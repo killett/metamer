@@ -593,6 +593,10 @@ git commit -m "feat: add bijectors, ParamSpec, and delta-method push-through"
 - [ ] Two specs differing only in Python dict insertion order produce identical `spec_hash()`
 - [ ] Stable labels (`matern12[0]`, `matern12[1]`) survive a re-sort
 - [ ] `canonical()` is JSON-serializable and round-trips through `json.dumps`
+- [ ] **`free_param_index(spec)` is the single source of truth for the flat parameter vector**, returning ordered `(term_label, param_name)` pairs for **free** parameters only
+- [ ] **`len(free_param_index(spec)) == spec.n_theta()` asserted for every spec in the test set**, including one with a fixed parameter
+- [ ] `free_param_index` matches hand-written expected output for: one term; a composite; a composite with a fixed parameter; two exchangeable terms
+- [ ] A spec declaring a shared parameter raises `NotImplementedError` rather than silently miscounting
 
 **Verify:** `pixi run test tests/test_terms.py -v` → all pass
 
@@ -604,8 +608,10 @@ git commit -m "feat: add bijectors, ParamSpec, and delta-method push-through"
 # tests/test_terms.py
 import json
 
+import pytest
+
 from metamer.core.params import ParamSpec
-from metamer.core.terms import ProcessSpec, TermSpec
+from metamer.core.terms import ProcessSpec, TermSpec, free_param_index
 from metamer.core.transforms import Log
 
 
@@ -687,6 +693,84 @@ def test_stable_labels_disambiguate_exchangeable_terms():
     assert spec.terms[0].params["rho"].default == 2.0
 
 
+def test_free_param_index_matches_hand_written_expectations():
+    """The flat parameter vector's layout is stated once and tested directly.
+
+    Expected values determined independently by applying the canonical-order
+    rule on paper: white sorts before matern12(rho=2) before matern12(rho=50),
+    and within a term the declared parameter order is preserved.
+
+    Bug this catches: five separate copies of this nested loop existed across
+    objective.py, optimize.py and gradients.py, two of them reading their
+    ordering from different sources (term.params vs family.param_specs()).
+    Divergence between two copies does not raise -- it produces converged-
+    looking fits at values interpreted differently in two places.
+    """
+    single = ProcessSpec((_matern12(3.0),))
+    assert free_param_index(single) == (("matern12[0]", "sigma"), ("matern12[0]", "rho"))
+
+    composite = _white() + _matern12(50.0) + _matern12(2.0)
+    assert free_param_index(composite) == (
+        ("white[0]", "sigma"),
+        ("matern12[0]", "sigma"),
+        ("matern12[0]", "rho"),
+        ("matern12[1]", "sigma"),
+        ("matern12[1]", "rho"),
+    )
+
+
+def test_free_param_index_omits_fixed_parameters():
+    """A frozen parameter is absent from the flat vector entirely.
+
+    Bug this catches: the optimizer moving a parameter the user pinned, and
+    k in AIC counting a parameter that was never estimated. Both are silent.
+    """
+    from dataclasses import replace
+
+    term = _matern12(4.0)
+    frozen = TermSpec(
+        kind="matern12",
+        params={n: replace(p, fixed=(n == "rho")) for n, p in term.params.items()},
+        ordering_param="rho",
+    )
+    spec = ProcessSpec((frozen,))
+    assert free_param_index(spec) == (("matern12[0]", "sigma"),)
+
+
+@pytest.mark.parametrize(
+    "spec_factory",
+    [
+        lambda: ProcessSpec((_matern12(3.0),)),
+        lambda: _white() + _matern12(2.0),
+        lambda: _white() + _matern12(2.0) + _matern12(50.0),
+    ],
+)
+def test_free_param_index_length_equals_n_theta(spec_factory):
+    """The layout and the count can never disagree.
+
+    This single invariant is what makes the parameter vector safe: n_theta
+    feeds k in every information criterion, and free_param_index defines what
+    the optimizer searches. If they diverge, selection is corrupted with no
+    visible symptom.
+    """
+    spec = spec_factory()
+    assert len(free_param_index(spec)) == spec.n_theta()
+
+
+def test_shared_parameters_are_refused_rather_than_miscounted():
+    """Cross-term parameter sharing is out of scope and says so.
+
+    Design doc section 4.7 requires counting to handle shared parameters.
+    Phase 1 implements no sharing mechanism, so a spec that declares one must
+    raise rather than be silently counted as independent -- the same discipline
+    as nonlinear signal terms.
+    """
+    term = _matern12(3.0)
+    shared = TermSpec(kind="matern12", params=term.params, ordering_param="rho", shared_with={"sigma": "other"})
+    with pytest.raises(NotImplementedError, match="shared"):
+        free_param_index(ProcessSpec((shared,)))
+
+
 def test_canonical_is_json_serializable():
     """canonical() round-trips through json.dumps with sorted keys.
 
@@ -749,6 +833,7 @@ class TermSpec:
     kind: str
     params: Mapping[str, ParamSpec]
     ordering_param: str | None = None
+    shared_with: Mapping[str, str] | None = None
 
     def order_key(self) -> tuple[str, float]:
         """Return the canonical sort key for this term."""
@@ -821,6 +906,48 @@ class ProcessSpec:
         """Return a stable 16-character hash of the canonical form."""
         encoded = json.dumps(self.canonical(), sort_keys=True, separators=(",", ":"))
         return hashlib.sha256(encoded.encode("utf-8")).hexdigest()[:16]
+
+
+def free_param_index(spec: ProcessSpec) -> tuple[tuple[str, str], ...]:
+    """Return the layout of the flat parameter vector, free parameters only.
+
+    THIS IS THE SINGLE SOURCE OF TRUTH for the ordering of the parameter vector
+    the optimizer searches. Everything that packs or unpacks that vector --
+    `objective.to_natural`, `to_unconstrained`, `dforward`, the diagnostic-limit
+    check in `optimize`, the gradient routines, and the memory formula -- calls
+    this rather than re-deriving the layout with its own nested loop.
+
+    The convention is: canonical term order (already applied by ProcessSpec),
+    then each term's declared parameter order, skipping any parameter with
+    `fixed=True`.
+
+    The invariant `len(free_param_index(spec)) == spec.n_theta()` ties this
+    layout to the count that feeds `k` in every information criterion. If the
+    two ever disagree, selection is corrupted with no visible symptom.
+
+    Args:
+        spec: The composite specification.
+
+    Returns:
+        Ordered (term_label, param_name) pairs, one per free parameter.
+
+    Raises:
+        NotImplementedError: If any term declares a shared parameter. Design
+            doc section 4.7 requires counting to handle cross-term sharing;
+            Phase 1 implements no sharing mechanism, so such a spec must be
+            refused rather than silently counted as independent.
+    """
+    out: list[tuple[str, str]] = []
+    for label, term in zip(spec.labels(), spec.terms, strict=True):
+        if term.shared_with:
+            raise NotImplementedError(
+                f"{label}: cross-term shared parameters {sorted(term.shared_with)} are "
+                "not implemented in Phase 1; see design doc section 4.7"
+            )
+        for name, param in term.params.items():
+            if not param.fixed:
+                out.append((label, name))
+    return tuple(out)
 ```
 
 - [ ] **Step 4: Run tests to verify they pass**
@@ -1420,6 +1547,56 @@ def reml_penalty(cov: NDArray[np.float64], design: NDArray[np.float64]) -> float
     sign, logdet = np.linalg.slogdet(x.T @ cov_inv @ x)
     assert sign > 0
     return float(-0.5 * logdet)
+
+
+def reml_loglik(
+    y: NDArray[np.float64], cov: NDArray[np.float64], design: NDArray[np.float64]
+) -> float:
+    """Brute-force ABSOLUTE REML log-likelihood, Harville (1974) form.
+
+    Written from the published formula rather than from the implementation, and
+    assembled term by term so that a constant offset in the code under test is
+    visible. A differential test against ML cannot see such an offset, which is
+    how the wrong normalization constant survived an earlier draft.
+
+        l_R = -0.5 [ (n - rank(X)) log(2 pi) + log|Sigma|
+                     + log|X' Sigma^-1 X| - log|X' X| + y' P y ]
+
+    with P = Sigma^-1 - Sigma^-1 X (X' Sigma^-1 X)^-1 X' Sigma^-1.
+
+    Args:
+        y: Observations, shape (n,).
+        cov: Covariance matrix Sigma, shape (n, n).
+        design: Full-column-rank design matrix, shape (n, k).
+
+    Returns:
+        The REML log-likelihood.
+    """
+    y = np.asarray(y, dtype=np.float64)
+    cov = np.asarray(cov, dtype=np.float64)
+    x = np.asarray(design, dtype=np.float64)
+    n = y.size
+    rank = int(np.linalg.matrix_rank(x))
+
+    cov_inv = np.linalg.inv(cov)
+    xtwx = x.T @ cov_inv @ x
+    p_matrix = cov_inv - cov_inv @ x @ np.linalg.solve(xtwx, x.T @ cov_inv)
+
+    _, logdet_cov = np.linalg.slogdet(cov)
+    _, logdet_xtwx = np.linalg.slogdet(xtwx)
+    _, logdet_xtx = np.linalg.slogdet(x.T @ x)
+    quad = float(y @ p_matrix @ y)
+
+    return float(
+        -0.5
+        * (
+            (n - rank) * np.log(2.0 * np.pi)
+            + logdet_cov
+            + logdet_xtwx
+            - logdet_xtx
+            + quad
+        )
+    )
 
 
 def fd_hessian(fn, x: NDArray[np.float64], step: float = 1e-4) -> NDArray[np.float64]:
@@ -2355,6 +2532,52 @@ def test_masked_points_equal_genuinely_absent_points():
     assert masked.loglik[0] == pytest.approx(absent.loglik[0], abs=1e-12)
 
 
+def test_masked_update_leaves_the_covariance_untouched():
+    """At a masked epoch P is unchanged, not merely gain-scaled.
+
+    Bug this catches: applying the update with a zeroed gain, which still
+    shrinks P by `- 0 * H P` only if the arithmetic is exactly right and
+    corrupts it otherwise. This is a numerical error that survives every
+    structural test, so it is asserted directly on the state.
+    """
+    spec = ProcessSpec((_term("matern12"),))
+    ss = StateSpace.from_spec(spec)
+    theta = np.array([[1.0, 5.0]])
+    t = np.array([0.0, 1.0])
+    y = np.array([[3.0, 3.0]])
+
+    engine = KalmanEngine()
+    all_masked = engine.score(ss, theta, y, np.zeros_like(y, dtype=bool), t, design=None)
+    # With every epoch masked the filter never updates, so nothing accumulates.
+    assert all_masked.n_used[0] == 0
+    assert all_masked.loglik[0] == pytest.approx(0.0, abs=1e-15)
+    assert all_masked.normal_equations[0, 0, 0] == pytest.approx(0.0, abs=1e-15)
+
+
+def test_log_determinant_accumulates_only_over_unmasked_epochs():
+    """sum log S counts exactly the observed epochs.
+
+    Expected value determined independently: for white noise of variance
+    sigma^2 with no state, S = sigma^2 at every epoch, so the log-likelihood
+    over m observed points is -0.5*m*(log(2 pi sigma^2) + y^2/sigma^2).
+
+    Bug this catches: accumulating log S at masked epochs, which adds a
+    spurious constant per gap and biases every fit on gappy series.
+    """
+    spec = ProcessSpec((_term("white"),))
+    ss = StateSpace.from_spec(spec)
+    sigma = 2.0
+    theta = np.array([[sigma]])
+    t = np.arange(6.0)
+    y = np.full((1, 6), 1.5)
+    mask = np.array([[True, False, True, False, True, False]])
+
+    got = KalmanEngine().score(ss, theta, y, mask, t, design=None).loglik[0]
+    m = int(mask.sum())
+    expected = -0.5 * m * (np.log(2 * np.pi * sigma**2) + (1.5 / sigma) ** 2)
+    assert got == pytest.approx(expected, abs=1e-12)
+
+
 def test_batch_of_one_matches_batch_of_many():
     """B=1 is a shape, not a code path.
 
@@ -3013,8 +3236,13 @@ git commit -m "feat: add signal terms, design matrix, and linear/nonlinear taxon
 - [ ] `β̂` from the accumulator matches an explicit `(XᵀΣ⁻¹X)⁻¹XᵀΣ⁻¹y` inversion to 1e-9
 - [ ] Concentrated ML log-likelihood matches `mvn_loglik(y, Σ, design=X)` to 1e-9
 - [ ] `β` covariance matches `(XᵀΣ⁻¹X)⁻¹` to 1e-9
-- [ ] A rank-deficient `X` returns `Outcome.RANK_DEFICIENT_X`, never NaN with `OK`
+- [ ] A rank-deficient `X` returns `Outcome.RANK_DEFICIENT_X` **before any factorization**, never NaN with `OK` and never an uncaught `LinAlgError`
 - [ ] The objective accepts unconstrained `u` and maps through the spec's bijectors
+- [ ] **`to_natural`, `to_unconstrained` and `dforward` all drive off `free_param_index`** — no local re-derivation of the layout, and fixed parameters are excluded
+- [ ] **REML absolute log-likelihood matches an independently-written brute-force oracle** at small N, with the convention named in both. A differential test against ML cannot see a constant offset and is not sufficient.
+- [ ] The REML constant is `(n − rank(X))·log(2π)`, not `n·log(2π)`, and the basis-invariance term `+½log|XᵀX|` is present
+- [ ] `GlsResult` is produced by **one** `cho_factor` and carries `beta`, `beta_cov`, `logdet`, `rss_reduction` and an `Outcome` — no second solve, no `np.linalg.inv`
+- [ ] The σ²-profiling decision is stated in the module docstring with its reason
 
 **Verify:** `pixi run test tests/test_objective.py -v`
 
@@ -3033,7 +3261,7 @@ from metamer.core.objective import ConcentratedObjective, gls_solution
 from metamer.core.signal import Constant, SignalSpec, Trend
 from metamer.core.statespace import StateSpace
 from metamer.core.terms import ProcessSpec
-from tests.oracles import mvn_loglik, reml_penalty
+from tests.oracles import mvn_loglik, reml_loglik, reml_penalty
 from tests.test_kalman import _covariance
 from tests.test_statespace import _term
 
@@ -3059,10 +3287,10 @@ def test_beta_hat_matches_explicit_gls():
     """
     _, ss, theta, t, x, _, cov, y = _setup()
     result = KalmanEngine().score(ss, theta, y, np.ones_like(y, dtype=bool), t, design=x)
-    beta, _, _ = gls_solution(result.normal_equations)
+    gls = gls_solution(result.normal_equations)
     cov_inv = np.linalg.inv(cov)
     expected = np.linalg.solve(x.T @ cov_inv @ x, x.T @ cov_inv @ y[0])
-    np.testing.assert_allclose(beta[0], expected, rtol=1e-9, atol=1e-9)
+    np.testing.assert_allclose(gls.beta[0], expected, rtol=1e-9, atol=1e-9)
 
 
 def test_concentrated_loglik_matches_profiled_mvn():
@@ -3085,9 +3313,9 @@ def test_beta_covariance_matches_explicit_inverse():
     """
     _, ss, theta, t, x, _, cov, y = _setup()
     result = KalmanEngine().score(ss, theta, y, np.ones_like(y, dtype=bool), t, design=x)
-    _, beta_cov, _ = gls_solution(result.normal_equations)
+    gls = gls_solution(result.normal_equations)
     cov_inv = np.linalg.inv(cov)
-    np.testing.assert_allclose(beta_cov[0], np.linalg.inv(x.T @ cov_inv @ x), rtol=1e-9)
+    np.testing.assert_allclose(gls.beta_cov[0], np.linalg.inv(x.T @ cov_inv @ x), rtol=1e-9)
 
 
 def test_reml_penalty_matches_brute_force_logdet():
@@ -3104,19 +3332,84 @@ def test_reml_penalty_matches_brute_force_logdet():
     assert delta == pytest.approx(reml_penalty(cov, x), abs=1e-9)
 
 
-def test_rank_deficient_design_is_a_named_outcome_not_nan():
-    """A rank-deficient X yields RANK_DEFICIENT_X, never a silent NaN.
+def test_reml_absolute_value_matches_an_independent_oracle():
+    """The REML value itself is right, not merely its difference from ML.
 
-    Bug this catches: letting log|X'S^-1X| return -inf and propagating it as a
-    finite-looking score, which at 10^7 points nobody would inspect.
+    The oracle is written from the published Harville form, term by term, and
+    shares no code with the implementation.
+
+    Bug this catches: inheriting ML's n*log(2pi) constant instead of REML's
+    (n - rank(X))*log(2pi), and omitting the +0.5*log|X'X| basis-invariance
+    term. Both are constant in theta, so they cancel in delta-IC and every
+    selection test passes -- while the stored log_lik primitive is wrong in
+    absolute terms and the Hector cross-validation becomes unattributable
+    between a convention difference and a bug.
+    """
+    spec, ss, theta, t, x, rank, cov, y = _setup()
+    obj = ConcentratedObjective(spec, ss, KalmanEngine(), Objective.REML)
+    got = obj.loglik(theta, y, np.ones_like(y, dtype=bool), t, x, rank)
+    assert got[0] == pytest.approx(reml_loglik(y[0], cov, x), abs=1e-9)
+
+
+@pytest.mark.parametrize("mode", ["duplicate_column", "offset_at_first_sample"])
+def test_rank_deficient_design_is_a_named_outcome_not_an_exception(mode):
+    """A rank-deficient X gives RANK_DEFICIENT_X before any factorization.
+
+    Two realistic cases: a duplicated column, and an offset epoch at the first
+    sample, which is collinear with the intercept (design doc section 5.2).
+
+    Bug this catches: a singular X'Sigma^-1X reaching np.linalg.cholesky and
+    raising LinAlgError. Exit criterion 6 requires the documented failure; an
+    uncaught exception is neither that nor a NaN, and at 10^7 points it aborts
+    a tile instead of recording an outcome.
     """
     from metamer.core.outcomes import Outcome
+    from metamer.core.signal import Constant, Offset
 
     spec, ss, theta, t, _, _, _, y = _setup()
     obj = ConcentratedObjective(spec, ss, KalmanEngine(), Objective.REML)
-    x_bad = np.column_stack([np.ones(t.size), np.ones(t.size)])
-    outcome = obj.check_design(x_bad, SignalSpec.rank(x_bad))
-    assert outcome is Outcome.RANK_DEFICIENT_X
+    if mode == "duplicate_column":
+        x_bad = np.column_stack([np.ones(t.size), np.ones(t.size)])
+    else:
+        x_bad, _ = SignalSpec([Constant(), Offset(epoch=float(t[0]))]).design_matrix(t)
+
+    rank_bad = SignalSpec.rank(x_bad)
+    assert obj.check_design(x_bad, rank_bad) is Outcome.RANK_DEFICIENT_X
+
+    result = obj.evaluate(theta, y, np.ones_like(y, dtype=bool), t, x_bad, rank_bad)
+    assert result.outcome is Outcome.RANK_DEFICIENT_X
+    assert np.all(np.isneginf(result.loglik))
+
+
+def test_fixed_parameter_is_pinned_and_absent_from_the_flat_vector():
+    """A frozen parameter is not searched, and hydrate restores its default.
+
+    Bug this catches: the flat vector carrying n_total entries while k counts
+    n_free, which either raises on a shape mismatch or silently shifts every
+    later parameter one slot left -- a wrong fit that still converges.
+    """
+    from dataclasses import replace
+
+    from metamer.core.terms import TermSpec, free_param_index
+
+    spec, ss, _, t, x, rank, _, y = _setup()
+    term = spec.terms[-1]
+    pinned = TermSpec(
+        kind=term.kind,
+        params={n: replace(p, fixed=(n == "rho")) for n, p in term.params.items()},
+        ordering_param=term.ordering_param,
+    )
+    frozen_spec = ProcessSpec(spec.terms[:-1] + (pinned,))
+    obj = ConcentratedObjective(frozen_spec, StateSpace.from_spec(frozen_spec), KalmanEngine(), Objective.ML)
+
+    n_free = len(free_param_index(frozen_spec))
+    assert n_free == frozen_spec.n_theta()
+
+    theta_free = np.full((1, n_free), 1.0)
+    full = obj.hydrate(theta_free)
+    assert full.shape[1] == sum(len(term.params) for term in frozen_spec.terms)
+    assert full[0, -1] == pytest.approx(pinned.params["rho"].default)
+    assert np.isfinite(obj.loglik(theta_free, y, np.ones_like(y, dtype=bool), t, x, rank)[0])
 ```
 
 - [ ] **Step 2: Run to verify failure**
@@ -3139,6 +3432,48 @@ Partitioning A gives every quantity needed:
 
 so beta_hat, the residual sum of squares, the beta covariance and the REML
 penalty all follow from one filter pass and a small Cholesky.
+
+REML CONVENTION (pinned; do not change without updating the oracle).
+--------------------------------------------------------------------
+This module implements the Harville (1974) form, which is invariant to the
+choice of error-contrast basis:
+
+    l_R = -0.5 * [ (n - rank(X)) log(2 pi)
+                   + log|Sigma|
+                   + log|X' Sigma^-1 X|
+                   - log|X' X|
+                   + y' P y ]
+
+Relative to the concentrated ML value l_c = -0.5 [n log(2pi) + log|Sigma| + y'Py]
+that is
+
+    l_R = l_c + 0.5 * rank(X) * log(2 pi) + 0.5 * log|X'X| - 0.5 * log|X' Sigma^-1 X|
+
+The two correction terms beyond the penalty are CONSTANT IN THETA, so they
+cancel in delta-IC and every selection decision is unaffected by omitting them.
+That is exactly what makes omitting them dangerous: no in-repo differential test
+can see it. They matter because (a) log_lik is stored as an auditable primitive
+and would be wrong in absolute terms, and (b) the Hector / CATS / est_noise
+cross-validation compares absolute REML values, where an unexplained constant is
+unattributable between "different convention" and "implementation bug" -- the
+precise ambiguity the exact power-law path exists to eliminate.
+
+OPEN: verify which convention Hector uses and record it in the design doc. If it
+differs, the cross-validation carries a documented offset, not a mystery.
+
+SIGMA-SQUARED IS NOT PROFILED OUT (deliberate).
+-----------------------------------------------
+Standard GLS profiles the overall noise scale analytically, dropping p by one
+and improving conditioning, and most of the geodesy literature does so. This
+package does not, because a composite kernel has a scale per term (white sigma,
+matern12 sigma, matern32 sigma) and there is no single sigma^2 to profile
+without reparameterizing as an overall amplitude times a simplex of per-term
+weights. That is a CROSS-TERM SHARED PARAMETER, and Phase 1 implements no
+sharing mechanism (see `terms.free_param_index`, which refuses such specs).
+
+Consequence to keep in view: this is a real comparability difference against
+Hector, on top of the REML convention above. Revisit when shared parameters
+land; it is a Phase 3+ change to the kernel algebra, not a flag flip.
 """
 
 from __future__ import annotations
@@ -3146,34 +3481,106 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import numpy as np
+from numpy.linalg import LinAlgError
 from numpy.typing import NDArray
 
 from metamer.core.capability import Objective
 from metamer.core.engines.protocol import Engine
 from metamer.core.outcomes import Outcome
+from metamer.core.params import ParamSpec
 from metamer.core.statespace import StateSpace
-from metamer.core.terms import ProcessSpec
+from metamer.core.terms import ProcessSpec, free_param_index
 
 
-def gls_solution(
-    accum: NDArray[np.float64],
-) -> tuple[NDArray[np.float64], NDArray[np.float64], NDArray[np.float64]]:
-    """Solve the profiled generalized least squares problem.
+@dataclass(frozen=True)
+class GlsResult:
+    """Everything one Cholesky of X' Sigma^-1 X yields, computed once.
+
+    Attributes:
+        beta: GLS estimates, shape (B, k).
+        beta_cov: Their covariance (X' Sigma^-1 X)^-1, shape (B, k, k). This is
+            the reported trend uncertainty -- the headline scientific output of
+            the package -- so it comes from a triangular solve against the
+            identity, never from `np.linalg.inv`.
+        logdet: log|X' Sigma^-1 X|, shape (B,).
+        rss_reduction: y' Sigma^-1 X (X' Sigma^-1 X)^-1 X' Sigma^-1 y, shape (B,).
+        outcome: OK, or the taxonomy member describing why the solve failed.
+    """
+
+    beta: NDArray[np.float64]
+    beta_cov: NDArray[np.float64]
+    logdet: NDArray[np.float64]
+    rss_reduction: NDArray[np.float64]
+    outcome: Outcome
+
+
+@dataclass(frozen=True)
+class ObjectiveResult:
+    """One objective evaluation, with everything the driver needs downstream.
+
+    Attributes:
+        loglik: Objective value per series, shape (B,). -inf where `outcome`
+            is not OK, so an optimizer walks away from the region.
+        gls: The GLS solve, or None when there is no design matrix.
+        outcome: OK, or the taxonomy member describing the failure.
+        n_used: Unmasked observation count per series, shape (B,).
+        rank_x: Numerical rank of the design matrix.
+    """
+
+    loglik: NDArray[np.float64]
+    gls: GlsResult | None
+    outcome: Outcome
+    n_used: NDArray[np.int64]
+    rank_x: int
+
+
+def gls_solution(accum: NDArray[np.float64]) -> GlsResult:
+    """Solve the profiled generalized least squares problem, once.
+
+    One `cho_factor` yields beta, beta_cov, the log-determinant and the residual
+    reduction. The earlier draft factorized the same k x k system four times
+    (cholesky, solve, inv, then another solve in the caller) and discarded beta
+    and beta_cov -- the two quantities the package exists to produce.
 
     Args:
-        accum: Accumulated whitened cross-products, shape (B, 1+k, 1+k).
+        accum: Accumulated whitened cross-products, shape (B, 1+k, 1+k), with
+            block structure [[y'Sy, y'SX], [X'Sy, X'SX]] where S = Sigma^-1.
 
     Returns:
-        A tuple of beta_hat (B, k), its covariance (B, k, k), and twice the
-        REML log-determinant term log|X' Sigma^-1 X| (B,).
+        A GlsResult. On a singular or non-finite system the arrays are filled
+        with NaN and `outcome` names the failure; the caller must not treat a
+        non-OK outcome as a usable fit.
     """
     xtx = accum[:, 1:, 1:]
     xty = accum[:, 1:, 0]
-    chol = np.linalg.cholesky(xtx)
-    beta = np.linalg.solve(xtx, xty)
-    beta_cov = np.linalg.inv(xtx)
-    logdet = 2.0 * np.log(np.diagonal(chol, axis1=1, axis2=2)).sum(axis=1)
-    return beta, beta_cov, logdet
+    batch, k = xty.shape
+
+    nan_k = np.full((batch, k), np.nan)
+    nan_kk = np.full((batch, k, k), np.nan)
+    nan_b = np.full(batch, np.nan)
+
+    if not np.all(np.isfinite(xtx)) or not np.all(np.isfinite(xty)):
+        return GlsResult(nan_k, nan_kk, nan_b, nan_b, Outcome.NONFINITE_OBJECTIVE)
+
+    # numpy's cholesky is batched over leading axes; scipy's cho_factor is 2-D
+    # only and would silently be wrong (or raise) for B > 1.
+    try:
+        lower = np.linalg.cholesky(xtx)
+    except LinAlgError:
+        return GlsResult(nan_k, nan_kk, nan_b, nan_b, Outcome.RANK_DEFICIENT_X)
+
+    upper = np.swapaxes(lower, -1, -2)
+    logdet = 2.0 * np.log(np.diagonal(lower, axis1=-2, axis2=-1)).sum(axis=-1)
+
+    # Two triangular solves reuse the one factorization. At k ~ 4 the cost of
+    # not exploiting triangularity is irrelevant; avoiding a second
+    # factorization -- and avoiding np.linalg.inv for beta_cov -- is not.
+    beta = np.linalg.solve(upper, np.linalg.solve(lower, xty[..., None]))[..., 0]
+    eye = np.broadcast_to(np.eye(k), (batch, k, k))
+    beta_cov = np.linalg.solve(upper, np.linalg.solve(lower, eye))
+    rss_reduction = np.einsum("bi,bi->b", xty, beta)
+
+    return GlsResult(beta, beta_cov, logdet, rss_reduction, Outcome.OK)
 
 
 @dataclass(frozen=True)
@@ -3226,22 +3633,65 @@ class ConcentratedObjective:
         Returns:
             Log-likelihood per series, shape (B,).
         """
+        return self.evaluate(theta, y, mask, t, design, rank).loglik
+
+    def evaluate(
+        self,
+        theta: NDArray[np.float64],
+        y: NDArray[np.float64],
+        mask: NDArray[np.bool_],
+        t: NDArray[np.float64],
+        design: NDArray[np.float64] | None,
+        rank: int,
+    ) -> ObjectiveResult:
+        """Evaluate the objective and return everything one pass produces.
+
+        The fit driver consumes `gls.beta` and `gls.beta_cov` from here rather
+        than running a second filter pass to recover them.
+
+        Returns:
+            An ObjectiveResult. When `outcome` is not OK, `loglik` is -inf so an
+            optimizer walks away from the region, and the caller must record the
+            outcome rather than treating the value as a fit.
+        """
+        batch = np.shape(y)[0]
+        neg_inf = np.full(batch, -np.inf)
+
+        # Rank deficiency is classified BEFORE any factorization: a singular
+        # X' Sigma^-1 X would otherwise reach cholesky and raise LinAlgError,
+        # which is neither the documented failure nor a NaN.
+        if design is not None and design.size:
+            precheck = self.check_design(design, rank)
+            if precheck is not Outcome.OK:
+                return ObjectiveResult(neg_inf, None, precheck, np.zeros(batch, np.int64), rank)
+
         result = self.engine.score(
-            self.state_space, theta, y, mask, t, design, self.objective
+            self.state_space, self.hydrate(theta), y, mask, t, design, self.objective
         )
         if design is None or design.shape[1] == 0:
-            return result.loglik
+            return ObjectiveResult(result.loglik, None, Outcome.OK, result.n_used, 0)
 
-        accum = result.normal_equations
-        _, _, logdet = gls_solution(accum)
-        xtx = accum[:, 1:, 1:]
-        xty = accum[:, 1:, 0]
-        rss_reduction = np.einsum("bi,bi->b", xty, np.linalg.solve(xtx, xty))
-        concentrated = result.loglik + 0.5 * rss_reduction
+        gls = gls_solution(result.normal_equations)
+        if gls.outcome is not Outcome.OK:
+            return ObjectiveResult(neg_inf, gls, gls.outcome, result.n_used, rank)
 
-        if self.objective is Objective.REML:
-            return concentrated - 0.5 * logdet
-        return concentrated
+        concentrated = result.loglik + 0.5 * gls.rss_reduction
+        if self.objective is Objective.ML:
+            return ObjectiveResult(concentrated, gls, Outcome.OK, result.n_used, rank)
+
+        # REML, Harville form -- see the module docstring. The two terms beyond
+        # the penalty are constant in theta and cancel in delta-IC, which is
+        # exactly why their absence cannot be detected by a differential test.
+        sign, logdet_xtx = np.linalg.slogdet(design.T @ design)
+        if sign <= 0:
+            return ObjectiveResult(neg_inf, gls, Outcome.RANK_DEFICIENT_X, result.n_used, rank)
+        reml = (
+            concentrated
+            + 0.5 * rank * np.log(2.0 * np.pi)
+            + 0.5 * float(logdet_xtx)
+            - 0.5 * gls.logdet
+        )
+        return ObjectiveResult(reml, gls, Outcome.OK, result.n_used, rank)
 
     def unconstrained_loglik(
         self,
@@ -3255,38 +3705,71 @@ class ConcentratedObjective:
         """Evaluate at unconstrained coordinates, mapping through bijectors."""
         return self.loglik(self.to_natural(u), y, mask, t, design, rank)
 
-    def to_natural(self, u: NDArray[np.float64]) -> NDArray[np.float64]:
-        """Map an unconstrained parameter matrix (B, p) to natural units."""
-        arr = np.asarray(u, dtype=np.float64)
+    def hydrate(self, theta_free: NDArray[np.float64]) -> NDArray[np.float64]:
+        """Expand a free-parameter vector to the full per-term layout.
+
+        `StateSpace` slices `theta` over ALL of a term's parameters, including
+        frozen ones, so the optimizer's free-only vector must be widened with
+        the pinned defaults before it reaches any family. Without this a spec
+        with a fixed parameter either raises on a shape mismatch or -- worse --
+        silently shifts every subsequent parameter one slot to the left.
+
+        Args:
+            theta_free: Natural-units free parameters, shape (B, p_free).
+
+        Returns:
+            Natural-units full parameter matrix, shape (B, p_total).
+        """
+        arr = np.asarray(theta_free, dtype=np.float64)
+        free = {pair: column for pair, column in zip(free_param_index(self.spec), arr.T, strict=True)}
+        columns: list[NDArray[np.float64]] = []
+        for label, term in zip(self.spec.labels(), self.spec.terms, strict=True):
+            for name, spec in term.params.items():
+                key = (label, name)
+                if key in free:
+                    columns.append(free[key])
+                else:
+                    columns.append(np.full(arr.shape[0], spec.default, dtype=np.float64))
+        return np.column_stack(columns)
+
+    def _free_specs(self) -> tuple[ParamSpec, ...]:
+        """Resolve the flat vector's ParamSpecs via the single source of truth.
+
+        All three mappings below drive off `free_param_index` rather than each
+        re-deriving the layout. Five separate copies of that nested loop existed
+        in an earlier draft, two of them reading their order from different
+        sources; divergence produces converged-looking fits at values
+        interpreted differently in two places, with no exception raised.
+        """
+        by_label = dict(zip(self.spec.labels(), self.spec.terms, strict=True))
+        return tuple(
+            by_label[label].params[name] for label, name in free_param_index(self.spec)
+        )
+
+    def _map(self, values: NDArray[np.float64], method: str) -> NDArray[np.float64]:
+        arr = np.asarray(values, dtype=np.float64)
+        specs = self._free_specs()
+        if arr.shape[1] != len(specs):
+            raise ValueError(
+                f"parameter vector has {arr.shape[1]} columns but this spec has "
+                f"{len(specs)} free parameters"
+            )
         out = np.empty_like(arr)
-        index = 0
-        for term in self.spec.terms:
-            for name in term.params:
-                out[:, index] = term.params[name].transform.forward(arr[:, index])
-                index += 1
+        for index, spec in enumerate(specs):
+            out[:, index] = getattr(spec.transform, method)(arr[:, index])
         return out
 
+    def to_natural(self, u: NDArray[np.float64]) -> NDArray[np.float64]:
+        """Map an unconstrained parameter matrix (B, p_free) to natural units."""
+        return self._map(u, "forward")
+
     def to_unconstrained(self, theta: NDArray[np.float64]) -> NDArray[np.float64]:
-        """Map a natural-units parameter matrix (B, p) to unconstrained space."""
-        arr = np.asarray(theta, dtype=np.float64)
-        out = np.empty_like(arr)
-        index = 0
-        for term in self.spec.terms:
-            for name in term.params:
-                out[:, index] = term.params[name].transform.inverse(arr[:, index])
-                index += 1
-        return out
+        """Map a natural-units matrix (B, p_free) to unconstrained space."""
+        return self._map(theta, "inverse")
 
     def dforward(self, u: NDArray[np.float64]) -> NDArray[np.float64]:
         """Return d(natural)/d(unconstrained) for the delta method."""
-        arr = np.asarray(u, dtype=np.float64)
-        out = np.empty_like(arr)
-        index = 0
-        for term in self.spec.terms:
-            for name in term.params:
-                out[:, index] = term.params[name].transform.dforward(arr[:, index])
-                index += 1
-        return out
+        return self._map(u, "dforward")
 ```
 
 - [ ] **Step 4: Run tests and commit**
@@ -4292,9 +4775,10 @@ def test_moment_init_recovers_the_timescale_within_a_factor_of_three():
     Bug this catches: an initializer that returns the family default whatever
     the data, which would silently make every fit a cold start from 1.0.
     """
-    _, ss, theta, t, y = _ou_series(rho=8.0)
-    init, rung = moment_init(ss, y, np.ones_like(y, dtype=bool), t)
+    spec, _, theta, t, y = _ou_series(rho=8.0)
+    init, rung = moment_init(spec, y, np.ones_like(y, dtype=bool), t)
     assert rung is InitRung.MOMENT
+    assert init.shape[1] == spec.n_theta()
     assert 8.0 / 3.0 < init[0, 1] < 8.0 * 3.0
 
 
@@ -4305,10 +4789,9 @@ def test_zero_variance_series_falls_through_to_the_family_default():
     which at 10^7 points would abort a tile instead of recording an outcome.
     """
     spec = ProcessSpec((_term("matern12"),))
-    ss = StateSpace.from_spec(spec)
     t = np.arange(50.0)
     y = np.zeros((1, 50))
-    init, rung = moment_init(ss, y, np.ones_like(y, dtype=bool), t)
+    init, rung = moment_init(spec, y, np.ones_like(y, dtype=bool), t)
     assert rung is InitRung.DEFAULT
     assert np.all(np.isfinite(init))
 
@@ -4389,7 +4872,7 @@ from scipy.optimize import minimize
 from metamer.core.gradients import fd_gradient, fd_step
 from metamer.core.objective import ConcentratedObjective
 from metamer.core.outcomes import Outcome
-from metamer.core.statespace import StateSpace
+from metamer.core.terms import ProcessSpec, free_param_index
 
 GRAD_TOL = 1e-5
 """Relative gradient-norm tolerance, judged in unconstrained coordinates."""
@@ -4420,7 +4903,7 @@ class SeriesFit:
 
 
 def moment_init(
-    state_space: StateSpace,
+    spec: ProcessSpec,
     y: NDArray[np.float64],
     mask: NDArray[np.bool_],
     t: NDArray[np.float64],
@@ -4435,17 +4918,22 @@ def moment_init(
     The rung reached is returned so it can be reported.
 
     Args:
-        state_space: The composite state space, supplying parameter defaults.
+        spec: The noise specification. Note this takes the SPEC, not the state
+            space: parameter defaults and the free-parameter layout both come
+            from the spec, and reading them from `family.param_specs()` instead
+            was a second, independent ordering source that nothing kept in sync
+            with `free_param_index`.
         y: Observations, shape (B, N).
         mask: Presence mask, shape (B, N).
         t: Shared time axis, shape (N,).
 
     Returns:
-        A tuple of the starting theta (B, p) in natural units and the rung.
+        A tuple of the starting theta (B, p_free) in natural units and the rung.
     """
+    free = free_param_index(spec)
+    by_label = dict(zip(spec.labels(), spec.terms, strict=True))
     defaults = np.array(
-        [p.default for fam in state_space.families for p in fam.param_specs().values()],
-        dtype=np.float64,
+        [by_label[label].params[name].default for label, name in free], dtype=np.float64
     )
     batch = y.shape[0]
     start = np.repeat(defaults[None, :], batch, axis=0)
@@ -4465,19 +4953,17 @@ def moment_init(
         rho = -dt / np.log(np.clip(r1, 1e-6, 1.0 - 1e-6))
 
     rung = InitRung.MOMENT
-    index = 0
-    for family in state_space.families:
-        for name, spec in family.param_specs().items():
-            if name == "sigma":
-                start[:, index] = np.sqrt(np.maximum(var, 1e-12))
-            elif name == "rho":
-                start[:, index] = rho
-            lo, hi = spec.diagnostic_limits
-            clipped = np.clip(start[:, index], lo, hi)
-            if not np.array_equal(clipped, start[:, index]):
-                rung = InitRung.CLIPPED
-            start[:, index] = clipped
-            index += 1
+    for index, (label, name) in enumerate(free):
+        param = by_label[label].params[name]
+        if name == "sigma":
+            start[:, index] = np.sqrt(np.maximum(var, 1e-12))
+        elif name == "rho":
+            start[:, index] = rho
+        lo, hi = param.diagnostic_limits
+        clipped = np.clip(start[:, index], lo, hi)
+        if not np.array_equal(clipped, start[:, index]):
+            rung = InitRung.CLIPPED
+        start[:, index] = clipped
 
     if not np.all(np.isfinite(start)):
         return np.repeat(defaults[None, :], batch, axis=0), InitRung.DEFAULT
@@ -4536,15 +5022,20 @@ def optimize_series(
     Returns:
         A SeriesFit carrying theta in natural units and a taxonomy outcome.
     """
+    # p is the FREE parameter count, from the single source of truth. Using
+    # len(term.params) here would size the vector to include frozen parameters
+    # and silently shift every later coordinate.
+    free = free_param_index(objective.spec)
+    p = len(free)
+
     outcome = objective.check_design(
         design if design is not None else np.zeros((t.size, 0)), rank
     )
     if outcome is not Outcome.OK:
-        p = sum(len(term.params) for term in objective.spec.terms)
         return SeriesFit(np.full((1, p), np.nan), float("nan"), outcome, 0, InitRung.DEFAULT, None)
 
     if x0 is None:
-        start_natural, rung = moment_init(objective.state_space, y, mask, t)
+        start_natural, rung = moment_init(objective.spec, y, mask, t)
         u0 = objective.to_unconstrained(start_natural)[0]
     else:
         u0, rung = np.asarray(x0, dtype=np.float64)[0], InitRung.WARM_START
@@ -4565,11 +5056,10 @@ def optimize_series(
     if not np.isfinite(loglik):
         return SeriesFit(theta, loglik, Outcome.NONFINITE_OBJECTIVE, res.nit, rung, None)
 
+    by_label = dict(zip(objective.spec.labels(), objective.spec.terms, strict=True))
     limit_hit = any(
-        spec.at_diagnostic_limit(float(theta[0, i]))
-        for i, spec in enumerate(
-            s for term in objective.spec.terms for s in term.params.values()
-        )
+        by_label[label].params[name].at_diagnostic_limit(float(theta[0, i]))
+        for i, (label, name) in enumerate(free)
     )
     if limit_hit:
         return SeriesFit(theta, loglik, Outcome.DIAGNOSTIC_LIMIT, res.nit, rung, None)
@@ -4746,7 +5236,7 @@ from metamer.core.optimize import InitRung, optimize_series
 from metamer.core.outcomes import Outcome
 from metamer.core.signal import SignalSpec
 from metamer.core.statespace import StateSpace
-from metamer.core.terms import ProcessSpec
+from metamer.core.terms import ProcessSpec, free_param_index
 from metamer.core.transforms import delta_method_cov
 
 
@@ -4812,7 +5302,7 @@ def fit(
     k_beta = design.shape[1]
     batch = y.shape[0]
     n_cand = len(candidates)
-    p_max = max(sum(len(term.params) for term in spec.terms) for spec in candidates)
+    p_max = max(len(free_param_index(spec)) for spec in candidates)
 
     theta = np.full((batch, n_cand, p_max), np.nan)
     theta_u = np.full((batch, n_cand, p_max), np.nan)
@@ -4829,7 +5319,7 @@ def fit(
         state_space = StateSpace.from_spec(spec)
         obj = ConcentratedObjective(spec, state_space, engine, objective)
         modes.append(resolve_gradient_mode(spec, objective))
-        p = sum(len(term.params) for term in spec.terms)
+        p = len(free_param_index(spec))
 
         for b in range(batch):
             warm = None if x0 is None else x0[b : b + 1, c, :p]
@@ -4847,13 +5337,14 @@ def fit(
                 cov_u = np.linalg.inv(res.hessian)
                 cov_nat = delta_method_cov(obj.dforward(u_hat[None, :])[0], cov_u)
                 theta_err[b, c, :p] = np.sqrt(np.clip(np.diag(cov_nat), 0.0, np.inf))
-                scored = engine.score(state_space, res.theta, y[b : b + 1], mask[b : b + 1], t, design, objective)
-                if k_beta:
-                    from metamer.core.objective import gls_solution
-
-                    bhat, bcov, _ = gls_solution(scored.normal_equations)
-                    beta[b, c] = bhat[0]
-                    beta_err[b, c] = np.sqrt(np.clip(np.diag(bcov[0]), 0.0, np.inf))
+                # One evaluation at the optimum yields beta and beta_cov. An
+                # earlier draft ran a second full filter pass here purely to
+                # recover quantities the objective had already computed and
+                # discarded.
+                final = obj.evaluate(res.theta, y[b : b + 1], mask[b : b + 1], t, design, rank)
+                if k_beta and final.gls is not None and final.gls.outcome is Outcome.OK:
+                    beta[b, c] = final.gls.beta[0]
+                    beta_err[b, c] = np.sqrt(np.clip(np.diag(final.gls.beta_cov[0]), 0.0, np.inf))
 
     rankings: list[Ranking] = []
     for b in range(batch):
