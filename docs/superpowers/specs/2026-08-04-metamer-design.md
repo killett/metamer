@@ -184,6 +184,18 @@ and required *now* for correct reporting: an uncertainty estimated in log-space 
 reported in natural units needs a delta-method push-through. Getting this wrong produces
 plausible, wrong error bars — the exact failure class this package exists to eliminate.
 
+**The push-through is first-order.** Reported parameter covariance in natural units is
+
+```
+Σ_natural = J Σ_unconstrained Jᵀ ,      J = dg/du      (g = the inverse transform)
+```
+
+which is the delta method to first order. **It degrades for parameters pushed near a
+diagnostic limit**, where the transform's curvature is not negligible and the linearization
+stops being a good approximation. This is a caveat on the package's headline numbers and
+must be visible: a `DIAGNOSTIC_LIMIT` outcome (§8.6) therefore also implies the reported
+uncertainty for that parameter is unreliable, not merely that the parameter is extreme.
+
 `diagnostic_limits` are distinct from `bounds`. The bijector guarantees a scale stays
 positive; it does not stop `log ρ` marching to 50, which is the near-degenerate direction
 the identifiability lint (§4.8) targets. **Hitting a diagnostic limit is a reported
@@ -668,43 +680,133 @@ it against.
 
 **Decision: ship A as the Phase 1 correctness reference, spike B, measure, decide.**
 
-### 9.2 Spike design
+### 9.2 The staged spike
+
+**The spike is staged, and the staging is what keeps Phase 1 tractable.**
+
+Most of Phase 1's bulk sits in one place: path A's batched trust-region optimizer, with
+active masks and compaction. That machinery exists *only* for path A's performance. **If
+path B wins, it is dead weight — a correctness reference does not need to be fast.** So the
+spike is sequenced to answer the question before that machinery is built.
+
+#### Stage 1 — optimistic bound (days, not weeks)
+
+Build the batched Kalman filter in numpy, which is needed for the reference regardless, and
+measure its per-pass cost. Then compute **path A's optimistic bound**:
+
+```
+t_A_bound  =  (filter pass cost)  ×  (mean iteration count)
+```
+
+assuming a **zero-overhead batched optimizer at 100% utilization** — a performance path A
+can never exceed. Build the compiled path B for Matérn ν=1/2 and the d=3 case, and measure
+it fully.
+
+| stage 1 outcome | action |
+|---|---|
+| **B beats A's optimistic bound by ≥3× at d=3** | A can never win. **Adopt B. Never build the batched trust-region.** Path A's permanent form becomes a plain per-series scipy loop — slow, obviously correct, ideal as the reference implementation and as the MVN-oracle harness. This is the large saving. |
+| **B does not beat the optimistic bound** | The comparison is genuinely close. Proceed to stage 2 and build the real path A, now knowing it is worth the effort. |
+
+The optimistic bound is sound **because it is one-sided**: it can only overstate A. "B wins
+even against A's best conceivable case" is a safe conclusion; the converse requires the real
+measurement, which stage 2 provides.
+
+#### Stage 2 — only if stage 1 is inconclusive
+
+Full batched trust-region, real measurement, the ≥3×-at-d=3 decision rule applied to
+measured rather than bounded path-A performance.
+
+**Why utilization matters at stage 2.** Path A's efficiency depends entirely on how much
+work is wasted on converged series still riding in the batch. With realistic heterogeneity
+some series converge in 20 iterations and some in 200, so the batch runs at the tail's pace
+unless the active set is compacted. A low utilization number means A's effective throughput
+is far below its nominal FLOP rate, and periodic compaction is mandatory work not yet
+costed. Path B has no equivalent tax — a thread finishes and takes the next series. The
+optimistic bound assumes 100% utilization precisely so stage 1 does not have to model this.
+
+#### Measurement specification (both stages)
 
 | aspect | specification |
 |---|---|
 | **families** | Matérn ν=1/2 (d=1) **and** a d=3 case (Matérn ν=5/2 or white+SHO). Two points show the scaling in d, which is the actual question — the curves may cross. Spiking only ν=1/2 measures scalar recursions with no matrix ops and flatters A for the wrong reason. |
-| **N** | 630, regular; plus one gappy case at 10% missing |
+| **N** | 630 |
+| **gap sweep** | **{0%, 10% scattered, 40% contiguous blocks}** — see below. Report the A:B ratio **per gap case**, not pooled. |
 | **B** | 10³ and 10⁴ |
-| **signal** | `k_β = 4` (constant, trend, annual, semiannual) |
+| **signal** | `k_β = 4` (constant, trend, annual, semiannual), shared X |
 | **objective** | ML (the default) |
-| **what is run** | **full fit to convergence**, including line search / trust-region loop — not a filter-only benchmark. A filter-only comparison measures the part where A is least disadvantaged and skips the part that costs weeks. |
+| **what is run** | **full fit to convergence**, including the trust-region / line-search loop — not a filter-only benchmark. A filter-only comparison measures the part where A is least disadvantaged and skips the part that costs weeks. (Stage 1 substitutes the optimistic bound for A's loop, not for B's.) |
 | **primary metric** | **ms per series-model fit** — the quantity the budget is denominated in |
-| **also reported** | mean iteration count; **active-mask utilization** for path A (fraction of series-iterations actually active); peak RSS; wall time |
+| **also reported** | mean iteration count; active-mask utilization (stage 2, path A); peak RSS; wall time |
 | **JIT** | benchmark with warm JIT; **report compile time separately** (real, but amortized to nothing at 10⁷ series) |
-| **machines** | the 64-core node **and** an 8-core/16 GB laptop. A's working set and bandwidth pressure scale with cores; B's per-thread state is a few hundred bytes. A result measured only on the big node may invert on the laptop, and **the laptop is the hard constraint.** |
-| **equivalence check** | both paths reach the same optimum on identical inputs and seeds: `max |Δθ| / σ_θ < 0.01` |
+| **threading** | `OMP_NUM_THREADS` and any BLAS threading **pinned explicitly** in the harness, or the thread-count sweep measures nothing |
 
-**Why utilization matters.** Path A's efficiency depends entirely on how much work is
-wasted on converged series still riding in the batch. With realistic heterogeneity some
-series converge in 20 iterations and some in 200, so the batch runs at the tail's pace
-unless the active set is compacted. A low utilization number means A's effective
-throughput is far below its nominal FLOP rate, and periodic compaction is mandatory work
-not yet costed. Path B has no equivalent tax — a thread finishes and takes the next series.
+**Gap structure matters more than gap fraction, and it decides the question.** High-latitude
+gridded altimetry loses points to seasonal ice for a large fraction of the year; 30–50%
+missing at a high-latitude point is ordinary, not extreme. And seasonal ice produces **long
+contiguous blocks**, not scattered dropouts. The two paths respond asymmetrically:
 
-**Decision rule, fixed in advance:**
+- Under **path A** the mask is a multiply — **full cost regardless of gap fraction**.
+- Under **path B** a compiled loop can branch past the update entirely — **a real saving
+  proportional to gap fraction**.
 
-> If path B is **≥3× faster at d=3 on either machine**, B becomes the default backend and
-> A is retained permanently as the correctness reference. Under 3×, A stays default and B
-> is dropped or deferred **with the number recorded.**
+So high gap fraction *favours* B, and measuring only at 10% scattered understates B's
+advantage exactly where the data is gappiest.
 
-"Faster" means wall-clock ms per series-model fit to a common convergence tolerance,
-verified to reach the same optimum, on identical inputs and identical seeds.
+#### Equivalence check
+
+`max|Δθ|/σ_θ < 0.01` alone is right for well-conditioned cases and meaningless for the rest:
+in a flat or near-degenerate direction θ is genuinely not identified, so demanding parameter
+agreement there tests the optimizer's stopping rule rather than correctness — and it will
+produce spurious failures exactly where the two paths use different optimizers, which is by
+construction.
+
+Use the **same three comparisons as the hysteresis audit (§11.2)**, one implementation
+serving both:
+
+| comparison | rule |
+|---|---|
+| **objective** | `|Δℓ|` below a stated tolerance — this is the real "same optimum" test |
+| **parameters** | `max|Δθ|/σ_θ < 0.01`, applied **only** when the Hessian condition number is below a stated threshold |
+| **selection** | both paths choose the same candidate |
+
+All three are reported.
+
+#### Hardware, and the one-machine rule
+
+Available hardware:
+
+| machine | role |
+|---|---|
+| Ubuntu mini PC, **4 slow cores, 16 GB RAM (~10 GB free)** | **primary development machine**; the binding memory and compute constraint |
+| Apple Silicon MacBook, 32 GB | Tier-1 platform check |
+| Linux box, 64 cores (RAM unknown) | throughput target |
+| SkyPilot via a forthcoming `cloudify` skill | future; see §15.5 |
+
+The two-machine requirement is recoverable on one box, **because the axis that matters is
+memory bandwidth per core, and thread count varies it.** Path A is memory-bound, so *more*
+bandwidth per core helps A. Low thread count therefore measures A under conditions most
+favourable to it, and the inference is one-sided but sound:
+
+> Measure at **low thread count (1)** and at **full thread count (4 on the mini PC)**.
+>
+> - **B ≥3× at d=3 at the low thread count** → adopt B. It will also win on any machine
+>   with less bandwidth per core, which hurts A further.
+> - **B ≥3× only at high thread count** → the result is bandwidth-contention dependent.
+>   **Do not commit.** This is the case the two-machine requirement existed to catch;
+>   record it and obtain a second-machine measurement before deciding.
+> - **B <3× at both** → A stays default, number recorded.
+
+Note that a 64-core node *restricted* to 8 threads would give A more bandwidth per core than
+a real 8-core laptop, so low-thread measurements on a large node are also conservative in
+A's favour. The 4-core mini PC is the low-bandwidth end, which makes a B win there
+informative and an A win there the one needing confirmation elsewhere.
 
 **The spike's real deliverable is the protocol, not the kernel.** Even a losing spike must
 prove a second backend slots in behind the §7.4 protocol without reshaping the core. That
 cannot be verified by argument, and it is why the spike belongs in Phase 1 regardless of
-outcome. If wiring the compiled path requires touching the fit driver, the protocol is
-wrong.
+outcome — and why the stage-1 "never build the trust-region" branch still requires both
+paths to sit behind the protocol. If wiring the compiled path requires touching the fit
+driver, the protocol is wrong.
 
 ### 9.3 The budget
 
@@ -729,13 +831,30 @@ large mismatch is a Phase 1 bug, to be found before zarr exists.
 **One formula per backend, not one formula** — the shapes genuinely differ:
 
 ```
-Path A:  bytes ≈ B × (N × 9  +  c_A(d, k_β, p))
-Path B:  bytes ≈ B × (N × 9) +  T × c_B(d, k_β, p)          T = thread count
+Path A:  bytes ≈ B × ( N×9 + X_term + out(M, p, k_β) + c_A(d, k_β, p) )
+Path B:  bytes ≈ B × ( N×9 + X_term + out(M, p, k_β) )  +  T × c_B(d, k_β, p)
+
+  N×9      = data tile: 8 bytes float64 y + 1 byte mask
+  X_term   = 0                if all regressors are shared (one copy, negligible)
+           = N × k_β × 8      if ANY regressor is a per-point field
+  out(...) = M × (2p + 2k_β + 2) × 8 + M × 3      output slots, held until tile write
+             (θ̂, θ̂_err, β, β_err, log_lik, k as float64;
+              iterations uint16 + status uint8 = 3 B.
+              n_eff is per point, not per candidate.)
+  T        = thread count
 ```
 
-where `N × 9` is the data tile: 8 bytes float64 `y` + 1 byte mask. (Data arrives float32
-from disk; peak includes both during conversion unless converted per chunk — noted as a
-detail the measurement must resolve.)
+**`X_term` is not a rounding error.** With a shared time axis and no per-point regressors,
+the design matrix is one shared copy. But the prompt requires per-point regressor fields
+(e.g. a GIA model), and then `X` is per-series: at N=630, k_β=4 that is **20.2 kB/series**,
+roughly 2.4× the entire rest of the per-series cost. It changes `tile_side` by a factor of
+~2 and is the difference between a configuration fitting in 16 GB and not.
+**`--explain` (§13.4) reports which regressor regime the config lands in.**
+
+**Directive on dtype conversion (not an open measurement).** Data arrives float32 from disk
+and `core` is float64 (§15.4). **Convert per dask chunk during tile assembly**, so the full
+float32 and full float64 representations never coexist. Peak then carries one float64 tile
+plus one float32 chunk, and the ~44% swing on the dominant term disappears.
 
 Per-series solver state, path A, with the collapsed/augmented GLS filter:
 
@@ -746,28 +865,50 @@ Per-series solver state, path A, with the collapsed/augmented GLS filter:
 | `F`, `Q`, `P∞` (per series — θ differs) | `3 d² × 8` |
 | normal-equation accumulators `XᵀΣ⁻¹X`, `XᵀΣ⁻¹y`, `yᵀΣ⁻¹y` | `(k_β(k_β+1)/2 + k_β + 1) × 8` |
 | prediction/update workspace copies | `~2 d² × 8` |
-| optimizer state (L-BFGS history m≈10, gradient, trust-region) | `~22 p × 8` |
+| **optimizer state — path A: dense quasi-Newton trust-region model** (§8.3) | `(p² + ~4p) × 8` |
+| **optimizer state — path B: L-BFGS history m≈10, per *thread*** | `~22 p × 8` |
 | Hessian at optimum (transient) | `p² × 8` |
 
-Worked example at **d=3, k_β=4, p=4, N=630**:
+**The optimizer term is per backend.** §8.3 specifies a batched **trust-region** for path A
+precisely because line search breaks batch utilization, and a trust-region with a dense
+quasi-Newton model stores `p²` plus a few `p`-vectors — **not** the 22`p` of an L-BFGS
+history. L-BFGS appears only on path B, where it is per-thread.
 
-```
-d² terms   6 × 9 × 8              =   432 B
-x          3 × 5 × 8              =   120 B
-accum      (10 + 4 + 1) × 8       =   120 B
-optimizer  22 × 4 × 8             =   704 B
-Hessian    16 × 8                 =   128 B
-                          solver  ≈ 1.5 kB / series
-data       630 × 9                ≈ 5.7 kB / series
-                          total   ≈ 7.2 kB / series   (path A)
-```
+**Output slots are per series and do not shrink under path B.** Results for all `M`
+candidates are held until the tile is written: `θ̂`, `θ̂_err` (`p` each), `β`, `β_err`
+(`k_β` each), `log_lik`, `k`, `n_eff`, plus `iterations` (uint16) and `status` (uint8).
 
-**Data dominates solver state by roughly 4:1 even on path A.** At `tile_side = 445`
-(198,025 series) that is ≈ 1.43 GB — consistent with a ~1 GB block budget.
+Worked example at **d=3, k_β=4, p=4, N=630, M=12**, shared X:
 
-For path B the per-series cost is the data alone (≈5.7 kB) plus output slots; per-thread
-solver state at 64 threads totals ~96 kB. **Path B's memory is essentially just the data
-tile**, which is the quantitative form of the claim in §11.5.
+| term | path A | path B |
+|---|---|---|
+| data `N×9` | 5670 B | 5670 B |
+| output slots `M × 18 × 8 + M × 3` | 1764 B | 1764 B |
+| `d²` terms (`P`, `F`, `Q`, `P∞`, 2 workspace) = `6d²×8` | 432 B | per thread |
+| augmented `x` = `d(1+k_β)×8` | 120 B | per thread |
+| normal-equation accumulators | 120 B | per thread |
+| optimizer (A: `(p²+4p)×8`; B: `22p×8`) | 256 B | per thread |
+| Hessian at optimum | 128 B | per thread |
+| **per series** | **8490 B ≈ 8.49 kB** | **7434 B ≈ 7.43 kB** |
+| per thread (path B only) | — | ≈ 1.50 kB |
+
+**Data plus output slots account for 87% of path A's total.** The largest *solver* term is
+the `d²` Kalman state at 432 B, not the optimizer at 256 B — the reverse of what an L-BFGS
+history would give, which is why §8.3's trust-region choice matters here as well as for
+utilization.
+
+**Path B saves 12.4%** (1056 B of 8490 B). With per-point regressors both totals gain
+20 160 B, and the saving falls to **3.7%**. Per-thread solver state totals ~6 kB at T=4 and
+~96 kB at T=64 — negligible either way. See §11.5 for the consequence.
+
+**Consequence for tiling.** The prompt's `tile_side = sqrt(block_bytes / (n_time · itemsize))`
+counts only the float64 data and therefore **overestimates**:
+
+| accounting | bytes/series | `tile_side` at a 1 GB budget |
+|---|---|---|
+| prompt formula (data only) | 5040 B | 445 |
+| this section, shared X | 8490 B | 343 |
+| this section, per-point X | 28 650 B | 187 |
 
 ---
 
@@ -798,7 +939,19 @@ tile**, which is the quantitative form of the claim in §11.5.
 
 `n_eff_trend` is *term-specific* — it is the effective sample size for estimating the
 trend, not a global property of the series — so using it as the BIC penalty's `n` would be
-a category error. Both are stored (§12).
+a category error. Both are stored (§12), and **they must never be interchanged.**
+
+**`n_eff_bic` uses the participation-ratio form** on the model correlation matrix `R`:
+
+```
+n_eff = n² / ‖R‖²_F = n² / ( n + 2 Σ_{k=1}^{n-1} (n−k) ρ_k² )
+```
+
+Chosen because it is always in `[1, n]`, always well-defined, monotone in correlation
+strength, computable directly from the fitted model's ACF without forming `R`, and it
+degrades gracefully for near-degenerate fits. The classic `n / (1 + 2 Σ ρ_k)` alternative
+is specifically the effective size for estimating *a mean*, can exceed `n` or go negative
+under negative correlation, and requires windowing choices that would then need defending.
 
 ### 10.2 Weights when candidates fail
 
@@ -874,12 +1027,16 @@ are Whittle-engine scores and **must not be compared against final scores** (§6
 Warm start carries **θ̂ in unconstrained coordinates only** — not L-BFGS curvature history,
 which is fragile across points and would deepen the hysteresis coupling.
 
-**Warm-start cache key: `(compat_hash, candidate spec_hash)`.** `compat_hash` alone is
-insufficient because §13.3 deliberately excludes the candidate set from it; warm starts are
-per-candidate, so the candidate's own spec hash must be in the key. A warm-start array
-written under a different objective, spec, or registry version is **actively harmful** —
-silent reuse of a stale warm-start cache produces converged-looking fits at the wrong
-optimum, the worst failure mode in the system. Mismatch is refused, never used.
+**Warm-start cache key: `(fit_hash, candidate spec_hash)`** — see §13.3. `fit_hash`, not
+`compat_hash`: θ̂ does not depend on the criterion set, so keying warm starts on
+`compat_hash` would discard every warm start the moment a user adds HQIC. And the candidate
+spec hash is needed because warm starts are per-candidate while neither run-level hash
+covers the candidate set.
+
+A warm-start array written under a different objective, spec, or registry version is
+**actively harmful** — silent reuse of a stale warm-start cache produces converged-looking
+fits at the wrong optimum, the worst failure mode in the system. Mismatch is refused, never
+used.
 
 **Nested-model chaining within a point** (initializing AR(5) from AR(4)'s optimum) is
 deferred, and the deferral carries its condition: it has the same hysteresis pathology in a
@@ -966,7 +1123,8 @@ workspace copies, and gradient buffers scaled by parameter count. Rather than ha
 constant, **measure**: pass 1 doubles as the calibration tile, deriving true
 bytes-per-series for this dataset and model set, validated against §9.4's analytic formula.
 
-**Cache key: `compat_hash` + backend + machine fingerprint.**
+**Cache key: `fit_hash` + backend + machine fingerprint** (§13.3 — the criterion set does
+not affect bytes-per-series).
 
 - **Backend must be in the key** because bytes-per-series is backend-dependent — path A's
   solver state is per-series, path B's is per-thread; the formulas have different *shapes*,
@@ -987,8 +1145,15 @@ Both are recorded now so they are not surprises:
   time axes differ; each series memoizes its own unique-Δt set. §2.1's ragged language
   survives as a modest cost, not a large penalty. It must still log a prominent warning
   rather than degrade silently.
-- **The memory formula changes shape** (§9.4), and bytes-per-series collapses toward the
-  data tile plus mask, making the 16 GB constraint substantially easier.
+- **The memory formula changes shape** (§9.4): path B's solver state is per-thread rather
+  than per-series. But the *magnitude* of that win must not be overstated. By §9.4's
+  corrected figures, path A is 8.49 kB/series and path B 7.43 kB/series — a **12.4%
+  saving**, because data and output slots already account for 87% of the total. With
+  per-point regressor fields the saving falls to **3.7%**.
+
+  **The 16 GB constraint is governed by the data tile and the output slots, essentially
+  regardless of backend.** Path B's memory advantage is useful, not transformative; the
+  reason to prefer path B is speed and the collapse of the ragged cliff, not memory.
 
 ---
 
@@ -1006,7 +1171,7 @@ noise parameters, which are secondary diagnostics.
 ### 12.2 Layout
 
 ```
-/                 attrs: schema_version, compat_hash, run_hash, objective, engine,
+/                 attrs: schema_version, fit_hash, compat_hash, run_hash, objective, engine,
                          registry_version, metamer_version, profile_name,
                          candidate spec hashes, warm_start_used, calibration provenance
 /signal/          dense   beta[y,x,m,b], beta_err[y,x,m,b]      (selected + model-averaged)
@@ -1133,18 +1298,25 @@ rather than archaeological.
 
 ### 12.8 Resumption
 
-Resume compares:
+Resume compares the three hashes of §13.3 and the candidate set, and there are **three**
+outcomes, not two:
 
-- `compat_hash` for **equality**
-- the candidate set for **superset** — same candidates in the same order, possibly more
+| condition | action |
+|---|---|
+| `fit_hash` matches, `compat_hash` matches, candidate set is a **superset** | resume normally: reuse all completed tiles, fit only what the completion bitmap says is outstanding |
+| `fit_hash` matches, **`compat_hash` differs** (e.g. a criterion was added) | **recompute the derived `/selection/` arrays from the stored `log_lik`, `k`, `n_eff` primitives and continue. Do not refuse. Do not refit.** |
+| `fit_hash` differs | refuse — the stored fits are not reusable |
 
-The superset rule exists because §12.5 stores per-candidate `log_lik` and `k` as
-primitives, which makes extending the candidate set a *scientifically* legitimate
-incremental operation: existing fits are unaffected, only `P_total` and the model axis
-grow. Whether v1 exposes that workflow is a scoping decision, but the hash boundary must
-not make it impossible.
+The candidate-set **superset** rule (same candidates in the same order, possibly more)
+exists because §12.5 stores per-candidate primitives, making candidate-set extension a
+*scientifically* legitimate incremental operation: existing fits are unaffected, only
+`P_total` and the model axis grow.
 
-Mismatch refuses to proceed rather than silently mixing.
+The middle row is the reason §13.3 splits `fit_hash` out of `compat_hash` at all. Without
+it, adding HQIC to a finished 10⁷-point run would demand a full refit to compute arithmetic
+on numbers already sitting in the store.
+
+Refusal never silently mixes.
 
 ---
 
@@ -1204,15 +1376,32 @@ job needs to say which layer and why.
    harmonics resolvable by the sampling, regressor alignment, `rank(X)` (§5.2). Runs at
    startup against pass 1, not at parse time.
 
-### 13.3 Two hashes
+### 13.3 Three hashes
+
+Two are not enough. The criterion set belongs in the resumption gate (it determines the
+stored `/selection/` arrays) but **not** in the warm-start key (AIC vs BIC changes nothing
+about where the optimizer lands). Collapsing them discards every warm start the moment a
+user adds HQIC, and blocks a legitimate resume workflow.
 
 | hash | covers | used for |
 |---|---|---|
-| **`compat_hash`** | data source and selection, signal spec, registry version, objective, engine, criterion set, seeds, metamer version. **Excludes the candidate set** (§12.8) and **excludes memory budget, tile size, thread count, output path, verbosity** | resumption gate, warm-start key component, calibration cache key |
-| **`run_hash`** | everything, plus machine fingerprint | provenance only, never a gate |
+| **`fit_hash`** | everything determining `θ̂` and `log_lik`: data source and selection, signal spec, objective, engine, registry version, seeds, metamer version. **Not** the criterion set. **Not** the candidate set. | warm-start key component; the gate for **reusing fits** |
+| **`compat_hash`** | `fit_hash` + criterion set + anything else affecting stored *derived* arrays | the gate for reusing `/selection/` |
+| **`run_hash`** | everything, plus memory budget, tile size, thread count, output path, verbosity, machine fingerprint | provenance only, never a gate |
 
-Excluding runtime knobs is what permits starting on the 64-core node and resuming on the
-16 GB laptop — a real workflow, made legitimate by §11.3's determinism guarantee.
+Runtime knobs appear only in `run_hash`, which is what permits starting on the 64-core node
+and resuming on the mini PC — a real workflow, made legitimate by §11.3's determinism
+guarantee, and the same property that makes a future cloud burst (§15.5) a resume rather
+than a rerun.
+
+**The payoff is in the mismatch behaviour** (§12.8): `compat_hash` mismatch with matching
+`fit_hash` **recomputes the derived arrays from the stored primitives and continues** — it
+does not refuse and it does not refit. §12.5 already stores `log_lik`, `k`, and `n_eff`
+precisely so criteria are recomputable without refitting 10⁷ series; a single hash boundary
+would have forbidden exactly that.
+
+Calibration cache key: `fit_hash` + backend + machine fingerprint (§11.4) — the criterion
+set does not affect bytes-per-series.
 
 **Hashing the validated, normalized pydantic model rather than the file text** normalizes
 away comments, key order, whitespace, and explicit-vs-default, so adding a comment does not
@@ -1231,8 +1420,12 @@ releases. The allowlist is what keeps that surface small and reviewable.
 ### 13.4 `metamer validate --explain`
 
 Dry run: executes layers 1–3, layer 4 if data is reachable, then prints the resolved
-canonical config, both hashes, and a per-candidate table of **resolved engine, cost class,
-gradient mode, and objective**, plus projected wall time and peak RSS.
+canonical config, **all three hashes**, and a per-candidate table of **resolved engine, cost
+class, gradient mode, and objective**, plus projected wall time and peak RSS.
+
+**It also reports which regressor regime the config lands in** — shared X or per-point X
+(§9.4) — because that single fact changes bytes-per-series by ~3.4× and `tile_side` by ~2×,
+and it is the difference between a configuration fitting in the available RAM and not.
 
 Given the hard 16 GB constraint, finding out before starting is worth considerably more
 than the hours it costs to implement.
@@ -1323,7 +1516,7 @@ Contents:
 - §11.2 audit numbers: disagreement rates overall **and per difficulty stratum**; mean
   iterations warm vs cold against the ≥30% threshold.
 - Iteration-count histogram from `iterations[y,x,m]`.
-- Resolved config, both hashes, profile name, calibration provenance.
+- Resolved config, all three hashes (§13.3), profile name, calibration provenance.
 - **Per-candidate resolved engine, cost class, gradient mode, and objective** — the same
   table `--explain` prints. The report is the artifact that survives; reading what was
   actually run without reconstructing it from the config and the registry version is worth
@@ -1345,9 +1538,9 @@ root attrs.
 A script that resumes on failure needs to distinguish "aborted, resumable" from "config
 rejected."
 
-**The final console line includes `compat_hash` and the store path** — that is what a user
-needs to resume or regenerate the report, and what they will copy out of a terminal
-scrollback three days later.
+**The final console line includes `fit_hash`, `compat_hash`, and the store path** — that is
+what a user needs to resume or regenerate the report, and what they will copy out of a
+terminal scrollback three days later.
 
 ---
 
@@ -1415,7 +1608,40 @@ Windows then becomes "add `win-64` to the platform list and stand up a CI leg," 
 ### 15.4 dtype policy
 
 **float64 throughout `core`**, stated explicitly. float32 conversion happens at the
-batch/IO boundary. Output arrays are float32 except where §12.6 requires float64.
+batch/IO boundary, **per dask chunk during tile assembly** (§9.4) so both full
+representations never coexist. Output arrays are float32 except where §12.6 requires
+float64.
+
+### 15.5 Cloud readiness
+
+Development happens on a 4-core / 16 GB mini PC (§9.2), and a `cloudify` skill giving
+SkyPilot access is forthcoming. The upgrade should be a configuration change, not a port.
+**Most of what that requires is already in the design for other reasons:**
+
+| property | already decided because | cloud consequence |
+|---|---|---|
+| **zarr v3 + sharding** (§12.7) | inode explosion at 10⁷ points | object stores penalize many small objects far more harshly than POSIX filesystems; sharding collapses object count by the shard factor. The single most important cloud property, already chosen. |
+| **runtime knobs excluded from `fit_hash`/`compat_hash`** (§13.3) | resume on a different machine | "run locally until the budget runs out, burst to cloud, resume" works **by construction** — it is a resume, not a rerun |
+| **determinism independent of memory budget and thread count** (§11.3) | results must not depend on RAM | a cloud-resumed run produces the same answer as a local one |
+| **calibration keyed on machine fingerprint** (§11.4) | heterogeneous nodes | each instance type gets its own cache entry automatically |
+| **single-process, threaded tiling loop** (§11.1) | Windows portability, simplicity | a cloud node is simply a bigger box — no distributed scheduler required |
+
+Two things to add now, both cheap:
+
+- **Every path is an fsspec URL, not a filesystem path** — data source, output store,
+  warm-start sidecar, report output, and cache locations. No assumption of a persistent home
+  directory for caches; cache location is configurable.
+- **No local-filesystem assumptions in the reporting path** (§14.2) — PNGs and JSON are
+  written through the same abstraction as the store.
+
+**One thing deliberately not built, with its blocker named.** Horizontal scaling across
+*multiple* nodes would partition the tile space, and the completion bitmap is already the
+natural coordination primitive. But the bitmap is read-modify-write, which is **not atomic
+on object stores**, so multi-node writers would need a tile-claiming mechanism (a lease
+directory, or per-worker bitmap shards reduced at the end). That is the one piece requiring
+design rather than configuration, and it is out of scope for v1 — recorded here so a future
+multi-node attempt starts from the known obstacle rather than discovering it through
+corrupted state.
 
 ---
 
@@ -1435,7 +1661,14 @@ written.
 matrix explicitly from the analytic autocovariance and evaluate the multivariate normal
 density directly. That is independent of the entire state-space formulation. celerite2
 agreement is a valuable second check, but it shares the GP-likelihood conceptual frame — it
-can agree with you and both be wrong. **Require both; MVN is primary.**
+can agree with you and both be wrong.
+
+**They validate different things, and that is what sets the priority.** MVN checks the
+filter against an analytic ACF taken from the literature, so it independently validates the
+**state-space construction** — the part that is bespoke here. celerite2 validates the **ACF
+itself**, which is valuable but less so, because the Matérn ACFs are textbook and checkable
+by inspection. celerite2 is therefore an **optional test on Tier-1 platforms**, and it is
+the first thing to cut if Phase 1 proves too large (§18).
 
 High-value targets:
 
@@ -1536,13 +1769,25 @@ Batched `(B, N)` API throughout; no tiling, no zarr, no CLI.
 - ML and REML objectives; engine + objective tags; comparability guards
 - FD gradients; gradient protocol slot; **analytic forward-mode for Matérn ν=1/2** (see
   §18 note); complex-step viability verdict
-- Batched trust-region optimizer (path A); moment initialization ladder; Hessian at optimum
+- Moment initialization ladder; Hessian at optimum
 - Failure taxonomy as an enum throughout
 - One criterion (AIC) end to end
 - `fit()` accepts `x0` — warm-starting is Phase 2, but it constrains the Phase 1 signature
-- **The §9.2 execution-strategy spike**, written up against budget
 - **The §9.4 memory formula**, validated against measured peak RSS
 - Platform RSS shim (§15.3)
+- Three-hash machinery (§13.3), with the compat-relevance allowlist and its golden test
+
+**Optimizer scope is decided by the staged spike, not fixed in advance** (§9.2). This is the
+largest single lever on Phase 1's size:
+
+| stage | what gets built |
+|---|---|
+| **Stage 1** (always) | batched Kalman filter in numpy; compiled path B for Matérn ν=1/2 and the d=3 case; path A's optimistic bound measured; gap-structure sweep; write-up against the 19 ms budget |
+| **Stage 1 says B wins by ≥3×** | **the batched trust-region is never built.** Path A's permanent form is a plain per-series scipy loop, retained as the reference implementation and the MVN-oracle harness |
+| **Stage 1 inconclusive → Stage 2** | full batched trust-region with active masks and compaction, then the original decision rule |
+
+Both branches still require **both paths to sit behind the §7.4 engine protocol** — that is
+the spike's real deliverable and it is not conditional.
 
 ### Phase 2 — batch orchestration (`metamer.batch`)
 
@@ -1578,7 +1823,10 @@ ML/REML sweep; external cross-validation against Hector / CATS / `est_noise`; RE
 ## 18. Phase 1 exit criteria (consolidated)
 
 1. Brute-force MVN agreement at small N, **every Phase 1 family and a sum**
-2. `celerite2` agreement on the shared kernel subset (Tier-1 platforms where importable)
+2. `celerite2` agreement on the shared kernel subset — **optional**, Tier-1 platforms where
+   importable. **The designated first cut if Phase 1 proves too large** (§16.1): MVN
+   validates the state-space construction, which is the bespoke part; celerite2 validates
+   the ACF, which is textbook.
 3. Masked-gap likelihood identical to the same series with those samples genuinely absent
 4. Analytic `F`/`Q`/`P∞` verified against a general `expm`/Lyapunov reference, per family
 5. Parameter counting verified against hand-counted values for **both objectives**,
@@ -1594,8 +1842,15 @@ ML/REML sweep; external cross-validation against Hector / CATS / `est_noise`; RE
 11. Hessian at optimum verified against a brute-force FD Hessian at small N
 12. **Every** failure-taxonomy branch reachable by a constructed test case
 13. Measured peak RSS matching the analytic memory formula at two or three values of B
-14. A completed run at **B ≈ 10⁴, N ≈ 630**, with the §9.2 execution-strategy benchmark
-    written up and measured ms-per-series-model compared against the 19 ms budget
+14. A completed run at **B ≈ 10⁴, N ≈ 630**, with the **stage-1** execution-strategy
+    comparison written up: compiled path B measured fully against path A's **optimistic
+    bound**, at low and full thread count, with measured ms-per-series-model compared
+    against the 19 ms budget. Stage 2 is required only if stage 1 is inconclusive (§9.2).
+15. **Gap-structure sweep results** at {0%, 10% scattered, 40% contiguous blocks}, with the
+    A:B ratio reported **per gap case** rather than pooled
+16. **`fit_hash` / `compat_hash` separation exercised end to end**: a resume that adds a
+    criterion recomputes `/selection/` from the stored primitives **without refitting**, and
+    a `fit_hash` mismatch is refused
 
 **Note on criterion 10.** It requires at least one family *with* an analytic gradient and one
 *without*, which pulls the forward-mode path into Phase 1 rather than deferring it. Resolved
@@ -1620,6 +1875,8 @@ gradients a per-family Phase 1 obligation.
 | Breakpoint *detection* | explicitly out of scope; must not be silently approximated |
 | Windows support | four portability disciplines adopted now; needs a CI leg to be claimed |
 | Cython / C backend | swap behind the engine protocol if numba's `nopython` constraints or compile times become binding |
+| Multi-node horizontal scaling | needs a tile-claiming mechanism; the completion bitmap is read-modify-write and **not atomic on object stores** (§15.5) |
+| Batched trust-region optimizer | built **only** if the stage-1 spike is inconclusive (§9.2) |
 
 ### Conditionally settled
 
@@ -1630,15 +1887,18 @@ actually being measured.
 
 ### Open
 
-- **Hardware for the §9.2 spike.** The decision rule requires measurement on *both* a
-  64-core node and an 8-core/16 GB laptop. Availability of those machines is unconfirmed.
-- **CI.** Not specified. It determines whether Tier-2 platforms and the celerite2 agreement
-  test are actually exercised, and whether Windows could ever be claimed.
-- **`n_eff_bic` definition.** §10.1 names the two quantities and their uses; the precise
-  estimator for `n_eff_bic` (sum of squared autocorrelations vs `tr` of the correlation
-  matrix vs another) is not yet fixed.
+- **CI.** Not specified. It determines whether Tier-2 platforms and the optional celerite2
+  agreement test are actually exercised, and whether Windows could ever be claimed.
 - **Index-space vs area-weighted adjacency** for the §14.2 clustering statistic — index-space
   is the recommendation, but the choice is recorded as not-yet-final.
+
+### Closed since first draft
+
+- **Hardware for the §9.2 spike** — resolved by the one-machine thread-sweep rule (§9.2),
+  with the 4-core / 16 GB mini PC as the primary development machine.
+- **`n_eff_bic` estimator** — participation-ratio form, §10.1.
+- **Criterion 10's pull on analytic gradients** — Matérn ν=1/2 analytic gradients plus a
+  test-only stub family (§18 note).
 
 ---
 

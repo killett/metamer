@@ -8,7 +8,8 @@
 | Original build prompt | [`metamer-build-prompt.md`](metamer-build-prompt.md) — **superseded** by the design doc's §2 where they conflict |
 | Implementation plan | not written yet |
 
-**Next action:** spec review with the user, then write the Phase 1 implementation plan.
+**Next action:** write the Phase 1 implementation plan (spec reviewed and amended
+2026-08-05; rulings R1–R6 and defects D1–D5 applied).
 
 Phase list lives in design doc §17. Phase 1 exit criteria live in §18. Do not duplicate
 either here.
@@ -32,7 +33,16 @@ be violated by accident.
   parameter of the model at all. Two definitions, not one with an adjustment. (§4.7)
 - **float64 throughout `core`**; float32 only at the batch/IO boundary. (§15.4)
 - **Primary likelihood oracle is brute-force MVN, not celerite2.** celerite2 shares the GP
-  conceptual frame and can agree while both are wrong. (§16.1)
+  conceptual frame and can agree while both are wrong. MVN validates the state-space
+  construction (bespoke); celerite2 validates the ACF (textbook). (§16.1)
+- **Three hashes, not two.** `fit_hash` ⊂ `compat_hash` ⊂ `run_hash`. Warm starts and the
+  calibration cache key on `fit_hash`; a `compat_hash`-only mismatch recomputes derived
+  arrays from stored primitives rather than refitting. (§13.3, §12.8)
+- **Do not build the batched trust-region until the stage-1 spike says to.** It exists only
+  for path A's performance; if path B wins it is dead weight, and path A's permanent form
+  is a plain per-series scipy loop. (§9.2, §17)
+- **Delta-method uncertainties are first-order** and degrade near a diagnostic limit — a
+  `DIAGNOSTIC_LIMIT` outcome also means the reported uncertainty is unreliable. (§4.1)
 
 ---
 
@@ -45,22 +55,35 @@ be violated by accident.
   while running on linux. Always pass `--platform` when checking availability, and use a
   known-good package (e.g. `numba`) as a control, because `rg | head` swallows the
   non-zero exit and an empty result looks the same as a failed query.
+- **The prompt's `tile_side = sqrt(block_bytes / (n_time · itemsize))` counts only the
+  float64 data.** Full accounting gives 343 instead of 445 at a 1 GB budget with a shared
+  design matrix, and 187 with per-point regressor fields. Design doc §9.4.
+- **Per-point regressor fields (e.g. GIA) cost `N × k_β × 8` per series** — 20.2 kB at
+  N=630, k_β=4, which is ~2.4× everything else combined. Whether a config lands in the
+  shared-X or per-point-X regime is the single biggest memory fact about it.
 - Per user global instructions: never do investigative `git checkout <sha>` inside the
   working tree. Use `git show <sha>:<path>`, `git worktree add`, or `git diff <sha>`.
 
 ---
 
+## Hardware
+
+| machine | role |
+|---|---|
+| Ubuntu mini PC — 4 slow cores, 16 GB RAM (~10 GB free) | **primary development machine**; the binding constraint |
+| Apple Silicon MacBook, 32 GB | Tier-1 platform check |
+| Linux box, 64 cores (RAM unknown) | throughput target |
+| SkyPilot via a forthcoming `cloudify` skill | future; design doc §15.5 |
+
+The spike's one-machine decision rule (thread-count sweep as a proxy for bandwidth per
+core) is in design doc §9.2.
+
 ## Open questions needing user input
 
-1. **Hardware for the execution-strategy spike (design doc §9.2).** The decision rule
-   requires measurement on both a 64-core node and an 8-core/16 GB laptop. Availability
-   unconfirmed. Without both, the decision rule needs restating.
-2. **CI.** Not specified anywhere. It determines whether Tier-2 platforms and the celerite2
-   agreement test are actually exercised, and whether Windows could ever be claimed.
-3. **`n_eff_bic` estimator** (design doc §10.1) — the two effective-sample-size quantities
-   are named and their uses separated, but the precise estimator for the BIC variant is not
-   fixed.
-4. **Index-space vs area-weighted adjacency** for the failure clustering statistic
+1. **CI.** Not specified anywhere. It determines whether Tier-2 platforms and the optional
+   celerite2 agreement test are actually exercised, and whether Windows could ever be
+   claimed.
+2. **Index-space vs area-weighted adjacency** for the failure clustering statistic
    (§14.2). Index-space is recommended; not yet final.
 
 ---
