@@ -1,106 +1,132 @@
 # metamer — progress
 
-## Durability: push after every task commit
+## Start here (cold-start summary)
 
-The repo is published at **https://github.com/killett/metamer** (public). Development is
-tracked there, so a commit that never reaches the remote defeats the point.
+- **Branch:** `phase-1` (work here, not `main`). Both branches are pushed.
+- **Remote:** https://github.com/killett/metamer — public. Run `git log --oneline -5` for the latest commit.
+- **Done:** design document, Phase 1 implementation plan, two rounds of plan review applied. **No code exists yet** — there is no `src/`.
+- **Pending:** Phase 1 Tasks 0–19. Nothing started.
+- **Next action:** implement **Task 0** (package skeleton) from
+  [`docs/superpowers/plans/2026-08-05-metamer-phase1.md`](docs/superpowers/plans/2026-08-05-metamer-phase1.md),
+  then immediately open the draft PR (command below).
+- **Resume with:** `/superpowers-extended-cc:executing-plans docs/superpowers/plans/2026-08-05-metamer-phase1.md`
+- Read this whole file before starting. The sections below hold decisions that exist
+  nowhere else.
 
-- A local `post-commit` hook (`.git/hooks/post-commit`, untracked) pushes the current branch
-  after every commit. It pushes **that branch only** — never `--all`, never `--tags` — and
-  never fails a commit if the push fails.
-- Hooks are not tracked by git, so **a fresh clone will not have it.** If you are working in
-  a new clone, either recreate it or push manually after each task.
-- If the hook reports a failed push, the commit is safe locally; run `git push` when the
-  network or credentials are back.
-- Never push tags without deciding to: a `v*` tag is the release trigger.
-
-### Phase 1 runs on the `phase-1` branch, not `main`
-
-The branch already exists locally and on the remote. Work there, so the whole phase reviews
-as one diff.
-
-**Open the draft PR immediately after Task 0's first commit** — it cannot be opened before
-then, because GitHub refuses a PR with no commits between the branches:
-
-```
-gh pr create --draft --base main --head phase-1 --title "Phase 1: likelihood spine" --body "Tracks execution of docs/superpowers/plans/2026-08-05-metamer-phase1.md."
-```
-
-After that the post-commit hook keeps the PR updated with no further action.
+---
 
 ## Current work
 
 | what | where |
 |---|---|
 | Design document | [`docs/superpowers/specs/2026-08-04-metamer-design.md`](docs/superpowers/specs/2026-08-04-metamer-design.md) |
-| Original build prompt | [`metamer-build-prompt.md`](metamer-build-prompt.md) — **superseded** by the design doc's §2 where they conflict |
 | Phase 1 implementation plan | [`docs/superpowers/plans/2026-08-05-metamer-phase1.md`](docs/superpowers/plans/2026-08-05-metamer-phase1.md) |
 | Phase 1 task tracker | `docs/superpowers/plans/2026-08-05-metamer-phase1.md.tasks.json` (native task ids 8–27) |
+| Original build prompt | [`metamer-build-prompt.md`](metamer-build-prompt.md) — **superseded** by design doc §2 where they conflict |
 
-**Next action:** execute Phase 1 Task 0 (package skeleton). Resume with
-`/superpowers-extended-cc:executing-plans docs/superpowers/plans/2026-08-05-metamer-phase1.md`.
+Phase list is design doc §17. Phase 1 exit criteria are §18. Do not duplicate either here.
 
-**The Phase 1 branch:** Task 18 is a user gate requiring runs on the 64-core box and the
-MacBook. Task 19 (batched trust-region) is built **only** if Task 18's verdict is
-"inconclusive" — if path B wins by ≥3× at d=3, it is deleted rather than deferred.
-
-Phase list lives in design doc §17. Phase 1 exit criteria live in §18. Do not duplicate
-either here.
+**The Phase 1 branch point:** Task 18 is a user gate needing runs on the 64-core box and
+the MacBook. **Task 19 is built only if Task 18's verdict is "inconclusive"** — if path B
+wins by ≥3× at d=3, Task 19 is *deleted, not deferred*, because a correctness reference
+does not need to be fast and path A's permanent form is then the plain per-series scipy
+loop already built in Task 13.
 
 ---
 
-## Cross-cutting decisions
+## Durability: push after every task commit
 
-These are recorded in full in the design doc; this is an index of the ones most likely to
-be violated by accident.
+- A local `post-commit` hook (`.git/hooks/post-commit`, untracked) pushes the current
+  branch after every commit. It pushes **that branch only** — never `--all`, never
+  `--tags` — and never fails a commit if the push fails.
+- Hooks are not tracked by git, so **a fresh clone will not have it.** Recreate it or push
+  manually.
+- Never push tags without deciding to: a `v*` tag is the release trigger.
+
+### Open the draft PR right after Task 0's first commit
+
+It cannot be opened before then — GitHub refuses a PR with no commits between branches:
+
+```
+gh pr create --draft --base main --head phase-1 --title "Phase 1: likelihood spine" --body "Tracks execution of docs/superpowers/plans/2026-08-05-metamer-phase1.md."
+```
+
+---
+
+## Decisions made in conversation (not derivable from the design doc)
+
+These came out of review rounds and exist only here and in the plan. A fresh session
+cannot reconstruct them.
+
+- **d=3 comes from a composite, not Matérn 5/2.** Design doc §9.2 offers "white + SHO" as
+  the d=3 spike case, but **white is measurement noise and contributes 0 to the state**, so
+  white + SHO is d=2. Phase 1 implements white (d=0), Matérn ν=1/2 (d=1), Matérn ν=3/2
+  (d=2), and reaches d=3 via `white + matern12 + matern32` — which also exercises
+  composition, block-diagonal assembly, and canonical ordering in the same test.
+- **Thread sweep is {1, 4} on the mini PC, not {8, full}.** The mini PC has 4 cores, so 8
+  threads would oversubscribe and measure the scheduler rather than memory bandwidth. At 1
+  thread path B loses its parallelism advantage entirely, so a B win there is the strongest
+  form of the conservative-for-A inference.
+- **The spike is staged.** Stage 1 measures compiled path B against path A's *optimistic
+  bound* (filter cost × mean iterations, zero optimizer overhead, 100% utilization) — a
+  performance A can never exceed. The bound is one-sided, so "B wins even against A's best
+  conceivable case" is safe; the converse needs the real measurement, which is stage 2.
+- **≥3× at d=3 on the 64-core box decides it.** The mini PC establishes feasibility and
+  correctness only; **the 19 ms budget comparison is valid only on the 64-core box.** The
+  MacBook is the adversarial case — unified memory gives high bandwidth per core, so if
+  path A wins anywhere it wins there.
+- **REML uses the Harville (1974) convention**, pinned in `objective.py`'s docstring:
+  constant is `(n − rank(X))·log(2π)`, and the basis-invariance term `+½log|XᵀX|` is
+  included. Both corrections are constant in θ, so they cancel in ΔIC and **no differential
+  test can detect their absence** — which is how the wrong constant survived a review.
+  **OPEN: verify which convention Hector uses.** If it differs, the cross-validation carries
+  a documented offset rather than a mystery.
+- **σ² is deliberately NOT profiled out.** Standard GLS profiles the overall scale, and most
+  geodesy does. A composite kernel has a scale *per term*, so an overall amplitude would be
+  amplitude × a simplex of per-term weights — i.e. a **cross-term shared parameter**, which
+  Phase 1 does not implement. This is a real comparability difference against Hector, on top
+  of the REML convention. Revisit when shared parameters land; it is a Phase 3+ change to
+  the kernel algebra, not a flag flip.
+- **Cross-term parameter sharing is refused, not silently miscounted.** Design doc §4.7
+  requires counting to handle it; nothing implements it, so `terms.free_param_index` raises
+  `NotImplementedError` — same discipline as nonlinear signal terms.
+- **celerite2 is optional and test-only**, and is the designated first cut if Phase 1 proves
+  too large. It has no `osx-arm64` conda-forge build, so it is pinned under
+  `[target.linux-64.dependencies]` and its agreement test skips elsewhere. MVN is the
+  primary oracle because it validates the state-space construction (bespoke); celerite2
+  validates the ACF (textbook).
+
+---
+
+## Cross-cutting decisions most likely to be violated by accident
 
 - **`(B, N)` is the only code path.** `B=1` is a shape, never a separate implementation.
-- **No reparameterization, reordering, or preconditioner refresh may change the coordinate
-  system mid-optimization** without an explicit curvature-history reset. (§4.5)
-- **Never interpolate to fill gaps.** Mask the update, keep the prediction. (§7.3)
-- **Analytic transition/process-noise per family.** The general `expm`/Lyapunov path is a
-  fallback that should almost never run; frequent firing is a bug signal. (§2.1, §7.1)
-- **Scores carry both an engine tag and an objective tag**, and the selection layer refuses
-  to rank across either. Hard error, not a warning. (§6.2)
-- **Profiled-out GLS parameters count toward `k` under ML.** Under REML, `β` is not a
-  parameter of the model at all. Two definitions, not one with an adjustment. (§4.7)
-- **float64 throughout `core`**; float32 only at the batch/IO boundary. (§15.4)
-- **Primary likelihood oracle is brute-force MVN, not celerite2.** celerite2 shares the GP
-  conceptual frame and can agree while both are wrong. MVN validates the state-space
-  construction (bespoke); celerite2 validates the ACF (textbook). (§16.1)
-- **Three hashes, not two.** `fit_hash` ⊂ `compat_hash` ⊂ `run_hash`. Warm starts and the
-  calibration cache key on `fit_hash`; a `compat_hash`-only mismatch recomputes derived
-  arrays from stored primitives rather than refitting. (§13.3, §12.8)
-- **Do not build the batched trust-region until the stage-1 spike says to.** It exists only
-  for path A's performance; if path B wins it is dead weight, and path A's permanent form
-  is a plain per-series scipy loop. (§9.2, §17)
-- **Delta-method uncertainties are first-order** and degrade near a diagnostic limit — a
-  `DIAGNOSTIC_LIMIT` outcome also means the reported uncertainty is unreliable. (§4.1)
-- **Parallelism is WITHIN a tile, never ACROSS tiles.** Across-tile parallelism is the
-  obvious later "optimization" and it multiplies peak RAM by thread count, silently
-  breaking the 16 GB constraint. (§11.1)
-- **Caches live with the zarr store, not in local scratch** — preemptible instances lose
-  local scratch, and losing pass 1's warm starts costs a full re-run of pass 1. (§15.5)
-
----
-
-## Gotchas discovered
-
-- **`celerite2` has no `osx-arm64` conda-forge build** (verified 2026-08-04). Coverage is
-  split between conda-forge and PyPI with no single source covering every target platform.
-  Mitigated by making it a test-only dependency. Full table in design doc §15.2.
-- **`pixi search` without `--platform` reports an arbitrary subdir** — it showed `osx-64`
-  while running on linux. Always pass `--platform` when checking availability, and use a
-  known-good package (e.g. `numba`) as a control, because `rg | head` swallows the
-  non-zero exit and an empty result looks the same as a failed query.
-- **The prompt's `tile_side = sqrt(block_bytes / (n_time · itemsize))` counts only the
-  float64 data.** Full accounting gives 343 instead of 445 at a 1 GB budget with a shared
-  design matrix, and 187 with per-point regressor fields. Design doc §9.4.
-- **Per-point regressor fields (e.g. GIA) cost `N × k_β × 8` per series** — 20.2 kB at
-  N=630, k_β=4, which is ~2.4× everything else combined. Whether a config lands in the
-  shared-X or per-point-X regime is the single biggest memory fact about it.
-- Per user global instructions: never do investigative `git checkout <sha>` inside the
-  working tree. Use `git show <sha>:<path>`, `git worktree add`, or `git diff <sha>`.
+- **Every per-series concept must be per series.** Outcomes are shape `(B,)` `uint8`, never
+  scalar. `np.linalg.cholesky` raises for the *whole stack* if one member fails, so
+  validity is classified with the non-raising batched `slogdet` first and only the valid
+  subset is factorized. `test_batched_results_equal_solo_results_series_by_series` is the
+  standing guard for this entire class.
+- **Failed series carry NaN, not −inf,** in anything destined for the store. −inf is a
+  finite-looking sentinel that survives some consumers' checks. It is the optimizer's
+  internal barrier value only.
+- **`terms.free_param_index` is the single source of truth** for the flat parameter vector.
+  Never re-derive the layout locally. `len(free_param_index(spec)) == spec.n_theta()` is the
+  invariant that keeps the searched vector and `k` in agreement.
+- **`StateSpace` slices `theta` over all of a term's parameters**, so a free-only vector
+  must go through `ConcentratedObjective.hydrate` first, or a frozen parameter shifts every
+  later coordinate one slot left.
+- **No reordering, reparameterization, or preconditioner refresh mid-optimization** without
+  an explicit curvature-history reset.
+- **Never interpolate gaps** — mask the update, keep the prediction.
+- **Analytic `F`, `Q`, `P∞` per family.** The general `expm`/Lyapunov path is a test
+  reference and a degeneracy fallback; frequent firing is a bug signal.
+- **Scores carry an engine tag AND an objective tag**; ranking across either is a hard error.
+- **Counting is per objective**: ML `k = k_θ + k_β`, `n = n_obs`; REML `k = k_θ`,
+  `n = n_obs − rank(X)`. Two definitions on two model classes, not one with an adjustment.
+- **float64 throughout `core`**; float32 only at the batch/IO boundary, converted per dask
+  chunk so both representations never coexist.
+- **Parallelism is within a tile, never across tiles** — that is what keeps peak RAM
+  independent of core count.
 
 ---
 
@@ -109,25 +135,59 @@ be violated by accident.
 | machine | threads | role |
 |---|---|---|
 | Ubuntu mini PC — 4 slow cores, 16 GB RAM (~10 GB free) | {1, 4} | primary development; correctness, oracles, memory formula. **Cannot answer the budget question.** |
-| Linux box, 64 cores (RAM unknown — establish before use) | {1, 4, full} | **the decisive measurement**; the only machine where the 19 ms budget comparison is valid |
-| Apple Silicon MacBook, 32 GB | {1, full} | adversarial case for path A (high bandwidth per core); arm64 smoke test |
+| Linux box, 64 cores (RAM unknown — establish before use) | {1, 4, full} | **the decisive measurement**; only valid place for the 19 ms budget comparison |
+| Apple Silicon MacBook, 32 GB | {1, full} | adversarial case for path A; arm64 smoke test |
 | SkyPilot via a forthcoming `cloudify` skill | — | future; design doc §15.5 |
 
 Machine plan and the two normalization instruments (canonical filter pass for the budget
-question; compute/bandwidth roofline pair for cross-machine prediction) are in design doc
-§9.2.
+question; compute/bandwidth roofline pair for cross-machine prediction) are in design doc §9.2.
 
-## Open questions needing user input
+---
 
-1. **CI.** Not specified anywhere. It determines whether Tier-2 platforms and the optional
-   celerite2 agreement test are actually exercised, and whether Windows could ever be
-   claimed.
-2. **Index-space vs area-weighted adjacency** for the failure clustering statistic
-   (§14.2). Index-space is recommended; not yet final.
+## Gotchas discovered
+
+- **`celerite2` has no `osx-arm64` conda-forge build** (verified 2026-08-04). Coverage is
+  split between conda-forge and PyPI with no single source covering every target platform.
+  Full table in design doc §15.2.
+- **`pixi search` without `--platform` reports an arbitrary subdir.** Always pass
+  `--platform`, and use a known-good package (e.g. `numba`) as a control — `rg | head`
+  swallows the non-zero exit, so an empty result looks identical to a failed query.
+- **`gitleaks` is not on conda-forge.** Install the binary release from GitHub instead.
+- **The prompt's `tile_side = sqrt(block_bytes / (n_time · itemsize))` counts only the
+  float64 data.** Full accounting gives 343 instead of 445 at a 1 GB budget with a shared
+  design matrix, and 187 with per-point regressor fields. Design doc §9.4.
+- **Per-point regressor fields (e.g. GIA) cost `N × k_β × 8` per series** — 20.2 kB at
+  N=630, k_β=4, ~2.4× everything else combined. `signal.DesignInfo` exists so that widening
+  is a shape change rather than a signature rewrite.
+- **The GitHub token has no `workflow` scope.** Any push adding `.github/workflows/` is
+  rejected outright.
+- Per user global instructions: never do investigative `git checkout <sha>` inside the
+  working tree. Use `git show <sha>:<path>`, `git worktree add`, or `git diff <sha>`.
+
+---
+
+## Open questions
+
+Still open. **A new session must not assume these were settled.**
+
+1. **CI.** Not specified anywhere. Determines whether Tier-2 platforms and the optional
+   celerite2 agreement test are exercised, and whether Windows could ever be claimed.
+   Blocked in practice by the missing `workflow` token scope.
+2. **Index-space vs area-weighted adjacency** for the failure clustering statistic (design
+   doc §14.2). Index-space is recommended; not final.
+3. **Which REML convention Hector uses** (see decisions above). Needed before the external
+   cross-validation can attribute any discrepancy.
+4. **`requires-python = ">=3.12,<3.14"` carries an upper cap.** Caps poison downstream
+   resolvers; drop before the PyPI stage ever runs.
+5. **64-core box RAM is unknown.** Establish it before the Task 18 run.
 
 ---
 
 ## Deferred items
 
-Design-level deferrals with their landing conditions live in design doc §19. Nothing is
-deferred that is not recorded there.
+Design-level deferrals with their landing conditions are in design doc §19. Nothing is
+deferred that is not recorded there. Phase 1 additions:
+
+- Cross-term shared parameters (blocks σ² profiling) — refused with `NotImplementedError`.
+- Per-point regressor fields — `signal.DesignInfo` carries the seam.
+- Nonlinear signal terms (`ExpDecay`, `LogDecay`) — constructible, raise on use.

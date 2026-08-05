@@ -1372,6 +1372,9 @@ from __future__ import annotations
 
 from enum import StrEnum
 
+import numpy as np
+from numpy.typing import NDArray
+
 
 class Outcome(StrEnum):
     """Per (point, candidate) fit outcome."""
@@ -1411,6 +1414,47 @@ class Outcome(StrEnum):
             Outcome.NOT_ATTEMPTED,
             Outcome.INSUFFICIENT_DATA,
         }
+
+    @property
+    def code(self) -> int:
+        """Stable integer code, for the batched arrays and the zarr schema."""
+        return _CODES[self]
+
+    @classmethod
+    def from_code(cls, value: int) -> Outcome:
+        """Invert `code`."""
+        return _BY_CODE[int(value)]
+
+
+# Stable on-disk codes. NEVER renumber: they are written to the zarr store as
+# uint8 and a renumbering silently reinterprets every archived run. Adding a new
+# member takes the next free code and bumps the store's schema_version.
+_CODES: dict[Outcome, int] = {
+    Outcome.OK: 0,
+    Outcome.ITER_CAP_SMALL_GRAD: 1,
+    Outcome.ITER_CAP_LARGE_GRAD: 2,
+    Outcome.DIAGNOSTIC_LIMIT: 3,
+    Outcome.TRUST_RADIUS_COLLAPSED: 4,
+    Outcome.NONFINITE_OBJECTIVE: 5,
+    Outcome.RANK_DEFICIENT_X: 6,
+    Outcome.DEGENERATE_HESSIAN: 7,
+    Outcome.NOT_ATTEMPTED: 8,
+    Outcome.CANDIDATE_DROPPED: 9,
+    Outcome.INSUFFICIENT_DATA: 10,
+}
+_BY_CODE: dict[int, Outcome] = {code: member for member, code in _CODES.items()}
+
+
+def outcome_array(batch: int, outcome: Outcome = Outcome.OK) -> NDArray[np.uint8]:
+    """Return a per-series outcome array filled with one value.
+
+    Outcomes are PER SERIES wherever they cross a batched boundary. A scalar
+    outcome for a batch of B means one bad grid point marks all B as failed,
+    which contradicts both "(B, N) is the only code path" and the output
+    schema's per-(point, model) status -- and turns the spatial failure map,
+    which is itself a diagnostic, into a picture of the tile grid.
+    """
+    return np.full(batch, outcome.code, dtype=np.uint8)
 ```
 
 - [ ] **Step 6: Wire capability into ProcessSpec**
@@ -3162,10 +3206,58 @@ class LogDecay:
 
 
 @dataclass(frozen=True)
+class DesignInfo:
+    """A built design matrix and everything derived from it that is theta-free.
+
+    `gram_logdet` is log|X'X|, the REML basis-invariance term. It is a property
+    of X alone, so computing it inside the likelihood would recompute a fixed
+    quantity ~50 times per fit, 12 candidates per point, 10^7 points.
+
+    SEAM (Phase 2, per-point regressors): when a regressor is a per-point field
+    -- a GIA model -- `matrix` becomes (B, N, k), `rank` and `gram_logdet`
+    become shape (B,), and `per_point` becomes True. Every consumer already
+    takes this object rather than a loose (design, rank) pair, so that change is
+    a shape widening, not a signature rewrite. It also triggers the
+    N*k_beta*8-per-series memory term, which dominates the per-series budget.
+    """
+
+    matrix: NDArray[np.float64]
+    rank: int
+    gram_logdet: float
+    per_point: bool = False
+
+    @property
+    def n_beta(self) -> int:
+        """Number of design columns."""
+        return int(self.matrix.shape[-1])
+
+    @property
+    def is_deficient(self) -> bool:
+        """Whether the design is rank-deficient."""
+        return bool(self.matrix.size and self.rank < self.n_beta)
+
+
+@dataclass(frozen=True)
 class SignalSpec:
     """An ordered collection of deterministic signal terms."""
 
     terms: list[SignalTerm]
+
+    def design_info(self, t: NDArray[np.float64]) -> DesignInfo:
+        """Build the design matrix and its theta-free derived quantities once.
+
+        Args:
+            t: Time axis, shape (n,).
+
+        Returns:
+            A DesignInfo. `gram_logdet` is -inf for a rank-deficient design; the
+            caller classifies that as RANK_DEFICIENT_X rather than using it.
+        """
+        matrix, rank = self.design_matrix(t)
+        if matrix.size == 0:
+            return DesignInfo(matrix, 0, 0.0)
+        sign, logdet = np.linalg.slogdet(matrix.T @ matrix)
+        return DesignInfo(matrix, rank, float(logdet) if sign > 0 else float("-inf"))
 
     @property
     def is_linear(self) -> bool:
@@ -3243,6 +3335,12 @@ git commit -m "feat: add signal terms, design matrix, and linear/nonlinear taxon
 - [ ] The REML constant is `(n − rank(X))·log(2π)`, not `n·log(2π)`, and the basis-invariance term `+½log|XᵀX|` is present
 - [ ] `GlsResult` is produced by **one** `cho_factor` and carries `beta`, `beta_cov`, `logdet`, `rss_reduction` and an `Outcome` — no second solve, no `np.linalg.inv`
 - [ ] The σ²-profiling decision is stated in the module docstring with its reason
+- [ ] **Outcomes are per series everywhere they cross a batched boundary** — `GlsResult.outcome` and `ObjectiveResult.outcome` are shape `(B,)` `uint8`, never a scalar
+- [ ] **`np.linalg.slogdet` builds the validity mask before any factorization**; only the valid subset is factorized and results are scattered back, so one bad series cannot fail the stack
+- [ ] A batch with exactly one fully-masked series marks that series `RANK_DEFICIENT_X` with NaN, and every other series `OK` with a finite log-likelihood equal to its solo fit
+- [ ] **Failed series carry NaN, not −inf**, in anything destined for the store; −inf appears only as the optimizer's internal barrier in `optimize_series`
+- [ ] `log|XᵀX|` is computed once on `DesignInfo`, never inside the likelihood
+- [ ] `Outcome.code` values are stable and documented as never renumbered
 
 **Verify:** `pixi run test tests/test_objective.py -v`
 
@@ -3257,7 +3355,8 @@ import pytest
 
 from metamer.core.capability import Objective
 from metamer.core.engines.kalman import KalmanEngine
-from metamer.core.objective import ConcentratedObjective, gls_solution
+from metamer.core.objective import ConcentratedObjective
+from metamer.core.signal import DesignInfo, gls_solution
 from metamer.core.signal import Constant, SignalSpec, Trend
 from metamer.core.statespace import StateSpace
 from metamer.core.terms import ProcessSpec
@@ -3272,11 +3371,12 @@ def _setup(seed: int = 3, n: int = 40):
     theta = np.array([[0.4, 1.2, 6.0]])
     t = np.arange(float(n))
     signal = SignalSpec([Constant(), Trend()])
-    x, rank = signal.design_matrix(t)
+    design = signal.design_info(t)
+    x = design.matrix
     cov = _covariance(ss, theta, t)
     rng = np.random.default_rng(seed)
     y = (rng.multivariate_normal(np.zeros(n), cov) + 2.0 + 0.05 * (t - t.mean()))[None, :]
-    return spec, ss, theta, t, x, rank, cov, y
+    return spec, ss, theta, t, design, cov, y
 
 
 def test_beta_hat_matches_explicit_gls():
@@ -3285,7 +3385,8 @@ def test_beta_hat_matches_explicit_gls():
     Bug this catches: partitioning the accumulator wrongly (row/column swap),
     which produces a plausible but incorrect trend -- the headline number.
     """
-    _, ss, theta, t, x, _, cov, y = _setup()
+    _, ss, theta, t, design, cov, y = _setup()
+    x = design.matrix
     result = KalmanEngine().score(ss, theta, y, np.ones_like(y, dtype=bool), t, design=x)
     gls = gls_solution(result.normal_equations)
     cov_inv = np.linalg.inv(cov)
@@ -3299,9 +3400,10 @@ def test_concentrated_loglik_matches_profiled_mvn():
     The oracle profiles beta explicitly from an explicit covariance matrix, so
     it shares nothing with the augmented-filter route.
     """
-    spec, ss, theta, t, x, rank, cov, y = _setup()
+    spec, ss, theta, t, design, cov, y = _setup()
+    x = design.matrix
     obj = ConcentratedObjective(spec, ss, KalmanEngine(), Objective.ML)
-    value = obj.loglik(theta, y, np.ones_like(y, dtype=bool), t, x, rank)
+    value = obj.loglik(theta, y, np.ones_like(y, dtype=bool), t, design)
     assert value[0] == pytest.approx(mvn_loglik(y[0], cov, design=x), abs=1e-9)
 
 
@@ -3311,7 +3413,8 @@ def test_beta_covariance_matches_explicit_inverse():
     Bug this catches: returning the un-inverted information matrix, which
     would understate trend uncertainty by orders of magnitude.
     """
-    _, ss, theta, t, x, _, cov, y = _setup()
+    _, ss, theta, t, design, cov, y = _setup()
+    x = design.matrix
     result = KalmanEngine().score(ss, theta, y, np.ones_like(y, dtype=bool), t, design=x)
     gls = gls_solution(result.normal_equations)
     cov_inv = np.linalg.inv(cov)
@@ -3324,11 +3427,12 @@ def test_reml_penalty_matches_brute_force_logdet():
     Expected value determined independently from an explicitly constructed
     Sigma and an explicit slogdet, sharing no code with the filter.
     """
-    spec, ss, theta, t, x, rank, cov, y = _setup()
+    spec, ss, theta, t, design, cov, y = _setup()
+    x = design.matrix
     obj = ConcentratedObjective(spec, ss, KalmanEngine(), Objective.REML)
     ml = ConcentratedObjective(spec, ss, KalmanEngine(), Objective.ML)
     mask = np.ones_like(y, dtype=bool)
-    delta = obj.loglik(theta, y, mask, t, x, rank)[0] - ml.loglik(theta, y, mask, t, x, rank)[0]
+    delta = obj.loglik(theta, y, mask, t, design)[0] - ml.loglik(theta, y, mask, t, design)[0]
     assert delta == pytest.approx(reml_penalty(cov, x), abs=1e-9)
 
 
@@ -3345,9 +3449,10 @@ def test_reml_absolute_value_matches_an_independent_oracle():
     absolute terms and the Hector cross-validation becomes unattributable
     between a convention difference and a bug.
     """
-    spec, ss, theta, t, x, rank, cov, y = _setup()
+    spec, ss, theta, t, design, cov, y = _setup()
+    x = design.matrix
     obj = ConcentratedObjective(spec, ss, KalmanEngine(), Objective.REML)
-    got = obj.loglik(theta, y, np.ones_like(y, dtype=bool), t, x, rank)
+    got = obj.loglik(theta, y, np.ones_like(y, dtype=bool), t, design)
     assert got[0] == pytest.approx(reml_loglik(y[0], cov, x), abs=1e-9)
 
 
@@ -3364,21 +3469,59 @@ def test_rank_deficient_design_is_a_named_outcome_not_an_exception(mode):
     a tile instead of recording an outcome.
     """
     from metamer.core.outcomes import Outcome
-    from metamer.core.signal import Constant, Offset
+    from metamer.core.signal import Constant, DesignInfo, Offset
 
-    spec, ss, theta, t, _, _, _, y = _setup()
+    spec, ss, theta, t, _, _, y = _setup()
     obj = ConcentratedObjective(spec, ss, KalmanEngine(), Objective.REML)
     if mode == "duplicate_column":
         x_bad = np.column_stack([np.ones(t.size), np.ones(t.size)])
     else:
         x_bad, _ = SignalSpec([Constant(), Offset(epoch=float(t[0]))]).design_matrix(t)
 
-    rank_bad = SignalSpec.rank(x_bad)
-    assert obj.check_design(x_bad, rank_bad) is Outcome.RANK_DEFICIENT_X
+    bad = DesignInfo(x_bad, SignalSpec.rank(x_bad), float("-inf"))
+    assert np.all(obj.check_design(bad, 1) == Outcome.RANK_DEFICIENT_X.code)
 
-    result = obj.evaluate(theta, y, np.ones_like(y, dtype=bool), t, x_bad, rank_bad)
-    assert result.outcome is Outcome.RANK_DEFICIENT_X
-    assert np.all(np.isneginf(result.loglik))
+    result = obj.evaluate(theta, y, np.ones_like(y, dtype=bool), t, bad)
+    assert np.all(result.outcome == Outcome.RANK_DEFICIENT_X.code)
+    assert np.all(np.isnan(result.loglik))
+
+
+def test_one_failing_series_does_not_contaminate_the_batch():
+    """A single bad series fails alone; its 63 neighbours fit normally.
+
+    Constructed by fully masking one series, so its accumulated X'Sigma^-1X is
+    zero and singular while every other series is well conditioned. In Phase 1
+    the design is shared across the batch, so this is the only way a per-series
+    rank deficiency can arise -- and it is exactly the shape of the real case
+    (a shelf pixel with no valid samples in the window).
+
+    Bug this catches: THE batched-granularity failure. np.linalg.cholesky raises
+    for the whole (B, k, k) stack if any one member is not positive definite, so
+    a scalar outcome marks all B as failed. At B = 10^4 one bad grid point
+    destroys 9,999 good fits, and the spatial failure map -- which the design
+    treats as a diagnostic in its own right -- becomes a picture of the tile
+    grid. Every small-B test passes, because there the batch is the series.
+    """
+    spec, ss, theta, t, design, _, _ = _setup()
+    batch = 64
+    rng = np.random.default_rng(21)
+    y = rng.standard_normal((batch, t.size))
+    mask = np.ones_like(y, dtype=bool)
+    mask[7, :] = False
+
+    obj = ConcentratedObjective(spec, ss, KalmanEngine(), Objective.ML)
+    result = obj.evaluate(np.repeat(theta, batch, axis=0), y, mask, t, design)
+
+    assert result.outcome[7] == Outcome.RANK_DEFICIENT_X.code
+    assert np.isnan(result.loglik[7])
+
+    others = np.ones(batch, dtype=bool)
+    others[7] = False
+    assert np.all(result.outcome[others] == Outcome.OK.code)
+    assert np.all(np.isfinite(result.loglik[others]))
+
+    solo = obj.evaluate(theta, y[3:4], mask[3:4], t, design)
+    assert result.loglik[3] == pytest.approx(solo.loglik[0], rel=1e-12)
 
 
 def test_fixed_parameter_is_pinned_and_absent_from_the_flat_vector():
@@ -3392,7 +3535,7 @@ def test_fixed_parameter_is_pinned_and_absent_from_the_flat_vector():
 
     from metamer.core.terms import TermSpec, free_param_index
 
-    spec, ss, _, t, x, rank, _, y = _setup()
+    spec, ss, _, t, design, _, y = _setup()
     term = spec.terms[-1]
     pinned = TermSpec(
         kind=term.kind,
@@ -3409,7 +3552,7 @@ def test_fixed_parameter_is_pinned_and_absent_from_the_flat_vector():
     full = obj.hydrate(theta_free)
     assert full.shape[1] == sum(len(term.params) for term in frozen_spec.terms)
     assert full[0, -1] == pytest.approx(pinned.params["rho"].default)
-    assert np.isfinite(obj.loglik(theta_free, y, np.ones_like(y, dtype=bool), t, x, rank)[0])
+    assert np.isfinite(obj.loglik(theta_free, y, np.ones_like(y, dtype=bool), t, design)[0])
 ```
 
 - [ ] **Step 2: Run to verify failure**
@@ -3486,10 +3629,14 @@ from numpy.typing import NDArray
 
 from metamer.core.capability import Objective
 from metamer.core.engines.protocol import Engine
-from metamer.core.outcomes import Outcome
+from metamer.core.outcomes import Outcome, outcome_array
 from metamer.core.params import ParamSpec
+from metamer.core.signal import DesignInfo
 from metamer.core.statespace import StateSpace
 from metamer.core.terms import ProcessSpec, free_param_index
+
+CONDITION_LOG_LIMIT = 30.0
+"""Per-dimension log-determinant slack allowed before X'Sigma^-1X reads as singular."""
 
 
 @dataclass(frozen=True)
@@ -3504,14 +3651,15 @@ class GlsResult:
             identity, never from `np.linalg.inv`.
         logdet: log|X' Sigma^-1 X|, shape (B,).
         rss_reduction: y' Sigma^-1 X (X' Sigma^-1 X)^-1 X' Sigma^-1 y, shape (B,).
-        outcome: OK, or the taxonomy member describing why the solve failed.
+        outcome: PER-SERIES outcome codes, shape (B,) uint8. Not a scalar: one
+            rank-deficient grid point must not mark the other 9,999 as failed.
     """
 
     beta: NDArray[np.float64]
     beta_cov: NDArray[np.float64]
     logdet: NDArray[np.float64]
     rss_reduction: NDArray[np.float64]
-    outcome: Outcome
+    outcome: NDArray[np.uint8]
 
 
 @dataclass(frozen=True)
@@ -3519,17 +3667,23 @@ class ObjectiveResult:
     """One objective evaluation, with everything the driver needs downstream.
 
     Attributes:
-        loglik: Objective value per series, shape (B,). -inf where `outcome`
-            is not OK, so an optimizer walks away from the region.
+        loglik: Objective value per series, shape (B,). **NaN** where `outcome`
+            is not OK -- not -inf. The store's status invariant is bidirectional
+            (non-OK implies NaN in the value slots), and -inf is a
+            finite-looking sentinel that survives some consumers' checks and
+            poisons a downstream mean. -inf is the optimizer's internal barrier
+            value only, applied at `optimize_series`, never here.
         gls: The GLS solve, or None when there is no design matrix.
-        outcome: OK, or the taxonomy member describing the failure.
+        outcome: PER-SERIES outcome codes, shape (B,) uint8.
         n_used: Unmasked observation count per series, shape (B,).
-        rank_x: Numerical rank of the design matrix.
+        rank_x: Numerical rank of the design matrix. Scalar in Phase 1, where
+            the design is shared across the batch; shape (B,) once per-point
+            regressors land (see `signal.DesignInfo`).
     """
 
     loglik: NDArray[np.float64]
     gls: GlsResult | None
-    outcome: Outcome
+    outcome: NDArray[np.uint8]
     n_used: NDArray[np.int64]
     rank_x: int
 
@@ -3555,32 +3709,69 @@ def gls_solution(accum: NDArray[np.float64]) -> GlsResult:
     xty = accum[:, 1:, 0]
     batch, k = xty.shape
 
-    nan_k = np.full((batch, k), np.nan)
-    nan_kk = np.full((batch, k, k), np.nan)
-    nan_b = np.full(batch, np.nan)
+    beta = np.full((batch, k), np.nan)
+    beta_cov = np.full((batch, k, k), np.nan)
+    logdet = np.full(batch, np.nan)
+    rss_reduction = np.full(batch, np.nan)
+    outcome = outcome_array(batch, Outcome.OK)
 
-    if not np.all(np.isfinite(xtx)) or not np.all(np.isfinite(xty)):
-        return GlsResult(nan_k, nan_kk, nan_b, nan_b, Outcome.NONFINITE_OBJECTIVE)
+    finite = np.isfinite(xtx).all(axis=(1, 2)) & np.isfinite(xty).all(axis=1)
+    outcome[~finite] = Outcome.NONFINITE_OBJECTIVE.code
 
-    # numpy's cholesky is batched over leading axes; scipy's cho_factor is 2-D
-    # only and would silently be wrong (or raise) for B > 1.
+    # slogdet is batched AND non-raising, unlike cholesky, which raises for the
+    # whole stack if any single member is not positive definite. Classifying
+    # validity here -- before any factorization -- is what keeps one bad grid
+    # point from failing its 9,999 neighbours. It also yields the determinant
+    # that is needed anyway, so this removes work rather than adding it.
+    with np.errstate(invalid="ignore", divide="ignore"):
+        sign, log_abs_det = np.linalg.slogdet(xtx)
+
+    # Conditioning proxy, scale-free and diagonal-only. By AM-GM on the
+    # eigenvalues, log|A| <= k log(tr(A)/k) for positive definite A; a
+    # log-determinant far below that bound means near-singularity.
+    diag_mean = np.diagonal(xtx, axis1=1, axis2=2).mean(axis=1)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        slack = k * np.log(np.maximum(diag_mean, np.finfo(np.float64).tiny)) - log_abs_det
+
+    valid = finite & (sign > 0) & np.isfinite(log_abs_det) & (slack < k * CONDITION_LOG_LIMIT)
+    outcome[finite & ~valid] = Outcome.RANK_DEFICIENT_X.code
+
+    if not valid.any():
+        return GlsResult(beta, beta_cov, logdet, rss_reduction, outcome)
+
+    index = np.flatnonzero(valid)
+    sub = xtx[index]
     try:
-        lower = np.linalg.cholesky(xtx)
+        lower = np.linalg.cholesky(sub)
     except LinAlgError:
-        return GlsResult(nan_k, nan_kk, nan_b, nan_b, Outcome.RANK_DEFICIENT_X)
+        # Backstop for the marginally positive-definite case: identify the
+        # offending members individually rather than failing the whole subset.
+        keep = np.ones(index.size, dtype=bool)
+        factors = np.full((index.size, k, k), np.nan)
+        for position in range(index.size):
+            try:
+                factors[position] = np.linalg.cholesky(sub[position])
+            except LinAlgError:
+                keep[position] = False
+        outcome[index[~keep]] = Outcome.RANK_DEFICIENT_X.code
+        index = index[keep]
+        if index.size == 0:
+            return GlsResult(beta, beta_cov, logdet, rss_reduction, outcome)
+        lower = factors[keep]
 
     upper = np.swapaxes(lower, -1, -2)
-    logdet = 2.0 * np.log(np.diagonal(lower, axis1=-2, axis2=-1)).sum(axis=-1)
+    logdet[index] = 2.0 * np.log(np.diagonal(lower, axis1=-2, axis2=-1)).sum(axis=-1)
 
     # Two triangular solves reuse the one factorization. At k ~ 4 the cost of
     # not exploiting triangularity is irrelevant; avoiding a second
     # factorization -- and avoiding np.linalg.inv for beta_cov -- is not.
-    beta = np.linalg.solve(upper, np.linalg.solve(lower, xty[..., None]))[..., 0]
-    eye = np.broadcast_to(np.eye(k), (batch, k, k))
-    beta_cov = np.linalg.solve(upper, np.linalg.solve(lower, eye))
-    rss_reduction = np.einsum("bi,bi->b", xty, beta)
+    sub_beta = np.linalg.solve(upper, np.linalg.solve(lower, xty[index][..., None]))[..., 0]
+    eye = np.broadcast_to(np.eye(k), (index.size, k, k))
+    beta[index] = sub_beta
+    beta_cov[index] = np.linalg.solve(upper, np.linalg.solve(lower, eye))
+    rss_reduction[index] = np.einsum("bi,bi->b", xty[index], sub_beta)
 
-    return GlsResult(beta, beta_cov, logdet, rss_reduction, Outcome.OK)
+    return GlsResult(beta, beta_cov, logdet, rss_reduction, outcome)
 
 
 @dataclass(frozen=True)
@@ -3592,19 +3783,25 @@ class ConcentratedObjective:
     engine: Engine
     objective: Objective
 
-    def check_design(self, design: NDArray[np.float64], rank: int) -> Outcome:
-        """Classify a design matrix before it reaches the likelihood.
+    def check_design(self, design: DesignInfo, batch: int) -> NDArray[np.uint8]:
+        """Classify the design matrix before it reaches the likelihood.
+
+        Returns the PER-SERIES form even though a Phase 1 design is shared
+        across the batch and the answer is therefore uniform. Returning a scalar
+        that later has to be broadcast is exactly how a per-series concept gets
+        implemented at batch granularity; see `signal.DesignInfo` for when this
+        stops being uniform.
 
         Args:
-            design: Design matrix, shape (n, k).
-            rank: Its numerical rank.
+            design: The built design matrix and its derived quantities.
+            batch: Number of series.
 
         Returns:
-            Outcome.RANK_DEFICIENT_X if rank < k, else Outcome.OK.
+            Per-series outcome codes, shape (B,).
         """
-        if design.size and rank < design.shape[1]:
-            return Outcome.RANK_DEFICIENT_X
-        return Outcome.OK
+        if design.is_deficient or not np.isfinite(design.gram_logdet):
+            return outcome_array(batch, Outcome.RANK_DEFICIENT_X)
+        return outcome_array(batch, Outcome.OK)
 
     def loglik(
         self,
@@ -3612,8 +3809,7 @@ class ConcentratedObjective:
         y: NDArray[np.float64],
         mask: NDArray[np.bool_],
         t: NDArray[np.float64],
-        design: NDArray[np.float64] | None,
-        rank: int,
+        design: DesignInfo | None,
     ) -> NDArray[np.float64]:
         """Return the concentrated log-likelihood per series.
 
@@ -3627,13 +3823,15 @@ class ConcentratedObjective:
             y: Observations, shape (B, N).
             mask: Presence mask, shape (B, N).
             t: Shared time axis, shape (N,).
-            design: Design matrix (n, k), or None.
-            rank: Numerical rank of `design`.
+            design: The built design matrix and its theta-free quantities, or
+                None. Carrying a DesignInfo rather than a loose (matrix, rank)
+                pair is what lets per-point regressors widen the shapes in
+                Phase 2 without a signature rewrite.
 
         Returns:
-            Log-likelihood per series, shape (B,).
+            Log-likelihood per series, shape (B,), NaN where the fit failed.
         """
-        return self.evaluate(theta, y, mask, t, design, rank).loglik
+        return self.evaluate(theta, y, mask, t, design).loglik
 
     def evaluate(
         self,
@@ -3641,8 +3839,7 @@ class ConcentratedObjective:
         y: NDArray[np.float64],
         mask: NDArray[np.bool_],
         t: NDArray[np.float64],
-        design: NDArray[np.float64] | None,
-        rank: int,
+        design: DesignInfo | None,
     ) -> ObjectiveResult:
         """Evaluate the objective and return everything one pass produces.
 
@@ -3655,43 +3852,47 @@ class ConcentratedObjective:
             outcome rather than treating the value as a fit.
         """
         batch = np.shape(y)[0]
-        neg_inf = np.full(batch, -np.inf)
+        nan = np.full(batch, np.nan)
 
         # Rank deficiency is classified BEFORE any factorization: a singular
-        # X' Sigma^-1 X would otherwise reach cholesky and raise LinAlgError,
-        # which is neither the documented failure nor a NaN.
-        if design is not None and design.size:
-            precheck = self.check_design(design, rank)
-            if precheck is not Outcome.OK:
-                return ObjectiveResult(neg_inf, None, precheck, np.zeros(batch, np.int64), rank)
+        # X' Sigma^-1 X would otherwise reach cholesky, which raises for the
+        # WHOLE STACK if any one member is not positive definite.
+        if design is not None and design.matrix.size:
+            precheck = self.check_design(design, batch)
+            if np.any(precheck != Outcome.OK.code):
+                return ObjectiveResult(nan, None, precheck, np.zeros(batch, np.int64), design.rank)
 
+        matrix = None if design is None else design.matrix
         result = self.engine.score(
-            self.state_space, self.hydrate(theta), y, mask, t, design, self.objective
+            self.state_space, self.hydrate(theta), y, mask, t, matrix, self.objective
         )
-        if design is None or design.shape[1] == 0:
-            return ObjectiveResult(result.loglik, None, Outcome.OK, result.n_used, 0)
+        if design is None or design.n_beta == 0:
+            return ObjectiveResult(
+                result.loglik, None, outcome_array(batch), result.n_used, 0
+            )
 
         gls = gls_solution(result.normal_equations)
-        if gls.outcome is not Outcome.OK:
-            return ObjectiveResult(neg_inf, gls, gls.outcome, result.n_used, rank)
+        ok = gls.outcome == Outcome.OK.code
 
-        concentrated = result.loglik + 0.5 * gls.rss_reduction
+        concentrated = np.where(ok, result.loglik + 0.5 * gls.rss_reduction, np.nan)
         if self.objective is Objective.ML:
-            return ObjectiveResult(concentrated, gls, Outcome.OK, result.n_used, rank)
+            return ObjectiveResult(concentrated, gls, gls.outcome, result.n_used, design.rank)
 
         # REML, Harville form -- see the module docstring. The two terms beyond
         # the penalty are constant in theta and cancel in delta-IC, which is
         # exactly why their absence cannot be detected by a differential test.
-        sign, logdet_xtx = np.linalg.slogdet(design.T @ design)
-        if sign <= 0:
-            return ObjectiveResult(neg_inf, gls, Outcome.RANK_DEFICIENT_X, result.n_used, rank)
-        reml = (
+        # gram_logdet is precomputed on DesignInfo: X does not depend on theta,
+        # so recomputing it here would repeat a fixed quantity ~50 times per
+        # fit, per candidate, per grid point.
+        reml = np.where(
+            ok,
             concentrated
-            + 0.5 * rank * np.log(2.0 * np.pi)
-            + 0.5 * float(logdet_xtx)
-            - 0.5 * gls.logdet
+            + 0.5 * design.rank * np.log(2.0 * np.pi)
+            + 0.5 * design.gram_logdet
+            - 0.5 * gls.logdet,
+            np.nan,
         )
-        return ObjectiveResult(reml, gls, Outcome.OK, result.n_used, rank)
+        return ObjectiveResult(reml, gls, gls.outcome, result.n_used, design.rank)
 
     def unconstrained_loglik(
         self,
@@ -3699,11 +3900,10 @@ class ConcentratedObjective:
         y: NDArray[np.float64],
         mask: NDArray[np.bool_],
         t: NDArray[np.float64],
-        design: NDArray[np.float64] | None,
-        rank: int,
+        design: DesignInfo | None,
     ) -> NDArray[np.float64]:
         """Evaluate at unconstrained coordinates, mapping through bijectors."""
-        return self.loglik(self.to_natural(u), y, mask, t, design, rank)
+        return self.loglik(self.to_natural(u), y, mask, t, design)
 
     def hydrate(self, theta_free: NDArray[np.float64]) -> NDArray[np.float64]:
         """Expand a free-parameter vector to the full per-term layout.
@@ -4395,6 +4595,7 @@ def test_complex_step_viability_on_the_real_filter_is_recorded():
     from metamer.core.capability import Objective
     from metamer.core.engines.kalman import KalmanEngine
     from metamer.core.objective import ConcentratedObjective
+from metamer.core.signal import DesignInfo
     from metamer.core.statespace import StateSpace
     from metamer.core.terms import ProcessSpec
     from tests.test_statespace import _term
@@ -4408,7 +4609,7 @@ def test_complex_step_viability_on_the_real_filter_is_recorded():
     mask = np.ones_like(y, dtype=bool)
 
     def f(u):
-        return float(obj.unconstrained_loglik(u[None, :], y, mask, t, None, 0)[0])
+        return float(obj.unconstrained_loglik(u[None, :], y, mask, t, None)[0])
 
     u0 = np.array([0.0, np.log(5.0)])
     g_fd = fd_gradient(f, u0, scale=64.0)
@@ -4744,6 +4945,7 @@ import pytest
 from metamer.core.capability import Objective
 from metamer.core.engines.kalman import KalmanEngine
 from metamer.core.objective import ConcentratedObjective
+from metamer.core.signal import DesignInfo
 from metamer.core.optimize import InitRung, hessian_at_optimum, moment_init, optimize_series
 from metamer.core.outcomes import Outcome
 from metamer.core.statespace import StateSpace
@@ -4805,7 +5007,7 @@ def test_optimizer_recovers_simulated_parameters():
     """
     spec, ss, theta, t, y = _ou_series(sigma=1.0, rho=8.0)
     obj = ConcentratedObjective(spec, ss, KalmanEngine(), Objective.ML)
-    result = optimize_series(obj, y, np.ones_like(y, dtype=bool), t, design=None, rank=0)
+    result = optimize_series(obj, y, np.ones_like(y, dtype=bool), t, design=None)
     assert result.outcome is Outcome.OK
     assert result.theta[0, 1] == pytest.approx(8.0, rel=0.3)
 
@@ -4820,7 +5022,7 @@ def test_iteration_cap_outcome_depends_on_the_gradient_norm():
     spec, ss, _, t, y = _ou_series()
     obj = ConcentratedObjective(spec, ss, KalmanEngine(), Objective.ML)
     capped = optimize_series(
-        obj, y, np.ones_like(y, dtype=bool), t, design=None, rank=0, max_iter=1
+        obj, y, np.ones_like(y, dtype=bool), t, design=None, max_iter=1
     )
     assert capped.outcome in {Outcome.ITER_CAP_SMALL_GRAD, Outcome.ITER_CAP_LARGE_GRAD}
 
@@ -4840,7 +5042,7 @@ def test_hessian_matches_the_brute_force_oracle():
     mask = np.ones_like(y, dtype=bool)
 
     def f(u):
-        return float(obj.unconstrained_loglik(u[None, :], y, mask, t, None, 0)[0])
+        return float(obj.unconstrained_loglik(u[None, :], y, mask, t, None)[0])
 
     u0 = np.array([0.0, np.log(8.0)])
     np.testing.assert_allclose(
@@ -4871,6 +5073,7 @@ from scipy.optimize import minimize
 
 from metamer.core.gradients import fd_gradient, fd_step
 from metamer.core.objective import ConcentratedObjective
+from metamer.core.signal import DesignInfo
 from metamer.core.outcomes import Outcome
 from metamer.core.terms import ProcessSpec, free_param_index
 
@@ -5002,8 +5205,7 @@ def optimize_series(
     y: NDArray[np.float64],
     mask: NDArray[np.bool_],
     t: NDArray[np.float64],
-    design: NDArray[np.float64] | None,
-    rank: int,
+    design: DesignInfo | None,
     x0: NDArray[np.float64] | None = None,
     max_iter: int = 200,
 ) -> SeriesFit:
@@ -5014,8 +5216,7 @@ def optimize_series(
         y: Observations, shape (1, N).
         mask: Presence mask, shape (1, N).
         t: Shared time axis, shape (N,).
-        design: Design matrix (N, k), or None.
-        rank: Numerical rank of `design`.
+        design: The built design matrix and its theta-free quantities, or None.
         x0: Optional warm start in unconstrained coordinates, shape (1, p).
         max_iter: Iteration cap.
 
@@ -5028,11 +5229,13 @@ def optimize_series(
     free = free_param_index(objective.spec)
     p = len(free)
 
-    outcome = objective.check_design(
-        design if design is not None else np.zeros((t.size, 0)), rank
-    )
-    if outcome is not Outcome.OK:
-        return SeriesFit(np.full((1, p), np.nan), float("nan"), outcome, 0, InitRung.DEFAULT, None)
+    if design is not None and design.matrix.size:
+        codes = objective.check_design(design, 1)
+        if codes[0] != Outcome.OK.code:
+            outcome = Outcome.from_code(int(codes[0]))
+            return SeriesFit(
+                np.full((1, p), np.nan), float("nan"), outcome, 0, InitRung.DEFAULT, None
+            )
 
     if x0 is None:
         start_natural, rung = moment_init(objective.spec, y, mask, t)
@@ -5043,7 +5246,11 @@ def optimize_series(
     scale = float(max(mask.sum(), 1))
 
     def negative(u: NDArray[np.float64]) -> float:
-        value = objective.unconstrained_loglik(u[None, :], y, mask, t, design, rank)[0]
+        # NaN (a failed evaluation) and -inf both become +inf here. This is the
+        # ONLY place -inf-as-barrier is used: results destined for the store
+        # carry NaN, because -inf is a finite-looking sentinel that survives
+        # some consumers' checks and poisons a downstream mean.
+        value = objective.unconstrained_loglik(u[None, :], y, mask, t, design)[0]
         return float(np.inf) if not np.isfinite(value) else float(-value)
 
     def jac(u: NDArray[np.float64]) -> NDArray[np.float64]:
@@ -5107,6 +5314,7 @@ git commit -m "feat: add reference optimizer, init ladder, and explicit Hessian"
 - [ ] A `DIAGNOSTIC_LIMIT` outcome also marks that parameter's uncertainty unreliable
 - [ ] Every result carries `engine`, `objective`, and the resolved `gradient_mode`
 - [ ] Selection uses `rank_candidates`, so the comparability guards apply
+- [ ] **Standing invariant: batched results equal solo results series by series**, for both `loglik` and `outcome`
 
 **Verify:** `pixi run test tests/test_fit.py -v`
 
@@ -5166,6 +5374,29 @@ def test_batch_of_one_matches_batch_of_many():
     many = fit(y, t, signal, _candidates(), criterion=Criterion.AIC)
     one = fit(y[:1], t, signal, _candidates(), criterion=Criterion.AIC)
     np.testing.assert_allclose(many.loglik[0], one.loglik[0], rtol=1e-12)
+
+
+def test_batched_results_equal_solo_results_series_by_series():
+    """STANDING INVARIANT: fitting B series together equals fitting each alone.
+
+    This is the general guard against the whole batched-granularity class --
+    any per-series concept accidentally implemented at batch granularity shows
+    up here, whether it is a failure outcome, a validity mask, a factorization,
+    or a reduction. It is deliberately a standing test rather than a regression
+    test for one bug.
+
+    Bug this catches: a scalar outcome, a batch-wide early return, or a
+    factorization that raises for the stack when one member is bad -- none of
+    which are visible at the B=1 or B=2 sizes the rest of the suite uses.
+    """
+    y, t = _data(batch=6, seed=17)
+    signal = SignalSpec([Constant(), Trend()])
+    cands = _candidates()
+    together = fit(y, t, signal, cands, criterion=Criterion.AIC)
+    for b in range(y.shape[0]):
+        alone = fit(y[b : b + 1], t, signal, cands, criterion=Criterion.AIC)
+        np.testing.assert_allclose(together.loglik[b], alone.loglik[0], rtol=1e-12)
+        assert list(together.outcome[b]) == list(alone.outcome[0])
 
 
 def test_warm_start_is_recorded_as_such():
@@ -5232,6 +5463,7 @@ from metamer.core.engines.kalman import KalmanEngine
 from metamer.core.engines.protocol import Engine
 from metamer.core.gradients import resolve_gradient_mode
 from metamer.core.objective import ConcentratedObjective
+from metamer.core.signal import DesignInfo
 from metamer.core.optimize import InitRung, optimize_series
 from metamer.core.outcomes import Outcome
 from metamer.core.signal import SignalSpec
@@ -5298,8 +5530,8 @@ def fit(
     mask = np.ones_like(y, dtype=bool) if mask is None else np.asarray(mask, dtype=bool)
     engine = KalmanEngine() if engine is None else engine
 
-    design, rank = signal.design_matrix(t)
-    k_beta = design.shape[1]
+    design = signal.design_info(t)
+    k_beta = design.n_beta
     batch = y.shape[0]
     n_cand = len(candidates)
     p_max = max(len(free_param_index(spec)) for spec in candidates)
@@ -5324,7 +5556,7 @@ def fit(
         for b in range(batch):
             warm = None if x0 is None else x0[b : b + 1, c, :p]
             res = optimize_series(
-                obj, y[b : b + 1], mask[b : b + 1], t, design, rank, warm, max_iter
+                obj, y[b : b + 1], mask[b : b + 1], t, design, warm, max_iter
             )
             outcome[b, c] = res.outcome
             rung[b, c] = res.init_rung
@@ -5341,8 +5573,8 @@ def fit(
                 # earlier draft ran a second full filter pass here purely to
                 # recover quantities the objective had already computed and
                 # discarded.
-                final = obj.evaluate(res.theta, y[b : b + 1], mask[b : b + 1], t, design, rank)
-                if k_beta and final.gls is not None and final.gls.outcome is Outcome.OK:
+                final = obj.evaluate(res.theta, y[b : b + 1], mask[b : b + 1], t, design)
+                if k_beta and final.gls is not None and final.gls.outcome[0] == Outcome.OK.code:
                     beta[b, c] = final.gls.beta[0]
                     beta_err[b, c] = np.sqrt(np.clip(np.diag(final.gls.beta_cov[0]), 0.0, np.inf))
 
@@ -5350,7 +5582,7 @@ def fit(
     for b in range(batch):
         scores = []
         for c, spec in enumerate(candidates):
-            k, n = penalty_terms(spec, objective, int(mask[b].sum()), rank, k_beta)
+            k, n = penalty_terms(spec, objective, int(mask[b].sum()), design.rank, k_beta)
             scores.append(
                 CandidateScore(
                     label=str(c),
