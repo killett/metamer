@@ -28,12 +28,16 @@ repos:
         entry: '^(<<<<<<< |>>>>>>> |={7}$)'
         language: pygrep
 
-      # Local reimplementation of pre-commit-hooks' check-added-large-files
-      # (default maxkb=500 → 500000 bytes). System bash + wc only; bash's
-      # arithmetic context strips BSD-wc's leading whitespace so no tr needed.
+      # Local reimplementation of pre-commit-hooks' check-added-large-files.
+      # The limit is raised from the upstream default (maxkb=500) to 2000 KB
+      # because pixi.lock is 645 KB and is legitimately large; every task that
+      # adds a dependency rewrites and stages it. Excluding the lock file
+      # instead would drop the check on the one file most likely to grow.
+      # System bash + wc only; bash's arithmetic context strips BSD-wc's
+      # leading whitespace so no tr needed.
       - id: check-added-large-files
-        name: check-added-large-files (limit 500 KB)
-        entry: 'bash -c ''max=500000; rc=0; for f in "$@"; do sz=$(wc -c < "$f"); if (( sz > max )); then echo "$f: $sz bytes exceeds limit of $max" >&2; rc=1; fi; done; exit $rc'' --'
+        name: check-added-large-files (limit 2000 KB)
+        entry: 'bash -c ''max=2000000; rc=0; for f in "$@"; do sz=$(wc -c < "$f"); if (( sz > max )); then echo "$f: $sz bytes exceeds limit of $max" >&2; rc=1; fi; done; exit $rc'' --'
         language: system
 
       # Local reimplementation of pre-commit-hooks' check-toml. tomllib is
