@@ -29,6 +29,20 @@ def _white(sigma: float = 0.1) -> TermSpec:
     return TermSpec(kind="white", params={"sigma": _param("sigma", sigma)})
 
 
+def _matern12_with_fixed_rho(rho: float) -> TermSpec:
+    """Build a matern12 term identical to _matern12 but with rho frozen."""
+    from dataclasses import replace
+
+    term = _matern12(rho)
+    return TermSpec(
+        kind=term.kind,
+        params={
+            name: replace(p, fixed=(name == "rho")) for name, p in term.params.items()
+        },
+        ordering_param=term.ordering_param,
+    )
+
+
 def test_addition_produces_process_spec():
     """TermSpec + TermSpec composes into a two-term ProcessSpec.
 
@@ -140,6 +154,7 @@ def test_free_param_index_omits_fixed_parameters():
         lambda: ProcessSpec((_matern12(3.0),)),
         lambda: _white() + _matern12(2.0),
         lambda: _white() + _matern12(2.0) + _matern12(50.0),
+        lambda: _white() + _matern12_with_fixed_rho(4.0),
     ],
 )
 def test_free_param_index_length_equals_n_theta(spec_factory):
@@ -148,7 +163,10 @@ def test_free_param_index_length_equals_n_theta(spec_factory):
     This single invariant is what makes the parameter vector safe: n_theta
     feeds k in every information criterion, and free_param_index defines what
     the optimizer searches. If they diverge, selection is corrupted with no
-    visible symptom.
+    visible symptom. The fourth case includes a fixed parameter, so a bug
+    where free_param_index and n_theta agree on unconstrained specs but
+    disagree once something is pinned would otherwise slip through: every
+    other case in this list has zero fixed parameters.
     """
     spec = spec_factory()
     assert len(free_param_index(spec)) == spec.n_theta()
@@ -183,3 +201,43 @@ def test_canonical_is_json_serializable():
     encoded = json.dumps(spec.canonical(), sort_keys=True, separators=(",", ":"))
     assert json.loads(encoded) == json.loads(encoded)
     assert "matern12" in encoded
+
+
+def test_n_theta_excludes_fixed_parameters():
+    """n_theta() counts only free parameters, not every declared parameter.
+
+    Expected value determined independently: the composite has three
+    declared parameters total (white.sigma, matern12.sigma, matern12.rho),
+    exactly one of which (rho) is fixed, so n_theta() must be 2. That value
+    is distinct from both "count every declared parameter regardless of
+    fixed" (3) and an inverted fixed-check that counts frozen parameters
+    instead of free ones (1) -- with a 2-vs-1 split of free-vs-fixed
+    parameters, those two wrong implementations cannot coincidentally agree
+    with the correct answer the way they would on a term with exactly one
+    free and one fixed parameter.
+
+    Bug this catches: n_theta() ignoring `fixed` (or inverting the check),
+    which lets a parameter the user pinned inflate -- or deflate -- k in
+    every information criterion even though the optimizer never touches it.
+    """
+    spec = _white() + _matern12_with_fixed_rho(4.0)
+    assert spec.n_theta() == 2
+
+
+def test_spec_hash_differs_for_specs_with_different_defaults():
+    """spec_hash() distinguishes specs that differ only in a parameter default.
+
+    Every other hash test in this file asserts equality between specs that
+    are the same model up to construction order or dict insertion order, so
+    a spec_hash() that always returned a fixed constant -- or that hashed
+    only term kinds and labels while dropping parameter values -- would pass
+    every one of them. This test is the only one in the suite that requires
+    inequality, so it is the only one such a stub implementation would fail.
+
+    Bug this catches: spec_hash() dropping parameter defaults from the
+    canonical form, which would let a genuinely different model fit collide
+    with an unrelated cached result in the 10^7-point store.
+    """
+    a = ProcessSpec((_matern12(3.0),))
+    b = ProcessSpec((_matern12(4.0),))
+    assert a.spec_hash() != b.spec_hash()
