@@ -14,6 +14,20 @@ tracked there, so a commit that never reaches the remote defeats the point.
   network or credentials are back.
 - Never push tags without deciding to: a `v*` tag is the release trigger.
 
+### Phase 1 runs on the `phase-1` branch, not `main`
+
+The branch already exists locally and on the remote. Work there, so the whole phase reviews
+as one diff.
+
+**Open the draft PR immediately after Task 0's first commit** — it cannot be opened before
+then, because GitHub refuses a PR with no commits between the branches:
+
+```
+gh pr create --draft --base main --head phase-1 --title "Phase 1: likelihood spine" --body "Tracks execution of docs/superpowers/plans/2026-08-05-metamer-phase1.md."
+```
+
+After that the post-commit hook keeps the PR updated with no further action.
+
 ## Current work
 
 | what | where |
