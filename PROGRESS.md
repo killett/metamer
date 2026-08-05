@@ -159,6 +159,18 @@ question; compute/bandwidth roofline pair for cross-machine prediction) are in d
 - **Per-point regressor fields (e.g. GIA) cost `N × k_β × 8` per series** — 20.2 kB at
   N=630, k_β=4, ~2.4× everything else combined. `signal.DesignInfo` exists so that widening
   is a shape change rather than a signature rewrite.
+- **`pixi.lock` (645 KB) exceeds the `check-added-large-files` 500 KB limit.** It is
+  already tracked, so ordinary commits pass — but **Task 0 adds `psutil` to `pixi.toml`,
+  which rewrites the lock file, stages it, and the pre-commit hook will fail the commit.**
+  Task 17 does the same with `numba` and `celerite2`. Fix before Task 0 by raising the
+  limit in `.pre-commit-config.yaml`:
+
+  ```yaml
+  - id: check-added-large-files
+    args: ['--maxkb=2000']
+  ```
+
+  A lock file is legitimately large; raising the limit is correct, excluding the file is not.
 - **The GitHub token has no `workflow` scope.** Any push adding `.github/workflows/` is
   rejected outright.
 - Per user global instructions: never do investigative `git checkout <sha>` inside the
