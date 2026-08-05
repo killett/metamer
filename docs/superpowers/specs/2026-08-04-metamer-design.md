@@ -771,35 +771,65 @@ serving both:
 
 All three are reported.
 
-#### Hardware, and the one-machine rule
+#### Machine plan
 
-Available hardware:
+| machine | threads | role |
+|---|---|---|
+| Ubuntu mini PC, **4 slow cores, 16 GB RAM (~10 GB free)** | {1, 4} | **primary development.** Correctness, the oracles, and the memory-formula validation. **Not** where the budget question is answered. |
+| **Linux box, 64 cores** | {1, 4, full} | **the decisive measurement.** Run once or twice, not continuously. The 4-thread point is the *bridge*: it isolates machine from thread count against the mini PC's 4-thread number. RAM unknown — establish it first, and run `--explain` before the run regardless. (At 8490 B/series and `tile_side` 343 a tile is ~1 GB, so it is almost certainly fine.) |
+| Apple Silicon MacBook, 32 GB | {1, full} | **the adversarial case.** Unified memory gives unusually high bandwidth per core, so **if path A wins anywhere, it wins here.** A machine where the expected answer might flip is worth more than a third confirmation. Also the numba-on-arm64 and celerite2-on-arm64 smoke test that §15 needs anyway. |
+| SkyPilot via a forthcoming `cloudify` skill | — | future; see §15.5 |
 
-| machine | role |
-|---|---|
-| Ubuntu mini PC, **4 slow cores, 16 GB RAM (~10 GB free)** | **primary development machine**; the binding memory and compute constraint |
-| Apple Silicon MacBook, 32 GB | Tier-1 platform check |
-| Linux box, 64 cores (RAM unknown) | throughput target |
-| SkyPilot via a forthcoming `cloudify` skill | future; see §15.5 |
+The ≥3×-at-d=3 decision rule (§9.2 stage 1) is evaluated on the **64-core box**, with the
+mini PC and MacBook as the bracketing cases. The single-machine fallback rule from an
+earlier draft is void — all three machines are available.
 
-The two-machine requirement is recoverable on one box, **because the axis that matters is
-memory bandwidth per core, and thread count varies it.** Path A is memory-bound, so *more*
-bandwidth per core helps A. Low thread count therefore measures A under conditions most
-favourable to it, and the inference is one-sided but sound:
+**Expected bandwidth ordering, to be measured rather than assumed:** bandwidth-per-core on
+the 4-core mini PC is probably *higher* than on the 64-core box at full load, because 64
+cores contend for a memory system that is not 16× wider. If so, the mini PC flatters path A
+relative to the production machine, which strengthens the conservative-for-A direction of
+the whole exercise — but only if measured.
 
-> Measure at **low thread count (1)** and at **full thread count (4 on the mini PC)**.
->
-> - **B ≥3× at d=3 at the low thread count** → adopt B. It will also win on any machine
->   with less bandwidth per core, which hurts A further.
-> - **B ≥3× only at high thread count** → the result is bandwidth-contention dependent.
->   **Do not commit.** This is the case the two-machine requirement existed to catch;
->   record it and obtain a second-machine measurement before deciding.
-> - **B <3× at both** → A stays default, number recorded.
+#### Cross-machine normalization: two instruments, two questions
 
-Note that a 64-core node *restricted* to 8 threads would give A more bandwidth per core than
-a real 8-core laptop, so low-thread measurements on a large node are also conservative in
-A's favour. The 4-core mini PC is the low-bandwidth end, which makes a B win there
-informative and an A win there the one needing confirmation elsewhere.
+These are different questions needing different instruments, and conflating them leaves
+both half-answered.
+
+**(i) "Does the 64-core box clear the 19 ms budget?" — normalizer: the canonical filter
+pass.**
+
+A fixed micro-benchmark of **one likelihood evaluation at a canonical configuration**:
+N=630, d=3, no gaps, single-threaded, no optimizer, fixed θ. **Zero proxy risk, because it
+*is* the workload**, and it is being built anyway. Report ms per series-model fit both raw
+and **in units of canonical filter passes**. Cross-machine comparison of the raw number
+becomes meaningful immediately.
+
+**(ii) "Which path wins on machine X, including machines not yet measured?" — instrument:
+the compute/bandwidth pair, fitted as a roofline.**
+
+A pair of numbers cannot normalize a scalar ms/fit — you cannot divide by a 2-tuple. What
+the pair supports is a two-parameter model:
+
+```
+predicted_ms  ≈  compute_work / compute_rate  +  memory_traffic / bandwidth
+```
+
+where the machine supplies the two rates and the spike supplies the two workloads. That is
+a real model with real fitting error.
+
+| reference | definition | why not the obvious choice |
+|---|---|---|
+| **compute** | fixed-iteration compiled loop of `P = F @ P @ F.T + Q` at **d=3**, plus a rank-1 downdate, single-threaded | **A dense 6×6 LU is the wrong proxy.** Per §7.1 the filter contains *no* matrix factorization — the scalar observation makes `S` a scalar, so there is no inverse, no Cholesky, no pivoting. An LU's pivoting branches and data-dependent control flow measure something the filter never does. It is also the wrong *size*: the spike runs at d=1 and d=3, where loop overhead and instruction latency dominate, not d=6. |
+| **bandwidth** | STREAM-triad-like over an array sized past L3, measured **at 1 thread and at full thread count**, reporting derived bandwidth-per-core at full occupancy | **Single-threaded STREAM does not measure a machine's memory bandwidth** — it measures what *one core* can pull, which on a server is limited by that core's outstanding-miss capacity rather than the memory subsystem. A 64-core server shows modest single-thread and very high aggregate bandwidth; a 4-core mini PC shows the opposite ratio. Path A's cost at full occupancy is governed by **aggregate bandwidth ÷ active cores.** |
+
+The compute reference nearly collapses into the canonical filter pass, and that is fine.
+They stay separate because **the canonical pass includes the N-loop and gap handling and the
+compute reference must not** — the latter is a machine characteristic, the former is a
+workload measurement.
+
+**The roofline model must be validated before it is trusted.** Measure the pair *and* the
+real spike on all three machines, fit the model, and **report the prediction error.** An
+unvalidated extrapolation model is worse than no model, because it will be believed.
 
 **The spike's real deliverable is the protocol, not the kernel.** Even a losing spike must
 prove a second backend slots in behind the §7.4 protocol without reshaping the core. That
@@ -990,6 +1020,12 @@ Tiling generalizes synesthesia's `timeseries2color.py` pattern:
 - **The tile is the batch** — no inner loop over pixels; the batched engine advances all
   `tile_side²` series together.
 
+**Requirement: parallelism is WITHIN a tile (over series), never ACROSS tiles.** Both paths
+already work this way, but it must be written down, because across-tile parallelism is the
+obvious "optimization" someone adds later — and it **multiplies peak RAM by thread count**,
+silently breaking the 16 GB constraint. Within-tile parallelism is what makes peak RAM
+independent of core count, and hence what lets the same job run on 4 cores and on 64.
+
 **The conflict that forces the warm-start design.** Warm-starting from a converged
 *neighbour* requires that neighbour to be finished. Per-series parallelism — path B, which
 is expected to win — hands each thread the next available series with no ordering
@@ -1130,9 +1166,13 @@ not affect bytes-per-series).
   solver state is per-series, path B's is per-thread; the formulas have different *shapes*,
   not just different constants. (If the backend is fixed per metamer version, the version
   covers it; the design states which.)
-- **Machine fingerprint is CPU model + core count + total RAM + thread count, hashed.**
-  Hostname is wrong — VMs, containers, and cluster nodes with heterogeneous hardware all
-  break it.
+- **Machine fingerprint is `(CPU model, core count, total RAM)` hashed — instance-type
+  based.** Hostname is meaningless on ephemeral nodes. Thread count is deliberately
+  excluded so a fresh spot instance of the same type **reuses** a calibration rather than
+  remeasuring.
+- **The calibration cache lives with the store, not in local scratch** (§15.5). On a
+  preemptible instance anything in local temp is gone on restart, and the two-pass barrier
+  means losing pass 1's warm starts costs a full re-run of it.
 - The cache has an explicit expiry and a `--recalibrate` flag. A cached measurement
   surviving a hardware change silently produces a bad RSS projection against a hard memory
   constraint.
@@ -1437,6 +1477,13 @@ case (c), print a range, not a point estimate**, and offer `--explain --calibrat
 quick measurement first. A confidently wrong RSS projection against a hard memory constraint
 is worse than an honestly wide one.
 
+**`--explain` accepts a machine profile, not only the local machine.** A profile is the
+§9.2 roofline pair plus core count and RAM. Shipped profiles accumulate as instance types
+get measured. This is where the roofline model earns its cost: it lets `--explain` project
+wall time — **and therefore rental cost** — on an instance type that has never been rented,
+before renting it, turning instance selection into a calculation rather than a guess. The
+prediction is always printed with the model's validated error bar (§9.2).
+
 When screening is enabled, the projection is an **upper bound** (screening has not yet run
 and cannot be predicted) and says so.
 
@@ -1626,11 +1673,27 @@ SkyPilot access is forthcoming. The upgrade should be a configuration change, no
 | **calibration keyed on machine fingerprint** (§11.4) | heterogeneous nodes | each instance type gets its own cache entry automatically |
 | **single-process, threaded tiling loop** (§11.1) | Windows portability, simplicity | a cloud node is simply a bigger box — no distributed scheduler required |
 
-Two things to add now, both cheap:
+Five things to add now, all cheap:
 
-- **Every path is an fsspec URL, not a filesystem path** — data source, output store,
-  warm-start sidecar, report output, and cache locations. No assumption of a persistent home
-  directory for caches; cache location is configurable.
+1. **Every path is an fsspec URL, not a filesystem path** — data source, output store,
+   warm-start sidecar, report output, cache locations. **No POSIX assumptions in the store
+   layer:** no file locking, no rename-based atomicity, no directory-listing-as-truth. The
+   data-then-bitmap ordering (§12.7) is already the right pattern for object storage and
+   relies only on per-object write atomicity, which S3 and GCS both provide. Do not add
+   anything needing more.
+2. **Caches live with the store, not in local scratch.** The warm-start array and the
+   calibration cache go in (or beside) the zarr store in object storage. On a preemptible
+   instance, local scratch is gone on restart — and because of the two-pass barrier
+   (§11.1), losing pass 1's warm starts costs a full re-run of pass 1.
+3. **Machine fingerprint is instance-type-based** — `(CPU model, core count, total RAM)`
+   hashed (§11.4) — so a fresh spot instance of the same type reuses its calibration.
+4. **`--explain` takes a machine profile** (§13.4), so wall time and cost can be projected
+   for an instance type before renting it.
+5. **Preemption is just resumption.** `fit_hash` gating plus the completion bitmap already
+   handle it. The only additions: checkpoint the bitmap frequently enough that a preemption
+   loses **at most one tile**, and **handle `SIGTERM` by flushing** rather than dying
+   mid-region-write.
+
 - **No local-filesystem assumptions in the reporting path** (§14.2) — PNGs and JSON are
   written through the same abstraction as the store.
 
@@ -1844,8 +1907,14 @@ ML/REML sweep; external cross-validation against Hector / CATS / `est_noise`; RE
 13. Measured peak RSS matching the analytic memory formula at two or three values of B
 14. A completed run at **B ≈ 10⁴, N ≈ 630**, with the **stage-1** execution-strategy
     comparison written up: compiled path B measured fully against path A's **optimistic
-    bound**, at low and full thread count, with measured ms-per-series-model compared
-    against the 19 ms budget. Stage 2 is required only if stage 1 is inconclusive (§9.2).
+    bound**. Stage 2 is required only if stage 1 is inconclusive (§9.2). Split by machine,
+    because the development machine cannot satisfy the budget clause:
+    - **Mini PC {1, 4}** — establishes feasibility, correctness, and the memory formula.
+    - **64-core box {1, 4, full}** — **the only machine on which the 19 ms budget
+      comparison is valid**, and where the ≥3× decision rule is evaluated.
+    - **MacBook {1, full}** — the adversarial case for path A, plus the arm64 smoke test.
+    - Reported in **canonical-filter-pass units** as well as raw ms, with the roofline
+      pair measured on all three and the model's **prediction error stated** (§9.2).
 15. **Gap-structure sweep results** at {0%, 10% scattered, 40% contiguous blocks}, with the
     A:B ratio reported **per gap case** rather than pooled
 16. **`fit_hash` / `compat_hash` separation exercised end to end**: a resume that adds a

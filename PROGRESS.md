@@ -43,6 +43,11 @@ be violated by accident.
   is a plain per-series scipy loop. (§9.2, §17)
 - **Delta-method uncertainties are first-order** and degrade near a diagnostic limit — a
   `DIAGNOSTIC_LIMIT` outcome also means the reported uncertainty is unreliable. (§4.1)
+- **Parallelism is WITHIN a tile, never ACROSS tiles.** Across-tile parallelism is the
+  obvious later "optimization" and it multiplies peak RAM by thread count, silently
+  breaking the 16 GB constraint. (§11.1)
+- **Caches live with the zarr store, not in local scratch** — preemptible instances lose
+  local scratch, and losing pass 1's warm starts costs a full re-run of pass 1. (§15.5)
 
 ---
 
@@ -68,15 +73,16 @@ be violated by accident.
 
 ## Hardware
 
-| machine | role |
-|---|---|
-| Ubuntu mini PC — 4 slow cores, 16 GB RAM (~10 GB free) | **primary development machine**; the binding constraint |
-| Apple Silicon MacBook, 32 GB | Tier-1 platform check |
-| Linux box, 64 cores (RAM unknown) | throughput target |
-| SkyPilot via a forthcoming `cloudify` skill | future; design doc §15.5 |
+| machine | threads | role |
+|---|---|---|
+| Ubuntu mini PC — 4 slow cores, 16 GB RAM (~10 GB free) | {1, 4} | primary development; correctness, oracles, memory formula. **Cannot answer the budget question.** |
+| Linux box, 64 cores (RAM unknown — establish before use) | {1, 4, full} | **the decisive measurement**; the only machine where the 19 ms budget comparison is valid |
+| Apple Silicon MacBook, 32 GB | {1, full} | adversarial case for path A (high bandwidth per core); arm64 smoke test |
+| SkyPilot via a forthcoming `cloudify` skill | — | future; design doc §15.5 |
 
-The spike's one-machine decision rule (thread-count sweep as a proxy for bandwidth per
-core) is in design doc §9.2.
+Machine plan and the two normalization instruments (canonical filter pass for the budget
+question; compute/bandwidth roofline pair for cross-machine prediction) are in design doc
+§9.2.
 
 ## Open questions needing user input
 
