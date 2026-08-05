@@ -1,5 +1,19 @@
 # metamer — progress
 
+## Durability: push after every task commit
+
+The repo is published at **https://github.com/killett/metamer** (public). Development is
+tracked there, so a commit that never reaches the remote defeats the point.
+
+- A local `post-commit` hook (`.git/hooks/post-commit`, untracked) pushes the current branch
+  after every commit. It pushes **that branch only** — never `--all`, never `--tags` — and
+  never fails a commit if the push fails.
+- Hooks are not tracked by git, so **a fresh clone will not have it.** If you are working in
+  a new clone, either recreate it or push manually after each task.
+- If the hook reports a failed push, the commit is safe locally; run `git push` when the
+  network or credentials are back.
+- Never push tags without deciding to: a `v*` tag is the release trigger.
+
 ## Current work
 
 | what | where |
