@@ -6,7 +6,7 @@
       "id": 8,
       "planTask": 0,
       "subject": "Task 0: Package skeleton and dependencies",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [],
       "verifyCommand": "pixi run python -m metamer && pixi run typecheck && pixi run lint",
       "modelTier": "mechanical",
@@ -23,7 +23,7 @@
       "id": 9,
       "planTask": 1,
       "subject": "Task 1: Bijectors, ParamSpec, delta method",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         8
       ],

@@ -4,11 +4,16 @@
 
 - **Branch:** `phase-1` (work here, not `main`). Both branches are pushed.
 - **Remote:** https://github.com/killett/metamer — public. Run `git log --oneline -5` for the latest commit.
-- **Done:** design document, Phase 1 implementation plan, two rounds of plan review applied. **No code exists yet** — there is no `src/`.
-- **Pending:** Phase 1 Tasks 0–19. Nothing started.
-- **Next action:** implement **Task 0** (package skeleton) from
-  [`docs/superpowers/plans/2026-08-05-metamer-phase1.md`](docs/superpowers/plans/2026-08-05-metamer-phase1.md),
-  then immediately open the draft PR (command below).
+- **Done:** design document, Phase 1 implementation plan, two rounds of plan review applied.
+  Phase 1 **Tasks 0 and 1** are implemented, reviewed, and committed.
+- **Pending:** Phase 1 Tasks 2–19.
+- **Next action:** implement **Task 2** (kernel algebra) from
+  [`docs/superpowers/plans/2026-08-05-metamer-phase1.md`](docs/superpowers/plans/2026-08-05-metamer-phase1.md).
+  The draft PR command is below and has not been run yet.
+- **Execution workspace:** `.superpowers/sdd/2026-08-05-metamer-phase1/` (git-ignored) holds
+  the subagent-driven-development ledger `progress.md`, per-task briefs, and reports. The
+  ledger is the recovery map for a session that dies mid-task; it is deleted when the branch
+  is finished, so anything worth keeping must be migrated here first.
 - **Resume with:** `/superpowers-extended-cc:executing-plans docs/superpowers/plans/2026-08-05-metamer-phase1.md`
 - Read this whole file before starting. The sections below hold decisions that exist
   nowhere else.
@@ -184,6 +189,18 @@ question; compute/bandwidth roofline pair for cross-machine prediction) are in d
   A lock file is legitimately large; raising the limit is correct, excluding the file is not.
 - **The GitHub token has no `workflow` scope.** Any push adding `.github/workflows/` is
   rejected outright.
+- **A global pre-commit `PreToolUse` hook blocks `git commit` while any native task is
+  `in_progress`.** `pre-commit-check-tasks.sh` counts in-progress tasks by replaying
+  `TaskUpdate` calls from the **controlling session's** transcript, so marking a task
+  `in_progress` before dispatching an implementation subagent locks that subagent out of
+  committing — and nothing the subagent does to the task board can clear it, because its
+  own `TaskUpdate` calls land in a different transcript. It also counts a `TaskUpdate` that
+  was itself rejected by another hook. Leave a task `pending` while its implementer works
+  and mark it `completed` after the commit lands. Never work around this with `--no-verify`
+  or by editing `settings.json`.
+- **`psutil` added no `pixi.lock` diff** (Task 0): it was already resolved on all four
+  platforms as a transitive dependency. The lock-size limit raise still matters — Task 17
+  adds `numba` and `celerite2`, which will genuinely rewrite it.
 - Per user global instructions: never do investigative `git checkout <sha>` inside the
   working tree. Use `git show <sha>:<path>`, `git worktree add`, or `git diff <sha>`.
 

@@ -652,8 +652,9 @@ def test_canonical_order_is_independent_of_construction_order():
     """Construction order does not survive into the canonical form.
 
     Expected value determined independently: canonical order is (kind,
-    ordering default) ascending, so white sorts before matern12(rho=2) which
-    sorts before matern12(rho=50), regardless of how they were added.
+    ordering default) ascending with kind compared as a string, so
+    matern12(rho=2) sorts before matern12(rho=50) before white, regardless of
+    how they were added.
     """
     a = _matern12(50.0) + _white() + _matern12(2.0)
     b = _white() + _matern12(2.0) + _matern12(50.0)
@@ -697,8 +698,9 @@ def test_free_param_index_matches_hand_written_expectations():
     """The flat parameter vector's layout is stated once and tested directly.
 
     Expected values determined independently by applying the canonical-order
-    rule on paper: white sorts before matern12(rho=2) before matern12(rho=50),
-    and within a term the declared parameter order is preserved.
+    rule on paper: kind ascending as a string puts matern12(rho=2) before
+    matern12(rho=50) before white, and within a term the declared parameter
+    order is preserved.
 
     Bug this catches: five separate copies of this nested loop existed across
     objective.py, optimize.py and gradients.py, two of them reading their
@@ -711,11 +713,11 @@ def test_free_param_index_matches_hand_written_expectations():
 
     composite = _white() + _matern12(50.0) + _matern12(2.0)
     assert free_param_index(composite) == (
-        ("white[0]", "sigma"),
         ("matern12[0]", "sigma"),
         ("matern12[0]", "rho"),
         ("matern12[1]", "sigma"),
         ("matern12[1]", "rho"),
+        ("white[0]", "sigma"),
     )
 
 
