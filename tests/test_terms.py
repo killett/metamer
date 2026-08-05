@@ -4,7 +4,7 @@ import pytest
 
 from metamer.core.params import ParamSpec
 from metamer.core.terms import ProcessSpec, TermSpec, free_param_index
-from metamer.core.transforms import Log
+from metamer.core.transforms import Log, Logit
 
 
 def _param(name: str, default: float) -> ParamSpec:
@@ -241,3 +241,144 @@ def test_spec_hash_differs_for_specs_with_different_defaults():
     a = ProcessSpec((_matern12(3.0),))
     b = ProcessSpec((_matern12(4.0),))
     assert a.spec_hash() != b.spec_hash()
+
+
+def test_n_theta_refuses_shared_parameters():
+    """n_theta() raises on a shared-parameter spec instead of miscounting it.
+
+    Before this fix, ProcessSpec.n_theta() summed TermSpec.n_free(), which
+    checked only `fixed` and ignored `shared_with` entirely -- a spec with a
+    shared parameter returned a finite n_theta() while free_param_index()
+    raised NotImplementedError on the identical spec. That divergence is
+    exactly what the project's shared-parameter discipline forbids: k in
+    every information criterion must never silently count a shared parameter
+    as independent.
+
+    Bug this catches: n_theta() and free_param_index() disagreeing on
+    whether a shared-parameter spec is refused.
+    """
+    term = _matern12(3.0)
+    shared = TermSpec(
+        kind="matern12",
+        params=term.params,
+        ordering_param="rho",
+        shared_with={"sigma": "other"},
+    )
+    with pytest.raises(NotImplementedError, match="shared"):
+        ProcessSpec((shared,)).n_theta()
+
+
+def test_label_association_survives_a_tied_ordering_value():
+    """Same ordering-param value: labels attach to the same term either way.
+
+    Two matern12 terms share rho=5.0 but differ in sigma (1.0 vs 2.0), so
+    order_key()'s first two elements (kind, ordering default) tie. Under a
+    non-total key, Python's stable sort would then fall back to construction
+    order, and matern12[0] would mean "whichever term was added first"
+    rather than a property of the term itself.
+
+    Expected association determined independently of the implementation:
+    with kind and ordering default tied, canonical() renders each term's
+    params as a dict sorted by key ("rho" before "sigma"), so the two terms'
+    JSON strings are identical character-for-character up through the "rho"
+    entry and first diverge at sigma's "default" field: '"default":"1.0"'
+    vs '"default":"2.0"'. Lexicographic string comparison then orders the
+    sigma=1.0 term first regardless of which object was constructed first.
+    So matern12[0] must carry sigma=1.0 and matern12[1] must carry sigma=2.0
+    in both construction orders, and the two resulting specs must hash
+    identically.
+
+    Bug this catches: order_key() returning only (kind, ordering default),
+    which is not a total order -- terms with a tied ordering-param default
+    silently keep construction order, so matern12[0] refers to a different
+    term depending on which ProcessSpec was built first. This corrupts
+    warm-start reuse and cross-run comparison without raising anything.
+    """
+    term_sigma1 = TermSpec(
+        kind="matern12",
+        params={"sigma": _param("sigma", 1.0), "rho": _param("rho", 5.0)},
+        ordering_param="rho",
+    )
+    term_sigma2 = TermSpec(
+        kind="matern12",
+        params={"sigma": _param("sigma", 2.0), "rho": _param("rho", 5.0)},
+        ordering_param="rho",
+    )
+    forward = term_sigma1 + term_sigma2
+    backward = term_sigma2 + term_sigma1
+
+    assert forward.labels() == ("matern12[0]", "matern12[1]")
+    assert backward.labels() == ("matern12[0]", "matern12[1]")
+    assert forward.terms[0].params["sigma"].default == 1.0
+    assert backward.terms[0].params["sigma"].default == 1.0
+    assert forward.terms[1].params["sigma"].default == 2.0
+    assert backward.terms[1].params["sigma"].default == 2.0
+    assert forward.spec_hash() == backward.spec_hash()
+
+
+def test_logit_transform_args_round_trip_and_are_construction_insensitive():
+    """A transform with float constructor args serializes safely and stably.
+
+    Round-trip: this path has zero prior coverage, since every other test in
+    this file uses Log(), whose __dict__ is empty. Logit(0.5, 10.0) exercises
+    the transform_args stringification directly. Expected value determined
+    independently from Logit.__init__ (self.lo = float(lo); self.hi =
+    float(hi)) and the repr(float(...)) convention _param_canonical already
+    applies elsewhere: transform_args must equal {"lo": "0.5", "hi": "10.0"}.
+
+    Construction-insensitivity: two independently constructed Logit(0.5, 10.0)
+    objects (different Python objects, same argument values) must canonicalize
+    identically. A buggy implementation that stringified the transform object
+    itself (str(transform), or a default object repr, which embeds the
+    object's memory address) would make two logically-identical Logit
+    instances hash differently purely because they are different objects --
+    the same kind of accidental-identity dependence the dict-insertion-order
+    tests in this file already guard against, just for the transform instead
+    of the params dict.
+    """
+    param_a = ParamSpec(
+        name="p",
+        default=1.0,
+        transform=Logit(0.5, 10.0),
+        bounds=(0.5, 10.0),
+        diagnostic_limits=(0.5, 10.0),
+    )
+    param_b = ParamSpec(
+        name="p",
+        default=1.0,
+        transform=Logit(0.5, 10.0),
+        bounds=(0.5, 10.0),
+        diagnostic_limits=(0.5, 10.0),
+    )
+    term_a = TermSpec(kind="custom", params={"p": param_a})
+    term_b = TermSpec(kind="custom", params={"p": param_b})
+
+    transform_args = term_a.canonical()["params"]["p"]["transform_args"]
+    assert transform_args == {"lo": "0.5", "hi": "10.0"}
+
+    encoded = json.dumps(term_a.canonical(), sort_keys=True, separators=(",", ":"))
+    assert json.loads(encoded) == json.loads(encoded)
+
+    assert ProcessSpec((term_a,)).spec_hash() == ProcessSpec((term_b,)).spec_hash()
+
+
+def test_labels_are_independent_of_construction_order():
+    """.labels() is identical regardless of the order terms were added.
+
+    test_canonical_order_is_independent_of_construction_order (above) checks
+    only the sequence of `.kind` values and the hash; it never calls
+    `.labels()`. That leaves a gap: labels() derives purely from position, so
+    two same-kind terms swapping positions between constructions is
+    invisible to a kind-only check when both specs contain the same
+    multiset of kinds (the .kind sequence looks identical either way). This
+    test asserts on .labels() directly to close that gap.
+
+    Bug this catches: any construction-order dependence in the canonical
+    sort -- including a non-total order_key that lets tied terms fall back
+    to construction order -- surfaces here as labels() disagreeing between
+    two differently-constructed but equivalent specs.
+    """
+    a = _matern12(50.0) + _white() + _matern12(2.0)
+    b = _white() + _matern12(2.0) + _matern12(50.0)
+    assert a.labels() == ("matern12[0]", "matern12[1]", "white[0]")
+    assert b.labels() == ("matern12[0]", "matern12[1]", "white[0]")

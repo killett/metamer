@@ -9,6 +9,26 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from metamer.core.params import ParamSpec
+from metamer.core.transforms import Bijector
+
+
+def _transform_args_canonical(transform: Bijector) -> dict[str, str]:
+    """Render a bijector's constructor arguments into a JSON-safe dict.
+
+    Applies the same `repr(float(...))` stringification that `_param_canonical`
+    applies to `default`, `bounds`, and `diagnostic_limits`. Without it, a
+    `Logit` built with an infinite bound would embed a raw `float("inf")`,
+    which `json.dumps` renders as the non-standard `Infinity` token and
+    breaks the "canonical() round-trips through json.dumps" invariant.
+
+    Args:
+        transform: The bijector instance backing a ParamSpec.
+
+    Returns:
+        A dict from sorted argument name to its `repr(float(...))` string.
+    """
+    raw: dict[str, Any] = getattr(transform, "__dict__", {})
+    return {name: repr(float(raw[name])) for name in sorted(raw)}
 
 
 def _param_canonical(spec: ParamSpec) -> dict[str, Any]:
@@ -17,12 +37,41 @@ def _param_canonical(spec: ParamSpec) -> dict[str, Any]:
         "name": spec.name,
         "default": repr(float(spec.default)),
         "transform": type(spec.transform).__name__,
-        "transform_args": getattr(spec.transform, "__dict__", {}),
+        "transform_args": _transform_args_canonical(spec.transform),
         "bounds": [repr(float(b)) for b in spec.bounds],
         "diagnostic_limits": [repr(float(b)) for b in spec.diagnostic_limits],
         "fixed": bool(spec.fixed),
         "unit": spec.unit,
     }
+
+
+def _refuse_shared(term: TermSpec, label: str | None = None) -> None:
+    """Raise if `term` declares cross-term shared parameters.
+
+    Both `TermSpec.n_free` and `free_param_index` must refuse the same specs
+    the same way -- one feeds `k` in every information criterion, the other
+    defines the optimizer's search vector, and letting them diverge on
+    shared-parameter handling would let `n_theta()` silently count a shared
+    parameter as independent while `free_param_index` refuses it.
+
+    Args:
+        term: Term to check.
+        label: The term's stable label, included in the message when the
+            caller has one. `TermSpec.n_free` does not have a label to give
+            (labels are a `ProcessSpec`-level concept), so it is optional.
+
+    Raises:
+        NotImplementedError: If `term.shared_with` is truthy. Design doc
+            section 4.7 requires counting to handle cross-term sharing;
+            Phase 1 implements no sharing mechanism, so such a term must be
+            refused rather than silently counted as independent.
+    """
+    if term.shared_with:
+        prefix = f"{label}: " if label is not None else ""
+        raise NotImplementedError(
+            f"{prefix}cross-term shared parameters {sorted(term.shared_with)} are "
+            "not implemented in Phase 1; see design doc section 4.7"
+        )
 
 
 @dataclass(frozen=True)
@@ -41,14 +90,38 @@ class TermSpec:
     ordering_param: str | None = None
     shared_with: Mapping[str, str] | None = None
 
-    def order_key(self) -> tuple[str, float]:
-        """Return the canonical sort key for this term."""
-        if self.ordering_param is None:
-            return (self.kind, 0.0)
-        return (self.kind, float(self.params[self.ordering_param].default))
+    def order_key(self) -> tuple[str, float, str]:
+        """Return the canonical sort key for this term.
+
+        The key is `(kind, ordering-parameter default, canonical JSON)`. The
+        first two elements alone are not a total order: two terms of the same
+        kind with an identical ordering-parameter default (but different
+        other parameters, e.g. `sigma`) would tie, and Python's stable sort
+        would then fall back to construction order -- silently reintroducing
+        the order-dependence in `spec_hash()` and in label-to-term
+        association that this task exists to eliminate. Appending the term's
+        own canonical serialization makes the key total: two terms tie under
+        it only when they are canonically identical, in which case
+        construction order carries no information anyway.
+        """
+        ordering_default = (
+            0.0
+            if self.ordering_param is None
+            else float(self.params[self.ordering_param].default)
+        )
+        canonical_json = json.dumps(
+            self.canonical(), sort_keys=True, separators=(",", ":")
+        )
+        return (self.kind, ordering_default, canonical_json)
 
     def n_free(self) -> int:
-        """Count parameters this term contributes to k_theta."""
+        """Count parameters this term contributes to k_theta.
+
+        Raises:
+            NotImplementedError: If this term declares shared parameters --
+                see `_refuse_shared`.
+        """
+        _refuse_shared(self)
         return sum(1 for p in self.params.values() if not p.fixed)
 
     def canonical(self) -> dict[str, Any]:
@@ -105,7 +178,17 @@ class ProcessSpec:
         return tuple(out)
 
     def n_theta(self) -> int:
-        """Count free noise parameters across all terms."""
+        """Count free noise parameters across all terms.
+
+        Derived independently from `free_param_index`: this sums each term's
+        own `n_free()` rather than computing `len(free_param_index(self))`,
+        so the two stay separate checks on the same invariant instead of one
+        masquerading as the other.
+
+        Raises:
+            NotImplementedError: If any term declares shared parameters --
+                see `TermSpec.n_free`.
+        """
         return sum(term.n_free() for term in self.terms)
 
     def canonical(self) -> dict[str, Any]:
@@ -149,11 +232,7 @@ def free_param_index(spec: ProcessSpec) -> tuple[tuple[str, str], ...]:
     """
     out: list[tuple[str, str]] = []
     for label, term in zip(spec.labels(), spec.terms, strict=True):
-        if term.shared_with:
-            raise NotImplementedError(
-                f"{label}: cross-term shared parameters {sorted(term.shared_with)} are "
-                "not implemented in Phase 1; see design doc section 4.7"
-            )
+        _refuse_shared(term, label)
         for name, param in term.params.items():
             if not param.fixed:
                 out.append((label, name))
