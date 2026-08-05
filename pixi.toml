@@ -55,6 +55,7 @@ pytest = "*"
 pytest-cov = "*"
 pre-commit = "*"
 # Group-derived conda packages are inserted on the line below.
+psutil = "*"
 python-dotenv = "*"
 httpx = "*"
 pydantic = "*"
