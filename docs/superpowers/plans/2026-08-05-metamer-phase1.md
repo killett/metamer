@@ -979,7 +979,7 @@ git commit -m "feat: add kernel algebra with canonical ordering and stable hashi
 - [ ] Kernel and recipe registries are separate objects with separate lookup types
 - [ ] Duplicate registration under the same key raises rather than silently overwriting
 - [ ] `REGISTRY_VERSION` is a module constant included in provenance
-- [ ] `Outcome` has all eleven members; `INSUFFICIENT_DATA` and `NOT_ATTEMPTED` are distinct from every failure
+- [ ] `Outcome` has all twelve members; `INSUFFICIENT_DATA` and `NOT_ATTEMPTED` are distinct from every failure; `RANK_DEFICIENT_X` and `ILL_CONDITIONED_X` are distinct from each other
 - [ ] `Outcome.is_failure` excludes `OK`, `NOT_ATTEMPTED`, and `INSUFFICIENT_DATA` — the denominator rule
 
 **Verify:** `pixi run test tests/test_capability.py tests/test_registry.py tests/test_outcomes.py -v`
@@ -1343,6 +1343,7 @@ def test_every_real_failure_reports_is_failure():
         Outcome.TRUST_RADIUS_COLLAPSED,
         Outcome.NONFINITE_OBJECTIVE,
         Outcome.RANK_DEFICIENT_X,
+        Outcome.ILL_CONDITIONED_X,
         Outcome.DEGENERATE_HESSIAN,
         Outcome.CANDIDATE_DROPPED,
     }
@@ -1387,6 +1388,7 @@ class Outcome(StrEnum):
     NONFINITE_OBJECTIVE = "nonfinite_objective"
     RANK_DEFICIENT_X = "rank_deficient_x"
     DEGENERATE_HESSIAN = "degenerate_hessian"
+    ILL_CONDITIONED_X = "ill_conditioned_x"
     NOT_ATTEMPTED = "not_attempted"
     CANDIDATE_DROPPED = "candidate_dropped"
     INSUFFICIENT_DATA = "insufficient_data"
@@ -1441,6 +1443,7 @@ _CODES: dict[Outcome, int] = {
     Outcome.NOT_ATTEMPTED: 8,
     Outcome.CANDIDATE_DROPPED: 9,
     Outcome.INSUFFICIENT_DATA: 10,
+    Outcome.ILL_CONDITIONED_X: 11,
 }
 _BY_CODE: dict[int, Outcome] = {code: member for member, code in _CODES.items()}
 
@@ -3337,7 +3340,9 @@ git commit -m "feat: add signal terms, design matrix, and linear/nonlinear taxon
 - [ ] The σ²-profiling decision is stated in the module docstring with its reason
 - [ ] **Outcomes are per series everywhere they cross a batched boundary** — `GlsResult.outcome` and `ObjectiveResult.outcome` are shape `(B,)` `uint8`, never a scalar
 - [ ] **`np.linalg.slogdet` builds the validity mask before any factorization**; only the valid subset is factorized and results are scattered back, so one bad series cannot fail the stack
-- [ ] A batch with exactly one fully-masked series marks that series `RANK_DEFICIENT_X` with NaN, and every other series `OK` with a finite log-likelihood equal to its solo fit
+- [ ] **A shared, globally full-rank design still fails per series when a gap removes a column's support** — an offset epoch inside a masked window marks that series alone, with NaN, while every other series is `OK`, finite, and equal to its solo fit
+- [ ] The three-way split is exercised: full support → `OK`; two post-breakpoint samples → `ILL_CONDITIONED_X`; none → `RANK_DEFICIENT_X`
+- [ ] `check_design` passing is shown to be **necessary but not sufficient** — a design it accepts still yields a per-series failure
 - [ ] **Failed series carry NaN, not −inf**, in anything destined for the store; −inf appears only as the optimizer's internal barrier in `optimize_series`
 - [ ] `log|XᵀX|` is computed once on `DesignInfo`, never inside the likelihood
 - [ ] `Outcome.code` values are stable and documented as never renumbered
@@ -3357,7 +3362,7 @@ from metamer.core.capability import Objective
 from metamer.core.engines.kalman import KalmanEngine
 from metamer.core.objective import ConcentratedObjective
 from metamer.core.signal import DesignInfo, gls_solution
-from metamer.core.signal import Constant, SignalSpec, Trend
+from metamer.core.signal import Constant, Offset, SignalSpec, Trend
 from metamer.core.statespace import StateSpace
 from metamer.core.terms import ProcessSpec
 from tests.oracles import mvn_loglik, reml_loglik, reml_penalty
@@ -3486,42 +3491,99 @@ def test_rank_deficient_design_is_a_named_outcome_not_an_exception(mode):
     assert np.all(np.isnan(result.loglik))
 
 
-def test_one_failing_series_does_not_contaminate_the_batch():
-    """A single bad series fails alone; its 63 neighbours fit normally.
+def _gapped_setup(n: int = 60, break_at: float = 40.0):
+    """Shared design containing an offset, so gaps can remove its support."""
+    spec = ProcessSpec((_term("white"), _term("matern12")))
+    ss = StateSpace.from_spec(spec)
+    theta = np.array([[0.4, 1.2, 6.0]])
+    t = np.arange(float(n))
+    design = SignalSpec([Constant(), Trend(), Offset(epoch=break_at)]).design_info(t)
+    return spec, ss, theta, t, design
 
-    Constructed by fully masking one series, so its accumulated X'Sigma^-1X is
-    zero and singular while every other series is well conditioned. In Phase 1
-    the design is shared across the batch, so this is the only way a per-series
-    rank deficiency can arise -- and it is exactly the shape of the real case
-    (a shelf pixel with no valid samples in the window).
+
+@pytest.mark.parametrize(
+    "post_break_kept, expected",
+    [
+        (20, Outcome.OK),
+        (2, Outcome.ILL_CONDITIONED_X),
+        (0, Outcome.RANK_DEFICIENT_X),
+    ],
+)
+def test_effective_rank_is_per_series_because_the_mask_restricts_the_design(
+    post_break_kept, expected
+):
+    """A shared, globally full-rank X still fails for one series in a batch.
+
+    The filter accumulates X' Sigma^-1 X only over each series' unmasked
+    epochs, so the design that actually enters the solve is X restricted to
+    those rows. Here the offset column is fully supported globally, but series
+    2's gap removes all (or nearly all) of its post-breakpoint samples. On a
+    grid point with a seasonal sea-ice dropout this is ordinary.
+
+    The three cases separate two scientific facts the map should distinguish:
+    a term with no support at all (exactly singular) and a term identified by a
+    handful of samples (barely identified). The middle case is what the AM-GM
+    conditioning proxy exists to catch and is otherwise untested.
 
     Bug this catches: THE batched-granularity failure. np.linalg.cholesky raises
-    for the whole (B, k, k) stack if any one member is not positive definite, so
-    a scalar outcome marks all B as failed. At B = 10^4 one bad grid point
-    destroys 9,999 good fits, and the spatial failure map -- which the design
-    treats as a diagnostic in its own right -- becomes a picture of the tile
-    grid. Every small-B test passes, because there the batch is the series.
+    for the whole (B, k, k) stack if one member is not positive definite, so a
+    scalar outcome marks all B as failed. At B = 10^4 one such grid point
+    destroys 9,999 good fits and the spatial failure map becomes a picture of
+    the tile grid. Every small-B test passes, because there the batch is the
+    series.
+
+    NOTE for the implementer: if the (2, ILL_CONDITIONED_X) case comes back OK,
+    `CONDITION_LOG_LIMIT` needs calibrating against this test rather than the
+    test being loosened -- that constant has no independently correct value and
+    this is the case it is for.
     """
-    spec, ss, theta, t, design, _, _ = _setup()
-    batch = 64
+    spec, ss, theta, t, design = _gapped_setup()
+    batch = 5
     rng = np.random.default_rng(21)
     y = rng.standard_normal((batch, t.size))
     mask = np.ones_like(y, dtype=bool)
-    mask[7, :] = False
+    keep_until = 40 + post_break_kept
+    mask[2, keep_until:] = False
 
     obj = ConcentratedObjective(spec, ss, KalmanEngine(), Objective.ML)
     result = obj.evaluate(np.repeat(theta, batch, axis=0), y, mask, t, design)
 
-    assert result.outcome[7] == Outcome.RANK_DEFICIENT_X.code
-    assert np.isnan(result.loglik[7])
+    assert result.outcome[2] == expected.code
+    if expected is Outcome.OK:
+        assert np.isfinite(result.loglik[2])
+    else:
+        assert np.isnan(result.loglik[2])
 
-    others = np.ones(batch, dtype=bool)
-    others[7] = False
+    others = np.array([0, 1, 3, 4])
     assert np.all(result.outcome[others] == Outcome.OK.code)
     assert np.all(np.isfinite(result.loglik[others]))
 
     solo = obj.evaluate(theta, y[3:4], mask[3:4], t, design)
     assert result.loglik[3] == pytest.approx(solo.loglik[0], rel=1e-12)
+
+
+def test_batch_level_rank_check_is_necessary_but_not_sufficient():
+    """check_design passes a design that still fails per series.
+
+    Bug this catches: believing the batch-level rank(X) is the whole story, and
+    so never classifying per series at all. X here is globally full rank, so
+    check_design returns OK for every series -- and one of them is nonetheless
+    singular once its mask is applied.
+    """
+    spec, ss, theta, t, design = _gapped_setup()
+    assert not design.is_deficient
+    assert np.all(obj_codes := ConcentratedObjective(
+        spec, ss, KalmanEngine(), Objective.ML
+    ).check_design(design, 3) == Outcome.OK.code)
+    assert obj_codes.shape == (3,)
+
+    y = np.random.default_rng(5).standard_normal((3, t.size))
+    mask = np.ones_like(y, dtype=bool)
+    mask[1, 40:] = False
+    obj = ConcentratedObjective(spec, ss, KalmanEngine(), Objective.ML)
+    result = obj.evaluate(np.repeat(theta, 3, axis=0), y, mask, t, design)
+    assert result.outcome[1] == Outcome.RANK_DEFICIENT_X.code
+    assert np.all(result.outcome[[0, 2]] == Outcome.OK.code)
 
 
 def test_fixed_parameter_is_pinned_and_absent_from_the_flat_vector():
@@ -3733,8 +3795,11 @@ def gls_solution(accum: NDArray[np.float64]) -> GlsResult:
     with np.errstate(invalid="ignore", divide="ignore"):
         slack = k * np.log(np.maximum(diag_mean, np.finfo(np.float64).tiny)) - log_abs_det
 
-    valid = finite & (sign > 0) & np.isfinite(log_abs_det) & (slack < k * CONDITION_LOG_LIMIT)
-    outcome[finite & ~valid] = Outcome.RANK_DEFICIENT_X.code
+    singular = finite & (~(sign > 0) | ~np.isfinite(log_abs_det))
+    ill = finite & ~singular & ~(slack < k * CONDITION_LOG_LIMIT)
+    valid = finite & ~singular & ~ill
+    outcome[singular] = Outcome.RANK_DEFICIENT_X.code
+    outcome[ill] = Outcome.ILL_CONDITIONED_X.code
 
     if not valid.any():
         return GlsResult(beta, beta_cov, logdet, rss_reduction, outcome)
@@ -3786,11 +3851,18 @@ class ConcentratedObjective:
     def check_design(self, design: DesignInfo, batch: int) -> NDArray[np.uint8]:
         """Classify the design matrix before it reaches the likelihood.
 
-        Returns the PER-SERIES form even though a Phase 1 design is shared
-        across the batch and the answer is therefore uniform. Returning a scalar
-        that later has to be broadcast is exactly how a per-series concept gets
-        implemented at batch granularity; see `signal.DesignInfo` for when this
-        stops being uniform.
+        THIS CHECK IS NECESSARY BUT NOT SUFFICIENT. It sees only the global
+        rank of X. The design that actually enters X' Sigma^-1 X for a given
+        series is X RESTRICTED TO THAT SERIES' UNMASKED ROWS, because the filter
+        accumulates only over unmasked epochs -- so effective rank is per-series
+        whenever masks differ, which in real gridded data is always. A shared,
+        globally full-rank X still yields a singular system for any series whose
+        gaps remove all support for one of its columns. `gls_solution` is what
+        catches that, per series.
+
+        Returns the per-series form for the same reason: a scalar that later has
+        to be broadcast is exactly how a per-series concept gets implemented at
+        batch granularity.
 
         Args:
             design: The built design matrix and its derived quantities.

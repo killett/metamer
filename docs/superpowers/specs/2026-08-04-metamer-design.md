@@ -357,7 +357,15 @@ and not others in a 10^7 run.
 
 Compute `rank(X)` numerically (pivoted QR or SVD with a stated tolerance), use it in both
 the REML penalty and the `n − rank(X)` bookkeeping, and **surface rank deficiency
-explicitly in the failure taxonomy** rather than letting it emerge as a NaN. This also
+explicitly in the failure taxonomy** rather than letting it emerge as a NaN.
+
+**Effective rank is per series, not per batch.** The design matrix may be shared, but the
+filter accumulates `XᵀΣ⁻¹X` only over each series' *unmasked* epochs — so the design that
+actually enters the solve is X restricted to those rows. A globally full-rank X still
+yields a singular system for any series whose gaps remove all support for one of its
+columns: an offset or piecewise rate change whose epoch falls inside a seasonal sea-ice
+dropout is the ordinary case, not a contrived one. A batch-level rank check is therefore
+necessary but not sufficient, and the per-series classification happens in the GLS solve. This also
 matters under ML, where rank-deficient `X` silently inflates `k`.
 
 ### 5.3 The offset/random-walk confound
@@ -640,7 +648,8 @@ early-return in the fit driver, so this is Phase 1.
 | `DIAGNOSTIC_LIMIT` | a parameter reached its diagnostic limit |
 | `TRUST_RADIUS_COLLAPSED` | trust region collapsed |
 | `NONFINITE_OBJECTIVE` | non-finite objective encountered |
-| `RANK_DEFICIENT_X` | design matrix rank-deficient (§5.2) |
+| `RANK_DEFICIENT_X` | design matrix exactly singular **for this series** (§5.2) |
+| `ILL_CONDITIONED_X` | design matrix technically full rank for this series but barely identified |
 | `DEGENERATE_HESSIAN` | near-degenerate Hessian at the optimum |
 | `NOT_ATTEMPTED` | candidate skipped — screened out, capability-excluded, or cost-refused |
 | `CANDIDATE_DROPPED` | candidate abandoned run-wide by the early-abort demotion path (§14.1) |

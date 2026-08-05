@@ -106,6 +106,17 @@ cannot reconstruct them.
   validity is classified with the non-raising batched `slogdet` first and only the valid
   subset is factorized. `test_batched_results_equal_solo_results_series_by_series` is the
   standing guard for this entire class.
+- **Effective rank is per series even when the design is shared.** The filter accumulates
+  `XᵀΣ⁻¹X` only over each series' unmasked epochs, so the design entering the solve is X
+  restricted to those rows. A globally full-rank X still yields a singular system wherever
+  a gap removes all support for a column — an offset or rate-change epoch inside a seasonal
+  sea-ice dropout is the ordinary case. **`check_design`'s batch-level rank is necessary but
+  not sufficient**; the per-series classification happens in `gls_solution`.
+- **`RANK_DEFICIENT_X` and `ILL_CONDITIONED_X` are distinct outcomes.** Exactly singular
+  (a term with no support) and barely identified (a handful of samples) are different
+  scientific facts, and the point of the failure map is which one happened where.
+  `CONDITION_LOG_LIMIT` has no independently correct value — calibrate it against the
+  two-post-breakpoint-samples test case rather than loosening that test.
 - **Failed series carry NaN, not −inf,** in anything destined for the store. −inf is a
   finite-looking sentinel that survives some consumers' checks. It is the optimizer's
   internal barrier value only.
