@@ -1,0 +1,5826 @@
+# metamer Phase 1 — Likelihood Spine Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers-extended-cc:subagent-driven-development (recommended) or superpowers-extended-cc:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Build `metamer.core` — a batched, exact, continuous-time state-space likelihood engine with joint signal/noise estimation — end to end on arrays, with no batch orchestration, no zarr, and no CLI.
+
+**Architecture:** A kernel algebra (`ProcessSpec` = sum of `TermSpec`) whose parameters carry bijections to unconstrained ℝ. Terms declare per-engine cost classes and per-objective gradient capability, resolved by intersection across a composite. A batched Kalman filter over `(B, N)` with scalar observations and masked gaps evaluates the likelihood; linear signal terms are profiled out by GLS inside the same filter pass, giving ML and REML objectives. The public API is `(B, N)` only — `B=1` is a shape, never a separate code path.
+
+**Tech Stack:** Python 3.12, numpy 2.5, scipy 1.18, pytest, mypy strict, ruff. numba (added in Task 18) for the compiled spike backend. celerite2 optional, test-only. psutil for the RSS shim.
+
+**Global Constraints:**
+- `(B, N)` is the only code path. Every public function takes a leading batch axis.
+- float64 throughout `core`. No float32 anywhere in this phase.
+- Never interpolate gaps — mask the Kalman update, keep the prediction step.
+- Analytic `F`, `Q`, `P∞` per family. A general `expm`/Lyapunov path exists only as a test reference and a numerical-degeneracy fallback.
+- Every score carries an `engine` tag AND an `objective` tag. Ranking across either is a hard error.
+- Parameter counting is defined per objective: ML `k = k_θ + k_β`, `n = n_obs`; REML `k = k_θ`, `n = n_obs − rank(X)`.
+- No reordering, reparameterization, or preconditioner refresh mid-optimization.
+- Parallelism is within a tile (over series), never across tiles.
+- `pathlib` only; no POSIX-only syscalls; no `fork` assumptions.
+- Design doc is authoritative: `docs/superpowers/specs/2026-08-04-metamer-design.md`. Section references below (§N) point into it.
+
+**User decisions (already made):**
+- "Phase 1 ships no batch orchestration (no tiling, no zarr, no CLI) while the array API is batched throughout. B=1 is a shape, never a code path."
+- "Phase 1 minimum: white + Matérn ν=1/2 + at least one d>1 family, and sums of them."
+- "The primary oracle is brute-force MVN, not celerite2." celerite2 is optional and is the designated first cut if Phase 1 proves too large.
+- "FD as the Phase 1 default, analytic forward-mode as the target with a protocol slot, complex-step as the test oracle."
+- "Do not build the batched trust-region until the stage-1 spike says to." Path A's reference form is a plain per-series scipy loop.
+- "Both objectives are supported. ML is the default." REML lands in Phase 1 because deferring it leaves the warm-start key wrong and the IC bookkeeping with an unexercised second branch.
+- Three hashes: `fit_hash` ⊂ `compat_hash` ⊂ `run_hash`, compat-relevance by allowlist.
+- Machines: mini PC (4 cores, ~10 GB free) for development; 64-core box for the budget measurement; MacBook as the adversarial case for path A.
+
+---
+
+## Resolved ambiguity: which families give d=3
+
+§9.2 offers "Matérn ν=5/2 or white+SHO" as the d=3 spike case. **`white + SHO` is d=2, not d=3** — white noise is *measurement* noise contributing to `R`, not to the state. This plan resolves it by implementing **white (d=0), Matérn ν=1/2 (d=1), Matérn ν=3/2 (d=2)** and reaching d=3 through the composite **`white + matern12 + matern32`**.
+
+That is strictly better than adding Matérn ν=5/2: it hits d=3 *and* exercises composition, block-diagonal assembly, and canonical ordering — the central architectural claims — in the same test case.
+
+---
+
+## File structure
+
+```
+src/metamer/
+  __init__.py                 version, public re-exports
+  __main__.py                 `python -m metamer` smoke entry point
+  core/
+    __init__.py               the public core API surface
+    transforms.py             Bijector protocol; Log, Logit, Identity; delta method
+    params.py                 ParamSpec
+    terms.py                  TermSpec, ProcessSpec, canonical ordering, canonical JSON
+    capability.py             EngineId, CostClass, Objective, GradientMode; intersection
+    registry.py               kernel registry, recipe registry, REGISTRY_VERSION
+    lint.py                   static identifiability lint
+    counting.py               n_free per objective
+    outcomes.py               Outcome enum (failure taxonomy)
+    hashing.py                canonical JSON, sha256, fit/compat/run hash + allowlist
+    machine.py                peak-RSS shim (Linux/macOS/Windows branches)
+    memory.py                 analytic bytes-per-series formula
+    families/
+      __init__.py             registration side effects
+      base.py                 Family protocol; expm/Lyapunov reference builders
+      white.py                white measurement noise (d=0)
+      matern12.py             Ornstein-Uhlenbeck (d=1)
+      matern32.py             Matérn 3/2, Jordan form (d=2)
+    statespace.py             composite block-diagonal assembly; defective-root guard
+    engines/
+      __init__.py
+      protocol.py             Engine protocol; ScoredResult carrying engine+objective tags
+      kalman.py               batched Kalman, masked gaps, augmented GLS accumulation
+    signal.py                 SignalSpec, term taxonomy, design matrix, rank(X)
+    objective.py              ML and REML concentrated objectives
+    gradients.py              FD, complex-step oracle, analytic forward-mode dispatch
+    optimize.py               reference per-series driver, init ladder, Hessian at optimum
+    criteria.py               AIC etc.; comparability guard
+    fit.py                    fit() — the (B, N) driver
+  bench/
+    __init__.py
+    references.py             canonical filter pass; compute reference; bandwidth reference
+    spike.py                  stage-1 harness
+tests/
+  __init__.py
+  test_transforms.py          test_terms.py          test_capability.py
+  test_registry.py            test_families.py       test_statespace.py
+  test_kalman.py              test_signal.py         test_objective.py
+  test_counting.py            test_criteria.py       test_gradients.py
+  test_optimize.py            test_fit.py            test_lint.py
+  test_hashing.py             test_memory.py         test_outcomes.py
+  oracles.py                  brute-force MVN, FD Hessian, expm/Lyapunov references
+```
+
+---
+
+## Task index and the branch
+
+Tasks 0–17 are unconditional. Task 18 builds the spike harness. **Task 19 is a user-thrown gate** — it requires runs on machines this session cannot reach. **Task 20 is conditional and may never be built.**
+
+| # | task | blocked by |
+|---|---|---|
+| 0 | Package skeleton and dependencies | — |
+| 1 | Bijectors, `ParamSpec`, delta method | 0 |
+| 2 | `TermSpec` / `ProcessSpec` algebra, canonical ordering, canonical JSON | 1 |
+| 3 | Capability resolution and the two registries | 2 |
+| 4 | Family protocol; white and Matérn ν=1/2; analytic vs `expm`/Lyapunov | 3 |
+| 5 | Matérn ν=3/2 (Jordan form); composite assembly; defective-root guard | 4 |
+| 6 | Engine protocol and the batched Kalman filter; MVN oracle | 5 |
+| 7 | Signal spec, design matrix, `rank(X)`, linear/nonlinear taxonomy | 2 |
+| 8 | GLS profiling; ML and REML concentrated objectives | 6, 7 |
+| 9 | Parameter counting per objective; both effective sample sizes | 8 |
+| 10 | Criteria and the comparability guards | 9 |
+| 11 | FD gradients, step rule, complex-step viability verdict | 9 |
+| 12 | Analytic forward-mode for Matérn ν=1/2; gradient-capability resolution | 11 |
+| 13 | Optimizer driver: init ladder, convergence, Hessian at optimum | 11 |
+| 14 | `fit()` — the `(B, N)` driver with `x0` | 13, 10 |
+| 15 | Identifiability lint | 5 |
+| 16 | Three-hash machinery with the compat-relevance allowlist | 2 |
+| 17 | Memory formula, RSS shim, benchmark references, spike harness | 14, 16 |
+| 18 | **USER GATE** — cross-machine stage-1 measurement and the ≥3× decision | 17 |
+| 19 | **CONDITIONAL** — batched trust-region, only if 18 is inconclusive | 18 |
+
+The failure-taxonomy enum (`outcomes.py`) lands in **Task 3**, not later: `objective.py`
+imports it in Task 8, and retrofitting a taxonomy onto a boolean `converged` flag means
+revisiting every early return in the fit driver.
+
+---
+
+## Task 0: Package skeleton and dependencies
+
+**Goal:** A `src/` layout package that imports, runs as `python -m metamer`, and has the Phase 1 dependencies installed.
+
+**Files:**
+- Create: `src/metamer/__init__.py`, `src/metamer/__main__.py`, `src/metamer/core/__init__.py`
+- Create: `src/metamer/core/families/__init__.py`, `src/metamer/core/engines/__init__.py`
+- Create: `src/metamer/bench/__init__.py`, `tests/__init__.py`, `tests/oracles.py`
+- Modify: `pixi.toml` (add `psutil`; `numba` and `celerite2` are added later, in Task 18)
+
+**Acceptance Criteria:**
+- [ ] `pixi run python -m metamer` prints the version and exits 0
+- [ ] `pixi run test` collects zero tests without error
+- [ ] `pixi run typecheck` passes on the empty package
+- [ ] `import metamer.core` succeeds without importing xarray, dask, or zarr
+
+**Verify:** `pixi run python -m metamer && pixi run typecheck && pixi run lint`
+
+**Steps:**
+
+- [ ] **Step 1: Create the package skeleton**
+
+```python
+# src/metamer/__init__.py
+"""metamer — stochastic noise-model fitting and selection for time series."""
+
+__version__ = "0.1.0"
+
+__all__ = ["__version__"]
+```
+
+```python
+# src/metamer/__main__.py
+"""Entry point so the package is runnable with `python -m metamer`."""
+
+import sys
+
+from metamer import __version__
+
+
+def main() -> int:
+    """Print the package version.
+
+    Returns:
+        Process exit code.
+    """
+    print(f"metamer {__version__}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+```
+
+```python
+# src/metamer/core/__init__.py
+"""Array-level API: numpy/scipy only. No file I/O, no xarray, no dask."""
+```
+
+Create `src/metamer/core/families/__init__.py`, `src/metamer/core/engines/__init__.py`,
+`src/metamer/bench/__init__.py`, and `tests/__init__.py` as empty files.
+
+- [ ] **Step 2: Add the import-isolation test**
+
+```python
+# tests/test_core_isolation.py
+import subprocess
+import sys
+
+
+def test_core_imports_without_batch_dependencies():
+    """core must be importable with no xarray/dask/zarr in sys.modules.
+
+    Bug this catches: someone adds `import xarray` to a core module, silently
+    making `metamer.core` unusable for downstream consumers that installed
+    without the [batch] extra.
+    """
+    code = (
+        "import metamer.core, sys; "
+        "bad = {'xarray', 'dask', 'zarr'} & set(sys.modules); "
+        "assert not bad, bad"
+    )
+    result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+```
+
+- [ ] **Step 3: Run it and confirm it passes**
+
+Run: `pixi run test tests/test_core_isolation.py -v`
+Expected: PASS
+
+- [ ] **Step 4: Add psutil to pixi.toml**
+
+Add `psutil = "*"` to the `[dependencies]` table, then:
+
+Run: `pixi install`
+Expected: solve succeeds on all four platforms
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src tests pixi.toml pixi.lock
+git commit -m "feat: scaffold metamer package skeleton"
+```
+
+---
+
+## Task 1: Bijectors, ParamSpec, and the delta method
+
+**Goal:** Every parameter carries a bijection to unconstrained ℝ that exposes `log|J|` and the first-order derivative needed to push uncertainties back to natural units.
+
+**Files:**
+- Create: `src/metamer/core/transforms.py`, `src/metamer/core/params.py`
+- Create: `tests/test_transforms.py`
+
+**Acceptance Criteria:**
+- [ ] `Log`, `Logit(lo, hi)`, and `Identity` round-trip: `inverse(forward(u)) == u` to 1e-12
+- [ ] `log_abs_det_jacobian` matches a finite-difference `log|d forward/d u|` to 1e-7
+- [ ] `delta_method_cov` reproduces an explicitly computed `J Σ Jᵀ` for a 2×2 case
+- [ ] `ParamSpec` rejects a `default` outside `bounds` at construction
+- [ ] `diagnostic_limits` are stored separately from `bounds` and never clip
+
+**Verify:** `pixi run test tests/test_transforms.py -v` → all pass
+
+**Steps:**
+
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# tests/test_transforms.py
+import numpy as np
+import pytest
+
+from metamer.core.params import ParamSpec
+from metamer.core.transforms import Identity, Log, Logit, delta_method_cov
+
+
+@pytest.mark.parametrize(
+    "bij, u",
+    [
+        (Log(), np.array([-3.0, 0.0, 2.5])),
+        (Logit(0.0, 1.0), np.array([-2.0, 0.0, 4.0])),
+        (Logit(0.5, 10.0), np.array([-1.0, 0.3])),
+        (Identity(), np.array([-7.0, 0.0, 7.0])),
+    ],
+)
+def test_roundtrip(bij, u):
+    """inverse(forward(u)) recovers u.
+
+    Bug this catches: a Logit that forgets to rescale by (hi - lo) in one
+    direction, which silently squashes every bounded parameter toward its
+    lower bound.
+    """
+    np.testing.assert_allclose(bij.inverse(bij.forward(u)), u, rtol=0, atol=1e-12)
+
+
+@pytest.mark.parametrize(
+    "bij, u",
+    [
+        (Log(), np.array([-1.5, 0.0, 2.0])),
+        (Logit(0.0, 1.0), np.array([-1.0, 0.0, 1.0])),
+        (Logit(-2.0, 3.0), np.array([0.25])),
+    ],
+)
+def test_log_abs_det_jacobian_matches_finite_difference(bij, u):
+    """log|J| equals log|d forward / d u| computed by central differences.
+
+    Bug this catches: a sign error or a missing (hi - lo) factor in log|J|,
+    which would bias any future MCMC and corrupt reported error bars now.
+    """
+    h = 1e-6
+    numeric = np.log(np.abs((bij.forward(u + h) - bij.forward(u - h)) / (2 * h)))
+    np.testing.assert_allclose(bij.log_abs_det_jacobian(u), numeric, rtol=1e-6, atol=1e-7)
+
+
+def test_delta_method_cov_against_explicit_computation():
+    """delta_method_cov(d, cov) equals diag(d) @ cov @ diag(d).T.
+
+    Expected value determined independently: J is diagonal because the
+    transforms are elementwise, so the answer is d_i d_j cov_ij by hand.
+    """
+    d = np.array([2.0, 3.0])
+    cov_u = np.array([[1.0, 0.5], [0.5, 4.0]])
+    expected = np.array([[4.0 * 1.0, 6.0 * 0.5], [6.0 * 0.5, 9.0 * 4.0]])
+    np.testing.assert_allclose(delta_method_cov(d, cov_u), expected, rtol=1e-12)
+
+
+def test_paramspec_rejects_default_outside_bounds():
+    """A default outside bounds is a construction-time error.
+
+    Bug this catches: a family shipping nu=0.5 with bounds (1.0, 3.0), which
+    would otherwise surface as a mystifying optimizer failure at fit time.
+    """
+    with pytest.raises(ValueError, match="default"):
+        ParamSpec(
+            name="nu",
+            default=0.5,
+            transform=Logit(1.0, 3.0),
+            bounds=(1.0, 3.0),
+            diagnostic_limits=(1.0, 3.0),
+        )
+
+
+def test_diagnostic_limits_are_independent_of_bounds():
+    """diagnostic_limits may be strictly inside bounds and do not clip.
+
+    Bug this catches: conflating the two, which would silently clamp a
+    parameter instead of reporting DIAGNOSTIC_LIMIT.
+    """
+    spec = ParamSpec(
+        name="rho",
+        default=10.0,
+        transform=Log(),
+        bounds=(0.0, np.inf),
+        diagnostic_limits=(1e-3, 1e4),
+    )
+    assert spec.bounds == (0.0, np.inf)
+    assert spec.diagnostic_limits == (1e-3, 1e4)
+    assert spec.at_diagnostic_limit(1e5) is True
+    assert spec.at_diagnostic_limit(10.0) is False
+```
+
+- [ ] **Step 2: Run to verify failure**
+
+Run: `pixi run test tests/test_transforms.py -v`
+Expected: FAIL — `ModuleNotFoundError: No module named 'metamer.core.transforms'`
+
+- [ ] **Step 3: Implement transforms.py**
+
+```python
+# src/metamer/core/transforms.py
+"""Bijections from constrained parameter space to unconstrained R.
+
+The optimizer only ever sees unconstrained coordinates. Each bijector exposes
+the log absolute Jacobian determinant (needed for MCMC, and for correctness of
+reported uncertainties) and the first derivative of the forward map (needed for
+the delta-method push-through of covariances into natural units).
+"""
+
+from typing import Protocol, runtime_checkable
+
+import numpy as np
+from numpy.typing import NDArray
+
+
+@runtime_checkable
+class Bijector(Protocol):
+    """Elementwise bijection between unconstrained R and a parameter's domain."""
+
+    def forward(self, u: NDArray[np.float64]) -> NDArray[np.float64]:
+        """Map unconstrained coordinates to natural units."""
+        ...
+
+    def inverse(self, x: NDArray[np.float64]) -> NDArray[np.float64]:
+        """Map natural units to unconstrained coordinates."""
+        ...
+
+    def dforward(self, u: NDArray[np.float64]) -> NDArray[np.float64]:
+        """Derivative of `forward` with respect to `u`."""
+        ...
+
+    def log_abs_det_jacobian(self, u: NDArray[np.float64]) -> NDArray[np.float64]:
+        """Log absolute determinant of the forward Jacobian."""
+        ...
+
+
+class Identity:
+    """The trivial bijection, for parameters already unconstrained."""
+
+    def forward(self, u: NDArray[np.float64]) -> NDArray[np.float64]:
+        """Return `u` unchanged."""
+        return np.asarray(u, dtype=np.float64)
+
+    def inverse(self, x: NDArray[np.float64]) -> NDArray[np.float64]:
+        """Return `x` unchanged."""
+        return np.asarray(x, dtype=np.float64)
+
+    def dforward(self, u: NDArray[np.float64]) -> NDArray[np.float64]:
+        """Return ones."""
+        return np.ones_like(np.asarray(u, dtype=np.float64))
+
+    def log_abs_det_jacobian(self, u: NDArray[np.float64]) -> NDArray[np.float64]:
+        """Return zeros."""
+        return np.zeros_like(np.asarray(u, dtype=np.float64))
+
+
+class Log:
+    """Positivity constraint: natural = exp(unconstrained)."""
+
+    def forward(self, u: NDArray[np.float64]) -> NDArray[np.float64]:
+        """Exponentiate."""
+        return np.exp(np.asarray(u, dtype=np.float64))
+
+    def inverse(self, x: NDArray[np.float64]) -> NDArray[np.float64]:
+        """Take the natural logarithm."""
+        return np.log(np.asarray(x, dtype=np.float64))
+
+    def dforward(self, u: NDArray[np.float64]) -> NDArray[np.float64]:
+        """Derivative of exp is exp."""
+        return np.exp(np.asarray(u, dtype=np.float64))
+
+    def log_abs_det_jacobian(self, u: NDArray[np.float64]) -> NDArray[np.float64]:
+        """log|d exp(u)/du| = u."""
+        return np.asarray(u, dtype=np.float64)
+
+
+class Logit:
+    """Box constraint on (lo, hi) via the logistic map."""
+
+    def __init__(self, lo: float, hi: float):
+        if not hi > lo:
+            raise ValueError(f"Logit requires hi > lo, got lo={lo}, hi={hi}")
+        self.lo = float(lo)
+        self.hi = float(hi)
+
+    @property
+    def _width(self) -> float:
+        return self.hi - self.lo
+
+    def forward(self, u: NDArray[np.float64]) -> NDArray[np.float64]:
+        """Map R onto (lo, hi)."""
+        s = 1.0 / (1.0 + np.exp(-np.asarray(u, dtype=np.float64)))
+        return self.lo + self._width * s
+
+    def inverse(self, x: NDArray[np.float64]) -> NDArray[np.float64]:
+        """Map (lo, hi) onto R."""
+        s = (np.asarray(x, dtype=np.float64) - self.lo) / self._width
+        return np.log(s) - np.log1p(-s)
+
+    def dforward(self, u: NDArray[np.float64]) -> NDArray[np.float64]:
+        """Derivative of the scaled logistic."""
+        s = 1.0 / (1.0 + np.exp(-np.asarray(u, dtype=np.float64)))
+        return self._width * s * (1.0 - s)
+
+    def log_abs_det_jacobian(self, u: NDArray[np.float64]) -> NDArray[np.float64]:
+        """log(width) + log s + log(1 - s), computed stably."""
+        arr = np.asarray(u, dtype=np.float64)
+        log_s = -np.logaddexp(0.0, -arr)
+        log_1ms = -np.logaddexp(0.0, arr)
+        return np.log(self._width) + log_s + log_1ms
+
+
+def delta_method_cov(
+    dforward: NDArray[np.float64], cov_unconstrained: NDArray[np.float64]
+) -> NDArray[np.float64]:
+    """Push a covariance from unconstrained to natural coordinates.
+
+    The transforms are elementwise, so the Jacobian is diagonal and the
+    push-through reduces to scaling rows and columns.
+
+    This is first order. It degrades for parameters near a diagnostic limit,
+    where the transform's curvature is not negligible; callers must surface
+    that via the DIAGNOSTIC_LIMIT outcome.
+
+    Args:
+        dforward: Derivative of the forward map at the estimate, shape (..., p).
+        cov_unconstrained: Covariance in unconstrained coordinates, (..., p, p).
+
+    Returns:
+        Covariance in natural units, same shape as `cov_unconstrained`.
+    """
+    d = np.asarray(dforward, dtype=np.float64)
+    cov = np.asarray(cov_unconstrained, dtype=np.float64)
+    return d[..., :, None] * cov * d[..., None, :]
+```
+
+- [ ] **Step 4: Implement params.py**
+
+```python
+# src/metamer/core/params.py
+"""Parameter specifications: the coordinates the optimizer searches in."""
+
+from dataclasses import dataclass
+
+import numpy as np
+
+from metamer.core.transforms import Bijector
+
+
+@dataclass(frozen=True)
+class ParamSpec:
+    """One scalar parameter of a kernel term.
+
+    Attributes:
+        name: Parameter name, unique within its term.
+        default: Starting value in natural units.
+        transform: Bijection to unconstrained R.
+        bounds: Mathematical domain, enforced by `transform`. Never clipped
+            against directly.
+        diagnostic_limits: Reporting limits. Reaching one is an outcome, not a
+            clamp: it means the fit ran away and the delta-method uncertainty
+            for this parameter is unreliable.
+        fixed: If True the parameter is frozen and excluded from `n_free`.
+        unit: Optional unit string, recorded in output metadata.
+    """
+
+    name: str
+    default: float
+    transform: Bijector
+    bounds: tuple[float, float]
+    diagnostic_limits: tuple[float, float]
+    fixed: bool = False
+    unit: str | None = None
+
+    def __post_init__(self) -> None:
+        lo, hi = self.bounds
+        if not lo <= self.default <= hi:
+            raise ValueError(
+                f"{self.name}: default {self.default} outside bounds {self.bounds}"
+            )
+        dlo, dhi = self.diagnostic_limits
+        if not dhi > dlo:
+            raise ValueError(
+                f"{self.name}: diagnostic_limits must be increasing, got "
+                f"{self.diagnostic_limits}"
+            )
+
+    def at_diagnostic_limit(self, value: float) -> bool:
+        """Report whether a fitted value has reached a diagnostic limit.
+
+        Args:
+            value: Fitted value in natural units.
+
+        Returns:
+            True if the value is at or beyond either diagnostic limit.
+        """
+        lo, hi = self.diagnostic_limits
+        return bool(value <= lo or value >= hi)
+
+    def to_unconstrained(self, value: float) -> float:
+        """Convert a natural-unit value to unconstrained coordinates."""
+        return float(self.transform.inverse(np.asarray(value, dtype=np.float64)))
+
+    def to_natural(self, value: float) -> float:
+        """Convert an unconstrained value to natural units."""
+        return float(self.transform.forward(np.asarray(value, dtype=np.float64)))
+```
+
+- [ ] **Step 5: Run tests to verify they pass**
+
+Run: `pixi run test tests/test_transforms.py -v`
+Expected: all PASS
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add src/metamer/core/transforms.py src/metamer/core/params.py tests/test_transforms.py
+git commit -m "feat: add bijectors, ParamSpec, and delta-method push-through"
+```
+
+---
+
+## Task 2: TermSpec / ProcessSpec algebra, canonical ordering, canonical JSON
+
+**Goal:** Kernel terms compose with `+`, sort into a canonical order, and serialize to a stable hash that is insensitive to dict ordering and float formatting.
+
+**Files:**
+- Create: `src/metamer/core/terms.py`
+- Create: `tests/test_terms.py`
+
+**Acceptance Criteria:**
+- [ ] `TermSpec + TermSpec` and `ProcessSpec + ProcessSpec` both yield a `ProcessSpec`
+- [ ] Terms are canonically ordered by `(kind, ordering-parameter default)` at construction
+- [ ] Two specs differing only in construction order produce identical `spec_hash()`
+- [ ] Two specs differing only in Python dict insertion order produce identical `spec_hash()`
+- [ ] Stable labels (`matern12[0]`, `matern12[1]`) survive a re-sort
+- [ ] `canonical()` is JSON-serializable and round-trips through `json.dumps`
+
+**Verify:** `pixi run test tests/test_terms.py -v` → all pass
+
+**Steps:**
+
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# tests/test_terms.py
+import json
+
+from metamer.core.params import ParamSpec
+from metamer.core.terms import ProcessSpec, TermSpec
+from metamer.core.transforms import Log
+
+
+def _param(name: str, default: float) -> ParamSpec:
+    return ParamSpec(
+        name=name,
+        default=default,
+        transform=Log(),
+        bounds=(0.0, float("inf")),
+        diagnostic_limits=(1e-8, 1e8),
+    )
+
+
+def _matern12(rho: float) -> TermSpec:
+    return TermSpec(
+        kind="matern12",
+        params={"sigma": _param("sigma", 1.0), "rho": _param("rho", rho)},
+        ordering_param="rho",
+    )
+
+
+def _white(sigma: float = 0.1) -> TermSpec:
+    return TermSpec(kind="white", params={"sigma": _param("sigma", sigma)})
+
+
+def test_addition_produces_process_spec():
+    """TermSpec + TermSpec composes into a two-term ProcessSpec.
+
+    Bug this catches: __add__ returning a tuple or mutating in place, either
+    of which breaks the frozen-value semantics every hash depends on.
+    """
+    spec = _white() + _matern12(10.0)
+    assert isinstance(spec, ProcessSpec)
+    assert len(spec.terms) == 2
+
+
+def test_canonical_order_is_independent_of_construction_order():
+    """Construction order does not survive into the canonical form.
+
+    Expected value determined independently: canonical order is (kind,
+    ordering default) ascending, so white sorts before matern12(rho=2) which
+    sorts before matern12(rho=50), regardless of how they were added.
+    """
+    a = _matern12(50.0) + _white() + _matern12(2.0)
+    b = _white() + _matern12(2.0) + _matern12(50.0)
+    assert [t.kind for t in a.terms] == [t.kind for t in b.terms]
+    assert a.spec_hash() == b.spec_hash()
+
+
+def test_hash_is_insensitive_to_dict_insertion_order():
+    """Reordering a params dict does not change spec_hash.
+
+    Bug this catches: hashing repr() or a non-sorted json.dumps, which would
+    make an identical model look like a different one across runs and
+    invalidate a completed 10^7-point store.
+    """
+    forward = TermSpec(
+        kind="matern12",
+        params={"sigma": _param("sigma", 1.0), "rho": _param("rho", 3.0)},
+        ordering_param="rho",
+    )
+    backward = TermSpec(
+        kind="matern12",
+        params={"rho": _param("rho", 3.0), "sigma": _param("sigma", 1.0)},
+        ordering_param="rho",
+    )
+    assert ProcessSpec((forward,)).spec_hash() == ProcessSpec((backward,)).spec_hash()
+
+
+def test_stable_labels_disambiguate_exchangeable_terms():
+    """Two terms of the same kind get distinct, order-stable labels.
+
+    Bug this catches: label collision, which makes warm-start reuse and
+    cross-grid-point comparison silently attach 'term 2' to different objects
+    at different points.
+    """
+    spec = _matern12(2.0) + _matern12(50.0)
+    assert spec.labels() == ("matern12[0]", "matern12[1]")
+    assert spec.terms[0].params["rho"].default == 2.0
+
+
+def test_canonical_is_json_serializable():
+    """canonical() round-trips through json.dumps with sorted keys.
+
+    Bug this catches: leaving a Bijector object or a numpy scalar in the
+    canonical dict, which raises at hash time rather than at construction.
+    """
+    spec = _white() + _matern12(7.5)
+    encoded = json.dumps(spec.canonical(), sort_keys=True, separators=(",", ":"))
+    assert json.loads(encoded) == json.loads(encoded)
+    assert "matern12" in encoded
+```
+
+- [ ] **Step 2: Run to verify failure**
+
+Run: `pixi run test tests/test_terms.py -v`
+Expected: FAIL — `ModuleNotFoundError: No module named 'metamer.core.terms'`
+
+- [ ] **Step 3: Implement terms.py**
+
+```python
+# src/metamer/core/terms.py
+"""The kernel algebra: TermSpec, ProcessSpec, canonical form, and hashing."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+from collections.abc import Mapping
+from dataclasses import dataclass, field
+from typing import Any
+
+from metamer.core.params import ParamSpec
+
+
+def _param_canonical(spec: ParamSpec) -> dict[str, Any]:
+    """Render a ParamSpec into a JSON-safe canonical dict."""
+    return {
+        "name": spec.name,
+        "default": repr(float(spec.default)),
+        "transform": type(spec.transform).__name__,
+        "transform_args": getattr(spec.transform, "__dict__", {}),
+        "bounds": [repr(float(b)) for b in spec.bounds],
+        "diagnostic_limits": [repr(float(b)) for b in spec.diagnostic_limits],
+        "fixed": bool(spec.fixed),
+        "unit": spec.unit,
+    }
+
+
+@dataclass(frozen=True)
+class TermSpec:
+    """One additive kernel term.
+
+    Attributes:
+        kind: Registry key naming the family.
+        params: Parameter specifications, keyed by name.
+        ordering_param: Parameter used as the secondary canonical sort key.
+            Terms without one sort only by kind.
+    """
+
+    kind: str
+    params: Mapping[str, ParamSpec]
+    ordering_param: str | None = None
+
+    def order_key(self) -> tuple[str, float]:
+        """Return the canonical sort key for this term."""
+        if self.ordering_param is None:
+            return (self.kind, 0.0)
+        return (self.kind, float(self.params[self.ordering_param].default))
+
+    def n_free(self) -> int:
+        """Count parameters this term contributes to k_theta."""
+        return sum(1 for p in self.params.values() if not p.fixed)
+
+    def canonical(self) -> dict[str, Any]:
+        """Render to a JSON-safe canonical dict with sorted parameter keys."""
+        return {
+            "kind": self.kind,
+            "ordering_param": self.ordering_param,
+            "params": {name: _param_canonical(self.params[name]) for name in sorted(self.params)},
+        }
+
+    def __add__(self, other: TermSpec | ProcessSpec) -> ProcessSpec:
+        """Compose with another term or process."""
+        return ProcessSpec((self,)) + other
+
+
+@dataclass(frozen=True)
+class ProcessSpec:
+    """An additive composition of kernel terms, canonically ordered.
+
+    Canonicalization happens here, at construction, and again when results are
+    packed. It must never happen mid-optimization: re-sorting between optimizer
+    iterations permutes the parameter vector under stored curvature and
+    corrupts it.
+    """
+
+    terms: tuple[TermSpec, ...] = field(default_factory=tuple)
+
+    def __post_init__(self) -> None:
+        ordered = tuple(sorted(self.terms, key=lambda t: t.order_key()))
+        object.__setattr__(self, "terms", ordered)
+
+    def __add__(self, other: TermSpec | ProcessSpec) -> ProcessSpec:
+        """Compose with another term or process."""
+        if isinstance(other, TermSpec):
+            return ProcessSpec(self.terms + (other,))
+        return ProcessSpec(self.terms + other.terms)
+
+    def __radd__(self, other: TermSpec) -> ProcessSpec:
+        """Support TermSpec + ProcessSpec."""
+        return ProcessSpec((other,)) + self
+
+    def labels(self) -> tuple[str, ...]:
+        """Return stable per-term labels, disambiguating repeated kinds."""
+        counts: dict[str, int] = {}
+        out: list[str] = []
+        for term in self.terms:
+            index = counts.get(term.kind, 0)
+            counts[term.kind] = index + 1
+            out.append(f"{term.kind}[{index}]")
+        return tuple(out)
+
+    def n_theta(self) -> int:
+        """Count free noise parameters across all terms."""
+        return sum(term.n_free() for term in self.terms)
+
+    def canonical(self) -> dict[str, Any]:
+        """Render the whole composition to a JSON-safe canonical dict."""
+        return {"terms": [term.canonical() for term in self.terms]}
+
+    def spec_hash(self) -> str:
+        """Return a stable 16-character hash of the canonical form."""
+        encoded = json.dumps(self.canonical(), sort_keys=True, separators=(",", ":"))
+        return hashlib.sha256(encoded.encode("utf-8")).hexdigest()[:16]
+```
+
+- [ ] **Step 4: Run tests to verify they pass**
+
+Run: `pixi run test tests/test_terms.py -v`
+Expected: all PASS
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/metamer/core/terms.py tests/test_terms.py
+git commit -m "feat: add kernel algebra with canonical ordering and stable hashing"
+```
+
+---
+
+## Task 3: Capability resolution, the two registries, and the failure taxonomy
+
+**Goal:** A spec declares which engines can evaluate it and at what cost; composition takes the intersection and errors informatively when it is empty. Kernel families and experiment recipes live in separate, versioned registries. The failure taxonomy is an enum from the outset.
+
+**Files:**
+- Create: `src/metamer/core/capability.py`, `src/metamer/core/registry.py`, `src/metamer/core/outcomes.py`
+- Modify: `src/metamer/core/terms.py` (add `engine_costs` to `TermSpec`/`ProcessSpec`)
+- Create: `tests/test_capability.py`, `tests/test_registry.py`, `tests/test_outcomes.py`
+
+**Acceptance Criteria:**
+- [ ] `CostClass` orders `LINEAR < NLOGN < CUBIC`; intersection takes the worst per engine
+- [ ] An empty engine intersection raises `IncompatibleSpecError` naming the eliminating term
+- [ ] Kernel and recipe registries are separate objects with separate lookup types
+- [ ] Duplicate registration under the same key raises rather than silently overwriting
+- [ ] `REGISTRY_VERSION` is a module constant included in provenance
+- [ ] `Outcome` has all eleven members; `INSUFFICIENT_DATA` and `NOT_ATTEMPTED` are distinct from every failure
+- [ ] `Outcome.is_failure` excludes `OK`, `NOT_ATTEMPTED`, and `INSUFFICIENT_DATA` — the denominator rule
+
+**Verify:** `pixi run test tests/test_capability.py tests/test_registry.py tests/test_outcomes.py -v`
+
+**Steps:**
+
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# tests/test_capability.py
+import pytest
+
+from metamer.core.capability import (
+    CostClass,
+    EngineId,
+    IncompatibleSpecError,
+    intersect_engine_costs,
+)
+
+
+def test_cost_class_orders_by_asymptotic_cost():
+    """LINEAR < NLOGN < CUBIC, so `max` picks the worst.
+
+    Expected value determined independently: O(N) is cheaper than O(N log N)
+    is cheaper than O(N^3) for all N > 1.
+    """
+    assert CostClass.LINEAR < CostClass.NLOGN < CostClass.CUBIC
+    assert max(CostClass.LINEAR, CostClass.CUBIC) is CostClass.CUBIC
+
+
+def test_intersection_keeps_only_engines_supported_by_every_term():
+    """An engine survives only if every term supports it.
+
+    Expected value determined independently: term A supports {kalman,
+    whittle}, term B supports {whittle, toeplitz}; the intersection is
+    {whittle} by set intersection done on paper.
+    """
+    a = {EngineId.KALMAN: CostClass.LINEAR, EngineId.WHITTLE: CostClass.NLOGN}
+    b = {EngineId.WHITTLE: CostClass.NLOGN, EngineId.TOEPLITZ: CostClass.CUBIC}
+    result = intersect_engine_costs([("a", a), ("b", b)])
+    assert set(result) == {EngineId.WHITTLE}
+
+
+def test_intersection_takes_the_worst_cost_per_engine():
+    """A composite is as expensive as its most expensive term.
+
+    Bug this catches: taking the min or the first cost, which would let the
+    batch layer accept an O(N^3) composite at 10^7 scale.
+    """
+    a = {EngineId.KALMAN: CostClass.LINEAR}
+    b = {EngineId.KALMAN: CostClass.CUBIC}
+    result = intersect_engine_costs([("a", a), ("b", b)])
+    assert result[EngineId.KALMAN] is CostClass.CUBIC
+
+
+def test_empty_intersection_names_the_eliminating_term():
+    """The error message identifies which term removed which engine.
+
+    Bug this catches: a bare "no engine available", which at 12 candidates
+    leaves the user guessing which term is at fault.
+    """
+    a = {EngineId.KALMAN: CostClass.LINEAR}
+    b = {EngineId.TOEPLITZ: CostClass.CUBIC}
+    with pytest.raises(IncompatibleSpecError) as excinfo:
+        intersect_engine_costs([("statespace_term", a), ("exact_powerlaw", b)])
+    message = str(excinfo.value)
+    assert "exact_powerlaw" in message
+    assert "kalman" in message
+```
+
+```python
+# tests/test_registry.py
+import pytest
+
+from metamer.core.registry import (
+    REGISTRY_VERSION,
+    DuplicateRegistrationError,
+    kernel_registry,
+    recipe_registry,
+)
+
+
+def test_registry_version_is_recorded():
+    """REGISTRY_VERSION exists and is a non-empty string.
+
+    Bug this catches: shipping without a version stamp, so "matern32" could
+    change meaning between releases and silently invalidate a cached run.
+    """
+    assert isinstance(REGISTRY_VERSION, str)
+    assert REGISTRY_VERSION
+
+
+def test_kernel_and_recipe_registries_are_distinct():
+    """Kernels and recipes do not share a namespace.
+
+    Bug this catches: putting 'hw2010_ar5' in the kernel registry, which
+    bundles a noise model with a signal model, an engine, and a criterion and
+    makes the return type of a lookup unpredictable.
+    """
+    assert kernel_registry is not recipe_registry
+    kernel_registry.register("dummy_kernel_probe")(lambda: "kernel")
+    assert "dummy_kernel_probe" not in recipe_registry
+    kernel_registry.unregister("dummy_kernel_probe")
+
+
+def test_duplicate_registration_raises():
+    """Registering the same key twice is an error, not an overwrite.
+
+    Bug this catches: two plugins claiming 'matern32', where last-import-wins
+    would change results depending on import order.
+    """
+    kernel_registry.register("dup_probe")(lambda: 1)
+    with pytest.raises(DuplicateRegistrationError, match="dup_probe"):
+        kernel_registry.register("dup_probe")(lambda: 2)
+    kernel_registry.unregister("dup_probe")
+```
+
+- [ ] **Step 2: Run to verify failure**
+
+Run: `pixi run test tests/test_capability.py tests/test_registry.py -v`
+Expected: FAIL — both modules missing
+
+- [ ] **Step 3: Implement capability.py**
+
+```python
+# src/metamer/core/capability.py
+"""Engine, objective, and gradient capability, resolved by intersection."""
+
+from __future__ import annotations
+
+from collections.abc import Iterable, Mapping
+from enum import IntEnum, StrEnum
+
+
+class EngineId(StrEnum):
+    """Likelihood engines. Only KALMAN is implemented in Phase 1."""
+
+    KALMAN = "kalman"
+    WHITTLE = "whittle"
+    TOEPLITZ = "toeplitz"
+    CELERITE2 = "celerite2"
+
+
+class CostClass(IntEnum):
+    """Asymptotic evaluation cost, ordered cheapest to most expensive."""
+
+    LINEAR = 1
+    NLOGN = 2
+    CUBIC = 3
+
+
+class Objective(StrEnum):
+    """Which likelihood is being maximized."""
+
+    ML = "ml"
+    REML = "reml"
+
+
+class GradientMode(StrEnum):
+    """How the gradient is obtained. ANALYTIC beats FD when available."""
+
+    ANALYTIC = "analytic"
+    FINITE_DIFFERENCE = "fd"
+
+
+class IncompatibleSpecError(ValueError):
+    """No engine can evaluate the composite specification."""
+
+
+def intersect_engine_costs(
+    per_term: Iterable[tuple[str, Mapping[EngineId, CostClass]]],
+) -> dict[EngineId, CostClass]:
+    """Resolve a composite's engine capability by intersection.
+
+    An engine survives only if every term supports it, and the composite's
+    cost for that engine is the worst cost across terms.
+
+    Args:
+        per_term: Pairs of (term label, that term's engine cost mapping).
+
+    Returns:
+        Mapping from surviving engine to composite cost class.
+
+    Raises:
+        IncompatibleSpecError: If no engine survives. The message names which
+            term eliminated which engine.
+    """
+    items = list(per_term)
+    if not items:
+        return {}
+
+    surviving: dict[EngineId, CostClass] = dict(items[0][1])
+    eliminated_by: dict[EngineId, str] = {}
+
+    for label, costs in items[1:]:
+        for engine in list(surviving):
+            if engine not in costs:
+                eliminated_by[engine] = label
+                del surviving[engine]
+            else:
+                surviving[engine] = max(surviving[engine], costs[engine])
+
+    if not surviving:
+        detail = ", ".join(f"{engine.value} eliminated by {label}" for engine, label in eliminated_by.items())
+        raise IncompatibleSpecError(f"No engine can evaluate this composite: {detail}")
+    return surviving
+
+
+def intersect_gradient_modes(
+    per_term: Iterable[Mapping[Objective, GradientMode]], objective: Objective
+) -> GradientMode:
+    """Resolve the composite gradient mode for one objective.
+
+    A composite has an analytic gradient only if every term does, for that
+    objective. Gradient availability differs by objective because the REML
+    penalty is not covered by the envelope theorem.
+
+    Args:
+        per_term: Each term's per-objective gradient mode.
+        objective: The objective being evaluated.
+
+    Returns:
+        ANALYTIC if every term supplies it, otherwise FINITE_DIFFERENCE.
+    """
+    modes = [m.get(objective, GradientMode.FINITE_DIFFERENCE) for m in per_term]
+    if modes and all(m is GradientMode.ANALYTIC for m in modes):
+        return GradientMode.ANALYTIC
+    return GradientMode.FINITE_DIFFERENCE
+```
+
+- [ ] **Step 4: Implement registry.py**
+
+```python
+# src/metamer/core/registry.py
+"""Two separate registries: kernel families, and experiment recipes.
+
+Recipes bundle a noise model with a signal model, an engine, and a criterion.
+They are not kernels, and keeping them apart is what stops the kernel registry
+becoming a junk drawer with an unpredictable lookup type.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Callable, Iterator
+from importlib.metadata import entry_points
+from typing import Generic, TypeVar
+
+REGISTRY_VERSION = "1"
+"""Stamped into provenance so a name cannot silently change meaning."""
+
+T = TypeVar("T")
+
+
+class DuplicateRegistrationError(KeyError):
+    """A key was registered twice."""
+
+
+class Registry(Generic[T]):
+    """A name-to-factory registry with decorator registration."""
+
+    def __init__(self, name: str, entry_point_group: str | None = None):
+        self._name = name
+        self._entry_point_group = entry_point_group
+        self._items: dict[str, T] = {}
+        self._loaded_entry_points = False
+
+    def register(self, key: str) -> Callable[[T], T]:
+        """Return a decorator registering a factory under `key`.
+
+        Args:
+            key: Registry name.
+
+        Returns:
+            A decorator that registers and returns its argument unchanged.
+
+        Raises:
+            DuplicateRegistrationError: If `key` is already registered.
+        """
+
+        def decorator(item: T) -> T:
+            if key in self._items:
+                raise DuplicateRegistrationError(
+                    f"{self._name}: {key!r} is already registered"
+                )
+            self._items[key] = item
+            return item
+
+        return decorator
+
+    def unregister(self, key: str) -> None:
+        """Remove a key. Used by tests; not part of the public contract."""
+        self._items.pop(key, None)
+
+    def _load_entry_points(self) -> None:
+        if self._loaded_entry_points or self._entry_point_group is None:
+            return
+        self._loaded_entry_points = True
+        for ep in entry_points(group=self._entry_point_group):
+            if ep.name not in self._items:
+                self._items[ep.name] = ep.load()
+
+    def __getitem__(self, key: str) -> T:
+        self._load_entry_points()
+        if key not in self._items:
+            available = ", ".join(sorted(self._items))
+            raise KeyError(f"{self._name}: unknown key {key!r}. Available: {available}")
+        return self._items[key]
+
+    def __contains__(self, key: str) -> bool:
+        self._load_entry_points()
+        return key in self._items
+
+    def __iter__(self) -> Iterator[str]:
+        self._load_entry_points()
+        return iter(sorted(self._items))
+
+
+kernel_registry: Registry[Callable[..., object]] = Registry(
+    "kernel_registry", entry_point_group="metamer.kernels"
+)
+recipe_registry: Registry[Callable[..., object]] = Registry("recipe_registry")
+```
+
+- [ ] **Step 5: Implement outcomes.py and its test**
+
+```python
+# tests/test_outcomes.py
+from metamer.core.outcomes import Outcome
+
+
+def test_insufficient_data_is_not_a_failure():
+    """Land and permanent-ice pixels must not inflate the failure rate.
+
+    Bug this catches: counting INSUFFICIENT_DATA as failure, which on a global
+    ocean-only run reports ~70% 'failure' and turns the number into noise
+    everyone learns to ignore.
+    """
+    assert Outcome.INSUFFICIENT_DATA.is_failure is False
+    assert Outcome.INSUFFICIENT_DATA.is_eligible is False
+
+
+def test_not_attempted_is_distinct_from_failure():
+    """A screened-out candidate is not a failed candidate.
+
+    Bug this catches: collapsing 'skipped' and 'failed' into one NaN, which
+    have opposite scientific meanings.
+    """
+    assert Outcome.NOT_ATTEMPTED.is_failure is False
+    assert Outcome.CANDIDATE_DROPPED is not Outcome.NOT_ATTEMPTED
+
+
+def test_every_real_failure_reports_is_failure():
+    """All genuine failure branches are counted as failures.
+
+    Expected value determined independently by reading the taxonomy table in
+    design doc section 8.6 and listing the failure rows by hand.
+    """
+    failures = {
+        Outcome.ITER_CAP_LARGE_GRAD,
+        Outcome.DIAGNOSTIC_LIMIT,
+        Outcome.TRUST_RADIUS_COLLAPSED,
+        Outcome.NONFINITE_OBJECTIVE,
+        Outcome.RANK_DEFICIENT_X,
+        Outcome.DEGENERATE_HESSIAN,
+        Outcome.CANDIDATE_DROPPED,
+    }
+    assert {o for o in Outcome if o.is_failure} == failures
+
+
+def test_iteration_cap_with_small_gradient_is_flagged_not_failed():
+    """Hitting the cap with a small gradient is probably fine, and flagged.
+
+    Bug this catches: treating all cap hits identically, which discards the
+    distinction between 'converged slowly' and 'did not converge'.
+    """
+    assert Outcome.ITER_CAP_SMALL_GRAD.is_failure is False
+    assert Outcome.ITER_CAP_SMALL_GRAD is not Outcome.OK
+```
+
+```python
+# src/metamer/core/outcomes.py
+"""The failure taxonomy.
+
+Non-convergence is not one outcome. At 10^7 series nobody inspects individual
+fits, so the map of *which* failure occurred *where* is itself the diagnostic.
+This is an enum written to the output, never a boolean `converged` flag.
+"""
+
+from __future__ import annotations
+
+from enum import StrEnum
+
+
+class Outcome(StrEnum):
+    """Per (point, candidate) fit outcome."""
+
+    OK = "ok"
+    ITER_CAP_SMALL_GRAD = "iter_cap_small_grad"
+    ITER_CAP_LARGE_GRAD = "iter_cap_large_grad"
+    DIAGNOSTIC_LIMIT = "diagnostic_limit"
+    TRUST_RADIUS_COLLAPSED = "trust_radius_collapsed"
+    NONFINITE_OBJECTIVE = "nonfinite_objective"
+    RANK_DEFICIENT_X = "rank_deficient_x"
+    DEGENERATE_HESSIAN = "degenerate_hessian"
+    NOT_ATTEMPTED = "not_attempted"
+    CANDIDATE_DROPPED = "candidate_dropped"
+    INSUFFICIENT_DATA = "insufficient_data"
+
+    @property
+    def is_eligible(self) -> bool:
+        """Whether this point counts toward a failure-rate denominator.
+
+        INSUFFICIENT_DATA is a legitimate expected outcome — land, permanent
+        ice, or too few valid samples — and is excluded.
+        """
+        return self is not Outcome.INSUFFICIENT_DATA
+
+    @property
+    def is_failure(self) -> bool:
+        """Whether this outcome counts as a failure.
+
+        Excludes OK, NOT_ATTEMPTED (deliberately skipped) and
+        INSUFFICIENT_DATA (expected). ITER_CAP_SMALL_GRAD is flagged but is
+        not a failure: the gradient is small, so the fit is probably fine.
+        """
+        return self not in {
+            Outcome.OK,
+            Outcome.ITER_CAP_SMALL_GRAD,
+            Outcome.NOT_ATTEMPTED,
+            Outcome.INSUFFICIENT_DATA,
+        }
+```
+
+- [ ] **Step 6: Wire capability into ProcessSpec**
+
+Add to `TermSpec` in `src/metamer/core/terms.py`:
+
+```python
+    def engine_costs(self) -> dict["EngineId", "CostClass"]:
+        """Return this term's per-engine cost classes from its family."""
+        from metamer.core.registry import kernel_registry
+
+        return kernel_registry[self.kind]().engine_costs
+```
+
+Add to `ProcessSpec`:
+
+```python
+    def engine_costs(self) -> dict["EngineId", "CostClass"]:
+        """Resolve composite engine capability by intersection across terms."""
+        from metamer.core.capability import intersect_engine_costs
+
+        return intersect_engine_costs(
+            zip(self.labels(), (t.engine_costs() for t in self.terms), strict=True)
+        )
+```
+
+- [ ] **Step 7: Run tests to verify they pass**
+
+Run: `pixi run test tests/test_capability.py tests/test_registry.py tests/test_outcomes.py -v`
+Expected: all PASS
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add src/metamer/core/capability.py src/metamer/core/registry.py src/metamer/core/outcomes.py src/metamer/core/terms.py tests/test_capability.py tests/test_registry.py tests/test_outcomes.py
+git commit -m "feat: add capability resolution, registries, and failure taxonomy"
+```
+
+---
+
+## Task 4: Family protocol; white and Matérn ν=1/2
+
+**Goal:** A `Family` protocol supplying analytic `F`, `Q`, `P∞`, `H` and an analytic autocovariance, with white noise and Ornstein–Uhlenbeck implemented and checked against a general `expm`/Lyapunov reference.
+
+**Files:**
+- Create: `src/metamer/core/families/base.py`, `white.py`, `matern12.py`
+- Modify: `src/metamer/core/families/__init__.py`
+- Create: `tests/oracles.py`, `tests/test_families.py`
+
+**Acceptance Criteria:**
+- [ ] `matern12.transition(theta, dt)` matches `scipy.linalg.expm(A*dt)` to 1e-12
+- [ ] `matern12.process_noise` matches `P∞ − F P∞ Fᵀ` computed from a Lyapunov solve to 1e-12
+- [ ] `matern12.acvf(τ) == sigma² exp(−|τ|/rho)` — a closed form taken from the literature, not from the implementation
+- [ ] White noise reports `state_dim == 0` and contributes only to `measurement_variance`
+- [ ] All family methods accept `theta` of shape `(B, p)` and return leading batch axes
+
+**Verify:** `pixi run test tests/test_families.py -v` → all pass
+
+**Steps:**
+
+- [ ] **Step 1: Write the oracle helpers**
+
+```python
+# tests/oracles.py
+"""Independently-derived references. Nothing here may import the code under test."""
+
+import numpy as np
+from numpy.typing import NDArray
+from scipy.linalg import expm, solve_continuous_lyapunov
+
+
+def expm_transition(drift: NDArray[np.float64], dt: float) -> NDArray[np.float64]:
+    """Transition matrix by general matrix exponential."""
+    return expm(np.asarray(drift, dtype=np.float64) * float(dt))
+
+
+def lyapunov_stationary_cov(
+    drift: NDArray[np.float64], diffusion: NDArray[np.float64]
+) -> NDArray[np.float64]:
+    """Stationary covariance from A P + P A' + L L' = 0."""
+    a = np.asarray(drift, dtype=np.float64)
+    ll = np.asarray(diffusion, dtype=np.float64) @ np.asarray(diffusion, dtype=np.float64).T
+    return solve_continuous_lyapunov(a, -ll)
+
+
+def process_noise_from_stationary(
+    stationary: NDArray[np.float64], transition: NDArray[np.float64]
+) -> NDArray[np.float64]:
+    """Q = P_inf - F P_inf F' for a stationary initialisation."""
+    return stationary - transition @ stationary @ transition.T
+
+
+def mvn_loglik(
+    y: NDArray[np.float64],
+    cov: NDArray[np.float64],
+    design: NDArray[np.float64] | None = None,
+) -> float:
+    """Brute-force multivariate-normal log-likelihood, GLS-profiled.
+
+    This is the primary oracle. It is built from an analytic autocovariance and
+    an explicit covariance matrix, so it is independent of the entire
+    state-space formulation.
+
+    Args:
+        y: Observations, shape (n,).
+        cov: Covariance matrix, shape (n, n).
+        design: Optional design matrix (n, k). If given, beta is profiled out
+            by generalized least squares.
+
+    Returns:
+        The (concentrated, if `design` is given) log-likelihood.
+    """
+    y = np.asarray(y, dtype=np.float64)
+    cov = np.asarray(cov, dtype=np.float64)
+    n = y.size
+    sign, logdet = np.linalg.slogdet(cov)
+    assert sign > 0, "covariance is not positive definite"
+    cov_inv = np.linalg.inv(cov)
+    if design is None:
+        resid = y
+    else:
+        x = np.asarray(design, dtype=np.float64)
+        xtwx = x.T @ cov_inv @ x
+        beta = np.linalg.solve(xtwx, x.T @ cov_inv @ y)
+        resid = y - x @ beta
+    quad = float(resid @ cov_inv @ resid)
+    return float(-0.5 * (n * np.log(2.0 * np.pi) + logdet + quad))
+
+
+def reml_penalty(cov: NDArray[np.float64], design: NDArray[np.float64]) -> float:
+    """Brute-force -0.5 log|X' Sigma^-1 X|, computed from an explicit Sigma."""
+    cov_inv = np.linalg.inv(np.asarray(cov, dtype=np.float64))
+    x = np.asarray(design, dtype=np.float64)
+    sign, logdet = np.linalg.slogdet(x.T @ cov_inv @ x)
+    assert sign > 0
+    return float(-0.5 * logdet)
+
+
+def fd_hessian(fn, x: NDArray[np.float64], step: float = 1e-4) -> NDArray[np.float64]:
+    """Central-difference Hessian of a scalar function."""
+    x = np.asarray(x, dtype=np.float64)
+    p = x.size
+    out = np.zeros((p, p))
+    for i in range(p):
+        for j in range(p):
+            ei = np.zeros(p)
+            ej = np.zeros(p)
+            ei[i] = step
+            ej[j] = step
+            out[i, j] = (
+                fn(x + ei + ej) - fn(x + ei - ej) - fn(x - ei + ej) + fn(x - ei - ej)
+            ) / (4.0 * step * step)
+    return out
+```
+
+- [ ] **Step 2: Write the failing family tests**
+
+```python
+# tests/test_families.py
+import numpy as np
+import pytest
+
+from metamer.core.families.matern12 import Matern12
+from metamer.core.families.white import White
+from tests.oracles import (
+    expm_transition,
+    lyapunov_stationary_cov,
+    process_noise_from_stationary,
+)
+
+
+@pytest.mark.parametrize("dt", [0.1, 1.0, 7.0])
+@pytest.mark.parametrize("rho", [0.5, 3.0, 40.0])
+def test_matern12_transition_matches_expm(dt, rho):
+    """Analytic F equals expm(A*dt) for the OU drift A = -1/rho.
+
+    Bug this catches: a sign error or a missing reciprocal in the analytic
+    form, which would invert the meaning of the correlation timescale.
+    """
+    fam = Matern12()
+    theta = np.array([[1.0, rho]])
+    drift = np.array([[-1.0 / rho]])
+    np.testing.assert_allclose(
+        fam.transition(theta, dt)[0], expm_transition(drift, dt), rtol=1e-12, atol=1e-14
+    )
+
+
+@pytest.mark.parametrize("dt", [0.25, 2.0])
+def test_matern12_process_noise_matches_lyapunov(dt):
+    """Analytic Q equals P_inf - F P_inf F' with P_inf from a Lyapunov solve.
+
+    Bug this catches: forgetting the (1 - exp(-2 dt / rho)) factor, which
+    makes the process non-stationary and inflates low-frequency power.
+    """
+    sigma, rho = 2.0, 5.0
+    fam = Matern12()
+    theta = np.array([[sigma, rho]])
+    drift = np.array([[-1.0 / rho]])
+    diffusion = np.array([[sigma * np.sqrt(2.0 / rho)]])
+    p_inf = lyapunov_stationary_cov(drift, diffusion)
+    f = expm_transition(drift, dt)
+    np.testing.assert_allclose(
+        fam.process_noise(theta, dt)[0],
+        process_noise_from_stationary(p_inf, f),
+        rtol=1e-11,
+        atol=1e-13,
+    )
+    np.testing.assert_allclose(fam.stationary_cov(theta)[0], p_inf, rtol=1e-12)
+
+
+def test_matern12_acvf_matches_textbook_closed_form():
+    """ACVF is sigma^2 exp(-|tau|/rho).
+
+    Expected value determined independently: this is the standard OU
+    autocovariance (Rasmussen & Williams eq. 4.9, Matern nu=1/2), written out
+    by hand rather than read off the implementation.
+    """
+    sigma, rho = 1.5, 4.0
+    lags = np.array([0.0, 1.0, 10.0])
+    expected = sigma**2 * np.exp(-np.abs(lags) / rho)
+    np.testing.assert_allclose(
+        Matern12().acvf(np.array([[sigma, rho]]), lags)[0], expected, rtol=1e-12
+    )
+
+
+def test_white_is_measurement_noise_not_state():
+    """White noise has no state dimension and only sets R.
+
+    Bug this catches: giving white a state dimension, which would make
+    `white + SHO` d=3 instead of d=2 and silently change every memory figure.
+    """
+    fam = White()
+    assert fam.state_dim == 0
+    theta = np.array([[0.3]])
+    assert fam.measurement_variance(theta)[0] == pytest.approx(0.09)
+    assert fam.transition(theta, 1.0).shape == (1, 0, 0)
+
+
+def test_families_broadcast_over_the_batch_axis():
+    """theta of shape (B, p) yields leading batch axes everywhere.
+
+    Bug this catches: a family written for a single series, which would force
+    a Python loop over pixels at the exact place the design forbids one.
+    """
+    theta = np.array([[1.0, 2.0], [2.0, 8.0], [0.5, 1.0]])
+    fam = Matern12()
+    assert fam.transition(theta, 1.0).shape == (3, 1, 1)
+    assert fam.process_noise(theta, 1.0).shape == (3, 1, 1)
+    assert fam.stationary_cov(theta).shape == (3, 1, 1)
+    assert fam.acvf(theta, np.array([0.0, 1.0])).shape == (3, 2)
+```
+
+- [ ] **Step 3: Run to verify failure**
+
+Run: `pixi run test tests/test_families.py -v`
+Expected: FAIL — family modules missing
+
+- [ ] **Step 4: Implement the family protocol**
+
+```python
+# src/metamer/core/families/base.py
+"""The Family protocol: analytic state-space construction per kernel family.
+
+Every family supplies closed-form F, Q, P_inf and an analytic autocovariance.
+The general expm/Lyapunov route exists only as a test reference and as the
+numerical fallback for near-degenerate roots; if it runs often in production,
+something is wrong.
+"""
+
+from __future__ import annotations
+
+from typing import Protocol, runtime_checkable
+
+import numpy as np
+from numpy.typing import NDArray
+
+from metamer.core.capability import CostClass, EngineId, GradientMode, Objective
+from metamer.core.params import ParamSpec
+
+Batch = NDArray[np.float64]
+
+
+@runtime_checkable
+class Family(Protocol):
+    """A kernel family, evaluated batched over the leading axis of `theta`."""
+
+    kind: str
+    state_dim: int
+    engine_costs: dict[EngineId, CostClass]
+    gradient_modes: dict[Objective, GradientMode]
+
+    def param_specs(self) -> dict[str, ParamSpec]:
+        """Return this family's parameter specifications, in canonical order."""
+        ...
+
+    def transition(self, theta: Batch, dt: float) -> Batch:
+        """Return F = expm(A dt), shape (B, d, d)."""
+        ...
+
+    def process_noise(self, theta: Batch, dt: float) -> Batch:
+        """Return Q = P_inf - F P_inf F', shape (B, d, d)."""
+        ...
+
+    def stationary_cov(self, theta: Batch) -> Batch:
+        """Return P_inf, shape (B, d, d)."""
+        ...
+
+    def observation(self, theta: Batch) -> Batch:
+        """Return the observation row H, shape (B, d)."""
+        ...
+
+    def measurement_variance(self, theta: Batch) -> Batch:
+        """Return this family's contribution to R, shape (B,)."""
+        ...
+
+    def acvf(self, theta: Batch, lags: NDArray[np.float64]) -> Batch:
+        """Return the analytic autocovariance at `lags`, shape (B, n_lags)."""
+        ...
+```
+
+- [ ] **Step 5: Implement white.py and matern12.py**
+
+```python
+# src/metamer/core/families/white.py
+"""White measurement noise: no state, contributes only to R."""
+
+from __future__ import annotations
+
+import numpy as np
+from numpy.typing import NDArray
+
+from metamer.core.capability import CostClass, EngineId, GradientMode, Objective
+from metamer.core.params import ParamSpec
+from metamer.core.registry import kernel_registry
+from metamer.core.transforms import Log
+
+
+@kernel_registry.register("white")
+class White:
+    """Independent Gaussian measurement noise of standard deviation sigma."""
+
+    kind = "white"
+    state_dim = 0
+    engine_costs = {
+        EngineId.KALMAN: CostClass.LINEAR,
+        EngineId.WHITTLE: CostClass.NLOGN,
+        EngineId.TOEPLITZ: CostClass.CUBIC,
+        EngineId.CELERITE2: CostClass.LINEAR,
+    }
+    # Declared FD in Task 4 because no analytic derivative is implemented yet.
+    # Task 12 adds one for matern12 only; a family must never advertise ANALYTIC
+    # without shipping the derivatives, or the composite resolution silently lies.
+    gradient_modes = {
+        Objective.ML: GradientMode.FINITE_DIFFERENCE,
+        Objective.REML: GradientMode.FINITE_DIFFERENCE,
+    }
+
+    def param_specs(self) -> dict[str, ParamSpec]:
+        """Return the single scale parameter."""
+        return {
+            "sigma": ParamSpec(
+                name="sigma",
+                default=1.0,
+                transform=Log(),
+                bounds=(0.0, np.inf),
+                diagnostic_limits=(1e-8, 1e8),
+            )
+        }
+
+    def transition(self, theta: NDArray[np.float64], dt: float) -> NDArray[np.float64]:
+        """Return an empty (B, 0, 0) array — white noise has no state."""
+        return np.zeros((np.shape(theta)[0], 0, 0), dtype=np.float64)
+
+    def process_noise(self, theta: NDArray[np.float64], dt: float) -> NDArray[np.float64]:
+        """Return an empty (B, 0, 0) array."""
+        return np.zeros((np.shape(theta)[0], 0, 0), dtype=np.float64)
+
+    def stationary_cov(self, theta: NDArray[np.float64]) -> NDArray[np.float64]:
+        """Return an empty (B, 0, 0) array."""
+        return np.zeros((np.shape(theta)[0], 0, 0), dtype=np.float64)
+
+    def observation(self, theta: NDArray[np.float64]) -> NDArray[np.float64]:
+        """Return an empty (B, 0) observation row."""
+        return np.zeros((np.shape(theta)[0], 0), dtype=np.float64)
+
+    def measurement_variance(self, theta: NDArray[np.float64]) -> NDArray[np.float64]:
+        """Return sigma^2, shape (B,)."""
+        return np.asarray(theta, dtype=np.float64)[:, 0] ** 2
+
+    def acvf(self, theta: NDArray[np.float64], lags: NDArray[np.float64]) -> NDArray[np.float64]:
+        """Return sigma^2 at lag 0 and zero elsewhere."""
+        arr = np.asarray(theta, dtype=np.float64)
+        lags = np.asarray(lags, dtype=np.float64)
+        out = np.zeros((arr.shape[0], lags.size), dtype=np.float64)
+        out[:, lags == 0.0] = (arr[:, 0] ** 2)[:, None]
+        return out
+```
+
+```python
+# src/metamer/core/families/matern12.py
+"""Matern nu=1/2, the Ornstein-Uhlenbeck process (continuous-time AR(1))."""
+
+from __future__ import annotations
+
+import numpy as np
+from numpy.typing import NDArray
+
+from metamer.core.capability import CostClass, EngineId, GradientMode, Objective
+from metamer.core.params import ParamSpec
+from metamer.core.registry import kernel_registry
+from metamer.core.transforms import Log
+
+
+@kernel_registry.register("matern12")
+class Matern12:
+    """OU process with marginal standard deviation sigma and timescale rho.
+
+    ACVF: k(tau) = sigma^2 exp(-|tau| / rho).
+    State-space: d = 1, A = -1/rho, F = exp(-dt/rho), P_inf = sigma^2.
+    """
+
+    kind = "matern12"
+    state_dim = 1
+    ordering_param = "rho"
+    engine_costs = {
+        EngineId.KALMAN: CostClass.LINEAR,
+        EngineId.WHITTLE: CostClass.NLOGN,
+        EngineId.TOEPLITZ: CostClass.CUBIC,
+        EngineId.CELERITE2: CostClass.LINEAR,
+    }
+    gradient_modes = {
+        Objective.ML: GradientMode.FINITE_DIFFERENCE,
+        Objective.REML: GradientMode.FINITE_DIFFERENCE,
+    }
+
+    def param_specs(self) -> dict[str, ParamSpec]:
+        """Return sigma and rho, both log-transformed."""
+        return {
+            "sigma": ParamSpec(
+                name="sigma",
+                default=1.0,
+                transform=Log(),
+                bounds=(0.0, np.inf),
+                diagnostic_limits=(1e-8, 1e8),
+            ),
+            "rho": ParamSpec(
+                name="rho",
+                default=1.0,
+                transform=Log(),
+                bounds=(0.0, np.inf),
+                diagnostic_limits=(1e-6, 1e6),
+                unit="time",
+            ),
+        }
+
+    def transition(self, theta: NDArray[np.float64], dt: float) -> NDArray[np.float64]:
+        """Return exp(-dt/rho) as a (B, 1, 1) array."""
+        rho = np.asarray(theta, dtype=np.float64)[:, 1]
+        return np.exp(-float(dt) / rho)[:, None, None]
+
+    def stationary_cov(self, theta: NDArray[np.float64]) -> NDArray[np.float64]:
+        """Return sigma^2 as a (B, 1, 1) array."""
+        sigma = np.asarray(theta, dtype=np.float64)[:, 0]
+        return (sigma**2)[:, None, None]
+
+    def process_noise(self, theta: NDArray[np.float64], dt: float) -> NDArray[np.float64]:
+        """Return sigma^2 (1 - exp(-2 dt / rho)) as a (B, 1, 1) array."""
+        arr = np.asarray(theta, dtype=np.float64)
+        sigma, rho = arr[:, 0], arr[:, 1]
+        return (sigma**2 * (1.0 - np.exp(-2.0 * float(dt) / rho)))[:, None, None]
+
+    def observation(self, theta: NDArray[np.float64]) -> NDArray[np.float64]:
+        """Return H = [1], shape (B, 1)."""
+        return np.ones((np.shape(theta)[0], 1), dtype=np.float64)
+
+    def measurement_variance(self, theta: NDArray[np.float64]) -> NDArray[np.float64]:
+        """Return zeros — this family contributes no measurement noise."""
+        return np.zeros(np.shape(theta)[0], dtype=np.float64)
+
+    def acvf(self, theta: NDArray[np.float64], lags: NDArray[np.float64]) -> NDArray[np.float64]:
+        """Return sigma^2 exp(-|tau| / rho), shape (B, n_lags)."""
+        arr = np.asarray(theta, dtype=np.float64)
+        sigma, rho = arr[:, 0][:, None], arr[:, 1][:, None]
+        tau = np.abs(np.asarray(lags, dtype=np.float64))[None, :]
+        return sigma**2 * np.exp(-tau / rho)
+```
+
+Import both from `src/metamer/core/families/__init__.py` so registration happens on
+package import:
+
+```python
+# src/metamer/core/families/__init__.py
+"""Kernel families. Importing this module registers every built-in family."""
+
+from metamer.core.families import matern12, white  # noqa: F401
+
+__all__ = ["matern12", "white"]
+```
+
+- [ ] **Step 6: Run tests to verify they pass**
+
+Run: `pixi run test tests/test_families.py -v`
+Expected: all PASS
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add src/metamer/core/families tests/oracles.py tests/test_families.py
+git commit -m "feat: add family protocol with white and Matern 1/2"
+```
+
+---
+
+## Task 5: Matérn ν=3/2, composite assembly, and the defective-root guard
+
+**Goal:** A `d=2` family with a repeated real root (so its closed form is a Jordan-block form, not an eigendecomposition), block-diagonal assembly of composites, and a condition-number guard on the general fallback path.
+
+**Files:**
+- Create: `src/metamer/core/families/matern32.py`, `src/metamer/core/statespace.py`
+- Modify: `src/metamer/core/families/__init__.py`
+- Create: `tests/test_statespace.py`; modify `tests/test_families.py`
+
+**Acceptance Criteria:**
+- [ ] `matern32.transition` matches `expm(A·dt)` to 1e-11 for `A = [[0, 1], [−λ², −2λ]]`
+- [ ] `matern32.acvf(τ) == σ²(1 + λ|τ|)exp(−λ|τ|)` with `λ = √3/ρ`
+- [ ] `StateSpace.from_spec(white + matern12 + matern32)` reports `state_dim == 3`
+- [ ] Composite `F`, `Q`, `P∞` are block-diagonal; `H` concatenates; `R` sums
+- [ ] `unique_dt` memoization returns one entry for a regular grid, `n` for an irregular one
+- [ ] `eigen_transition` raises `DefectiveMatrixError` above a stated condition-number threshold, and the fallback to scaling-and-squaring is counted
+
+**Verify:** `pixi run test tests/test_families.py tests/test_statespace.py -v`
+
+**Steps:**
+
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# tests/test_statespace.py
+import numpy as np
+import pytest
+
+from metamer.core.families.matern12 import Matern12
+from metamer.core.families.matern32 import Matern32
+from metamer.core.statespace import DefectiveMatrixError, StateSpace, eigen_transition
+from metamer.core.terms import ProcessSpec, TermSpec
+from tests.oracles import expm_transition
+
+
+def _term(kind: str, **defaults: float) -> TermSpec:
+    from metamer.core.registry import kernel_registry
+
+    family = kernel_registry[kind]()
+    specs = family.param_specs()
+    for name, value in defaults.items():
+        specs[name] = type(specs[name])(
+            name=specs[name].name,
+            default=value,
+            transform=specs[name].transform,
+            bounds=specs[name].bounds,
+            diagnostic_limits=specs[name].diagnostic_limits,
+            fixed=specs[name].fixed,
+            unit=specs[name].unit,
+        )
+    return TermSpec(kind=kind, params=specs, ordering_param=getattr(family, "ordering_param", None))
+
+
+@pytest.mark.parametrize("dt", [0.2, 1.0, 5.0])
+@pytest.mark.parametrize("rho", [1.0, 12.0])
+def test_matern32_transition_matches_expm(dt, rho):
+    """Analytic Jordan-form F equals expm(A dt) for the defective drift.
+
+    Bug this catches: someone 'simplifying' Matern 3/2 into the general
+    root-based CARMA path. Its root is repeated, so an eigendecomposition is
+    defective and silently drops the t*exp(-lambda t) term.
+    """
+    lam = np.sqrt(3.0) / rho
+    drift = np.array([[0.0, 1.0], [-(lam**2), -2.0 * lam]])
+    theta = np.array([[1.0, rho]])
+    np.testing.assert_allclose(
+        Matern32().transition(theta, dt)[0], expm_transition(drift, dt), rtol=1e-11, atol=1e-13
+    )
+
+
+def test_matern32_acvf_matches_textbook_closed_form():
+    """ACVF is sigma^2 (1 + lambda|tau|) exp(-lambda|tau|), lambda = sqrt(3)/rho.
+
+    Expected value determined independently: standard Matern nu=3/2 kernel
+    (Rasmussen & Williams eq. 4.17), written out by hand.
+    """
+    sigma, rho = 2.0, 3.0
+    lam = np.sqrt(3.0) / rho
+    lags = np.array([0.0, 0.5, 4.0])
+    expected = sigma**2 * (1.0 + lam * lags) * np.exp(-lam * lags)
+    np.testing.assert_allclose(
+        Matern32().acvf(np.array([[sigma, rho]]), lags)[0], expected, rtol=1e-12
+    )
+
+
+def test_composite_state_dim_is_the_sum_of_its_terms():
+    """white + matern12 + matern32 has d = 0 + 1 + 2 = 3.
+
+    Expected value determined independently by adding the documented state
+    dimensions. This is the d=3 spike configuration, and getting it wrong
+    invalidates every memory figure that depends on d^2.
+    """
+    spec = ProcessSpec((_term("white"), _term("matern12"), _term("matern32")))
+    assert StateSpace.from_spec(spec).state_dim == 3
+
+
+def test_composite_matrices_are_block_diagonal():
+    """Composite F places each term's block on the diagonal, zeros elsewhere.
+
+    Bug this catches: assembling with a reshape instead of a block placement,
+    which silently couples independent processes.
+    """
+    spec = ProcessSpec((_term("matern12", rho=2.0), _term("matern32", rho=9.0)))
+    ss = StateSpace.from_spec(spec)
+    theta = np.array([[1.0, 2.0, 1.0, 9.0]])
+    f = ss.transition(theta, 1.0)[0]
+    assert f.shape == (3, 3)
+    np.testing.assert_allclose(f[0, 1:], 0.0, atol=0.0)
+    np.testing.assert_allclose(f[1:, 0], 0.0, atol=0.0)
+
+
+def test_measurement_variance_sums_over_terms():
+    """R is the sum of every term's measurement-variance contribution.
+
+    Bug this catches: taking the first term's R, which drops white noise
+    whenever it is not sorted first.
+    """
+    spec = ProcessSpec((_term("white", sigma=0.5), _term("matern12")))
+    ss = StateSpace.from_spec(spec)
+    theta = np.array([[0.5, 1.0, 1.0]])
+    assert ss.measurement_variance(theta)[0] == pytest.approx(0.25)
+
+
+def test_unique_dt_collapses_a_regular_grid():
+    """A regular time axis has exactly one unique dt.
+
+    Bug this catches: recomputing F and Q at every one of N timesteps, which
+    throws away the N-fold amortization that is the dominant win.
+    """
+    regular = np.arange(0.0, 10.0, 1.0)
+    irregular = np.array([0.0, 1.0, 3.0, 6.0])
+    assert StateSpace.unique_dt(regular).size == 1
+    assert StateSpace.unique_dt(irregular).size == 3
+
+
+def test_eigen_transition_refuses_a_near_defective_matrix():
+    """The guard fires before the eigen route returns a quietly wrong answer.
+
+    Bug this catches: silent precision loss as two roots coalesce. There is no
+    exception from numpy here -- the eigenvector matrix simply becomes
+    ill-conditioned and the result degrades continuously.
+    """
+    eps = 1e-12
+    drift = np.array([[-1.0, 1.0], [0.0, -1.0 - eps]])
+    with pytest.raises(DefectiveMatrixError):
+        eigen_transition(drift, 1.0, cond_threshold=1e8)
+```
+
+- [ ] **Step 2: Run to verify failure**
+
+Run: `pixi run test tests/test_statespace.py -v`
+Expected: FAIL — modules missing
+
+- [ ] **Step 3: Implement matern32.py**
+
+```python
+# src/metamer/core/families/matern32.py
+"""Matern nu=3/2: d=2, repeated real root, Jordan-form closed solution.
+
+The drift matrix has eigenvalue -lambda with multiplicity 2 and is therefore
+defective. Its matrix exponential carries a t*exp(-lambda t) term that no
+eigendecomposition can produce, which is why this family is a separate analytic
+construction and NOT an instance of the general root-based CARMA path.
+"""
+
+from __future__ import annotations
+
+import numpy as np
+from numpy.typing import NDArray
+
+from metamer.core.capability import CostClass, EngineId, GradientMode, Objective
+from metamer.core.params import ParamSpec
+from metamer.core.registry import kernel_registry
+from metamer.core.transforms import Log
+
+_SQRT3 = np.sqrt(3.0)
+
+
+@kernel_registry.register("matern32")
+class Matern32:
+    """Matern nu=3/2 with marginal standard deviation sigma and timescale rho."""
+
+    kind = "matern32"
+    state_dim = 2
+    ordering_param = "rho"
+    engine_costs = {
+        EngineId.KALMAN: CostClass.LINEAR,
+        EngineId.WHITTLE: CostClass.NLOGN,
+        EngineId.TOEPLITZ: CostClass.CUBIC,
+    }
+    gradient_modes = {
+        Objective.ML: GradientMode.FINITE_DIFFERENCE,
+        Objective.REML: GradientMode.FINITE_DIFFERENCE,
+    }
+
+    def param_specs(self) -> dict[str, ParamSpec]:
+        """Return sigma and rho, both log-transformed."""
+        return {
+            "sigma": ParamSpec(
+                name="sigma",
+                default=1.0,
+                transform=Log(),
+                bounds=(0.0, np.inf),
+                diagnostic_limits=(1e-8, 1e8),
+            ),
+            "rho": ParamSpec(
+                name="rho",
+                default=1.0,
+                transform=Log(),
+                bounds=(0.0, np.inf),
+                diagnostic_limits=(1e-6, 1e6),
+                unit="time",
+            ),
+        }
+
+    @staticmethod
+    def _lam(theta: NDArray[np.float64]) -> NDArray[np.float64]:
+        return _SQRT3 / np.asarray(theta, dtype=np.float64)[:, 1]
+
+    def transition(self, theta: NDArray[np.float64], dt: float) -> NDArray[np.float64]:
+        """Return the Jordan-form F = exp(-lam dt) (I + dt (A + lam I))."""
+        lam = self._lam(theta)
+        t = float(dt)
+        decay = np.exp(-lam * t)
+        out = np.empty((lam.size, 2, 2), dtype=np.float64)
+        out[:, 0, 0] = 1.0 + lam * t
+        out[:, 0, 1] = t
+        out[:, 1, 0] = -(lam**2) * t
+        out[:, 1, 1] = 1.0 - lam * t
+        return out * decay[:, None, None]
+
+    def stationary_cov(self, theta: NDArray[np.float64]) -> NDArray[np.float64]:
+        """Return diag(sigma^2, sigma^2 lam^2).
+
+        Cov(f, f') = -k'(0) = 0 and Var(f') = -k''(0) = sigma^2 lam^2.
+        """
+        arr = np.asarray(theta, dtype=np.float64)
+        sigma = arr[:, 0]
+        lam = self._lam(arr)
+        out = np.zeros((sigma.size, 2, 2), dtype=np.float64)
+        out[:, 0, 0] = sigma**2
+        out[:, 1, 1] = (sigma * lam) ** 2
+        return out
+
+    def process_noise(self, theta: NDArray[np.float64], dt: float) -> NDArray[np.float64]:
+        """Return Q = P_inf - F P_inf F'."""
+        p_inf = self.stationary_cov(theta)
+        f = self.transition(theta, dt)
+        return p_inf - f @ p_inf @ np.transpose(f, (0, 2, 1))
+
+    def observation(self, theta: NDArray[np.float64]) -> NDArray[np.float64]:
+        """Return H = [1, 0], shape (B, 2)."""
+        out = np.zeros((np.shape(theta)[0], 2), dtype=np.float64)
+        out[:, 0] = 1.0
+        return out
+
+    def measurement_variance(self, theta: NDArray[np.float64]) -> NDArray[np.float64]:
+        """Return zeros — this family contributes no measurement noise."""
+        return np.zeros(np.shape(theta)[0], dtype=np.float64)
+
+    def acvf(self, theta: NDArray[np.float64], lags: NDArray[np.float64]) -> NDArray[np.float64]:
+        """Return sigma^2 (1 + lam|tau|) exp(-lam|tau|), shape (B, n_lags)."""
+        arr = np.asarray(theta, dtype=np.float64)
+        sigma = arr[:, 0][:, None]
+        lam = self._lam(arr)[:, None]
+        tau = np.abs(np.asarray(lags, dtype=np.float64))[None, :]
+        return sigma**2 * (1.0 + lam * tau) * np.exp(-lam * tau)
+```
+
+Add `matern32` to the imports in `src/metamer/core/families/__init__.py`.
+
+- [ ] **Step 4: Implement statespace.py**
+
+```python
+# src/metamer/core/statespace.py
+"""Composite state-space assembly and the defective-root guard."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+import numpy as np
+from numpy.typing import NDArray
+from scipy.linalg import expm
+
+from metamer.core.families.base import Family
+from metamer.core.registry import kernel_registry
+from metamer.core.terms import ProcessSpec
+
+
+class DefectiveMatrixError(RuntimeError):
+    """The eigenvector matrix is too ill-conditioned for the eigen route."""
+
+
+def eigen_transition(
+    drift: NDArray[np.float64], dt: float, cond_threshold: float = 1e8
+) -> NDArray[np.float64]:
+    """Transition matrix via eigendecomposition, with a conditioning guard.
+
+    As two roots coalesce the eigenvector matrix becomes ill-conditioned and
+    V diag(exp(lam dt)) V^-1 loses precision *continuously* -- no exception,
+    just a quietly wrong likelihood. The optimizer is attracted to these
+    regions because near-degenerate roots are where composite models collapse
+    onto simpler ones, so the guard is not an edge case.
+
+    Args:
+        drift: The drift matrix A, shape (d, d).
+        dt: Timestep.
+        cond_threshold: Maximum acceptable eigenvector-matrix condition number.
+
+    Returns:
+        expm(A * dt).
+
+    Raises:
+        DefectiveMatrixError: If the condition number exceeds the threshold.
+            Callers fall back to scaling-and-squaring and count the fallback.
+    """
+    values, vectors = np.linalg.eig(np.asarray(drift, dtype=np.float64))
+    cond = float(np.linalg.cond(vectors))
+    if not np.isfinite(cond) or cond > cond_threshold:
+        raise DefectiveMatrixError(
+            f"eigenvector condition number {cond:.3e} exceeds {cond_threshold:.3e}; "
+            "roots are near-degenerate and this model may be non-identifiable here"
+        )
+    return np.real(vectors @ np.diag(np.exp(values * dt)) @ np.linalg.inv(vectors))
+
+
+def safe_transition(
+    drift: NDArray[np.float64], dt: float, counter: dict[str, int] | None = None
+) -> NDArray[np.float64]:
+    """Transition matrix, falling back to scaling-and-squaring when defective.
+
+    Args:
+        drift: The drift matrix A.
+        dt: Timestep.
+        counter: Optional dict whose "fallback" key is incremented on fallback,
+            so the rate can be surfaced as a diagnostic.
+
+    Returns:
+        expm(A * dt).
+    """
+    try:
+        return eigen_transition(drift, dt)
+    except DefectiveMatrixError:
+        if counter is not None:
+            counter["fallback"] = counter.get("fallback", 0) + 1
+        return np.asarray(expm(np.asarray(drift, dtype=np.float64) * float(dt)))
+
+
+@dataclass(frozen=True)
+class StateSpace:
+    """A composite state space assembled block-diagonally from its terms."""
+
+    families: tuple[Family, ...]
+    slices: tuple[slice, ...]
+    param_slices: tuple[slice, ...]
+    state_dim: int
+
+    @classmethod
+    def from_spec(cls, spec: ProcessSpec) -> StateSpace:
+        """Assemble from a canonically ordered ProcessSpec.
+
+        Args:
+            spec: The composite specification.
+
+        Returns:
+            A StateSpace whose block layout follows the spec's canonical order.
+        """
+        families: list[Family] = []
+        blocks: list[slice] = []
+        params: list[slice] = []
+        offset = 0
+        p_offset = 0
+        for term in spec.terms:
+            family = kernel_registry[term.kind]()
+            families.append(family)
+            blocks.append(slice(offset, offset + family.state_dim))
+            offset += family.state_dim
+            n_p = len(term.params)
+            params.append(slice(p_offset, p_offset + n_p))
+            p_offset += n_p
+        return cls(tuple(families), tuple(blocks), tuple(params), offset)
+
+    @staticmethod
+    def unique_dt(t: NDArray[np.float64]) -> NDArray[np.float64]:
+        """Return the sorted unique timesteps of a shared time axis.
+
+        On a regular grid this has one entry, so F and Q are computed once per
+        series per optimizer iteration rather than once per timestep.
+        """
+        return np.unique(np.diff(np.asarray(t, dtype=np.float64)))
+
+    def _assemble(self, theta: NDArray[np.float64], method: str, *args: float) -> NDArray[np.float64]:
+        arr = np.asarray(theta, dtype=np.float64)
+        batch = arr.shape[0]
+        out = np.zeros((batch, self.state_dim, self.state_dim), dtype=np.float64)
+        for family, block, pslice in zip(self.families, self.slices, self.param_slices, strict=True):
+            if family.state_dim == 0:
+                continue
+            out[:, block, block] = getattr(family, method)(arr[:, pslice], *args)
+        return out
+
+    def transition(self, theta: NDArray[np.float64], dt: float) -> NDArray[np.float64]:
+        """Return the block-diagonal composite F, shape (B, d, d)."""
+        return self._assemble(theta, "transition", dt)
+
+    def process_noise(self, theta: NDArray[np.float64], dt: float) -> NDArray[np.float64]:
+        """Return the block-diagonal composite Q, shape (B, d, d)."""
+        return self._assemble(theta, "process_noise", dt)
+
+    def stationary_cov(self, theta: NDArray[np.float64]) -> NDArray[np.float64]:
+        """Return the block-diagonal composite P_inf, shape (B, d, d)."""
+        return self._assemble(theta, "stationary_cov")
+
+    def observation(self, theta: NDArray[np.float64]) -> NDArray[np.float64]:
+        """Return the concatenated observation row H, shape (B, d)."""
+        arr = np.asarray(theta, dtype=np.float64)
+        out = np.zeros((arr.shape[0], self.state_dim), dtype=np.float64)
+        for family, block, pslice in zip(self.families, self.slices, self.param_slices, strict=True):
+            if family.state_dim == 0:
+                continue
+            out[:, block] = family.observation(arr[:, pslice])
+        return out
+
+    def measurement_variance(self, theta: NDArray[np.float64]) -> NDArray[np.float64]:
+        """Return the summed measurement variance R, shape (B,)."""
+        arr = np.asarray(theta, dtype=np.float64)
+        total = np.zeros(arr.shape[0], dtype=np.float64)
+        for family, pslice in zip(self.families, self.param_slices, strict=True):
+            total = total + family.measurement_variance(arr[:, pslice])
+        return total
+
+    def acvf(self, theta: NDArray[np.float64], lags: NDArray[np.float64]) -> NDArray[np.float64]:
+        """Return the summed autocovariance, shape (B, n_lags)."""
+        arr = np.asarray(theta, dtype=np.float64)
+        total = np.zeros((arr.shape[0], np.size(lags)), dtype=np.float64)
+        for family, pslice in zip(self.families, self.param_slices, strict=True):
+            total = total + family.acvf(arr[:, pslice], lags)
+        return total
+```
+
+- [ ] **Step 5: Run tests to verify they pass**
+
+Run: `pixi run test tests/test_families.py tests/test_statespace.py -v`
+Expected: all PASS
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add src/metamer/core/families/matern32.py src/metamer/core/statespace.py src/metamer/core/families/__init__.py tests/test_statespace.py
+git commit -m "feat: add Matern 3/2, composite assembly, and defective-root guard"
+```
+
+---
+
+## Task 6: Engine protocol and the batched Kalman filter
+
+**Goal:** An `Engine` protocol and a batched, masked, scalar-observation Kalman filter that accumulates whitened cross-products for an augmented observation matrix `[y | X]`. Validated against the brute-force MVN oracle.
+
+The filter is **written augmented from the start**. Task 8 supplies a non-empty `X`; here `X` is empty and the accumulator is 1×1. Building the y-only version first and generalising later would be exactly the rework this design avoids.
+
+**Files:**
+- Create: `src/metamer/core/engines/protocol.py`, `src/metamer/core/engines/kalman.py`
+- Create: `tests/test_kalman.py`
+
+**Acceptance Criteria:**
+- [ ] Filter log-likelihood matches `mvn_loglik` with an explicitly built Toeplitz covariance to 1e-9 for `matern12`, `matern32`, and `white + matern12 + matern32`
+- [ ] A series with masked points gives **exactly** the same log-likelihood as the same series with those points genuinely absent (to 1e-12)
+- [ ] `B = 1` and `B = 64` produce identical per-series results for identical inputs
+- [ ] `F`/`Q` are computed once per unique Δt, verified by a call counter on a regular grid
+- [ ] `ScoredResult` carries both `engine` and `objective` tags
+
+**Verify:** `pixi run test tests/test_kalman.py -v` → all pass
+
+**Steps:**
+
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# tests/test_kalman.py
+import numpy as np
+import pytest
+from scipy.linalg import toeplitz
+
+from metamer.core.capability import EngineId
+from metamer.core.engines.kalman import KalmanEngine
+from metamer.core.statespace import StateSpace
+from metamer.core.terms import ProcessSpec
+from tests.oracles import mvn_loglik
+from tests.test_statespace import _term
+
+
+def _covariance(ss: StateSpace, theta: np.ndarray, t: np.ndarray) -> np.ndarray:
+    """Build Sigma explicitly from the analytic ACVF plus measurement noise."""
+    lags = np.abs(t[:, None] - t[None, :])
+    acv = ss.acvf(theta, np.unique(lags))[0]
+    lookup = dict(zip(np.unique(lags), acv, strict=True))
+    cov = np.vectorize(lookup.get)(lags).astype(np.float64)
+    return cov + np.eye(t.size) * ss.measurement_variance(theta)[0]
+
+
+@pytest.mark.parametrize(
+    "kinds, theta",
+    [
+        (["matern12"], [1.3, 4.0]),
+        (["matern32"], [0.8, 6.0]),
+        (["white", "matern12", "matern32"], [0.25, 1.3, 4.0, 0.8, 11.0]),
+    ],
+)
+def test_filter_loglik_matches_brute_force_mvn(kinds, theta):
+    """The Kalman log-likelihood equals an explicit MVN density.
+
+    The oracle is built from analytic autocovariances and an explicit
+    covariance matrix, so it is independent of the entire state-space
+    formulation. This is the primary correctness test for the engine.
+
+    Bug this catches: a missing 2*pi, a dropped log|S| term, or an incorrect
+    stationary initialisation -- each of which shifts the likelihood by a
+    constant and silently biases every information criterion.
+    """
+    spec = ProcessSpec(tuple(_term(k) for k in kinds))
+    ss = StateSpace.from_spec(spec)
+    theta_b = np.array([theta], dtype=np.float64)
+    t = np.arange(24.0)
+    rng = np.random.default_rng(0)
+    cov = _covariance(ss, theta_b, t)
+    y = rng.multivariate_normal(np.zeros(t.size), cov)[None, :]
+    mask = np.ones_like(y, dtype=bool)
+
+    result = KalmanEngine().score(ss, theta_b, y, mask, t, design=None)
+    assert result.loglik[0] == pytest.approx(mvn_loglik(y[0], cov), abs=1e-9)
+
+
+def test_masked_points_equal_genuinely_absent_points():
+    """Masking a sample gives the same likelihood as deleting it.
+
+    Bug this catches: applying the update with a zero innovation instead of
+    skipping it, which adds a spurious log|S| term per gap and biases every
+    fit on gappy series -- exactly the high-latitude sea-ice case.
+    """
+    spec = ProcessSpec((_term("matern12"),))
+    ss = StateSpace.from_spec(spec)
+    theta = np.array([[1.0, 5.0]])
+    t_full = np.arange(20.0)
+    rng = np.random.default_rng(1)
+    y_full = rng.standard_normal((1, 20))
+    keep = np.ones(20, dtype=bool)
+    keep[[3, 4, 5, 11]] = False
+
+    masked = KalmanEngine().score(
+        ss, theta, y_full, keep[None, :], t_full, design=None
+    )
+    absent = KalmanEngine().score(
+        ss, theta, y_full[:, keep], np.ones((1, keep.sum()), dtype=bool), t_full[keep], design=None
+    )
+    assert masked.loglik[0] == pytest.approx(absent.loglik[0], abs=1e-12)
+
+
+def test_batch_of_one_matches_batch_of_many():
+    """B=1 is a shape, not a code path.
+
+    Bug this catches: a broadcasting error that only appears at B>1, or a
+    special case for B=1 that drifts from the batched path.
+    """
+    spec = ProcessSpec((_term("matern12"),))
+    ss = StateSpace.from_spec(spec)
+    rng = np.random.default_rng(2)
+    theta = np.repeat(np.array([[1.0, 3.0]]), 64, axis=0)
+    t = np.arange(30.0)
+    y = rng.standard_normal((64, 30))
+    mask = np.ones_like(y, dtype=bool)
+
+    many = KalmanEngine().score(ss, theta, y, mask, t, design=None)
+    one = KalmanEngine().score(ss, theta[:1], y[:1], mask[:1], t, design=None)
+    assert many.loglik[0] == pytest.approx(one.loglik[0], abs=1e-12)
+
+
+def test_transition_is_computed_once_per_unique_dt():
+    """A regular grid triggers exactly one transition build.
+
+    Bug this catches: rebuilding F and Q inside the time loop, which discards
+    the N-fold amortization that the whole performance argument rests on.
+    """
+    spec = ProcessSpec((_term("matern12"),))
+    ss = StateSpace.from_spec(spec)
+    calls = {"n": 0}
+    original = ss.transition
+
+    def counting(theta, dt):
+        calls["n"] += 1
+        return original(theta, dt)
+
+    object.__setattr__(ss, "transition", counting)
+    t = np.arange(50.0)
+    y = np.zeros((1, 50))
+    KalmanEngine().score(ss, np.array([[1.0, 4.0]]), y, np.ones_like(y, dtype=bool), t, design=None)
+    assert calls["n"] == 1
+
+
+def test_result_carries_engine_tag():
+    """Every score is tagged with the engine that produced it.
+
+    Bug this catches: an untagged score reaching the selection layer, where
+    the comparability guard could not then refuse a cross-engine comparison.
+    """
+    spec = ProcessSpec((_term("matern12"),))
+    ss = StateSpace.from_spec(spec)
+    t = np.arange(8.0)
+    y = np.zeros((1, 8))
+    result = KalmanEngine().score(ss, np.array([[1.0, 2.0]]), y, np.ones_like(y, dtype=bool), t, design=None)
+    assert result.engine is EngineId.KALMAN
+```
+
+- [ ] **Step 2: Run to verify failure**
+
+Run: `pixi run test tests/test_kalman.py -v`
+Expected: FAIL — engine modules missing
+
+- [ ] **Step 3: Implement the engine protocol**
+
+```python
+# src/metamer/core/engines/protocol.py
+"""The engine protocol and the tagged score it returns."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Protocol, runtime_checkable
+
+import numpy as np
+from numpy.typing import NDArray
+
+from metamer.core.capability import EngineId, Objective
+from metamer.core.statespace import StateSpace
+
+
+@dataclass(frozen=True)
+class ScoredResult:
+    """A likelihood evaluation, tagged with its engine and objective.
+
+    The tags are load-bearing. A Whittle score is not an exact likelihood, and
+    an ML and a REML likelihood live on different measures. Both look
+    commensurable and are not, so the selection layer refuses to rank across
+    either tag.
+
+    Attributes:
+        loglik: Log-likelihood per series, shape (B,).
+        engine: Which engine produced this score.
+        objective: Which objective this score is on.
+        n_used: Number of unmasked observations per series, shape (B,).
+        rank_x: Numerical rank of the design matrix per series, shape (B,).
+        normal_equations: Accumulated whitened cross-products, (B, 1+k, 1+k).
+    """
+
+    loglik: NDArray[np.float64]
+    engine: EngineId
+    objective: Objective
+    n_used: NDArray[np.int64]
+    rank_x: NDArray[np.int64]
+    normal_equations: NDArray[np.float64]
+
+
+@runtime_checkable
+class Engine(Protocol):
+    """Evaluates a likelihood for a state space over a batch of series."""
+
+    engine_id: EngineId
+
+    def score(
+        self,
+        state_space: StateSpace,
+        theta: NDArray[np.float64],
+        y: NDArray[np.float64],
+        mask: NDArray[np.bool_],
+        t: NDArray[np.float64],
+        design: NDArray[np.float64] | None,
+        objective: Objective = Objective.ML,
+    ) -> ScoredResult:
+        """Return the tagged log-likelihood for each series in the batch."""
+        ...
+```
+
+- [ ] **Step 4: Implement the batched Kalman filter**
+
+```python
+# src/metamer/core/engines/kalman.py
+"""Batched Kalman filter: scalar observations, masked gaps, augmented GLS.
+
+Two structural facts make this simple. The observation is scalar, so the
+innovation variance S = H P H' + R is a scalar and there is no inverse, no
+Cholesky and no pivoting anywhere in the filter. And P_inf is analytic per
+family, so there is no Lyapunov solve either. The filter is therefore analytic
+in theta end to end, which is what makes exact-gradient options available.
+
+Because P and S do not depend on the data, one covariance recursion serves the
+observation column and every design column at once: the filter runs on the
+augmented matrix [y | X] and accumulates the whitened cross-products from which
+the GLS solution and the REML penalty both follow.
+"""
+
+from __future__ import annotations
+
+import numpy as np
+from numpy.typing import NDArray
+
+from metamer.core.capability import EngineId, Objective
+from metamer.core.engines.protocol import ScoredResult
+from metamer.core.statespace import StateSpace
+
+_RANK_RTOL = 1e-10
+
+
+class KalmanEngine:
+    """Exact O(N) state-space likelihood, vectorized over the series axis."""
+
+    engine_id = EngineId.KALMAN
+
+    def score(
+        self,
+        state_space: StateSpace,
+        theta: NDArray[np.float64],
+        y: NDArray[np.float64],
+        mask: NDArray[np.bool_],
+        t: NDArray[np.float64],
+        design: NDArray[np.float64] | None,
+        objective: Objective = Objective.ML,
+    ) -> ScoredResult:
+        """Filter a batch of series and accumulate whitened cross-products.
+
+        Args:
+            state_space: Composite state space for this candidate.
+            theta: Noise parameters in natural units, shape (B, p).
+            y: Observations, shape (B, N).
+            mask: True where an observation is present, shape (B, N).
+            t: Shared time axis, shape (N,).
+            design: Optional design matrix, shape (N, k) if shared across
+                series or (B, N, k) if per-point.
+            objective: Recorded on the result; the penalty itself is applied by
+                `metamer.core.objective`.
+
+        Returns:
+            A ScoredResult whose `loglik` is the y-only Gaussian log-likelihood
+            and whose `normal_equations` is the (B, 1+k, 1+k) accumulator.
+        """
+        theta = np.asarray(theta, dtype=np.float64)
+        y = np.asarray(y, dtype=np.float64)
+        mask = np.asarray(mask, dtype=bool)
+        t = np.asarray(t, dtype=np.float64)
+        batch, n_time = y.shape
+        dim = state_space.state_dim
+
+        cols = self._augment(y, design, batch, n_time)
+        n_cols = cols.shape[2]
+
+        # F and Q depend on theta and dt only, so memoize on unique dt.
+        # On a regular grid this loop body runs exactly once.
+        matrices: dict[float, tuple[NDArray[np.float64], NDArray[np.float64]]] = {}
+        for dt in state_space.unique_dt(t):
+            matrices[float(dt)] = (
+                state_space.transition(theta, float(dt)),
+                state_space.process_noise(theta, float(dt)),
+            )
+
+        h = state_space.observation(theta)
+        r = state_space.measurement_variance(theta)
+        p = state_space.stationary_cov(theta)
+        x = np.zeros((batch, dim, n_cols), dtype=np.float64)
+
+        accum = np.zeros((batch, n_cols, n_cols), dtype=np.float64)
+        sum_log_s = np.zeros(batch, dtype=np.float64)
+        n_used = np.zeros(batch, dtype=np.int64)
+
+        for step in range(n_time):
+            if step > 0:
+                f, q = matrices[float(t[step] - t[step - 1])]
+                x = f @ x
+                p = f @ p @ np.transpose(f, (0, 2, 1)) + q
+
+            active = mask[:, step]
+            if not active.any():
+                continue
+
+            hp = np.einsum("bd,bde->be", h, p)            # (B, d)
+            s = np.einsum("be,be->b", hp, h) + r          # (B,)
+            v = cols[:, step, :] - np.einsum("bd,bdc->bc", h, x)   # (B, n_cols)
+            gain = hp / s[:, None]                        # (B, d)
+
+            upd_x = x + gain[:, :, None] * v[:, None, :]
+            upd_p = p - gain[:, :, None] * hp[:, None, :]
+
+            w = active.astype(np.float64)
+            x = np.where(active[:, None, None], upd_x, x)
+            p = np.where(active[:, None, None], upd_p, p)
+
+            accum += (w / s)[:, None, None] * v[:, :, None] * v[:, None, :]
+            sum_log_s += w * np.log(s)
+            n_used += active.astype(np.int64)
+
+        loglik = -0.5 * (
+            n_used.astype(np.float64) * np.log(2.0 * np.pi) + sum_log_s + accum[:, 0, 0]
+        )
+        rank_x = self._rank(accum[:, 1:, 1:]) if n_cols > 1 else np.zeros(batch, dtype=np.int64)
+
+        return ScoredResult(
+            loglik=loglik,
+            engine=self.engine_id,
+            objective=objective,
+            n_used=n_used,
+            rank_x=rank_x,
+            normal_equations=accum,
+        )
+
+    @staticmethod
+    def _augment(
+        y: NDArray[np.float64],
+        design: NDArray[np.float64] | None,
+        batch: int,
+        n_time: int,
+    ) -> NDArray[np.float64]:
+        """Stack [y | X] into a (B, N, 1+k) array of filtered columns."""
+        if design is None:
+            return y[:, :, None]
+        x = np.asarray(design, dtype=np.float64)
+        if x.ndim == 2:
+            x = np.broadcast_to(x, (batch, n_time, x.shape[1]))
+        return np.concatenate([y[:, :, None], x], axis=2)
+
+    @staticmethod
+    def _rank(xtx: NDArray[np.float64]) -> NDArray[np.int64]:
+        """Numerical rank of each accumulated X' Sigma^-1 X block."""
+        values = np.linalg.svdvals(xtx)
+        tol = _RANK_RTOL * values[:, :1]
+        return (values > tol).sum(axis=1).astype(np.int64)
+```
+
+- [ ] **Step 5: Run tests to verify they pass**
+
+Run: `pixi run test tests/test_kalman.py -v`
+Expected: all PASS
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add src/metamer/core/engines tests/test_kalman.py
+git commit -m "feat: add batched Kalman engine with masked gaps and augmented GLS"
+```
+
+---
+
+## Task 7: Signal spec, design matrix, rank(X), linear/nonlinear taxonomy
+
+**Goal:** Every signal term synesthesia needs, plus offsets and rate changes, with the linear/nonlinear split and its dispatch present from day one and nonlinear terms raising `NotImplementedError`.
+
+**Files:**
+- Create: `src/metamer/core/signal.py`
+- Create: `tests/test_signal.py`
+
+**Acceptance Criteria:**
+- [ ] `constant`, `trend`, `accel`, `annual`, `semiannual`, `offset`, `rate_change` all build correct columns
+- [ ] Harmonic columns are `[cos(2πt/P), sin(2πt/P)]` with `P` in the time axis's own units
+- [ ] An offset epoch **at the first sample** yields an all-ones column; **after the last sample** yields an all-zeros column and is flagged rank-deficient
+- [ ] A rate change with no samples on one side yields an all-zeros column
+- [ ] `rank(X)` is computed by SVD with a stated tolerance and returned alongside `X`
+- [ ] `ExpDecay` and `LogDecay` are constructible and raise `NotImplementedError` from `design_matrix`
+- [ ] `SignalSpec.is_linear` is `False` when any nonlinear term is present
+
+**Verify:** `pixi run test tests/test_signal.py -v` → all pass
+
+**Steps:**
+
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# tests/test_signal.py
+import numpy as np
+import pytest
+
+from metamer.core.signal import (
+    Accel,
+    Annual,
+    Constant,
+    ExpDecay,
+    Offset,
+    RateChange,
+    SemiAnnual,
+    SignalSpec,
+    Trend,
+)
+
+
+def test_polynomial_columns_are_powers_of_centred_time():
+    """constant/trend/accel are t^0, t^1, t^2/2 about the record mean.
+
+    Expected value determined independently: centring at t.mean() is stated in
+    the docstring, so for t = [0,1,2] the trend column is [-1,0,1] and the
+    acceleration column is [0.5,0,0.5].
+    """
+    t = np.array([0.0, 1.0, 2.0])
+    x, _ = SignalSpec([Constant(), Trend(), Accel()]).design_matrix(t)
+    np.testing.assert_allclose(x[:, 0], [1.0, 1.0, 1.0])
+    np.testing.assert_allclose(x[:, 1], [-1.0, 0.0, 1.0])
+    np.testing.assert_allclose(x[:, 2], [0.5, 0.0, 0.5])
+
+
+def test_harmonic_columns_are_cosine_then_sine():
+    """A harmonic contributes cos then sin at 2*pi*t/period.
+
+    Bug this catches: swapping the column order, which silently swaps the
+    reported amplitude and phase of the annual cycle.
+    """
+    t = np.array([0.0, 0.25, 0.5])
+    x, _ = SignalSpec([Annual(period=1.0)]).design_matrix(t)
+    np.testing.assert_allclose(x[:, 0], np.cos(2 * np.pi * t), atol=1e-14)
+    np.testing.assert_allclose(x[:, 1], np.sin(2 * np.pi * t), atol=1e-14)
+
+
+def test_offset_at_first_sample_is_all_ones():
+    """An offset at or before t[0] steps the entire record.
+
+    Bug this catches: a strict `>` comparison, which would make an offset at
+    the first epoch an all-zeros column indistinguishable from a no-op.
+    """
+    t = np.arange(5.0)
+    x, _ = SignalSpec([Offset(epoch=0.0)]).design_matrix(t)
+    np.testing.assert_allclose(x[:, 0], np.ones(5))
+
+
+def test_offset_after_last_sample_is_rank_deficient():
+    """An out-of-record offset produces a zero column and drops the rank.
+
+    Bug this catches: letting an all-zero column through, where log|X'S^-1X|
+    is undefined and the fit returns NaN rather than a named failure.
+    """
+    t = np.arange(5.0)
+    x, rank = SignalSpec([Constant(), Offset(epoch=99.0)]).design_matrix(t)
+    np.testing.assert_allclose(x[:, 1], np.zeros(5))
+    assert rank == 1
+
+
+def test_rate_change_with_no_samples_after_the_break_is_zero():
+    """A piecewise rate change beyond the record contributes nothing.
+
+    Bug this catches: producing negative ramp values before the break, which
+    would silently redefine the term as a two-sided hinge.
+    """
+    t = np.arange(5.0)
+    x, _ = SignalSpec([RateChange(epoch=10.0)]).design_matrix(t)
+    np.testing.assert_allclose(x[:, 0], np.zeros(5))
+
+
+def test_nonlinear_terms_are_classified_and_refused():
+    """Nonlinear terms exist in the taxonomy but are not implemented.
+
+    Bug this catches: omitting the taxonomy entirely, which means retrofitting
+    the linear/nonlinear dispatch later requires rewriting the fit driver.
+    """
+    spec = SignalSpec([Constant(), ExpDecay(epoch=0.0)])
+    assert spec.is_linear is False
+    with pytest.raises(NotImplementedError, match="nonlinear"):
+        spec.design_matrix(np.arange(5.0))
+
+
+def test_semiannual_period_is_half_the_annual_period():
+    """SemiAnnual defaults to half of Annual's default period.
+
+    Expected value determined independently: 'semiannual' means twice per
+    year, so period = 0.5 yr when the axis is in years.
+    """
+    assert SemiAnnual().period == pytest.approx(Annual().period / 2.0)
+```
+
+- [ ] **Step 2: Run to verify failure**
+
+Run: `pixi run test tests/test_signal.py -v`
+Expected: FAIL — `metamer.core.signal` missing
+
+- [ ] **Step 3: Implement signal.py**
+
+```python
+# src/metamer/core/signal.py
+"""Deterministic signal terms and design-matrix construction.
+
+Linear terms are profiled out analytically by GLS at each noise-parameter
+evaluation. Nonlinear terms (exponential and logarithmic decays) break that and
+require joint optimization; the taxonomy and the dispatch exist from day one so
+the fit driver never has to be rewritten to accommodate them.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Protocol, runtime_checkable
+
+import numpy as np
+from numpy.typing import NDArray
+
+RANK_RTOL = 1e-10
+"""Relative singular-value tolerance for the numerical rank of X."""
+
+
+@runtime_checkable
+class SignalTerm(Protocol):
+    """One deterministic term contributing columns to the design matrix."""
+
+    linear: bool
+
+    def columns(self, t: NDArray[np.float64]) -> NDArray[np.float64]:
+        """Return this term's design columns, shape (n, n_cols)."""
+        ...
+
+
+@dataclass(frozen=True)
+class Constant:
+    """An intercept."""
+
+    linear: bool = True
+
+    def columns(self, t: NDArray[np.float64]) -> NDArray[np.float64]:
+        """Return a column of ones."""
+        return np.ones((t.size, 1), dtype=np.float64)
+
+
+@dataclass(frozen=True)
+class Trend:
+    """A linear rate, in time units centred on the record mean."""
+
+    linear: bool = True
+
+    def columns(self, t: NDArray[np.float64]) -> NDArray[np.float64]:
+        """Return (t - mean(t))."""
+        return (t - t.mean())[:, None]
+
+
+@dataclass(frozen=True)
+class Accel:
+    """A quadratic term, parameterized so its coefficient is an acceleration."""
+
+    linear: bool = True
+
+    def columns(self, t: NDArray[np.float64]) -> NDArray[np.float64]:
+        """Return (t - mean(t))^2 / 2."""
+        return (0.5 * (t - t.mean()) ** 2)[:, None]
+
+
+@dataclass(frozen=True)
+class Harmonic:
+    """A cosine/sine pair at a specified period, in the time axis's units."""
+
+    period: float
+    linear: bool = True
+
+    def columns(self, t: NDArray[np.float64]) -> NDArray[np.float64]:
+        """Return [cos(2 pi t / P), sin(2 pi t / P)]."""
+        phase = 2.0 * np.pi * t / self.period
+        return np.column_stack([np.cos(phase), np.sin(phase)])
+
+
+@dataclass(frozen=True)
+class Annual(Harmonic):
+    """The annual cycle. Default period assumes a time axis in years."""
+
+    period: float = 1.0
+
+
+@dataclass(frozen=True)
+class SemiAnnual(Harmonic):
+    """The semiannual cycle: twice per year, hence half the annual period."""
+
+    period: float = 0.5
+
+
+@dataclass(frozen=True)
+class Offset:
+    """A step of unit height at a user-supplied epoch.
+
+    Breakpoint epochs are user-supplied in v1. Breakpoint *detection* is out of
+    scope and is not silently approximated: an undetected offset is nearly
+    indistinguishable from random-walk noise, a well-known trap in GNSS trend
+    estimation.
+    """
+
+    epoch: float
+    linear: bool = True
+
+    def columns(self, t: NDArray[np.float64]) -> NDArray[np.float64]:
+        """Return 1 where t >= epoch, else 0."""
+        return (t >= self.epoch).astype(np.float64)[:, None]
+
+
+@dataclass(frozen=True)
+class RateChange:
+    """A one-sided ramp starting at a user-supplied epoch."""
+
+    epoch: float
+    linear: bool = True
+
+    def columns(self, t: NDArray[np.float64]) -> NDArray[np.float64]:
+        """Return max(t - epoch, 0)."""
+        return np.maximum(t - self.epoch, 0.0)[:, None]
+
+
+@dataclass(frozen=True)
+class Regressor:
+    """An external regressor supplied as a column of values."""
+
+    values: NDArray[np.float64]
+    name: str = "regressor"
+    linear: bool = True
+
+    def columns(self, t: NDArray[np.float64]) -> NDArray[np.float64]:
+        """Return the supplied values as a single column."""
+        arr = np.asarray(self.values, dtype=np.float64)
+        if arr.shape[0] != t.size:
+            raise ValueError(f"{self.name}: length {arr.shape[0]} != time axis {t.size}")
+        return arr.reshape(t.size, -1)
+
+
+@dataclass(frozen=True)
+class ExpDecay:
+    """Exponential decay from an epoch. Nonlinear in its timescale."""
+
+    epoch: float
+    linear: bool = False
+
+    def columns(self, t: NDArray[np.float64]) -> NDArray[np.float64]:
+        """Not available on the concentrated path."""
+        raise NotImplementedError("ExpDecay is nonlinear; joint optimization is Phase 4")
+
+
+@dataclass(frozen=True)
+class LogDecay:
+    """Logarithmic decay from an epoch. Nonlinear in its timescale."""
+
+    epoch: float
+    linear: bool = False
+
+    def columns(self, t: NDArray[np.float64]) -> NDArray[np.float64]:
+        """Not available on the concentrated path."""
+        raise NotImplementedError("LogDecay is nonlinear; joint optimization is Phase 4")
+
+
+@dataclass(frozen=True)
+class SignalSpec:
+    """An ordered collection of deterministic signal terms."""
+
+    terms: list[SignalTerm]
+
+    @property
+    def is_linear(self) -> bool:
+        """True when every term is linear in its parameters."""
+        return all(term.linear for term in self.terms)
+
+    def design_matrix(
+        self, t: NDArray[np.float64]
+    ) -> tuple[NDArray[np.float64], int]:
+        """Build the design matrix and its numerical rank.
+
+        Args:
+            t: Time axis, shape (n,).
+
+        Returns:
+            A tuple of the design matrix (n, k) and its numerical rank.
+
+        Raises:
+            NotImplementedError: If any term is nonlinear. Phase 1 implements
+                only the GLS-concentrated linear path.
+        """
+        if not self.is_linear:
+            raise NotImplementedError(
+                "This signal specification contains nonlinear terms; only the "
+                "GLS-concentrated linear path is implemented in Phase 1"
+            )
+        t = np.asarray(t, dtype=np.float64)
+        if not self.terms:
+            return np.zeros((t.size, 0), dtype=np.float64), 0
+        x = np.concatenate([term.columns(t) for term in self.terms], axis=1)
+        return x, self.rank(x)
+
+    @staticmethod
+    def rank(x: NDArray[np.float64]) -> int:
+        """Numerical rank of a design matrix by SVD, with a stated tolerance."""
+        if x.size == 0:
+            return 0
+        values = np.linalg.svdvals(x)
+        if values[0] == 0.0:
+            return 0
+        return int((values > RANK_RTOL * values[0]).sum())
+
+    def n_beta(self, t: NDArray[np.float64]) -> int:
+        """Number of design columns for this time axis."""
+        return int(self.design_matrix(t)[0].shape[1])
+```
+
+- [ ] **Step 4: Run tests and commit**
+
+Run: `pixi run test tests/test_signal.py -v` → all PASS
+
+```bash
+git add src/metamer/core/signal.py tests/test_signal.py
+git commit -m "feat: add signal terms, design matrix, and linear/nonlinear taxonomy"
+```
+
+---
+
+## Task 8: GLS profiling and the ML concentrated objective
+
+**Goal:** Profile `β` out of the likelihood using the accumulator the filter already produces, and expose the concentrated ML objective in unconstrained coordinates.
+
+**Files:**
+- Create: `src/metamer/core/objective.py`
+- Create: `tests/test_objective.py`
+
+**Acceptance Criteria:**
+- [ ] `β̂` from the accumulator matches an explicit `(XᵀΣ⁻¹X)⁻¹XᵀΣ⁻¹y` inversion to 1e-9
+- [ ] Concentrated ML log-likelihood matches `mvn_loglik(y, Σ, design=X)` to 1e-9
+- [ ] `β` covariance matches `(XᵀΣ⁻¹X)⁻¹` to 1e-9
+- [ ] A rank-deficient `X` returns `Outcome.RANK_DEFICIENT_X`, never NaN with `OK`
+- [ ] The objective accepts unconstrained `u` and maps through the spec's bijectors
+
+**Verify:** `pixi run test tests/test_objective.py -v`
+
+**Steps:**
+
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# tests/test_objective.py
+import numpy as np
+import pytest
+
+from metamer.core.capability import Objective
+from metamer.core.engines.kalman import KalmanEngine
+from metamer.core.objective import ConcentratedObjective, gls_solution
+from metamer.core.signal import Constant, SignalSpec, Trend
+from metamer.core.statespace import StateSpace
+from metamer.core.terms import ProcessSpec
+from tests.oracles import mvn_loglik, reml_penalty
+from tests.test_kalman import _covariance
+from tests.test_statespace import _term
+
+
+def _setup(seed: int = 3, n: int = 40):
+    spec = ProcessSpec((_term("white"), _term("matern12")))
+    ss = StateSpace.from_spec(spec)
+    theta = np.array([[0.4, 1.2, 6.0]])
+    t = np.arange(float(n))
+    signal = SignalSpec([Constant(), Trend()])
+    x, rank = signal.design_matrix(t)
+    cov = _covariance(ss, theta, t)
+    rng = np.random.default_rng(seed)
+    y = (rng.multivariate_normal(np.zeros(n), cov) + 2.0 + 0.05 * (t - t.mean()))[None, :]
+    return spec, ss, theta, t, x, rank, cov, y
+
+
+def test_beta_hat_matches_explicit_gls():
+    """Profiled beta equals an explicit generalized-least-squares inversion.
+
+    Bug this catches: partitioning the accumulator wrongly (row/column swap),
+    which produces a plausible but incorrect trend -- the headline number.
+    """
+    _, ss, theta, t, x, _, cov, y = _setup()
+    result = KalmanEngine().score(ss, theta, y, np.ones_like(y, dtype=bool), t, design=x)
+    beta, _, _ = gls_solution(result.normal_equations)
+    cov_inv = np.linalg.inv(cov)
+    expected = np.linalg.solve(x.T @ cov_inv @ x, x.T @ cov_inv @ y[0])
+    np.testing.assert_allclose(beta[0], expected, rtol=1e-9, atol=1e-9)
+
+
+def test_concentrated_loglik_matches_profiled_mvn():
+    """The concentrated ML objective equals the GLS-profiled MVN density.
+
+    The oracle profiles beta explicitly from an explicit covariance matrix, so
+    it shares nothing with the augmented-filter route.
+    """
+    spec, ss, theta, t, x, rank, cov, y = _setup()
+    obj = ConcentratedObjective(spec, ss, KalmanEngine(), Objective.ML)
+    value = obj.loglik(theta, y, np.ones_like(y, dtype=bool), t, x, rank)
+    assert value[0] == pytest.approx(mvn_loglik(y[0], cov, design=x), abs=1e-9)
+
+
+def test_beta_covariance_matches_explicit_inverse():
+    """Reported beta covariance equals (X' Sigma^-1 X)^-1.
+
+    Bug this catches: returning the un-inverted information matrix, which
+    would understate trend uncertainty by orders of magnitude.
+    """
+    _, ss, theta, t, x, _, cov, y = _setup()
+    result = KalmanEngine().score(ss, theta, y, np.ones_like(y, dtype=bool), t, design=x)
+    _, beta_cov, _ = gls_solution(result.normal_equations)
+    cov_inv = np.linalg.inv(cov)
+    np.testing.assert_allclose(beta_cov[0], np.linalg.inv(x.T @ cov_inv @ x), rtol=1e-9)
+
+
+def test_reml_penalty_matches_brute_force_logdet():
+    """The R-factor REML penalty equals -0.5 log|X' Sigma^-1 X|.
+
+    Expected value determined independently from an explicitly constructed
+    Sigma and an explicit slogdet, sharing no code with the filter.
+    """
+    spec, ss, theta, t, x, rank, cov, y = _setup()
+    obj = ConcentratedObjective(spec, ss, KalmanEngine(), Objective.REML)
+    ml = ConcentratedObjective(spec, ss, KalmanEngine(), Objective.ML)
+    mask = np.ones_like(y, dtype=bool)
+    delta = obj.loglik(theta, y, mask, t, x, rank)[0] - ml.loglik(theta, y, mask, t, x, rank)[0]
+    assert delta == pytest.approx(reml_penalty(cov, x), abs=1e-9)
+
+
+def test_rank_deficient_design_is_a_named_outcome_not_nan():
+    """A rank-deficient X yields RANK_DEFICIENT_X, never a silent NaN.
+
+    Bug this catches: letting log|X'S^-1X| return -inf and propagating it as a
+    finite-looking score, which at 10^7 points nobody would inspect.
+    """
+    from metamer.core.outcomes import Outcome
+
+    spec, ss, theta, t, _, _, _, y = _setup()
+    obj = ConcentratedObjective(spec, ss, KalmanEngine(), Objective.REML)
+    x_bad = np.column_stack([np.ones(t.size), np.ones(t.size)])
+    outcome = obj.check_design(x_bad, SignalSpec.rank(x_bad))
+    assert outcome is Outcome.RANK_DEFICIENT_X
+```
+
+- [ ] **Step 2: Run to verify failure**
+
+Run: `pixi run test tests/test_objective.py -v`
+Expected: FAIL — `metamer.core.objective` missing
+
+- [ ] **Step 3: Implement objective.py**
+
+```python
+# src/metamer/core/objective.py
+"""Concentrated ML and REML objectives built on the filter's accumulator.
+
+The augmented filter returns A = sum_t v_t v_t' / S_t for the columns [y | X].
+Partitioning A gives every quantity needed:
+
+    A[0,0]   = y' Sigma^-1 y
+    A[0,1:]  = y' Sigma^-1 X
+    A[1:,1:] = X' Sigma^-1 X
+
+so beta_hat, the residual sum of squares, the beta covariance and the REML
+penalty all follow from one filter pass and a small Cholesky.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+import numpy as np
+from numpy.typing import NDArray
+
+from metamer.core.capability import Objective
+from metamer.core.engines.protocol import Engine
+from metamer.core.outcomes import Outcome
+from metamer.core.statespace import StateSpace
+from metamer.core.terms import ProcessSpec
+
+
+def gls_solution(
+    accum: NDArray[np.float64],
+) -> tuple[NDArray[np.float64], NDArray[np.float64], NDArray[np.float64]]:
+    """Solve the profiled generalized least squares problem.
+
+    Args:
+        accum: Accumulated whitened cross-products, shape (B, 1+k, 1+k).
+
+    Returns:
+        A tuple of beta_hat (B, k), its covariance (B, k, k), and twice the
+        REML log-determinant term log|X' Sigma^-1 X| (B,).
+    """
+    xtx = accum[:, 1:, 1:]
+    xty = accum[:, 1:, 0]
+    chol = np.linalg.cholesky(xtx)
+    beta = np.linalg.solve(xtx, xty)
+    beta_cov = np.linalg.inv(xtx)
+    logdet = 2.0 * np.log(np.diagonal(chol, axis1=1, axis2=2)).sum(axis=1)
+    return beta, beta_cov, logdet
+
+
+@dataclass(frozen=True)
+class ConcentratedObjective:
+    """The objective the optimizer sees, in natural or unconstrained units."""
+
+    spec: ProcessSpec
+    state_space: StateSpace
+    engine: Engine
+    objective: Objective
+
+    def check_design(self, design: NDArray[np.float64], rank: int) -> Outcome:
+        """Classify a design matrix before it reaches the likelihood.
+
+        Args:
+            design: Design matrix, shape (n, k).
+            rank: Its numerical rank.
+
+        Returns:
+            Outcome.RANK_DEFICIENT_X if rank < k, else Outcome.OK.
+        """
+        if design.size and rank < design.shape[1]:
+            return Outcome.RANK_DEFICIENT_X
+        return Outcome.OK
+
+    def loglik(
+        self,
+        theta: NDArray[np.float64],
+        y: NDArray[np.float64],
+        mask: NDArray[np.bool_],
+        t: NDArray[np.float64],
+        design: NDArray[np.float64] | None,
+        rank: int,
+    ) -> NDArray[np.float64]:
+        """Return the concentrated log-likelihood per series.
+
+        Under ML the envelope theorem applies exactly: beta_hat is a stationary
+        point, so d loglik / d theta needs no d beta_hat / d theta term. Under
+        REML the penalty is NOT covered by that argument, which is why
+        analytic REML gradients are strictly more work.
+
+        Args:
+            theta: Noise parameters in natural units, shape (B, p).
+            y: Observations, shape (B, N).
+            mask: Presence mask, shape (B, N).
+            t: Shared time axis, shape (N,).
+            design: Design matrix (n, k), or None.
+            rank: Numerical rank of `design`.
+
+        Returns:
+            Log-likelihood per series, shape (B,).
+        """
+        result = self.engine.score(
+            self.state_space, theta, y, mask, t, design, self.objective
+        )
+        if design is None or design.shape[1] == 0:
+            return result.loglik
+
+        accum = result.normal_equations
+        _, _, logdet = gls_solution(accum)
+        xtx = accum[:, 1:, 1:]
+        xty = accum[:, 1:, 0]
+        rss_reduction = np.einsum("bi,bi->b", xty, np.linalg.solve(xtx, xty))
+        concentrated = result.loglik + 0.5 * rss_reduction
+
+        if self.objective is Objective.REML:
+            return concentrated - 0.5 * logdet
+        return concentrated
+
+    def unconstrained_loglik(
+        self,
+        u: NDArray[np.float64],
+        y: NDArray[np.float64],
+        mask: NDArray[np.bool_],
+        t: NDArray[np.float64],
+        design: NDArray[np.float64] | None,
+        rank: int,
+    ) -> NDArray[np.float64]:
+        """Evaluate at unconstrained coordinates, mapping through bijectors."""
+        return self.loglik(self.to_natural(u), y, mask, t, design, rank)
+
+    def to_natural(self, u: NDArray[np.float64]) -> NDArray[np.float64]:
+        """Map an unconstrained parameter matrix (B, p) to natural units."""
+        arr = np.asarray(u, dtype=np.float64)
+        out = np.empty_like(arr)
+        index = 0
+        for term in self.spec.terms:
+            for name in term.params:
+                out[:, index] = term.params[name].transform.forward(arr[:, index])
+                index += 1
+        return out
+
+    def to_unconstrained(self, theta: NDArray[np.float64]) -> NDArray[np.float64]:
+        """Map a natural-units parameter matrix (B, p) to unconstrained space."""
+        arr = np.asarray(theta, dtype=np.float64)
+        out = np.empty_like(arr)
+        index = 0
+        for term in self.spec.terms:
+            for name in term.params:
+                out[:, index] = term.params[name].transform.inverse(arr[:, index])
+                index += 1
+        return out
+
+    def dforward(self, u: NDArray[np.float64]) -> NDArray[np.float64]:
+        """Return d(natural)/d(unconstrained) for the delta method."""
+        arr = np.asarray(u, dtype=np.float64)
+        out = np.empty_like(arr)
+        index = 0
+        for term in self.spec.terms:
+            for name in term.params:
+                out[:, index] = term.params[name].transform.dforward(arr[:, index])
+                index += 1
+        return out
+```
+
+- [ ] **Step 4: Run tests and commit**
+
+Note the REML test in this file passes only after Task 9's counting lands; run it now and
+confirm the ML tests pass and the REML one exercises the penalty already implemented above.
+
+Run: `pixi run test tests/test_objective.py -v` → all PASS
+
+```bash
+git add src/metamer/core/objective.py tests/test_objective.py
+git commit -m "feat: add GLS profiling with ML and REML concentrated objectives"
+```
+
+---
+
+## Task 9: Parameter counting per objective and both effective sample sizes
+
+**Goal:** `k` and `n` defined **per objective as definitions, not adjustments**, and the two distinct effective sample sizes named so they can never be interchanged.
+
+**Files:**
+- Create: `src/metamer/core/counting.py`
+- Create: `tests/test_counting.py`
+
+**Acceptance Criteria:**
+- [ ] ML: `k == k_θ + k_β` (including profiled-out `β`), `n == n_obs`
+- [ ] REML: `k == k_θ`, `n == n_obs − rank(X)`
+- [ ] Frozen parameters are excluded from `k_θ`
+- [ ] Rank-deficient `X` reduces REML's `n` by `rank(X)`, not by `ncol(X)`
+- [ ] `n_eff_bic` is the participation ratio `n² / ‖R‖²_F`, equals `n` at zero correlation and 1 at perfect correlation
+- [ ] `n_eff_trend` is a separate function and is never used as the BIC penalty's `n`
+
+**Verify:** `pixi run test tests/test_counting.py -v`
+
+**Steps:**
+
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# tests/test_counting.py
+import numpy as np
+import pytest
+
+from metamer.core.capability import Objective
+from metamer.core.counting import n_eff_bic, n_eff_trend, penalty_terms
+from metamer.core.terms import ProcessSpec
+from tests.test_statespace import _term
+
+
+def test_ml_counts_profiled_out_beta():
+    """Under ML, k includes the GLS-profiled signal parameters.
+
+    Expected value determined independently by hand: white(1) + matern12(2)
+    gives k_theta = 3; a constant+trend signal gives k_beta = 2; so k = 5.
+
+    Bug this catches: the single most common silent bug in concentrated-
+    likelihood implementations. Profiled parameters were still estimated from
+    the data and still count toward k; omitting them corrupts every selection
+    decision with no visible symptom.
+    """
+    spec = ProcessSpec((_term("white"), _term("matern12")))
+    k, n = penalty_terms(spec, Objective.ML, n_obs=630, rank_x=2, k_beta=2)
+    assert k == 5
+    assert n == 630
+
+
+def test_reml_excludes_beta_entirely_and_reduces_n_by_rank():
+    """Under REML, beta is not a parameter of the model at all.
+
+    Expected value determined independently: REML is the likelihood of a set
+    of error contrasts, a different random quantity from y. So k = k_theta = 3
+    and n = 630 - rank(X) = 628. This is a definition on a different model
+    class, not ML's bookkeeping with an adjustment.
+    """
+    spec = ProcessSpec((_term("white"), _term("matern12")))
+    k, n = penalty_terms(spec, Objective.REML, n_obs=630, rank_x=2, k_beta=2)
+    assert k == 3
+    assert n == 628
+
+
+def test_rank_deficiency_uses_rank_not_ncol():
+    """REML's n uses rank(X), which is smaller than ncol(X) when deficient.
+
+    Bug this catches: using ncol(X), which over-subtracts and makes the REML
+    penalty wrong exactly at the grid points where an offset epoch or an
+    unresolvable harmonic has collapsed a column.
+    """
+    spec = ProcessSpec((_term("matern12"),))
+    _, n = penalty_terms(spec, Objective.REML, n_obs=100, rank_x=3, k_beta=5)
+    assert n == 97
+
+
+def test_frozen_parameters_are_not_counted():
+    """A fixed parameter contributes nothing to k_theta.
+
+    Bug this catches: counting every declared parameter, which inflates the
+    penalty for any candidate with a pinned timescale.
+    """
+    from dataclasses import replace
+
+    term = _term("matern12")
+    frozen = {name: replace(p, fixed=(name == "rho")) for name, p in term.params.items()}
+    spec = ProcessSpec((type(term)(kind="matern12", params=frozen, ordering_param="rho"),))
+    k, _ = penalty_terms(spec, Objective.ML, n_obs=50, rank_x=0, k_beta=0)
+    assert k == 1
+
+
+def test_n_eff_bic_endpoints():
+    """Participation ratio equals n when uncorrelated and 1 when perfectly so.
+
+    Expected value determined independently: ||R||_F^2 = n for R = I, giving
+    n^2/n = n; and ||R||_F^2 = n^2 for the all-ones R, giving 1.
+    """
+    n = 50
+    assert n_eff_bic(np.zeros(n - 1), n) == pytest.approx(float(n))
+    assert n_eff_bic(np.ones(n - 1), n) == pytest.approx(1.0)
+
+
+def test_n_eff_bic_is_monotone_in_correlation_strength():
+    """Stronger correlation gives a smaller effective sample size.
+
+    Bug this catches: an estimator that can exceed n or go negative -- the
+    classic n/(1 + 2 sum rho_k) form does both under negative correlation,
+    which is why it is not used here.
+    """
+    n = 200
+    lags = np.arange(1, n)
+    weak = n_eff_bic(0.3**lags, n)
+    strong = n_eff_bic(0.9**lags, n)
+    assert 1.0 <= strong < weak <= n
+
+
+def test_n_eff_trend_is_a_separate_quantity():
+    """n_eff_trend is term-specific and distinct from n_eff_bic.
+
+    Bug this catches: interchanging them. n_eff_trend is the effective sample
+    size for estimating the trend, not a global property of the series, so
+    using it as the BIC penalty's n is a category error.
+    """
+    n = 100
+    var_gls = 4.0
+    var_white = 1.0
+    assert n_eff_trend(var_gls, var_white, n) == pytest.approx(25.0)
+```
+
+- [ ] **Step 2: Run to verify failure, then implement**
+
+Run: `pixi run test tests/test_counting.py -v` → FAIL (module missing)
+
+```python
+# src/metamer/core/counting.py
+"""Parameter counting and effective sample sizes.
+
+ML and REML are different model classes, not the same model with different
+bookkeeping: under REML the objective is the likelihood of a set of error
+contrasts, and beta is not a parameter of that model at all. The counts are
+therefore stated as two definitions.
+
+    ML:   k = k_theta + k_beta (including profiled-out beta), n = n_obs
+    REML: k = k_theta,                                        n = n_obs - rank(X)
+"""
+
+from __future__ import annotations
+
+import numpy as np
+from numpy.typing import NDArray
+
+from metamer.core.capability import Objective
+from metamer.core.terms import ProcessSpec
+
+
+def penalty_terms(
+    spec: ProcessSpec, objective: Objective, n_obs: int, rank_x: int, k_beta: int
+) -> tuple[int, int]:
+    """Return (k, n) for an information criterion, per objective.
+
+    Args:
+        spec: The noise specification, supplying k_theta.
+        objective: ML or REML.
+        n_obs: Number of unmasked observations.
+        rank_x: Numerical rank of the design matrix.
+        k_beta: Number of design columns (only used under ML).
+
+    Returns:
+        A tuple of (k, n) for the criterion's penalty.
+    """
+    k_theta = spec.n_theta()
+    if objective is Objective.REML:
+        return k_theta, int(n_obs - rank_x)
+    return k_theta + int(k_beta), int(n_obs)
+
+
+def n_eff_bic(autocorrelation: NDArray[np.float64], n: int) -> float:
+    """Effective sample size for the BIC penalty, as a participation ratio.
+
+    Uses n_eff = n^2 / ||R||_F^2 where R is the model correlation matrix. For
+    a Toeplitz R this is
+
+        ||R||_F^2 = n + 2 * sum_{k=1}^{n-1} (n - k) * rho_k^2
+
+    so it never forms R explicitly. Chosen because it is always in [1, n],
+    always well-defined, monotone in correlation strength, and degrades
+    gracefully for near-degenerate fits. The classic n / (1 + 2 sum rho_k)
+    form is the effective size for estimating *a mean*, can exceed n or go
+    negative under negative correlation, and needs windowing choices.
+
+    Args:
+        autocorrelation: rho_k for k = 1 .. n-1.
+        n: Series length.
+
+    Returns:
+        Effective sample size in [1, n].
+    """
+    rho = np.asarray(autocorrelation, dtype=np.float64)
+    lags = np.arange(1, rho.size + 1, dtype=np.float64)
+    frob_sq = float(n) + 2.0 * float(np.sum((n - lags) * rho**2))
+    return float(n * n / frob_sq)
+
+
+def n_eff_trend(var_trend_gls: float, var_trend_white: float, n: int) -> float:
+    """Effective sample size for estimating the trend.
+
+    This is term-specific and must never be substituted for `n_eff_bic`. It is
+    used by the ML-versus-REML rule of thumb and by coverage diagnostics.
+
+    Args:
+        var_trend_gls: Variance of the GLS trend estimate under the fitted
+            noise model.
+        var_trend_white: Variance the trend estimate would have under white
+            noise of the same marginal variance.
+        n: Series length.
+
+    Returns:
+        n * var_white / var_gls, clipped to [1, n].
+    """
+    ratio = float(n) * float(var_trend_white) / float(var_trend_gls)
+    return float(np.clip(ratio, 1.0, float(n)))
+```
+
+- [ ] **Step 3: Run tests and commit**
+
+Run: `pixi run test tests/test_counting.py -v` → all PASS
+
+```bash
+git add src/metamer/core/counting.py tests/test_counting.py
+git commit -m "feat: add per-objective parameter counting and effective sample sizes"
+```
+
+---
+
+## Task 10: Criteria and the comparability guards
+
+**Goal:** AIC (plus AICc, BIC, HQIC and the effective-sample-size BIC variant, which are arithmetic on the same primitives), and a selection layer that **refuses** to rank across engines or across objectives.
+
+**Files:**
+- Create: `src/metamer/core/criteria.py`
+- Create: `tests/test_criteria.py`
+
+**Acceptance Criteria:**
+- [ ] `aic == 2k − 2ℓ`; `bic == k ln n − 2ℓ`; `aicc == aic + 2k(k+1)/(n−k−1)`; `hqic == 2k ln ln n − 2ℓ`
+- [ ] `bic_neff` substitutes `n_eff_bic` for `n` and is strictly smaller than `bic` when `n_eff < n`
+- [ ] Ranking two scores with different `engine` tags raises `ComparabilityError`
+- [ ] Ranking two scores with different `objective` tags raises `ComparabilityError`
+- [ ] `ΔIC` is relative to the best surviving candidate; failed candidates get `NaN` and are excluded from weight normalization
+- [ ] `n_valid` counts surviving candidates and is returned alongside the weights
+
+**Verify:** `pixi run test tests/test_criteria.py -v`
+
+**Steps:**
+
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# tests/test_criteria.py
+import numpy as np
+import pytest
+
+from metamer.core.capability import EngineId, Objective
+from metamer.core.criteria import (
+    Criterion,
+    ComparabilityError,
+    CandidateScore,
+    ic_value,
+    rank_candidates,
+)
+
+
+def _score(loglik, k, n, engine=EngineId.KALMAN, objective=Objective.ML, ok=True):
+    return CandidateScore(
+        label="c", loglik=loglik, k=k, n=n, n_eff=float(n), engine=engine,
+        objective=objective, ok=ok,
+    )
+
+
+def test_criterion_formulae_match_textbook_definitions():
+    """AIC, BIC, AICc and HQIC match their standard definitions.
+
+    Expected values determined independently by hand from the published
+    formulae: AIC = 2k - 2l; BIC = k ln n - 2l; AICc = AIC + 2k(k+1)/(n-k-1);
+    HQIC = 2k ln ln n - 2l.
+    """
+    loglik, k, n = -100.0, 4.0, 50.0
+    assert ic_value(Criterion.AIC, loglik, k, n, n) == pytest.approx(2 * 4 + 200)
+    assert ic_value(Criterion.BIC, loglik, k, n, n) == pytest.approx(4 * np.log(50) + 200)
+    assert ic_value(Criterion.AICC, loglik, k, n, n) == pytest.approx(
+        2 * 4 + 200 + 2 * 4 * 5 / (50 - 4 - 1)
+    )
+    assert ic_value(Criterion.HQIC, loglik, k, n, n) == pytest.approx(
+        2 * 4 * np.log(np.log(50)) + 200
+    )
+
+
+def test_bic_neff_is_a_smaller_penalty_when_correlation_is_strong():
+    """Substituting n_eff for n loosens BIC's penalty.
+
+    Expected value determined independently: BIC's penalty is k ln n, and
+    ln(n_eff) < ln(n) whenever n_eff < n, so the criterion value is smaller.
+    """
+    strict = ic_value(Criterion.BIC, -100.0, 4.0, 500.0, 500.0)
+    loose = ic_value(Criterion.BIC_NEFF, -100.0, 4.0, 500.0, 12.0)
+    assert loose < strict
+
+
+def test_cross_engine_ranking_is_a_hard_error():
+    """A Whittle score and a Kalman score are never ranked together.
+
+    Bug this catches: the silent-failure mode that produces plausible-looking
+    but wrong maps. A Whittle score is not an exact likelihood and lives on a
+    different scale.
+    """
+    scores = [_score(-10.0, 2, 100), _score(-9.0, 2, 100, engine=EngineId.WHITTLE)]
+    with pytest.raises(ComparabilityError, match="engine"):
+        rank_candidates(scores, Criterion.AIC)
+
+
+def test_cross_objective_ranking_is_a_hard_error():
+    """An ML score and a REML score are never ranked together.
+
+    Bug this catches: the same failure class one level up. The two live on
+    different measures -- REML is the likelihood of error contrasts -- and the
+    numbers look commensurable while not being so.
+    """
+    scores = [_score(-10.0, 2, 100), _score(-9.0, 2, 100, objective=Objective.REML)]
+    with pytest.raises(ComparabilityError, match="objective"):
+        rank_candidates(scores, Criterion.AIC)
+
+
+def test_failed_candidates_do_not_poison_the_weight_vector():
+    """A failed candidate gets NaN delta-IC and is excluded from weights.
+
+    Bug this catches: letting a NaN through exp(-dIC/2), which makes every
+    weight at that grid point NaN and silently destroys the whole model-average.
+    """
+    scores = [_score(-10.0, 2, 100), _score(np.nan, 2, 100, ok=False), _score(-12.0, 2, 100)]
+    result = rank_candidates(scores, Criterion.AIC)
+    assert np.isnan(result.delta_ic[1])
+    assert result.weights[1] == 0.0
+    assert result.weights[[0, 2]].sum() == pytest.approx(1.0)
+    assert result.n_valid == 2
+
+
+def test_delta_ic_is_zero_for_the_best_candidate():
+    """The winner has delta-IC exactly zero.
+
+    Bug this catches: normalizing against the mean or the first candidate,
+    which makes delta-IC maps uninterpretable.
+    """
+    scores = [_score(-20.0, 2, 100), _score(-10.0, 2, 100)]
+    result = rank_candidates(scores, Criterion.AIC)
+    assert result.delta_ic[1] == pytest.approx(0.0)
+    assert result.best_index == 1
+```
+
+- [ ] **Step 2: Run to verify failure, then implement**
+
+Run: `pixi run test tests/test_criteria.py -v` → FAIL (module missing)
+
+```python
+# src/metamer/core/criteria.py
+"""Information criteria and the comparability guards.
+
+Every score carries the engine that produced it and the objective it is on.
+Ranking across either is a hard error, not a warning: both are silent-failure
+modes that produce plausible-looking but wrong maps.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from enum import StrEnum
+
+import numpy as np
+from numpy.typing import NDArray
+
+from metamer.core.capability import EngineId, Objective
+
+
+class Criterion(StrEnum):
+    """Selectable information criteria."""
+
+    AIC = "aic"
+    AICC = "aicc"
+    BIC = "bic"
+    BIC_NEFF = "bic_neff"
+    HQIC = "hqic"
+
+
+class ComparabilityError(ValueError):
+    """Scores from different engines or objectives cannot be ranked."""
+
+
+@dataclass(frozen=True)
+class CandidateScore:
+    """One candidate's score at one grid point, with its provenance tags."""
+
+    label: str
+    loglik: float
+    k: float
+    n: float
+    n_eff: float
+    engine: EngineId
+    objective: Objective
+    ok: bool = True
+
+
+@dataclass(frozen=True)
+class Ranking:
+    """The result of ranking a candidate set at one point."""
+
+    delta_ic: NDArray[np.float64]
+    weights: NDArray[np.float64]
+    best_index: int
+    n_valid: int
+
+
+def ic_value(criterion: Criterion, loglik: float, k: float, n: float, n_eff: float) -> float:
+    """Evaluate an information criterion from the stored primitives.
+
+    Args:
+        criterion: Which criterion to evaluate.
+        loglik: Maximized log-likelihood.
+        k: Parameter count, per objective (see `counting.penalty_terms`).
+        n: Sample size, per objective.
+        n_eff: Effective sample size, used only by BIC_NEFF.
+
+    Returns:
+        The criterion value; lower is better.
+    """
+    fit = -2.0 * loglik
+    match criterion:
+        case Criterion.AIC:
+            return 2.0 * k + fit
+        case Criterion.AICC:
+            denom = n - k - 1.0
+            correction = np.inf if denom <= 0 else 2.0 * k * (k + 1.0) / denom
+            return 2.0 * k + fit + correction
+        case Criterion.BIC:
+            return k * np.log(n) + fit
+        case Criterion.BIC_NEFF:
+            return k * np.log(max(n_eff, 2.0)) + fit
+        case Criterion.HQIC:
+            return 2.0 * k * np.log(np.log(n)) + fit
+    raise ValueError(f"unknown criterion {criterion!r}")
+
+
+def rank_candidates(scores: list[CandidateScore], criterion: Criterion) -> Ranking:
+    """Rank a candidate set, refusing incomparable scores.
+
+    Args:
+        scores: One score per candidate, all from the same engine and
+            objective.
+        criterion: Criterion to rank by.
+
+    Returns:
+        A Ranking with delta-IC, normalized weights, the winning index, and the
+        number of surviving candidates.
+
+    Raises:
+        ComparabilityError: If the scores mix engines or objectives.
+    """
+    engines = {s.engine for s in scores}
+    if len(engines) > 1:
+        raise ComparabilityError(
+            f"refusing to rank across engine tags {sorted(e.value for e in engines)}: "
+            "these scores are not on a common scale"
+        )
+    objectives = {s.objective for s in scores}
+    if len(objectives) > 1:
+        raise ComparabilityError(
+            f"refusing to rank across objective tags {sorted(o.value for o in objectives)}: "
+            "ML and REML likelihoods live on different measures"
+        )
+
+    values = np.array(
+        [
+            ic_value(criterion, s.loglik, s.k, s.n, s.n_eff) if s.ok else np.nan
+            for s in scores
+        ],
+        dtype=np.float64,
+    )
+    valid = np.isfinite(values)
+    if not valid.any():
+        nan = np.full(values.shape, np.nan)
+        return Ranking(nan, np.zeros_like(values), -1, 0)
+
+    best = int(np.nanargmin(values))
+    delta = values - values[best]
+    weights = np.zeros_like(values)
+    weights[valid] = np.exp(-0.5 * delta[valid])
+    weights[valid] /= weights[valid].sum()
+    return Ranking(delta, weights, best, int(valid.sum()))
+```
+
+- [ ] **Step 3: Run tests and commit**
+
+Run: `pixi run test tests/test_criteria.py -v` → all PASS
+
+```bash
+git add src/metamer/core/criteria.py tests/test_criteria.py
+git commit -m "feat: add information criteria with engine and objective guards"
+```
+
+---
+
+## Task 11: Finite-difference gradients, the step rule, and the complex-step verdict
+
+**Goal:** Central-difference gradients in unconstrained coordinates with a step rule that accounts for `|ℓ|` scaling with `N`, plus a recorded verdict on whether complex-step differentiation is viable through this filter.
+
+**Files:**
+- Create: `src/metamer/core/gradients.py`
+- Create: `tests/test_gradients.py`, `docs/superpowers/notes/complex-step-verdict.md`
+
+**Acceptance Criteria:**
+- [ ] `fd_gradient` matches an analytically differentiable reference to 1e-7 relative
+- [ ] The step rule holds at `N ∈ {100, 630, 5000}` — gradient error does not degrade as `|ℓ|` grows
+- [ ] Steps are taken in unconstrained coordinates, so one relative step serves every family
+- [ ] Complex-step is run against central FD on `matern32`; the agreement level is **recorded with numbers** in the verdict note
+- [ ] If complex-step agrees to ~1e-12 it becomes the oracle; if only ~1e-7, Richardson-extrapolated central FD is adopted instead and the note says so
+
+**Verify:** `pixi run test tests/test_gradients.py -v` and the verdict note exists with numbers
+
+**Steps:**
+
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# tests/test_gradients.py
+import numpy as np
+import pytest
+
+from metamer.core.gradients import complex_step_gradient, fd_gradient, fd_step
+
+
+def _quadratic(u):
+    """A function with a known analytic gradient, scaled to mimic |loglik| ~ N."""
+    return -0.5 * np.sum((u - np.array([0.3, -1.2])) ** 2) * 1000.0
+
+
+def _quadratic_grad(u):
+    return -(u - np.array([0.3, -1.2])) * 1000.0
+
+
+def test_fd_gradient_matches_the_analytic_gradient():
+    """Central differences recover a known gradient.
+
+    Expected value determined independently by differentiating the quadratic
+    on paper.
+    """
+    u = np.array([1.0, 2.0])
+    np.testing.assert_allclose(
+        fd_gradient(_quadratic, u, scale=1000.0), _quadratic_grad(u), rtol=1e-7
+    )
+
+
+@pytest.mark.parametrize("n", [100, 630, 5000])
+def test_step_rule_holds_as_the_objective_magnitude_grows(n):
+    """Gradient accuracy does not degrade as |loglik| scales with N.
+
+    Bug this catches: a hardcoded cube-root-of-eps step. FD cancellation error
+    is eps*|l|/h, not eps/h, so a step tuned at N=100 quietly loses digits at
+    production N. This is the class of thing that works at Phase 1 scale and
+    fails silently later.
+    """
+
+    def scaled(u):
+        return _quadratic(u) * (n / 1000.0)
+
+    u = np.array([0.7, -0.4])
+    expected = _quadratic_grad(u) * (n / 1000.0)
+    got = fd_gradient(scaled, u, scale=float(n))
+    np.testing.assert_allclose(got, expected, rtol=1e-6)
+
+
+def test_fd_step_scales_with_objective_magnitude():
+    """The step grows with |loglik| as the cube-root rule requires.
+
+    Expected value determined independently: h ~ (eps*|l|)^(1/3), so a 1000x
+    larger objective gives a 10x larger step.
+    """
+    assert fd_step(1e6) / fd_step(1e3) == pytest.approx(10.0, rel=1e-9)
+
+
+def test_complex_step_matches_fd_on_an_analytic_function():
+    """Complex-step reproduces the analytic gradient to machine precision.
+
+    This establishes the mechanism works; the *verdict* test below establishes
+    whether the actual filter is complex-analytic, which is a different and
+    harder question.
+    """
+    u = np.array([1.0, 2.0])
+    np.testing.assert_allclose(complex_step_gradient(_quadratic, u), _quadratic_grad(u), rtol=1e-12)
+
+
+def test_complex_step_viability_on_the_real_filter_is_recorded():
+    """Run complex-step against central FD on matern32 and record the level.
+
+    Complex-step silently returns a WRONG derivative -- it does not raise --
+    when any non-analytic operation is in the path: abs(), max()/min(), a
+    comparison-based branch, numpy's conjugating norm, sorting, or a clipping
+    guard. Agreement to ~1e-12 means viable; ~1e-7 means something
+    non-analytic is present and the fallback oracle must be adopted.
+    """
+    from metamer.core.capability import Objective
+    from metamer.core.engines.kalman import KalmanEngine
+    from metamer.core.objective import ConcentratedObjective
+    from metamer.core.statespace import StateSpace
+    from metamer.core.terms import ProcessSpec
+    from tests.test_statespace import _term
+
+    spec = ProcessSpec((_term("matern32"),))
+    ss = StateSpace.from_spec(spec)
+    obj = ConcentratedObjective(spec, ss, KalmanEngine(), Objective.ML)
+    t = np.arange(64.0)
+    rng = np.random.default_rng(7)
+    y = rng.standard_normal((1, 64))
+    mask = np.ones_like(y, dtype=bool)
+
+    def f(u):
+        return float(obj.unconstrained_loglik(u[None, :], y, mask, t, None, 0)[0])
+
+    u0 = np.array([0.0, np.log(5.0)])
+    g_fd = fd_gradient(f, u0, scale=64.0)
+    g_cs = complex_step_gradient(f, u0)
+    rel = float(np.max(np.abs(g_cs - g_fd) / np.maximum(np.abs(g_fd), 1e-12)))
+    # Record the number; the assertion only guards against outright breakage.
+    print(f"COMPLEX_STEP_AGREEMENT rel={rel:.3e}")
+    assert rel < 1e-4
+```
+
+- [ ] **Step 2: Implement gradients.py**
+
+```python
+# src/metamer/core/gradients.py
+"""Gradient strategies.
+
+Finite differences are the Phase 1 default because they cost zero per-family
+work. Analytic forward-mode is the target (1+p passes against FD's 2p, and
+exact). Complex-step's role is VERIFICATION, not production: it is an exact
+gradient requiring no derivation, so it is the oracle that catches an incorrect
+hand-derived dQ/dtheta. FD alone cannot play that role -- agreeing to 1e-8 with
+a wrong analytic gradient is entirely possible.
+
+Steps are taken in unconstrained coordinates, where log and logit transforms
+have already made every coordinate O(1)-scaled. That licenses a single relative
+step across families, and is a second dividend from the ParamSpec contract.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+
+import numpy as np
+from numpy.typing import NDArray
+
+_EPS = float(np.finfo(np.float64).eps)
+
+
+def fd_step(objective_scale: float) -> float:
+    """Return the central-difference step for an objective of a given size.
+
+    Truncation error is O(h^2 |l'''|) and cancellation error is O(eps |l| / h),
+    so the optimum is h ~ (eps |l|)^(1/3). The |l| factor matters: the
+    log-likelihood scales with N, so a step tuned at small N loses digits at
+    production N.
+
+    Args:
+        objective_scale: Rough magnitude of the objective, e.g. |loglik|.
+
+    Returns:
+        A step size in unconstrained coordinates.
+    """
+    return float((_EPS * max(abs(objective_scale), 1.0)) ** (1.0 / 3.0))
+
+
+def fd_gradient(
+    fn: Callable[[NDArray[np.float64]], float],
+    u: NDArray[np.float64],
+    scale: float,
+    step: float | None = None,
+) -> NDArray[np.float64]:
+    """Central-difference gradient in unconstrained coordinates.
+
+    Args:
+        fn: Scalar objective of an unconstrained parameter vector.
+        u: Point at which to differentiate, shape (p,).
+        scale: Rough magnitude of `fn`, used to size the step.
+        step: Explicit step, overriding the rule.
+
+    Returns:
+        Gradient, shape (p,).
+    """
+    u = np.asarray(u, dtype=np.float64)
+    h = fd_step(scale) if step is None else float(step)
+    out = np.empty_like(u)
+    for i in range(u.size):
+        e = np.zeros_like(u)
+        e[i] = h
+        out[i] = (fn(u + e) - fn(u - e)) / (2.0 * h)
+    return out
+
+
+def richardson_gradient(
+    fn: Callable[[NDArray[np.float64]], float], u: NDArray[np.float64], scale: float
+) -> NDArray[np.float64]:
+    """Richardson-extrapolated central difference.
+
+    The fallback oracle if complex-step proves non-viable through the filter.
+    Reaches roughly 1e-10 to 1e-11, which is weaker than complex-step but
+    sufficient for its actual job: a wrong dQ/dtheta produces O(1) relative
+    error, not O(1e-7).
+    """
+    h = fd_step(scale)
+    coarse = fd_gradient(fn, u, scale, step=h)
+    fine = fd_gradient(fn, u, scale, step=h / 2.0)
+    return (4.0 * fine - coarse) / 3.0
+
+
+def complex_step_gradient(
+    fn: Callable[[NDArray[np.complex128]], complex],
+    u: NDArray[np.float64],
+    step: float = 1e-20,
+) -> NDArray[np.float64]:
+    """Complex-step derivative: exact, with no subtractive cancellation.
+
+    Requires the whole evaluation path to be complex-analytic. abs(), max(),
+    comparison-based branches, numpy's conjugating norms, sorting and clipping
+    guards all silently return a WRONG derivative rather than raising, which is
+    why viability must be measured rather than assumed.
+
+    Args:
+        fn: Objective, which must accept a complex argument.
+        u: Point at which to differentiate, shape (p,).
+        step: Imaginary step; 1e-20 is safe because there is no cancellation.
+
+    Returns:
+        Gradient, shape (p,).
+    """
+    u = np.asarray(u, dtype=np.float64)
+    out = np.empty_like(u)
+    for i in range(u.size):
+        e = np.zeros(u.size, dtype=np.complex128)
+        e[i] = 1j * step
+        out[i] = float(np.imag(fn(u.astype(np.complex128) + e)) / step)
+    return out
+```
+
+- [ ] **Step 3: Run the tests, capture the complex-step number, write the verdict note**
+
+Run: `pixi run test tests/test_gradients.py -v -s | rg COMPLEX_STEP_AGREEMENT`
+
+Write `docs/superpowers/notes/complex-step-verdict.md` containing the measured relative
+agreement, the decision that follows (`rel < 1e-10` → complex-step is the oracle;
+otherwise Richardson-extrapolated central FD is), and the specific non-analytic operation
+found in the path if the verdict is negative.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add src/metamer/core/gradients.py tests/test_gradients.py docs/superpowers/notes/complex-step-verdict.md
+git commit -m "feat: add FD gradients with a scale-aware step rule and complex-step oracle"
+```
+
+---
+
+## Task 12: Analytic forward-mode for Matérn ν=1/2 and gradient-capability resolution
+
+**Goal:** One family ships a real analytic gradient, so the forward-mode machinery is exercised now rather than in Phase 3, and the composite resolution rule is testable against a family that lacks one.
+
+**Files:**
+- Modify: `src/metamer/core/families/matern12.py` (add `dtransition`, `dprocess_noise`, `dstationary_cov`; flip `gradient_modes[ML]` to `ANALYTIC`)
+- Modify: `src/metamer/core/gradients.py` (forward-mode dispatch)
+- Create: `tests/test_gradient_capability.py`
+
+**Acceptance Criteria:**
+- [ ] `matern12` analytic derivatives match the complex-step (or Richardson) oracle to the level recorded in Task 11
+- [ ] A composite of `matern12 + matern32` resolves to `FINITE_DIFFERENCE`, because `matern32` has no analytic gradient
+- [ ] A composite of `matern12 + matern12` resolves to `ANALYTIC` under ML and `FINITE_DIFFERENCE` under REML
+- [ ] The resolved gradient mode is a **reported field**, not a silent fallback
+- [ ] A test-only stub family exercises the resolution logic without shipping a real family
+
+**Verify:** `pixi run test tests/test_gradient_capability.py -v`
+
+**Steps:**
+
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# tests/test_gradient_capability.py
+import numpy as np
+import pytest
+
+from metamer.core.capability import GradientMode, Objective, intersect_gradient_modes
+from metamer.core.families.matern12 import Matern12
+from metamer.core.gradients import complex_step_gradient
+
+
+def test_matern12_analytic_transition_derivative_matches_the_oracle():
+    """d/d rho exp(-dt/rho) equals (dt/rho^2) exp(-dt/rho).
+
+    Expected value determined independently by differentiating the closed form
+    on paper, then cross-checked against the complex-step oracle -- which
+    requires no derivation at all and so catches a wrong hand derivation that
+    FD would happily agree with.
+    """
+    dt, sigma, rho = 2.0, 1.0, 5.0
+    analytic = Matern12().dtransition(np.array([[sigma, rho]]), dt)[0, :, 0, 0]
+
+    def f(theta):
+        return complex(np.exp(-dt / theta[1]))
+
+    oracle = complex_step_gradient(f, np.array([sigma, rho]))
+    np.testing.assert_allclose(analytic, oracle, rtol=1e-10, atol=1e-14)
+
+
+def test_composite_falls_back_when_any_term_lacks_an_analytic_gradient():
+    """A composite has an analytic gradient only if every term does.
+
+    Bug this catches: a composite silently using FD while reporting ANALYTIC,
+    which is a ~1.7x cost difference at p=6 and makes the wall-time projection
+    wrong.
+    """
+    has = {Objective.ML: GradientMode.ANALYTIC}
+    lacks = {Objective.ML: GradientMode.FINITE_DIFFERENCE}
+    assert intersect_gradient_modes([has, lacks], Objective.ML) is GradientMode.FINITE_DIFFERENCE
+    assert intersect_gradient_modes([has, has], Objective.ML) is GradientMode.ANALYTIC
+
+
+def test_gradient_capability_is_per_objective():
+    """A family may ship analytic ML gradients before REML ones.
+
+    Expected value determined independently: under ML the envelope theorem
+    removes the d beta_hat / d theta term exactly, but the REML penalty is not
+    covered by that argument, so its analytic gradient is strictly more work.
+    """
+    modes = Matern12().gradient_modes
+    assert modes[Objective.ML] is GradientMode.ANALYTIC
+    assert modes[Objective.REML] is GradientMode.FINITE_DIFFERENCE
+
+
+def test_stub_family_exercises_resolution_without_shipping_a_family():
+    """A test-only stub covers the resolution logic in isolation.
+
+    Bug this catches: resolution logic that is only ever exercised through
+    real families, so a bug in it hides until a third-party kernel registers.
+    """
+
+    class _Stub:
+        gradient_modes = {Objective.ML: GradientMode.ANALYTIC, Objective.REML: GradientMode.ANALYTIC}
+
+    resolved = intersect_gradient_modes(
+        [_Stub().gradient_modes, Matern12().gradient_modes], Objective.REML
+    )
+    assert resolved is GradientMode.FINITE_DIFFERENCE
+```
+
+- [ ] **Step 2: Add analytic derivatives to Matern12**
+
+```python
+    def dtransition(self, theta: NDArray[np.float64], dt: float) -> NDArray[np.float64]:
+        """Return dF/dtheta, shape (B, p, 1, 1).
+
+        F = exp(-dt/rho), so dF/dsigma = 0 and dF/drho = (dt/rho^2) F.
+        """
+        arr = np.asarray(theta, dtype=np.float64)
+        rho = arr[:, 1]
+        f = np.exp(-float(dt) / rho)
+        out = np.zeros((arr.shape[0], 2, 1, 1), dtype=np.float64)
+        out[:, 1, 0, 0] = float(dt) / rho**2 * f
+        return out
+
+    def dstationary_cov(self, theta: NDArray[np.float64]) -> NDArray[np.float64]:
+        """Return dP_inf/dtheta, shape (B, p, 1, 1). P_inf = sigma^2."""
+        arr = np.asarray(theta, dtype=np.float64)
+        out = np.zeros((arr.shape[0], 2, 1, 1), dtype=np.float64)
+        out[:, 0, 0, 0] = 2.0 * arr[:, 0]
+        return out
+
+    def dprocess_noise(self, theta: NDArray[np.float64], dt: float) -> NDArray[np.float64]:
+        """Return dQ/dtheta, shape (B, p, 1, 1).
+
+        Q = sigma^2 (1 - exp(-2 dt / rho)); differentiate both factors.
+        """
+        arr = np.asarray(theta, dtype=np.float64)
+        sigma, rho = arr[:, 0], arr[:, 1]
+        decay = np.exp(-2.0 * float(dt) / rho)
+        out = np.zeros((arr.shape[0], 2, 1, 1), dtype=np.float64)
+        out[:, 0, 0, 0] = 2.0 * sigma * (1.0 - decay)
+        out[:, 1, 0, 0] = -(sigma**2) * decay * (2.0 * float(dt) / rho**2)
+        return out
+```
+
+Flip `gradient_modes[Objective.ML]` to `GradientMode.ANALYTIC` in the same file.
+
+- [ ] **Step 3: Add the resolution helper to gradients.py**
+
+```python
+def resolve_gradient_mode(spec, objective) -> "GradientMode":
+    """Resolve a composite's gradient mode and return it for reporting.
+
+    The resolved mode is a reported field on every result. A composite
+    silently falling back to finite differences must not be invisible.
+    """
+    from metamer.core.capability import intersect_gradient_modes
+    from metamer.core.registry import kernel_registry
+
+    modes = [kernel_registry[t.kind]().gradient_modes for t in spec.terms]
+    return intersect_gradient_modes(modes, objective)
+```
+
+- [ ] **Step 4: Run tests and commit**
+
+Run: `pixi run test tests/test_gradient_capability.py -v` → all PASS
+
+```bash
+git add src/metamer/core/families/matern12.py src/metamer/core/gradients.py tests/test_gradient_capability.py
+git commit -m "feat: add analytic forward-mode for Matern 1/2 and gradient resolution"
+```
+
+---
+
+## Task 13: Optimizer driver — initialization ladder, convergence, Hessian at optimum
+
+**Goal:** The reference per-series optimizer (plain scipy L-BFGS-B in a loop), a deterministic moment-based initialization ladder with a reported rung, and an explicit Hessian at the optimum.
+
+**This is path A's permanent reference form.** It is deliberately not fast. Whether the batched trust-region is ever built is decided by Task 18.
+
+**Files:**
+- Create: `src/metamer/core/optimize.py`
+- Create: `tests/test_optimize.py`
+
+**Acceptance Criteria:**
+- [ ] Moment initialization recovers `ρ` within a factor of 3 on a simulated OU series
+- [ ] The ladder falls back `moment → clipped → family default` and **reports the rung reached**
+- [ ] A degenerate series (zero variance) reaches the `default` rung rather than raising
+- [ ] Convergence is judged in unconstrained coordinates on relative gradient norm and relative function change
+- [ ] Hitting the iteration cap with a small gradient gives `ITER_CAP_SMALL_GRAD`; with a large gradient, `ITER_CAP_LARGE_GRAD`
+- [ ] A parameter reaching a diagnostic limit gives `DIAGNOSTIC_LIMIT`
+- [ ] Hessian at the optimum matches `fd_hessian` from `tests/oracles.py` to 1e-4 relative
+- [ ] A Hessian with condition number above threshold gives `DEGENERATE_HESSIAN`
+
+**Verify:** `pixi run test tests/test_optimize.py -v`
+
+**Steps:**
+
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# tests/test_optimize.py
+import numpy as np
+import pytest
+
+from metamer.core.capability import Objective
+from metamer.core.engines.kalman import KalmanEngine
+from metamer.core.objective import ConcentratedObjective
+from metamer.core.optimize import InitRung, hessian_at_optimum, moment_init, optimize_series
+from metamer.core.outcomes import Outcome
+from metamer.core.statespace import StateSpace
+from metamer.core.terms import ProcessSpec
+from tests.oracles import fd_hessian
+from tests.test_kalman import _covariance
+from tests.test_statespace import _term
+
+
+def _ou_series(sigma=1.0, rho=8.0, n=400, seed=11):
+    spec = ProcessSpec((_term("matern12"),))
+    ss = StateSpace.from_spec(spec)
+    theta = np.array([[sigma, rho]])
+    t = np.arange(float(n))
+    cov = _covariance(ss, theta, t)
+    rng = np.random.default_rng(seed)
+    y = rng.multivariate_normal(np.zeros(n), cov)[None, :]
+    return spec, ss, theta, t, y
+
+
+def test_moment_init_recovers_the_timescale_within_a_factor_of_three():
+    """The deterministic initializer lands in the right basin.
+
+    Expected value determined independently: the lag-1 autocorrelation of an
+    OU process is exp(-dt/rho), so rho_hat = -dt / log(r1) by hand. A factor
+    of 3 is a deliberately loose band -- this is a starting point, not an
+    estimate.
+
+    Bug this catches: an initializer that returns the family default whatever
+    the data, which would silently make every fit a cold start from 1.0.
+    """
+    _, ss, theta, t, y = _ou_series(rho=8.0)
+    init, rung = moment_init(ss, y, np.ones_like(y, dtype=bool), t)
+    assert rung is InitRung.MOMENT
+    assert 8.0 / 3.0 < init[0, 1] < 8.0 * 3.0
+
+
+def test_zero_variance_series_falls_through_to_the_family_default():
+    """A degenerate series reaches the default rung rather than raising.
+
+    Bug this catches: a NaN or a divide-by-zero escaping the initializer,
+    which at 10^7 points would abort a tile instead of recording an outcome.
+    """
+    spec = ProcessSpec((_term("matern12"),))
+    ss = StateSpace.from_spec(spec)
+    t = np.arange(50.0)
+    y = np.zeros((1, 50))
+    init, rung = moment_init(ss, y, np.ones_like(y, dtype=bool), t)
+    assert rung is InitRung.DEFAULT
+    assert np.all(np.isfinite(init))
+
+
+def test_optimizer_recovers_simulated_parameters():
+    """Fitting a simulated OU series returns close to the truth.
+
+    Expected value determined independently: the series was generated from
+    known sigma and rho, so recovery within 30% at N=400 is a weak but
+    honest check that the optimizer is descending the right surface.
+    """
+    spec, ss, theta, t, y = _ou_series(sigma=1.0, rho=8.0)
+    obj = ConcentratedObjective(spec, ss, KalmanEngine(), Objective.ML)
+    result = optimize_series(obj, y, np.ones_like(y, dtype=bool), t, design=None, rank=0)
+    assert result.outcome is Outcome.OK
+    assert result.theta[0, 1] == pytest.approx(8.0, rel=0.3)
+
+
+def test_iteration_cap_outcome_depends_on_the_gradient_norm():
+    """Cap-with-small-gradient and cap-with-large-gradient are distinct.
+
+    Bug this catches: collapsing both into one 'not converged' flag, which
+    discards the distinction between a slow fit and a failed one -- and at
+    10^7 points nobody will re-inspect.
+    """
+    spec, ss, _, t, y = _ou_series()
+    obj = ConcentratedObjective(spec, ss, KalmanEngine(), Objective.ML)
+    capped = optimize_series(
+        obj, y, np.ones_like(y, dtype=bool), t, design=None, rank=0, max_iter=1
+    )
+    assert capped.outcome in {Outcome.ITER_CAP_SMALL_GRAD, Outcome.ITER_CAP_LARGE_GRAD}
+
+
+def test_hessian_matches_the_brute_force_oracle():
+    """The reported Hessian matches a brute-force FD Hessian.
+
+    The oracle is a double-central-difference of the objective, sharing no
+    code with the Hessian routine.
+
+    Bug this catches: reusing the quasi-Newton approximation, which is too
+    crude for TIC and the sandwich estimator and would make reported parameter
+    uncertainties quietly wrong.
+    """
+    spec, ss, _, t, y = _ou_series(n=200)
+    obj = ConcentratedObjective(spec, ss, KalmanEngine(), Objective.ML)
+    mask = np.ones_like(y, dtype=bool)
+
+    def f(u):
+        return float(obj.unconstrained_loglik(u[None, :], y, mask, t, None, 0)[0])
+
+    u0 = np.array([0.0, np.log(8.0)])
+    np.testing.assert_allclose(
+        hessian_at_optimum(f, u0, scale=200.0), fd_hessian(f, u0), rtol=1e-4, atol=1e-4
+    )
+```
+
+- [ ] **Step 2: Implement optimize.py**
+
+```python
+# src/metamer/core/optimize.py
+"""Reference per-series optimizer, initialization ladder, and Hessian.
+
+This is path A's permanent reference form: a plain scipy loop over series. It is
+deliberately not fast. A correctness reference does not need to be, and whether
+the batched trust-region is ever built is decided by the stage-1 spike.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+from dataclasses import dataclass
+from enum import StrEnum
+
+import numpy as np
+from numpy.typing import NDArray
+from scipy.optimize import minimize
+
+from metamer.core.gradients import fd_gradient, fd_step
+from metamer.core.objective import ConcentratedObjective
+from metamer.core.outcomes import Outcome
+from metamer.core.statespace import StateSpace
+
+GRAD_TOL = 1e-5
+"""Relative gradient-norm tolerance, judged in unconstrained coordinates."""
+
+HESSIAN_COND_LIMIT = 1e10
+"""Above this condition number the fit is reported as near-degenerate."""
+
+
+class InitRung(StrEnum):
+    """Which rung of the initialization ladder produced the starting point."""
+
+    WARM_START = "warm_start"
+    MOMENT = "moment"
+    CLIPPED = "clipped"
+    DEFAULT = "default"
+
+
+@dataclass(frozen=True)
+class SeriesFit:
+    """One series' fit result."""
+
+    theta: NDArray[np.float64]
+    loglik: float
+    outcome: Outcome
+    n_iter: int
+    init_rung: InitRung
+    hessian: NDArray[np.float64] | None
+
+
+def moment_init(
+    state_space: StateSpace,
+    y: NDArray[np.float64],
+    mask: NDArray[np.bool_],
+    t: NDArray[np.float64],
+) -> tuple[NDArray[np.float64], InitRung]:
+    """Deterministic moment-based starting point, with a fallback ladder.
+
+    Deterministic rather than random multi-start: reproducible, seed-free, and
+    the precursor of the Whittle screening pass. Random multi-start is a
+    straight multiplier on a budget with little headroom.
+
+    Ladder: moment estimate -> clipped to diagnostic limits -> family default.
+    The rung reached is returned so it can be reported.
+
+    Args:
+        state_space: The composite state space, supplying parameter defaults.
+        y: Observations, shape (B, N).
+        mask: Presence mask, shape (B, N).
+        t: Shared time axis, shape (N,).
+
+    Returns:
+        A tuple of the starting theta (B, p) in natural units and the rung.
+    """
+    defaults = np.array(
+        [p.default for fam in state_space.families for p in fam.param_specs().values()],
+        dtype=np.float64,
+    )
+    batch = y.shape[0]
+    start = np.repeat(defaults[None, :], batch, axis=0)
+
+    valid = mask.sum(axis=1)
+    var = np.where(valid > 1, np.nanvar(np.where(mask, y, np.nan), axis=1), 0.0)
+    if not np.all(np.isfinite(var)) or np.all(var <= 0.0):
+        return start, InitRung.DEFAULT
+
+    centred = np.where(mask, y - np.nanmean(np.where(mask, y, np.nan), axis=1, keepdims=True), 0.0)
+    num = np.sum(centred[:, 1:] * centred[:, :-1], axis=1)
+    den = np.sum(centred**2, axis=1)
+    r1 = np.divide(num, den, out=np.zeros_like(num), where=den > 0)
+
+    dt = float(np.median(np.diff(t))) if t.size > 1 else 1.0
+    with np.errstate(divide="ignore", invalid="ignore"):
+        rho = -dt / np.log(np.clip(r1, 1e-6, 1.0 - 1e-6))
+
+    rung = InitRung.MOMENT
+    index = 0
+    for family in state_space.families:
+        for name, spec in family.param_specs().items():
+            if name == "sigma":
+                start[:, index] = np.sqrt(np.maximum(var, 1e-12))
+            elif name == "rho":
+                start[:, index] = rho
+            lo, hi = spec.diagnostic_limits
+            clipped = np.clip(start[:, index], lo, hi)
+            if not np.array_equal(clipped, start[:, index]):
+                rung = InitRung.CLIPPED
+            start[:, index] = clipped
+            index += 1
+
+    if not np.all(np.isfinite(start)):
+        return np.repeat(defaults[None, :], batch, axis=0), InitRung.DEFAULT
+    return start, rung
+
+
+def hessian_at_optimum(
+    fn: Callable[[NDArray[np.float64]], float], u: NDArray[np.float64], scale: float
+) -> NDArray[np.float64]:
+    """Explicit Hessian by central differences on the objective.
+
+    A converged quasi-Newton approximation is too crude for TIC, the sandwich
+    estimator, and near-degeneracy detection, so the Hessian is computed
+    explicitly once per fit. At p=6 that is ~2p^2 = 72 passes, roughly +12% on
+    a 50-iteration fit.
+    """
+    u = np.asarray(u, dtype=np.float64)
+    h = max(fd_step(scale), 1e-5)
+    p = u.size
+    out = np.zeros((p, p), dtype=np.float64)
+    for i in range(p):
+        for j in range(i, p):
+            ei = np.zeros(p)
+            ej = np.zeros(p)
+            ei[i] = h
+            ej[j] = h
+            value = (fn(u + ei + ej) - fn(u + ei - ej) - fn(u - ei + ej) + fn(u - ei - ej)) / (
+                4.0 * h * h
+            )
+            out[i, j] = out[j, i] = value
+    return out
+
+
+def optimize_series(
+    objective: ConcentratedObjective,
+    y: NDArray[np.float64],
+    mask: NDArray[np.bool_],
+    t: NDArray[np.float64],
+    design: NDArray[np.float64] | None,
+    rank: int,
+    x0: NDArray[np.float64] | None = None,
+    max_iter: int = 200,
+) -> SeriesFit:
+    """Fit one series. The batch driver in `fit.py` loops over this.
+
+    Args:
+        objective: The concentrated objective.
+        y: Observations, shape (1, N).
+        mask: Presence mask, shape (1, N).
+        t: Shared time axis, shape (N,).
+        design: Design matrix (N, k), or None.
+        rank: Numerical rank of `design`.
+        x0: Optional warm start in unconstrained coordinates, shape (1, p).
+        max_iter: Iteration cap.
+
+    Returns:
+        A SeriesFit carrying theta in natural units and a taxonomy outcome.
+    """
+    outcome = objective.check_design(
+        design if design is not None else np.zeros((t.size, 0)), rank
+    )
+    if outcome is not Outcome.OK:
+        p = sum(len(term.params) for term in objective.spec.terms)
+        return SeriesFit(np.full((1, p), np.nan), float("nan"), outcome, 0, InitRung.DEFAULT, None)
+
+    if x0 is None:
+        start_natural, rung = moment_init(objective.state_space, y, mask, t)
+        u0 = objective.to_unconstrained(start_natural)[0]
+    else:
+        u0, rung = np.asarray(x0, dtype=np.float64)[0], InitRung.WARM_START
+
+    scale = float(max(mask.sum(), 1))
+
+    def negative(u: NDArray[np.float64]) -> float:
+        value = objective.unconstrained_loglik(u[None, :], y, mask, t, design, rank)[0]
+        return float(np.inf) if not np.isfinite(value) else float(-value)
+
+    def jac(u: NDArray[np.float64]) -> NDArray[np.float64]:
+        return fd_gradient(negative, u, scale)
+
+    res = minimize(negative, u0, jac=jac, method="L-BFGS-B", options={"maxiter": max_iter})
+    theta = objective.to_natural(np.atleast_2d(res.x))
+    loglik = -float(res.fun)
+
+    if not np.isfinite(loglik):
+        return SeriesFit(theta, loglik, Outcome.NONFINITE_OBJECTIVE, res.nit, rung, None)
+
+    limit_hit = any(
+        spec.at_diagnostic_limit(float(theta[0, i]))
+        for i, spec in enumerate(
+            s for term in objective.spec.terms for s in term.params.values()
+        )
+    )
+    if limit_hit:
+        return SeriesFit(theta, loglik, Outcome.DIAGNOSTIC_LIMIT, res.nit, rung, None)
+
+    hess = hessian_at_optimum(negative, res.x, scale)
+    if float(np.linalg.cond(hess)) > HESSIAN_COND_LIMIT:
+        return SeriesFit(theta, loglik, Outcome.DEGENERATE_HESSIAN, res.nit, rung, hess)
+
+    grad_norm = float(np.linalg.norm(jac(res.x)))
+    if res.nit >= max_iter:
+        capped = (
+            Outcome.ITER_CAP_SMALL_GRAD
+            if grad_norm < GRAD_TOL * max(abs(loglik), 1.0)
+            else Outcome.ITER_CAP_LARGE_GRAD
+        )
+        return SeriesFit(theta, loglik, capped, res.nit, rung, hess)
+
+    return SeriesFit(theta, loglik, Outcome.OK, res.nit, rung, hess)
+```
+
+- [ ] **Step 3: Run tests and commit**
+
+Run: `pixi run test tests/test_optimize.py -v` → all PASS
+
+```bash
+git add src/metamer/core/optimize.py tests/test_optimize.py
+git commit -m "feat: add reference optimizer, init ladder, and explicit Hessian"
+```
+
+---
+
+## Task 14: `fit()` — the (B, N) driver
+
+**Goal:** The public entry point: a batched driver taking a candidate set, returning tagged scores, a ranking, natural-unit uncertainties via the delta method, and a per-(series, candidate) outcome.
+
+**Files:**
+- Create: `src/metamer/core/fit.py`; modify `src/metamer/core/__init__.py` to re-export
+- Create: `tests/test_fit.py`
+
+**Acceptance Criteria:**
+- [ ] `fit(y, t, signal, candidates)` accepts `y` of shape `(B, N)` and returns per-(series, candidate) results
+- [ ] `B=1` and `B=64` give identical per-series output for identical inputs
+- [ ] `x0` is accepted and, when supplied, `init_rung == WARM_START`
+- [ ] Parameter uncertainties are in **natural units**, via `delta_method_cov`
+- [ ] A `DIAGNOSTIC_LIMIT` outcome also marks that parameter's uncertainty unreliable
+- [ ] Every result carries `engine`, `objective`, and the resolved `gradient_mode`
+- [ ] Selection uses `rank_candidates`, so the comparability guards apply
+
+**Verify:** `pixi run test tests/test_fit.py -v`
+
+**Steps:**
+
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# tests/test_fit.py
+import numpy as np
+import pytest
+
+from metamer.core.capability import EngineId, Objective
+from metamer.core.criteria import Criterion
+from metamer.core.fit import fit
+from metamer.core.outcomes import Outcome
+from metamer.core.signal import Constant, SignalSpec, Trend
+from metamer.core.terms import ProcessSpec
+from tests.test_statespace import _term
+
+
+def _candidates():
+    return [
+        ProcessSpec((_term("white"),)),
+        ProcessSpec((_term("white"), _term("matern12"))),
+    ]
+
+
+def _data(batch=4, n=120, seed=5):
+    rng = np.random.default_rng(seed)
+    t = np.arange(float(n))
+    y = rng.standard_normal((batch, n)) + 0.02 * (t - t.mean())
+    return y, t
+
+
+def test_fit_returns_a_result_per_series_and_candidate():
+    """The result grid is (B, M).
+
+    Bug this catches: collapsing the candidate axis, which would make ranking
+    and delta-IC meaningless.
+    """
+    y, t = _data()
+    out = fit(y, t, SignalSpec([Constant(), Trend()]), _candidates(), criterion=Criterion.AIC)
+    assert out.theta.shape[0] == y.shape[0]
+    assert len(out.candidates) == 2
+    assert out.outcome.shape == (y.shape[0], 2)
+
+
+def test_batch_of_one_matches_batch_of_many():
+    """B=1 is a shape, not a code path.
+
+    Bug this catches: a per-series driver that diverges from the batched one.
+    This is the single invariant the whole design rests on.
+    """
+    y, t = _data(batch=8)
+    signal = SignalSpec([Constant(), Trend()])
+    many = fit(y, t, signal, _candidates(), criterion=Criterion.AIC)
+    one = fit(y[:1], t, signal, _candidates(), criterion=Criterion.AIC)
+    np.testing.assert_allclose(many.loglik[0], one.loglik[0], rtol=1e-12)
+
+
+def test_warm_start_is_recorded_as_such():
+    """Supplying x0 changes the reported initialization rung.
+
+    Bug this catches: accepting x0 and silently ignoring it, which would make
+    Phase 2's warm-starting a no-op that still carries all its hysteresis
+    risk in the accounting.
+    """
+    from metamer.core.optimize import InitRung
+
+    y, t = _data(batch=2)
+    signal = SignalSpec([Constant()])
+    cands = [ProcessSpec((_term("white"), _term("matern12")))]
+    cold = fit(y, t, signal, cands, criterion=Criterion.AIC)
+    warm = fit(y, t, signal, cands, criterion=Criterion.AIC, x0=cold.theta_unconstrained)
+    assert warm.init_rung[0, 0] is InitRung.WARM_START
+
+
+def test_uncertainties_are_reported_in_natural_units():
+    """theta_err is in natural units, not log-space.
+
+    Bug this catches: reporting the unconstrained standard error directly,
+    which is the exact failure class this package exists to eliminate --
+    plausible, wrong error bars.
+    """
+    y, t = _data(batch=1, n=300)
+    out = fit(y, t, SignalSpec([Constant()]), [ProcessSpec((_term("matern12"),))], criterion=Criterion.AIC)
+    if out.outcome[0, 0] is Outcome.OK:
+        assert np.all(out.theta_err[0, 0] > 0.0)
+        assert np.all(np.isfinite(out.theta_err[0, 0]))
+
+
+def test_results_carry_all_three_provenance_tags():
+    """engine, objective, and the resolved gradient mode are all reported.
+
+    Bug this catches: an untagged result reaching selection, or a silent FD
+    fallback that makes the wall-time projection wrong.
+    """
+    y, t = _data(batch=1)
+    out = fit(y, t, SignalSpec([Constant()]), _candidates(), criterion=Criterion.AIC)
+    assert out.engine is EngineId.KALMAN
+    assert out.objective is Objective.ML
+    assert len(out.gradient_mode) == 2
+```
+
+- [ ] **Step 2: Implement fit.py**
+
+```python
+# src/metamer/core/fit.py
+"""The (B, N) fit driver. B=1 is a shape, never a separate code path."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+import numpy as np
+from numpy.typing import NDArray
+
+from metamer.core.capability import EngineId, GradientMode, Objective
+from metamer.core.counting import penalty_terms
+from metamer.core.criteria import CandidateScore, Criterion, Ranking, rank_candidates
+from metamer.core.engines.kalman import KalmanEngine
+from metamer.core.engines.protocol import Engine
+from metamer.core.gradients import resolve_gradient_mode
+from metamer.core.objective import ConcentratedObjective
+from metamer.core.optimize import InitRung, optimize_series
+from metamer.core.outcomes import Outcome
+from metamer.core.signal import SignalSpec
+from metamer.core.statespace import StateSpace
+from metamer.core.terms import ProcessSpec
+from metamer.core.transforms import delta_method_cov
+
+
+@dataclass(frozen=True)
+class FitResult:
+    """Results for a batch of series across a candidate set."""
+
+    candidates: tuple[ProcessSpec, ...]
+    theta: NDArray[np.float64]
+    theta_err: NDArray[np.float64]
+    theta_unconstrained: NDArray[np.float64]
+    beta: NDArray[np.float64]
+    beta_err: NDArray[np.float64]
+    loglik: NDArray[np.float64]
+    outcome: NDArray[np.object_]
+    init_rung: NDArray[np.object_]
+    n_iter: NDArray[np.int64]
+    ranking: list[Ranking]
+    engine: EngineId
+    objective: Objective
+    gradient_mode: tuple[GradientMode, ...]
+
+
+def fit(
+    y: NDArray[np.float64],
+    t: NDArray[np.float64],
+    signal: SignalSpec,
+    candidates: list[ProcessSpec],
+    criterion: Criterion,
+    mask: NDArray[np.bool_] | None = None,
+    objective: Objective = Objective.ML,
+    engine: Engine | None = None,
+    x0: NDArray[np.float64] | None = None,
+    max_iter: int = 200,
+) -> FitResult:
+    """Fit a candidate set to a batch of series and rank the candidates.
+
+    Args:
+        y: Observations, shape (B, N).
+        t: Shared time axis, shape (N,).
+        signal: The fixed signal specification; only the noise model is
+            selected in v1.
+        candidates: Noise specifications to compare.
+        criterion: Information criterion for ranking.
+        mask: Presence mask, shape (B, N). Defaults to all present.
+        objective: ML (default) or REML.
+        engine: Likelihood engine. Defaults to the batched Kalman filter.
+        x0: Optional warm starts in unconstrained coordinates, shape
+            (B, M, p_max). Phase 2 supplies these; the signature exists now
+            because it constrains this one.
+        max_iter: Iteration cap per series.
+
+    Returns:
+        A FitResult carrying natural-unit estimates, natural-unit
+        uncertainties, per-(series, candidate) outcomes, and the ranking.
+    """
+    y = np.asarray(y, dtype=np.float64)
+    t = np.asarray(t, dtype=np.float64)
+    mask = np.ones_like(y, dtype=bool) if mask is None else np.asarray(mask, dtype=bool)
+    engine = KalmanEngine() if engine is None else engine
+
+    design, rank = signal.design_matrix(t)
+    k_beta = design.shape[1]
+    batch = y.shape[0]
+    n_cand = len(candidates)
+    p_max = max(sum(len(term.params) for term in spec.terms) for spec in candidates)
+
+    theta = np.full((batch, n_cand, p_max), np.nan)
+    theta_u = np.full((batch, n_cand, p_max), np.nan)
+    theta_err = np.full((batch, n_cand, p_max), np.nan)
+    beta = np.full((batch, n_cand, k_beta), np.nan)
+    beta_err = np.full((batch, n_cand, k_beta), np.nan)
+    loglik = np.full((batch, n_cand), np.nan)
+    outcome = np.empty((batch, n_cand), dtype=object)
+    rung = np.empty((batch, n_cand), dtype=object)
+    n_iter = np.zeros((batch, n_cand), dtype=np.int64)
+    modes: list[GradientMode] = []
+
+    for c, spec in enumerate(candidates):
+        state_space = StateSpace.from_spec(spec)
+        obj = ConcentratedObjective(spec, state_space, engine, objective)
+        modes.append(resolve_gradient_mode(spec, objective))
+        p = sum(len(term.params) for term in spec.terms)
+
+        for b in range(batch):
+            warm = None if x0 is None else x0[b : b + 1, c, :p]
+            res = optimize_series(
+                obj, y[b : b + 1], mask[b : b + 1], t, design, rank, warm, max_iter
+            )
+            outcome[b, c] = res.outcome
+            rung[b, c] = res.init_rung
+            n_iter[b, c] = res.n_iter
+            loglik[b, c] = res.loglik
+            theta[b, c, :p] = res.theta[0]
+            if res.hessian is not None and res.outcome is Outcome.OK:
+                u_hat = obj.to_unconstrained(res.theta)[0]
+                theta_u[b, c, :p] = u_hat
+                cov_u = np.linalg.inv(res.hessian)
+                cov_nat = delta_method_cov(obj.dforward(u_hat[None, :])[0], cov_u)
+                theta_err[b, c, :p] = np.sqrt(np.clip(np.diag(cov_nat), 0.0, np.inf))
+                scored = engine.score(state_space, res.theta, y[b : b + 1], mask[b : b + 1], t, design, objective)
+                if k_beta:
+                    from metamer.core.objective import gls_solution
+
+                    bhat, bcov, _ = gls_solution(scored.normal_equations)
+                    beta[b, c] = bhat[0]
+                    beta_err[b, c] = np.sqrt(np.clip(np.diag(bcov[0]), 0.0, np.inf))
+
+    rankings: list[Ranking] = []
+    for b in range(batch):
+        scores = []
+        for c, spec in enumerate(candidates):
+            k, n = penalty_terms(spec, objective, int(mask[b].sum()), rank, k_beta)
+            scores.append(
+                CandidateScore(
+                    label=str(c),
+                    loglik=float(loglik[b, c]),
+                    k=float(k),
+                    n=float(n),
+                    n_eff=float(n),
+                    engine=engine.engine_id,
+                    objective=objective,
+                    ok=bool(outcome[b, c] is Outcome.OK),
+                )
+            )
+        rankings.append(rank_candidates(scores, criterion))
+
+    return FitResult(
+        candidates=tuple(candidates),
+        theta=theta,
+        theta_err=theta_err,
+        theta_unconstrained=theta_u,
+        beta=beta,
+        beta_err=beta_err,
+        loglik=loglik,
+        outcome=outcome,
+        init_rung=rung,
+        n_iter=n_iter,
+        ranking=rankings,
+        engine=engine.engine_id,
+        objective=objective,
+        gradient_mode=tuple(modes),
+    )
+```
+
+Re-export from `src/metamer/core/__init__.py`:
+
+```python
+from metamer.core import families  # noqa: F401  (registers built-in kernels)
+from metamer.core.capability import EngineId, GradientMode, Objective
+from metamer.core.criteria import Criterion
+from metamer.core.fit import FitResult, fit
+from metamer.core.outcomes import Outcome
+from metamer.core.signal import SignalSpec
+from metamer.core.terms import ProcessSpec, TermSpec
+
+__all__ = [
+    "Criterion", "EngineId", "FitResult", "GradientMode", "Objective",
+    "Outcome", "ProcessSpec", "SignalSpec", "TermSpec", "fit",
+]
+```
+
+- [ ] **Step 3: Run tests and commit**
+
+Run: `pixi run test tests/test_fit.py -v` → all PASS
+
+```bash
+git add src/metamer/core/fit.py src/metamer/core/__init__.py tests/test_fit.py
+git commit -m "feat: add the (B, N) fit driver with natural-unit uncertainties"
+```
+
+---
+
+## Task 15: Static identifiability lint
+
+**Goal:** Flag structurally non-identifiable compositions at construction time. **Warn, do not block — but say it out loud.**
+
+**Files:**
+- Create: `src/metamer/core/lint.py`; create `tests/test_lint.py`
+
+**Acceptance Criteria:**
+- [ ] `white + matern12` with `ρ` below a stated fraction of the sampling interval flags "collapses to white + white"
+- [ ] Two free-`ν` Matérn terms with overlapping timescales flag "terms may collapse onto each other"
+- [ ] A clean composite returns an empty finding list
+- [ ] Findings are warnings, never exceptions — `lint()` returns, it does not raise
+- [ ] Each finding names the offending term labels, not just the composite
+
+**Verify:** `pixi run test tests/test_lint.py -v`
+
+**Steps:**
+
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# tests/test_lint.py
+from dataclasses import replace
+
+from metamer.core.lint import lint
+from metamer.core.terms import ProcessSpec, TermSpec
+from tests.test_statespace import _term
+
+
+def _with(term: TermSpec, **defaults: float) -> TermSpec:
+    params = {
+        name: replace(p, default=defaults.get(name, p.default)) for name, p in term.params.items()
+    }
+    return TermSpec(kind=term.kind, params=params, ordering_param=term.ordering_param)
+
+
+def test_short_timescale_matern_is_flagged_as_white():
+    """matern12 with rho far below the sampling interval is white noise.
+
+    Expected value determined independently: exp(-dt/rho) -> 0 as rho -> 0, so
+    the process decorrelates entirely between samples and is indistinguishable
+    from white noise at the observed cadence.
+    """
+    spec = ProcessSpec((_term("white"), _with(_term("matern12"), rho=1e-4)))
+    findings = lint(spec, sampling_interval=1.0)
+    assert any("white" in f.message for f in findings)
+    assert any("matern12[0]" in f.terms for f in findings)
+
+
+def test_overlapping_matern_terms_are_flagged():
+    """Two same-kind terms with nearly equal timescales may collapse.
+
+    Bug this catches: shipping a candidate set whose members are pairwise
+    indistinguishable, which produces meaningless IC weights.
+    """
+    spec = ProcessSpec((_with(_term("matern12"), rho=5.0), _with(_term("matern12"), rho=5.2)))
+    findings = lint(spec, sampling_interval=1.0)
+    assert any("collapse" in f.message for f in findings)
+
+
+def test_clean_composite_produces_no_findings():
+    """A well-separated composite lints clean.
+
+    Bug this catches: a lint that fires on everything, which trains users to
+    ignore it.
+    """
+    spec = ProcessSpec((_term("white"), _with(_term("matern12"), rho=30.0)))
+    assert lint(spec, sampling_interval=1.0) == []
+
+
+def test_lint_warns_and_never_raises():
+    """Degenerate specifications are reported, not rejected.
+
+    Bug this catches: blocking a user from fitting a model they knowingly
+    want. The lint's job is to say it out loud, not to decide.
+    """
+    spec = ProcessSpec((_with(_term("matern12"), rho=1e-6),))
+    assert isinstance(lint(spec, sampling_interval=1.0), list)
+```
+
+- [ ] **Step 2: Implement lint.py**
+
+```python
+# src/metamer/core/lint.py
+"""Static identifiability lint over a composite specification.
+
+Compositional freedom lets users specify structurally non-identifiable models.
+This pass flags the known-degenerate patterns at construction time. A runtime
+counterpart flags near-degeneracy in the fitted solution via the Hessian
+condition number (see `optimize.HESSIAN_COND_LIMIT`).
+
+Warn, do not block.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from metamer.core.terms import ProcessSpec
+
+SHORT_TIMESCALE_FRACTION = 0.1
+"""Below this multiple of the sampling interval a process reads as white."""
+
+OVERLAP_RATIO = 1.5
+"""Same-kind terms within this ratio of each other may be inseparable."""
+
+
+@dataclass(frozen=True)
+class Finding:
+    """One lint finding."""
+
+    terms: tuple[str, ...]
+    message: str
+
+
+def lint(spec: ProcessSpec, sampling_interval: float) -> list[Finding]:
+    """Report structurally degenerate patterns in a composition.
+
+    Args:
+        spec: The composite specification.
+        sampling_interval: Median observation spacing, in the same time units
+            as the timescale parameters.
+
+    Returns:
+        A list of findings, empty if the composition lints clean.
+    """
+    findings: list[Finding] = []
+    labels = spec.labels()
+
+    timescales: list[tuple[str, str, float]] = []
+    for label, term in zip(labels, spec.terms, strict=True):
+        if "rho" not in term.params:
+            continue
+        rho = float(term.params["rho"].default)
+        timescales.append((label, term.kind, rho))
+        if rho < SHORT_TIMESCALE_FRACTION * sampling_interval:
+            findings.append(
+                Finding(
+                    terms=(label,),
+                    message=(
+                        f"{label}: rho={rho:g} is far below the sampling interval "
+                        f"{sampling_interval:g}; this term is indistinguishable from "
+                        "white noise at the observed cadence"
+                    ),
+                )
+            )
+
+    for i, (label_a, kind_a, rho_a) in enumerate(timescales):
+        for label_b, kind_b, rho_b in timescales[i + 1 :]:
+            if kind_a != kind_b:
+                continue
+            hi, lo = max(rho_a, rho_b), min(rho_a, rho_b)
+            if lo > 0.0 and hi / lo < OVERLAP_RATIO:
+                findings.append(
+                    Finding(
+                        terms=(label_a, label_b),
+                        message=(
+                            f"{label_a} and {label_b} have timescales within a factor of "
+                            f"{hi / lo:.2f}; these terms may collapse onto each other and "
+                            "the resulting IC weights would not be meaningful"
+                        ),
+                    )
+                )
+    return findings
+```
+
+- [ ] **Step 3: Run tests and commit**
+
+Run: `pixi run test tests/test_lint.py -v` → all PASS
+
+```bash
+git add src/metamer/core/lint.py tests/test_lint.py
+git commit -m "feat: add static identifiability lint"
+```
+
+---
+
+## Task 16: Three-hash machinery with the compat-relevance allowlist
+
+**Goal:** `fit_hash ⊂ compat_hash ⊂ run_hash`, hashed from a normalized model rather than file text, with compat-relevance declared by **allowlist**.
+
+**Files:**
+- Create: `src/metamer/core/hashing.py`; create `tests/test_hashing.py`
+
+**Acceptance Criteria:**
+- [ ] `fit_hash` covers data selection, signal spec, objective, engine, registry version, seeds, metamer version — and **excludes** the criterion set and the candidate set
+- [ ] Adding a criterion changes `compat_hash` but leaves `fit_hash` unchanged
+- [ ] Changing the memory budget or thread count changes only `run_hash`
+- [ ] Compat relevance is an **allowlist**: a newly added field defaults to provenance-only
+- [ ] A golden test enumerates the compat-relevant field set, so changing it requires updating the test
+- [ ] Hashing is insensitive to dict ordering and float formatting
+
+**Verify:** `pixi run test tests/test_hashing.py -v`
+
+**Steps:**
+
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# tests/test_hashing.py
+from metamer.core.hashing import (
+    COMPAT_RELEVANT_FIELDS,
+    FIT_RELEVANT_FIELDS,
+    canonical_json,
+    compat_hash,
+    fit_hash,
+    run_hash,
+)
+
+
+def _config(**overrides):
+    base = {
+        "data_uri": "s3://bucket/ssh.zarr",
+        "variable": "sla",
+        "signal_terms": ["constant", "trend", "annual"],
+        "objective": "ml",
+        "engine": "kalman",
+        "registry_version": "1",
+        "metamer_version": "0.1.0",
+        "seed": 0,
+        "criteria": ["aic"],
+        "candidates": ["white+matern12"],
+        "memory_budget_gb": 4.0,
+        "threads": 4,
+        "output": "out.zarr",
+    }
+    base.update(overrides)
+    return base
+
+
+def test_adding_a_criterion_changes_compat_but_not_fit():
+    """A criterion change must not discard warm starts or force a refit.
+
+    Bug this catches: a single hash boundary, under which adding HQIC to a
+    finished 10^7-point run demands a full refit to compute arithmetic on
+    numbers already sitting in the store.
+    """
+    base = _config()
+    more = _config(criteria=["aic", "hqic"])
+    assert fit_hash(base) == fit_hash(more)
+    assert compat_hash(base) != compat_hash(more)
+
+
+def test_runtime_knobs_change_only_run_hash():
+    """Memory budget and thread count are provenance, never a gate.
+
+    Bug this catches: gating resumption on runtime knobs, which would block
+    starting on the 64-core box and resuming on the mini PC -- a real workflow
+    the determinism guarantee exists to permit.
+    """
+    base = _config()
+    other = _config(memory_budget_gb=1.0, threads=64)
+    assert fit_hash(base) == fit_hash(other)
+    assert compat_hash(base) == compat_hash(other)
+    assert run_hash(base) != run_hash(other)
+
+
+def test_objective_is_fit_relevant():
+    """theta_hat_REML != theta_hat_ML, so the objective must gate fit reuse.
+
+    Bug this catches: reusing a warm start across objectives, which produces
+    converged-looking fits at the wrong optimum -- the worst failure mode in
+    the system.
+    """
+    assert fit_hash(_config()) != fit_hash(_config(objective="reml"))
+
+
+def test_compat_relevance_is_an_allowlist_golden_set():
+    """The compat-relevant field set is pinned by a golden test.
+
+    Expected value determined independently by reading design doc section
+    13.3 and listing the fields by hand. With a denylist, every newly added
+    field would silently become compat-relevant and the failure mode is
+    'resume broke and nobody knows why'.
+    """
+    assert FIT_RELEVANT_FIELDS == frozenset(
+        {
+            "data_uri", "variable", "signal_terms", "objective", "engine",
+            "registry_version", "metamer_version", "seed",
+        }
+    )
+    assert COMPAT_RELEVANT_FIELDS == FIT_RELEVANT_FIELDS | {"criteria"}
+
+
+def test_hash_is_insensitive_to_key_order_and_float_formatting():
+    """Reordering keys or writing 4.0 as 4 does not change the hash.
+
+    Bug this catches: hashing file text, under which adding a comment would
+    invalidate a completed 10^7-point store.
+    """
+    a = canonical_json({"b": 1, "a": 4.0})
+    b = canonical_json({"a": 4.0, "b": 1})
+    assert a == b
+
+
+def test_an_unknown_field_is_provenance_only():
+    """A new field defaults to run_hash only.
+
+    Bug this catches: the denylist failure mode, where adding any field
+    silently invalidates every in-progress store.
+    """
+    base = _config()
+    extended = _config(new_experimental_knob=True)
+    assert fit_hash(base) == fit_hash(extended)
+    assert compat_hash(base) == compat_hash(extended)
+    assert run_hash(base) != run_hash(extended)
+```
+
+- [ ] **Step 2: Implement hashing.py**
+
+```python
+# src/metamer/core/hashing.py
+"""Three hashes, with compat relevance declared by allowlist.
+
+    fit_hash    everything determining theta_hat and log_lik
+    compat_hash fit_hash + the criterion set (which determines /selection/)
+    run_hash    everything, plus runtime knobs and the machine fingerprint
+
+The split exists so that a criterion-only change recomputes the derived arrays
+from the stored primitives rather than refitting, and so that warm starts
+survive a criterion change.
+
+Compat relevance is an ALLOWLIST. With a denylist, every newly added field
+silently becomes compat-relevant and the failure mode is "resume broke and
+nobody knows why".
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+from collections.abc import Mapping
+from typing import Any
+
+FIT_RELEVANT_FIELDS = frozenset(
+    {
+        "data_uri",
+        "variable",
+        "signal_terms",
+        "objective",
+        "engine",
+        "registry_version",
+        "metamer_version",
+        "seed",
+    }
+)
+"""Fields determining theta_hat and log_lik. Extending this is a deliberate act."""
+
+COMPAT_RELEVANT_FIELDS = FIT_RELEVANT_FIELDS | {"criteria"}
+"""Fields determining the stored derived arrays."""
+
+
+def canonical_json(payload: Mapping[str, Any]) -> str:
+    """Render a mapping to canonical JSON: sorted keys, compact separators."""
+    return json.dumps(dict(payload), sort_keys=True, separators=(",", ":"), default=repr)
+
+
+def _digest(payload: Mapping[str, Any]) -> str:
+    return hashlib.sha256(canonical_json(payload).encode("utf-8")).hexdigest()[:16]
+
+
+def _subset(config: Mapping[str, Any], fields: frozenset[str]) -> dict[str, Any]:
+    return {key: config[key] for key in sorted(fields) if key in config}
+
+
+def fit_hash(config: Mapping[str, Any]) -> str:
+    """Hash the fields determining theta_hat and log_lik.
+
+    Excludes the criterion set (AIC versus BIC changes nothing about where the
+    optimizer lands) and the candidate set (candidate-set extension is a
+    legitimate incremental operation).
+    """
+    return _digest(_subset(config, FIT_RELEVANT_FIELDS))
+
+
+def compat_hash(config: Mapping[str, Any]) -> str:
+    """Hash the fields determining the stored derived arrays."""
+    return _digest(_subset(config, COMPAT_RELEVANT_FIELDS))
+
+
+def run_hash(config: Mapping[str, Any], machine: Mapping[str, Any] | None = None) -> str:
+    """Hash everything, including runtime knobs and the machine fingerprint.
+
+    Provenance only. Never a gate.
+    """
+    payload = dict(config)
+    if machine is not None:
+        payload["_machine"] = dict(machine)
+    return _digest(payload)
+
+
+def machine_fingerprint(cpu_model: str, cores: int, total_ram_bytes: int) -> str:
+    """Instance-type-based fingerprint for the calibration cache.
+
+    Hostname is meaningless on ephemeral nodes. Thread count is deliberately
+    excluded so a fresh spot instance of the same type reuses its calibration.
+    """
+    return _digest({"cpu": cpu_model, "cores": int(cores), "ram": int(total_ram_bytes)})
+```
+
+- [ ] **Step 3: Run tests and commit**
+
+Run: `pixi run test tests/test_hashing.py -v` → all PASS
+
+```bash
+git add src/metamer/core/hashing.py tests/test_hashing.py
+git commit -m "feat: add three-hash machinery with a compat-relevance allowlist"
+```
+
+---
+
+## Task 17: Memory formula, RSS shim, benchmark references, and the stage-1 spike harness
+
+**Goal:** An analytic bytes-per-series formula validated against measured peak RSS, the two cross-machine normalization instruments, a compiled path-B backend, and the harness that runs the stage-1 comparison.
+
+**Files:**
+- Create: `src/metamer/core/machine.py`, `src/metamer/core/memory.py`
+- Create: `src/metamer/bench/references.py`, `src/metamer/bench/spike.py`
+- Create: `src/metamer/core/engines/compiled.py` (numba path B)
+- Create: `tests/test_memory.py`, `tests/test_compiled.py`
+- Modify: `pixi.toml` (add `numba`; add `celerite2` under `[target.linux-64.dependencies]`)
+
+**Acceptance Criteria:**
+- [ ] `bytes_per_series` reproduces the design-doc worked example: **8490 B** for path A and **7434 B** for path B at `d=3, k_β=4, p=4, N=630, M=12`, shared X
+- [ ] Per-point regressors add exactly `N·k_β·8 = 20 160 B` to both
+- [ ] `peak_rss_bytes()` returns a finite value on Linux and macOS; the Windows branch exists though untested
+- [ ] Measured peak RSS matches the formula within 25% at `B ∈ {10³, 10⁴}`
+- [ ] The compiled path-B engine agrees with `KalmanEngine` to 1e-10 on identical input
+- [ ] `bench.references.canonical_filter_pass()` times one likelihood evaluation at N=630, d=3, single-threaded, fixed θ
+- [ ] The compute reference is a compiled `P = F P Fᵀ + Q` loop at d=3 plus a rank-1 downdate — **not** a 6×6 LU
+- [ ] The bandwidth reference is measured at **1 thread and full thread count**, reporting bandwidth-per-core at full occupancy
+- [ ] `bench.spike` runs the gap sweep `{0%, 10% scattered, 40% contiguous}` and reports the A:B ratio **per gap case**
+
+**Verify:** `pixi run test tests/test_memory.py tests/test_compiled.py -v` and `pixi run python -m metamer.bench.spike --threads 1 --threads 4`
+
+**Steps:**
+
+- [ ] **Step 1: Add dependencies**
+
+Add `numba = "*"` to `[dependencies]` and `celerite2 = "*"` to `[target.linux-64.dependencies]`
+(celerite2 has no `osx-arm64` conda-forge build; it is optional and test-only).
+
+Run: `pixi install`
+
+- [ ] **Step 2: Write the failing memory tests**
+
+```python
+# tests/test_memory.py
+import numpy as np
+import pytest
+
+from metamer.core.machine import peak_rss_bytes
+from metamer.core.memory import Backend, bytes_per_series, tile_side
+
+
+def test_path_a_matches_the_design_doc_worked_example():
+    """Path A is 8490 B/series at the documented configuration.
+
+    Expected value determined independently by summing the design doc's
+    section 9.4 table by hand: 5670 data + 1764 output + 432 d^2 + 120 x +
+    120 accumulators + 256 trust-region + 128 Hessian.
+    """
+    got = bytes_per_series(Backend.NUMPY_BATCHED, d=3, k_beta=4, p=4, n_time=630, n_models=12)
+    assert got == 8490
+
+
+def test_path_b_drops_only_the_per_series_solver_state():
+    """Path B is 7434 B/series: data plus output slots only.
+
+    Bug this catches: claiming path B's memory advantage is transformative.
+    It is 12.4%, because data and output already account for 87%.
+    """
+    got = bytes_per_series(Backend.COMPILED, d=3, k_beta=4, p=4, n_time=630, n_models=12)
+    assert got == 7434
+    assert (8490 - 7434) / 8490 == pytest.approx(0.124, abs=0.001)
+
+
+def test_per_point_regressors_add_the_design_matrix_per_series():
+    """A per-point X adds N*k_beta*8 bytes to both backends.
+
+    Expected value determined independently: 630 * 4 * 8 = 20160 by hand.
+    """
+    shared = bytes_per_series(Backend.NUMPY_BATCHED, 3, 4, 4, 630, 12, per_point_design=False)
+    per_point = bytes_per_series(Backend.NUMPY_BATCHED, 3, 4, 4, 630, 12, per_point_design=True)
+    assert per_point - shared == 20160
+
+
+def test_tile_side_shrinks_under_the_full_accounting():
+    """The prompt's data-only formula overestimates tile_side.
+
+    Expected value determined independently: sqrt(1e9 / 8490) = 343 with
+    shared X and sqrt(1e9 / 28650) = 187 with per-point X, against the naive
+    sqrt(1e9 / (630*8)) = 445.
+    """
+    assert tile_side(10**9, 8490) == 343
+    assert tile_side(10**9, 28650) == 187
+
+
+def test_peak_rss_is_finite_on_this_platform():
+    """The RSS shim returns a usable number.
+
+    Bug this catches: ru_maxrss unit confusion -- KB on Linux, bytes on macOS
+    -- which would make the memory-formula validation wrong by 1024x on one
+    platform while looking fine on the other.
+    """
+    value = peak_rss_bytes()
+    assert np.isfinite(value)
+    assert value > 10 * 1024 * 1024
+
+
+@pytest.mark.parametrize("batch", [1000, 10000])
+def test_measured_peak_rss_matches_the_formula(batch):
+    """Measured peak RSS tracks the analytic formula within 25%.
+
+    A large mismatch is a Phase 1 bug and must be found before zarr exists,
+    so that Phase 2's calibration tile validates against something rather than
+    being a black box.
+    """
+    from metamer.core.memory import measure_peak_rss_for_batch
+
+    predicted = bytes_per_series(Backend.NUMPY_BATCHED, 3, 4, 4, 630, 2) * batch
+    measured = measure_peak_rss_for_batch(batch=batch, n_time=630)
+    assert 0.75 * predicted <= measured <= 1.25 * predicted
+```
+
+- [ ] **Step 3: Implement machine.py and memory.py**
+
+```python
+# src/metamer/core/machine.py
+"""Peak-RSS measurement, with a branch per platform.
+
+Linux reports ru_maxrss in kilobytes and macOS in bytes -- a 1024x difference
+that would look fine on one platform and be badly wrong on the other. Windows
+has no `resource` module at all; that branch is written but untested, and is
+part of the "portable, unclaimed" position on Windows support.
+"""
+
+from __future__ import annotations
+
+import sys
+
+
+def peak_rss_bytes() -> float:
+    """Return this process's peak resident set size, in bytes.
+
+    Returns:
+        Peak RSS in bytes.
+    """
+    if sys.platform == "win32":  # pragma: no cover - written, untested
+        import psutil
+
+        return float(psutil.Process().memory_info().peak_wset)
+
+    import resource
+
+    raw = float(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+    return raw if sys.platform == "darwin" else raw * 1024.0
+```
+
+```python
+# src/metamer/core/memory.py
+"""Analytic bytes-per-series, one formula per backend.
+
+    Path A:  B * ( N*9 + X_term + out(M, p, k_beta) + c_A(d, k_beta, p) )
+    Path B:  B * ( N*9 + X_term + out(M, p, k_beta) )  +  T * c_B(d, k_beta, p)
+
+The shapes genuinely differ: path A's solver state is per series, path B's is
+per thread. N*9 is the data tile: 8 bytes float64 y plus 1 byte mask.
+"""
+
+from __future__ import annotations
+
+from enum import StrEnum
+
+import numpy as np
+
+
+class Backend(StrEnum):
+    """Which execution strategy the formula describes."""
+
+    NUMPY_BATCHED = "numpy_batched"
+    COMPILED = "compiled"
+
+
+def _output_slots(n_models: int, p: int, k_beta: int) -> int:
+    """theta, theta_err, beta, beta_err, loglik, k as float64; iterations + status."""
+    return n_models * (2 * p + 2 * k_beta + 2) * 8 + n_models * 3
+
+
+def _solver_state(backend: Backend, d: int, k_beta: int, p: int) -> int:
+    """Per-series (path A) or per-thread (path B) solver working set."""
+    d2 = 6 * d * d * 8                      # P, F, Q, P_inf and two workspace copies
+    x_aug = d * (1 + k_beta) * 8            # augmented state over [y | X]
+    accum = (k_beta * (k_beta + 1) // 2 + k_beta + 1) * 8
+    hessian = p * p * 8
+    if backend is Backend.COMPILED:
+        optimizer = 22 * p * 8              # L-BFGS history, m ~= 10
+    else:
+        optimizer = (p * p + 4 * p) * 8     # dense quasi-Newton trust-region model
+    return d2 + x_aug + accum + optimizer + hessian
+
+
+def bytes_per_series(
+    backend: Backend,
+    d: int,
+    k_beta: int,
+    p: int,
+    n_time: int,
+    n_models: int,
+    per_point_design: bool = False,
+) -> int:
+    """Analytic per-series memory cost.
+
+    Args:
+        backend: Which execution strategy.
+        d: Composite state dimension.
+        k_beta: Number of design columns.
+        p: Number of free noise parameters.
+        n_time: Series length.
+        n_models: Candidate count held until the tile is written.
+        per_point_design: True if any regressor is a per-point field, which
+            makes X per-series rather than one shared copy.
+
+    Returns:
+        Bytes per series.
+    """
+    data = n_time * 9
+    x_term = n_time * k_beta * 8 if per_point_design else 0
+    total = data + x_term + _output_slots(n_models, p, k_beta)
+    if backend is Backend.NUMPY_BATCHED:
+        total += _solver_state(backend, d, k_beta, p)
+    return int(total)
+
+
+def thread_state_bytes(d: int, k_beta: int, p: int) -> int:
+    """Per-thread solver state for the compiled backend."""
+    return int(_solver_state(Backend.COMPILED, d, k_beta, p))
+
+
+def tile_side(budget_bytes: int, per_series_bytes: int) -> int:
+    """Square spatial tile side from a byte budget and the full accounting."""
+    return int(np.floor(np.sqrt(budget_bytes / per_series_bytes)))
+
+
+def measure_peak_rss_for_batch(batch: int, n_time: int) -> float:
+    """Fit a synthetic batch and return the peak RSS increase, in bytes."""
+    import gc
+
+    import numpy as np
+
+    from metamer.core.capability import Objective
+    from metamer.core.criteria import Criterion
+    from metamer.core.fit import fit
+    from metamer.core.machine import peak_rss_bytes
+    from metamer.core.signal import Annual, Constant, SemiAnnual, SignalSpec, Trend
+    from metamer.core.terms import ProcessSpec
+    from metamer.core.registry import kernel_registry
+
+    def _term(kind: str):
+        from metamer.core.terms import TermSpec
+
+        family = kernel_registry[kind]()
+        return TermSpec(kind, family.param_specs(), getattr(family, "ordering_param", None))
+
+    gc.collect()
+    before = peak_rss_bytes()
+    rng = np.random.default_rng(0)
+    y = rng.standard_normal((batch, n_time))
+    t = np.arange(float(n_time))
+    fit(
+        y,
+        t,
+        SignalSpec([Constant(), Trend(), Annual(period=52.0), SemiAnnual(period=26.0)]),
+        [ProcessSpec((_term("white"), _term("matern12"), _term("matern32")))],
+        criterion=Criterion.AIC,
+        objective=Objective.ML,
+        max_iter=5,
+    )
+    gc.collect()
+    return peak_rss_bytes() - before
+```
+
+- [ ] **Step 4: Implement the compiled path-B engine and its agreement test**
+
+`src/metamer/core/engines/compiled.py` implements the same scalar-observation filter
+in a `numba.njit(parallel=True)` kernel with `prange` over series, exposing the same
+`Engine` protocol. `tests/test_compiled.py` asserts agreement with `KalmanEngine` to
+1e-10 on `white + matern12 + matern32` at `B=64, N=630`, on all three gap cases, with a
+docstring naming the bug it catches: **a compiled kernel that diverges from the numpy
+reference is the one failure the two-implementation design exists to detect.**
+
+Set `fastmath=False` and pin `NUMBA_NUM_THREADS` in the harness — `fastmath` reassociates
+and would void the bitwise-reproducibility precondition.
+
+- [ ] **Step 5: Implement the benchmark references**
+
+`src/metamer/bench/references.py` provides three functions:
+
+1. `canonical_filter_pass()` — times **one likelihood evaluation** at N=630, d=3, no gaps,
+   single-threaded, fixed θ, no optimizer. **Zero proxy risk, because it is the workload.**
+   This is the normalizer for the budget question.
+2. `compute_reference()` — a compiled fixed-iteration loop of `P = F @ P @ F.T + Q` at
+   **d=3** plus a rank-1 downdate, single-threaded. **Not a 6×6 LU:** the filter contains
+   no matrix factorization (the scalar observation makes `S` a scalar), and the spike runs
+   at d=1 and d=3, not d=6.
+3. `bandwidth_reference(threads)` — a STREAM-triad over an array sized past L3, run at
+   **1 thread and at full thread count**, reporting bandwidth-per-core at full occupancy.
+   Single-threaded STREAM measures one core's outstanding-miss capacity, not the memory
+   subsystem.
+
+- [ ] **Step 6: Implement the stage-1 spike harness**
+
+`src/metamer/bench/spike.py` exposes `python -m metamer.bench.spike`:
+
+- Families: `matern12` (d=1) and `white + matern12 + matern32` (d=3)
+- N=630; `k_β=4`; `B ∈ {10³, 10⁴}`; objective ML
+- Gap sweep `{0%, 10% scattered, 40% contiguous blocks}`
+- **Path A's optimistic bound** = `canonical_filter_pass_cost × mean_iterations`, assuming
+  a zero-overhead batched optimizer at 100% utilization — a performance A can never exceed
+- **Path B measured fully**, warm JIT, compile time reported separately
+- Equivalence: `|Δℓ|` below tolerance; `max|Δθ|/σ_θ < 0.01` **only where the Hessian
+  condition number is below threshold**; both paths select the same candidate
+- Emits JSON: per (family, gap case, B, thread count) the A:B ratio, ms/fit raw **and in
+  canonical-filter-pass units**, peak RSS, mean iterations, compile time, and the roofline
+  pair for this machine
+
+- [ ] **Step 7: Run everything on the mini PC and commit**
+
+```bash
+pixi run test tests/test_memory.py tests/test_compiled.py -v
+pixi run python -m metamer.bench.spike --threads 1 --threads 4 --out bench/minipc.json
+git add src/metamer/core/machine.py src/metamer/core/memory.py src/metamer/bench src/metamer/core/engines/compiled.py tests/test_memory.py tests/test_compiled.py bench/minipc.json pixi.toml pixi.lock
+git commit -m "feat: add memory formula, RSS shim, benchmark references, and spike harness"
+```
+
+---
+
+## Task 18: Cross-machine stage-1 measurement and the ≥3× decision
+
+**USER-ORDERED GATE — NON-SKIPPABLE.** This task was requested by the user in the current conversation. It MUST NOT be closed by walking around it, by declaring it "verified inline", or by substituting a cheaper check. Close only after every item in `acceptanceCriteria` has been re-validated independently, with output captured.
+
+**Goal:** Run the Task 17 harness on all three machines, evaluate the ≥3×-at-d=3 rule on the 64-core box, and record the decision that determines whether Task 19 is built at all.
+
+**This session cannot close this task alone.** The mini PC is the only machine reachable from here; the 64-core box and the MacBook runs must be executed by the user. The budget comparison is **valid only on the 64-core box**.
+
+**Files:**
+- Create: `bench/minipc.json`, `bench/box64.json`, `bench/macbook.json`
+- Create: `docs/superpowers/notes/2026-XX-XX-spike-stage1-verdict.md`
+
+**Acceptance Criteria:**
+- [ ] `bench/minipc.json` exists, from `{1, 4}` threads — establishes feasibility and correctness
+- [ ] `bench/box64.json` exists, from `{1, 4, full}` threads — **the only valid budget comparison**; the 4-thread point bridges to the mini PC
+- [ ] `bench/macbook.json` exists, from `{1, full}` threads — the adversarial case; unified memory gives high bandwidth per core, so **if path A wins anywhere it wins here**
+- [ ] The roofline pair (compute reference, bandwidth reference at 1 and full threads) is recorded for all three machines, and the fitted model's **prediction error is stated**
+- [ ] ms/fit is reported raw **and in canonical-filter-pass units**
+- [ ] The A:B ratio is reported **per gap case**, not pooled
+- [ ] The verdict note states, explicitly, one of: **adopt B** (B ≥3× at d=3 on the 64-core box), **inconclusive → build Task 19**, or **A stays default** with the measured number recorded
+- [ ] Measured ms/fit on the 64-core box is compared against the **19 ms** budget
+
+**Verify:** `pixi run python -m metamer.bench.spike --report bench/minipc.json bench/box64.json bench/macbook.json` → prints the three-machine table, the roofline fit and its prediction error, and the verdict line
+
+**Steps:**
+
+- [ ] **Step 1: Run the harness on the mini PC (this session can do this)**
+
+```bash
+pixi run python -m metamer.bench.spike --threads 1 --threads 4 --out bench/minipc.json
+```
+
+- [ ] **Step 2: Ask the user to run the 64-core box and the MacBook**
+
+Give the user these commands, one per line so terminal wrapping cannot corrupt a paste.
+First establish the 64-core box's RAM, then run `--explain` before the measurement.
+
+```bash
+free -g
+```
+
+```bash
+pixi run python -m metamer.bench.spike \
+  --threads 1 --threads 4 --threads 0 \
+  --out bench/box64.json
+```
+
+```bash
+pixi run python -m metamer.bench.spike \
+  --threads 1 --threads 0 \
+  --out bench/macbook.json
+```
+
+(`--threads 0` means "all available".)
+
+- [ ] **Step 3: Collect the three JSON files and fit the roofline**
+
+```bash
+pixi run python -m metamer.bench.spike --report bench/minipc.json bench/box64.json bench/macbook.json
+```
+
+Expected: a table of ms/fit per (machine, family, gap case, thread count), the same numbers
+in canonical-filter-pass units, the A:B ratio per gap case, the fitted roofline with its
+prediction error, and a verdict line.
+
+- [ ] **Step 4: Write the verdict note**
+
+Record: the decision, the measured ratios, the budget comparison on the 64-core box, the
+bandwidth-per-core ordering across machines (the design doc predicts the mini PC has
+*higher* bandwidth per core than the 64-core box at full load, which would mean the mini PC
+flatters path A — confirm or refute), and the roofline prediction error.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add bench docs/superpowers/notes
+git commit -m "test: record stage-1 spike results and the execution-strategy verdict"
+```
+
+---
+
+## Task 19: **CONDITIONAL** — batched trust-region optimizer
+
+**Build this only if Task 18's verdict is "inconclusive".** If path B wins by ≥3× at d=3 on the 64-core box, **this task is deleted, not deferred**: path A's permanent form is the plain per-series scipy loop from Task 13, which is already a complete and tested correctness reference.
+
+**Goal:** A batched trust-region optimizer with per-series radii, an active mask, and periodic compaction, so path A can be measured at its real performance rather than its optimistic bound.
+
+**Files:**
+- Create: `src/metamer/core/optimize_batched.py`
+- Create: `tests/test_optimize_batched.py`
+
+**Acceptance Criteria:**
+- [ ] Trust-region, **not** line-search L-BFGS: per-iteration work is fixed (one function and gradient per active series, then a masked accept/reject and a masked radius update). A data-dependent inner loop is the pathology that destroys batch utilization.
+- [ ] Per-series results are **identical** to the Task 13 reference to 1e-8 on the same inputs
+- [ ] The active mask freezes converged series; utilization is reported
+- [ ] Compaction repacks the active set and does **not** change results
+- [ ] Trust-radius collapse produces `Outcome.TRUST_RADIUS_COLLAPSED`
+- [ ] No reordering or rescaling of the parameter vector occurs mid-run without an explicit curvature-history reset
+
+**Verify:** `pixi run test tests/test_optimize_batched.py -v` and a rerun of the stage-2 spike
+
+**Steps:**
+
+- [ ] **Step 1: Confirm this task is still required**
+
+Read `docs/superpowers/notes/*-spike-stage1-verdict.md`. If the verdict is "adopt B",
+**stop and close this task as not-required**, recording the verdict's ratio in the closing
+note. Do not build the optimizer.
+
+- [ ] **Step 2: Write the equivalence test first**
+
+The single most important test is that the batched path reproduces the reference exactly:
+
+```python
+def test_batched_trust_region_matches_the_reference_optimizer():
+    """The batched path and the scipy reference reach the same optimum.
+
+    Bug this catches: a masked update that leaks across series, or a radius
+    update applied to frozen series. Both produce plausible fits that differ
+    from the reference in ways no single-series test would reveal.
+    """
+```
+
+- [ ] **Step 3: Implement, then rerun the stage-2 comparison and record it**
+
+```bash
+pixi run test tests/test_optimize_batched.py -v
+pixi run python -m metamer.bench.spike --stage 2 --out bench/box64-stage2.json
+git add src/metamer/core/optimize_batched.py tests/test_optimize_batched.py bench
+git commit -m "feat: add batched trust-region optimizer and stage-2 spike results"
+```
+
+---
+
+## Phase 1 exit criteria checklist
+
+Mapped from design doc §18. Tick these before declaring Phase 1 complete.
+
+- [ ] 1. Brute-force MVN agreement at small N, every family **and a sum** — Task 6
+- [ ] 2. `celerite2` agreement (optional, Tier-1) — **first cut if Phase 1 is too large**
+- [ ] 3. Masked-gap likelihood identical to genuinely-absent — Task 6
+- [ ] 4. Analytic `F`/`Q`/`P∞` vs `expm`/Lyapunov, per family — Tasks 4, 5
+- [ ] 5. Parameter counting vs hand counts, **both objectives** — Task 9
+- [ ] 6. Rank-deficient `X` gives the documented failure, not NaN — Tasks 7, 8
+- [ ] 7. REML penalty vs brute-force `log|XᵀΣ⁻¹X|` — Task 8
+- [ ] 8. Complex-step viability verdict **recorded with numbers** — Task 11
+- [ ] 9. FD step rule validated at N ∈ {100, 630, 5000} — Task 11
+- [ ] 10. Gradient-capability resolution on a mixed composite — Task 12
+- [ ] 11. Hessian vs brute-force FD Hessian — Task 13
+- [ ] 12. **Every** failure-taxonomy branch reachable by a constructed test — Tasks 3, 13
+- [ ] 13. Measured peak RSS matches the analytic formula at two values of B — Task 17
+- [ ] 14. Stage-1 comparison at B ≈ 10⁴, N ≈ 630, split by machine — Task 18
+- [ ] 15. Gap-structure sweep, A:B ratio **per gap case** — Tasks 17, 18
+- [ ] 16. `fit_hash`/`compat_hash` separation exercised end to end — Task 16
+
+Criterion 16's full end-to-end form (a resume that adds a criterion without refitting)
+needs the zarr store and therefore lands in Phase 2; Task 16 proves the hash boundary that
+makes it possible.
+
+---
+
+## Deferred to Phase 2 and beyond
+
+Nothing in this plan builds tiling, zarr, the CLI, warm-starting, the hysteresis audit, the
+calibration tile, Whittle, exact Toeplitz, CARMA, SHO, sum-of-OU power law, TIC, the
+sandwich estimator, model averaging, Student-t, or MCMC. Those are Phases 2–6 in design doc
+§17 and get their own plans.

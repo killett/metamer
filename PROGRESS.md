@@ -6,10 +6,15 @@
 |---|---|
 | Design document | [`docs/superpowers/specs/2026-08-04-metamer-design.md`](docs/superpowers/specs/2026-08-04-metamer-design.md) |
 | Original build prompt | [`metamer-build-prompt.md`](metamer-build-prompt.md) — **superseded** by the design doc's §2 where they conflict |
-| Implementation plan | not written yet |
+| Phase 1 implementation plan | [`docs/superpowers/plans/2026-08-05-metamer-phase1.md`](docs/superpowers/plans/2026-08-05-metamer-phase1.md) |
+| Phase 1 task tracker | `docs/superpowers/plans/2026-08-05-metamer-phase1.md.tasks.json` (native task ids 8–27) |
 
-**Next action:** write the Phase 1 implementation plan (spec reviewed and amended
-2026-08-05; rulings R1–R6 and defects D1–D5 applied).
+**Next action:** execute Phase 1 Task 0 (package skeleton). Resume with
+`/superpowers-extended-cc:executing-plans docs/superpowers/plans/2026-08-05-metamer-phase1.md`.
+
+**The Phase 1 branch:** Task 18 is a user gate requiring runs on the 64-core box and the
+MacBook. Task 19 (batched trust-region) is built **only** if Task 18's verdict is
+"inconclusive" — if path B wins by ≥3× at d=3, it is deleted rather than deferred.
 
 Phase list lives in design doc §17. Phase 1 exit criteria live in §18. Do not duplicate
 either here.
