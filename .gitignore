@@ -2,3 +2,25 @@
 .claude-project-id
 
 .sandbox_settings.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Build artefacts
+dist/
+build/
+
+# Environments
+.venv/
+.pixi/
+
+# Note: bench/ is deliberately NOT ignored. The spike results committed there
+# are Phase 1 exit-criteria evidence (see docs/superpowers/plans/), not scratch.
