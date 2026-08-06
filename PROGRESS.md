@@ -212,6 +212,23 @@ cannot reconstruct them.
 - **Scores carry an engine tag AND an objective tag**; ranking across either is a hard error.
 - **Counting is per objective**: ML `k = k_θ + k_β`, `n = n_obs`; REML `k = k_θ`,
   `n = n_obs − rank(X)`. Two definitions on two model classes, not one with an adjustment.
+- **`k_β` is `rank(X_r)`, not `ncol(X)`, under *both* objectives.** A criterion's `k` is the
+  dimension of the identified parameter space, and the log-likelihood is flat in the
+  `ncol − rank` unidentified directions, so charging for them penalises what no record
+  informed. `ncol` under ML beside `rank` under REML would also have the two objectives
+  asserting different answers to "how many coefficients does this design resolve".
+  Precedent: R's `extractAIC.lm` / `logLik.lm` use `rank`. The plan's criterion 13 mandates
+  rank-not-`ncol` for REML's `n` and is **silent** on ML's `k` — this resolves that silence.
+  Unreachable today, because Task 8 fails a deficient `X_r` before scoring, so the test that
+  pins it is a contract test on `penalty_terms` (a pure function Task 10 calls directly),
+  not integration coverage. That is the right place for it: the function boundary is the
+  only place the rule can be stated.
+- **`n_eff_bic`'s closed form is invalid under a mask** and its `ρ` is a model quantity, not
+  a data statistic. See design doc §10.1, corrected 2026-08-06: the realized-pairs form
+  `n_used² / Σ_{i,j∈used} ρ(t_i−t_j)²` is exact for any mask and any axis; the lag-index
+  closed form is a fast path for the complete regular case only. Measured error from using
+  the closed form under a half-mask: **−48.16%**. Both `n_eff` variants are per
+  `(point, candidate)` because both are functions of the fitted model.
 - **float64 throughout `core`**; float32 only at the batch/IO boundary, converted per dask
   chunk so both representations never coexist.
 - **Parallelism is within a tile, never across tiles** — that is what keeps peak RAM
