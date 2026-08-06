@@ -83,15 +83,15 @@ from metamer.core.statespace import UNIQUE_DT_RTOL, StateSpace
 from metamer.core.terms import ProcessSpec
 
 MAX_PAIR_BYTES: int = 1 << 20
-"""Byte budget for one row block of the dense `n_eff_bic` fallback.
+"""Byte budget for ONE BLOCK of either `n_eff_bic` path. The module's one knob.
 
-The dense sum over realized pairs is `O(n_used^2)` in TIME by definition, but it
-need not be `O(n_used^2)` in SPACE. A full `n_used x n_used` lag matrix, plus
-the temporaries `StateSpace.acvf` needs to turn it into correlations, is the
-wrong shape for a tile of 100k series. Blocking over rows bounds the largest
-allocation REGARDLESS of `n_used`; only the iteration count grows.
+BOTH paths block against this budget, for the same reason and with the same
+consequence: peak memory is a bounded multiple of it rather than a function of
+the problem size. What each path blocks over differs.
 
-Measured peak allocation (tracemalloc, matern12, complete series):
+**Dense path -- blocks over ROWS of the lag matrix.** The sum over realized
+pairs is `O(n_used^2)` in TIME by definition, but it need not be `O(n_used^2)`
+in SPACE. Measured peak (tracemalloc, matern12, complete series):
 
     n_used      blocked at 1 MiB      unblocked
        402             5.2 MB            6.5 MB
@@ -102,6 +102,34 @@ Measured peak allocation (tracemalloc, matern12, complete series):
 The blocked column is flat, at about six times this budget: the lag block, its
 contiguous copy, and the four temporaries `StateSpace.acvf` allocates on the way
 to a correlation. Six times a bounded number is bounded; `n_used^2` is not.
+
+**FFT path -- blocks over SERIES.** Its per-series cost is small but its batch
+cost is not, and the batch is the thing that scales. Measured at `N = 630`,
+UNBLOCKED:
+
+    B          peak        per series
+      100      3.5 MB       35.4 kB
+      500     17.7 MB       35.3 kB
+     1000     35.3 MB       35.3 kB
+     2000     70.6 MB       35.3 kB
+
+Flat at 56 bytes per epoch per series, hence **3.5 GB at the 100 000-series
+tile this module's own docstrings quote** -- against a 16 GB whole-job budget
+(design doc section 11). Blocking over series is exact, because each series'
+pair counts and autocorrelations are independent of every other's, so it costs
+nothing but a loop. Without it the RARE path (dense, irregular axes) would be
+the only capped one while the COMMON path (regular axes) scaled without bound,
+which is precisely backwards.
+"""
+
+_FFT_BYTES_PER_EPOCH: int = 64
+"""Peak bytes the FFT path holds per epoch per series, for sizing its block.
+
+MEASURED, not derived: 56.1 B/epoch/series at `N = 630`, flat from B = 100 to
+B = 2000 (see `MAX_PAIR_BYTES`). Rounded up to 64 for headroom, since the exact
+count depends on how many temporaries numpy's FFT keeps live and on the term
+count of the composite. Sizing a block with a measured constant is honest about
+being an estimate; the test that pins the resulting peak is what makes it safe.
 """
 
 _ACF_MAGNITUDE_TOL: float = 1e-9
@@ -112,6 +140,20 @@ arithmetic. A composite sums per-term autocovariances, so the ratio can land an
 ulp or two above 1 by rounding. The tolerance absorbs that and nothing else: a
 value of 1.5, which the participation ratio would happily turn into `n_eff` of
 0.449 at `n = 50`, is nowhere near it.
+
+CONSEQUENCE FOR THE ADVERTISED RANGE. The UPPER bound `n_eff <= n_used` is
+structural and exact: `rho_0` is `acvf(0)/acvf(0) = 1` identically, so the
+Frobenius sum is at least the `n_used` diagonal entries whatever the
+off-diagonals do. The LOWER bound is not quite 1. Correlations admitted at the
+tolerance ceiling give a sum up to `n_used^2 (1 + tol)^2`, hence
+
+    n_eff >= 1 / (1 + tol)^2  ~  1 - 2 * tol  =  1 - 2e-9
+
+so the honest range is `[1 - 2e-9, n_used]`, and exactly `[1, n_used]` for any
+autocorrelation that respects `|rho| <= 1`. The two-nanosecond-wide gap is
+stated rather than clamped away: clamping would silently repair an input this
+module has otherwise decided to refuse, and 2e-9 is far below any scale at
+which an effective sample size is read.
 """
 
 _Path = Literal["auto", "fft", "dense"]
@@ -277,8 +319,18 @@ def penalty_terms(
 def n_eff_bic_closed_form(autocorrelation: NDArray[np.float64], n: int) -> float:
     """Participation ratio for a COMPLETE, REGULARLY SAMPLED series.
 
-    Fast path and cross-check for `n_eff_bic`. For a Toeplitz correlation matrix
-    the lag-`k` off-diagonal has exactly `(n - k)` entries on each side, so
+    **NOT WIRED INTO `n_eff_bic`'S DISPATCH, DELIBERATELY.** This is a reference
+    form and a cross-check, not a fast path: `n_eff_bic`'s FFT path is already
+    `O(N)` per series and provably reduces to this expression when the mask is
+    all-true (`c_k = n - k`), so routing the complete case here would buy no
+    time and would add a third code path to keep in agreement. Design doc
+    section 10.1 asks for the closed form to be KEPT AND CHECKED AGAINST the
+    general one -- that agreement is the cheapest available evidence that the
+    realized-pairs machinery is right -- which is exactly the role it has here.
+    Its only callers are tests, and that is the intent.
+
+    For a Toeplitz correlation matrix the lag-`k` off-diagonal has exactly
+    `(n - k)` entries on each side, so
 
         ||R||_F^2 = n + 2 * sum_{k=1}^{n-1} (n - k) * rho_k^2
 
@@ -298,7 +350,8 @@ def n_eff_bic_closed_form(autocorrelation: NDArray[np.float64], n: int) -> float
         n: Series length; the number of observations, all of them used.
 
     Returns:
-        Effective sample size in `[1, n]`.
+        Effective sample size, at most `n` exactly and at least
+        `1 - 2 * _ACF_MAGNITUDE_TOL`; exactly 1 for any `|rho| <= 1`.
 
     Raises:
         ValueError: If `n < 1`; if `autocorrelation` is not one-dimensional of
@@ -344,7 +397,7 @@ def n_eff_bic(
         n_eff = n_used^2 / sum_{i,j in used} rho(t_i - t_j)^2
 
     which reduces to `n_eff_bic_closed_form` when the series is complete and
-    regular. Chosen because it is always in `[1, n_used]`, always well defined,
+    regular. Chosen because it is confined to `[1, n_used]`, always well defined,
     monotone in correlation strength, depends only on `|rho|` so negative
     correlation cannot inflate it, and degrades gracefully for a near-degenerate
     fit. The classic `n / (1 + 2 sum rho_k)` alternative is the effective size
@@ -405,12 +458,20 @@ def n_eff_bic(
             path, for cross-checking one against the other. `"fft"` is refused
             on an irregular axis rather than silently answering with sample
             index in place of elapsed time.
-        max_pair_bytes: Byte budget for one row block of the dense path.
-        rtol: Relative tolerance forwarded to `StateSpace.unique_dt`.
+        max_pair_bytes: Byte budget for one block of EITHER path -- rows of the
+            lag matrix for the dense path, series for the FFT path. The
+            module's single memory knob; see `MAX_PAIR_BYTES`.
+        rtol: Relative tolerance forwarded to `StateSpace.unique_dt`, and
+            therefore the tolerance at which an axis counts as regular. A
+            looser value routes a near-regular axis to the FFT path with the
+            cluster representative as its step.
 
     Returns:
-        Effective sample size per series, shape (B,) float64, in
-        `[1, n_used]`, NaN wherever `outcome` is not OK.
+        Effective sample size per series, shape (B,) float64, NaN wherever
+        `outcome` is not OK. The upper bound `n_eff <= n_used` is exact and
+        structural; the lower bound is `1 - 2 * _ACF_MAGNITUDE_TOL` = 1 - 2e-9
+        in the worst case this module admits, and exactly 1 for any
+        autocorrelation satisfying `|rho| <= 1`. See `_ACF_MAGNITUDE_TOL`.
 
     Raises:
         ValueError: If `path` is not one of the three names; if `theta`, `mask`
@@ -465,7 +526,7 @@ def n_eff_bic(
     if chosen == "fft":
         step = float(steps[0]) if steps.size else 1.0
         frobenius = _frobenius_fft(
-            state_space, params[rows], axis.size, step, used[rows]
+            state_space, params[rows], axis.size, step, used[rows], max_pair_bytes
         )
     else:
         frobenius = np.array(
@@ -642,6 +703,7 @@ def _frobenius_fft(
     length: int,
     step: float,
     mask: NDArray[np.bool_],
+    max_pair_bytes: int = MAX_PAIR_BYTES,
 ) -> NDArray[np.float64]:
     """Return `||R||_F^2` over realized pairs on a REGULAR axis, per series.
 
@@ -651,21 +713,38 @@ def _frobenius_fft(
     `n + 2 sum (n-k) rho_k^2` when the mask is all-true, because then
     `c_k = n - k`.
 
+    BLOCKED OVER SERIES against `max_pair_bytes`. Per series this path is cheap,
+    but `O(B * N)` over a whole tile is not: unblocked it reaches 3.5 GB at
+    100 000 series and `N = 630`. Series are independent here -- one series'
+    pair counts and autocorrelations involve no other's -- so blocking is exact
+    and costs only a loop. See `MAX_PAIR_BYTES` for the measurements.
+
     Args:
         state_space: Supplies the analytic ACVF.
         theta: Natural parameters of the scored series, shape (S, P).
         length: Number of epochs on the axis, N.
         step: The single distinct timestep of the axis.
         mask: True where used, shape (S, N).
+        max_pair_bytes: Byte budget for one block of series.
 
     Returns:
         The Frobenius sum per series, shape (S,).
+
+    Raises:
+        ValueError: Propagated from `_model_acf` if a marginal variance is not
+            positive or a derived `|rho|` exceeds 1 beyond the tolerance.
     """
     lags = np.arange(float(length)) * step
-    rho = _model_acf(state_space, theta, lags)
-    counts = _lag_pair_counts(mask)
-    tail = np.sum(counts[:, 1:] * rho[:, 1:] ** 2, axis=1)
-    return np.asarray(counts[:, 0] + 2.0 * tail, dtype=np.float64)
+    per_series = max(1, length * _FFT_BYTES_PER_EPOCH)
+    block = max(1, int(max_pair_bytes) // per_series)
+    out = np.empty(theta.shape[0], dtype=np.float64)
+    for start in range(0, theta.shape[0], block):
+        stop = start + block
+        rho = _model_acf(state_space, theta[start:stop], lags)
+        counts = _lag_pair_counts(mask[start:stop])
+        tail = np.sum(counts[:, 1:] * rho[:, 1:] ** 2, axis=1)
+        out[start:stop] = counts[:, 0] + 2.0 * tail
+    return out
 
 
 def _frobenius_dense(
@@ -691,6 +770,11 @@ def _frobenius_dense(
 
     Returns:
         The Frobenius sum for this series.
+
+    Raises:
+        ValueError: Propagated from `_model_acf` if this series' marginal
+            variance is not positive or a derived `|rho|` exceeds 1 beyond the
+            tolerance.
     """
     n_used = int(t_used.size)
     rows_per_block = max(1, int(max_pair_bytes) // (n_used * 8))

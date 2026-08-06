@@ -11,6 +11,7 @@ implementation's algorithm.
 from __future__ import annotations
 
 import math
+import tracemalloc
 from collections.abc import Callable
 from dataclasses import replace
 
@@ -19,6 +20,8 @@ import pytest
 
 from metamer.core.capability import Objective
 from metamer.core.counting import (
+    _frobenius_dense,
+    _frobenius_fft,
     n_eff_bic,
     n_eff_bic_closed_form,
     n_eff_trend,
@@ -708,6 +711,91 @@ def test_the_dense_path_is_chunked_and_matches_across_chunk_sizes():
     assert one_row == pytest.approx(one_chunk, rel=1e-13)
 
 
+def test_the_dense_path_peak_memory_is_bounded_by_the_budget():
+    """The budget bounds peak allocation, not just the answer.
+
+    Chunk-invariance of the SUM cannot catch a missing block loop -- deleting
+    the blocking entirely leaves every sum unchanged. Only a measurement of
+    peak allocation distinguishes "blocked" from "not blocked", so this asserts
+    on tracemalloc directly.
+
+    Expected magnitudes by hand: n_used = 600 unmasked epochs means a full
+    600 x 600 float64 lag matrix is 600^2 * 8 = 2.88 MB, and the ACVF needs
+    several temporaries of that same shape. A 64 KiB budget admits
+    65536 // (600 * 8) = 13 rows, so each block is 62.4 kB and peak should be a
+    single-digit multiple of that -- two orders of magnitude below the
+    unblocked figure.
+
+    Bug this catches: `rows_per_block = n_used`, i.e. removing the blocking.
+    That leaves every assertion about the VALUE untouched and reintroduces the
+    O(n_used^2) allocation this budget exists to prevent.
+    """
+    spec = ProcessSpec((_term("matern12"),))
+    ss = StateSpace.from_spec(spec)
+    rng = np.random.default_rng(31)
+    t = np.cumsum(rng.uniform(0.5, 2.5, size=600))
+    theta = np.array([[1.0, 9.0]])
+    full_matrix_bytes = 600 * 600 * 8
+
+    tracemalloc.start()
+    try:
+        tracemalloc.reset_peak()
+        blocked = _frobenius_dense(ss, theta, t, 1 << 16)
+        peak_blocked = tracemalloc.get_traced_memory()[1]
+        tracemalloc.reset_peak()
+        unblocked = _frobenius_dense(ss, theta, t, 1 << 30)
+        peak_unblocked = tracemalloc.get_traced_memory()[1]
+    finally:
+        tracemalloc.stop()
+
+    assert blocked == pytest.approx(unblocked, rel=1e-13)
+    # The unblocked call must really allocate the full matrix, or the bound
+    # below would be trivially satisfied.
+    assert peak_unblocked > full_matrix_bytes
+    # The blocked call must stay far below it: 10x the 64 KiB budget is still
+    # under a quarter of one full matrix.
+    assert peak_blocked < 10 * (1 << 16)
+
+
+def test_the_fft_path_peak_memory_is_bounded_over_the_batch():
+    """The FFT path is capped over SERIES, which is the axis that scales.
+
+    Per series the FFT path is cheap; over a tile it is not. Measured at
+    N = 630 it holds 56 bytes per epoch per series, so an uncapped batch of
+    100 000 series would reach 3.5 GB against a 16 GB whole-job budget. The cap
+    blocks over series, which is exact because no series' pair counts involve
+    any other's.
+
+    Expected magnitudes by hand: B = 400 at N = 630 is about 400 * 35.3 kB =
+    14 MB uncapped. A 1 MiB budget at 64 estimated bytes per epoch per series
+    admits 1048576 // (630 * 64) = 26 series per block, so peak should land
+    near 26 * 35.3 kB = 0.9 MB.
+
+    Bug this catches: dropping the series loop from `_frobenius_fft`, which
+    changes no value anywhere and silently restores the 3.5 GB tile.
+    """
+    spec = ProcessSpec((_term("matern12"),))
+    ss = StateSpace.from_spec(spec)
+    batch, length = 400, 630
+    theta = np.tile([[1.0, 13.0]], (batch, 1))
+    mask = np.ones((batch, length), dtype=bool)
+
+    tracemalloc.start()
+    try:
+        tracemalloc.reset_peak()
+        capped = _frobenius_fft(ss, theta, length, 1.0, mask, 1 << 20)
+        peak_capped = tracemalloc.get_traced_memory()[1]
+        tracemalloc.reset_peak()
+        uncapped = _frobenius_fft(ss, theta, length, 1.0, mask, 1 << 30)
+        peak_uncapped = tracemalloc.get_traced_memory()[1]
+    finally:
+        tracemalloc.stop()
+
+    np.testing.assert_allclose(capped, uncapped, rtol=1e-13)
+    assert peak_uncapped > 8 * (1 << 20)  # the uncapped batch really is large
+    assert peak_capped < 4 * (1 << 20)  # and the cap really binds
+
+
 def test_n_eff_bic_is_per_series_with_its_own_mask_theta_and_outcome():
     """Each series gets its own model ACF, its own mask, and its own verdict.
 
@@ -851,6 +939,85 @@ def test_n_eff_bic_returns_all_nan_when_nothing_was_scored():
     )
     assert got.shape == (3,)
     assert bool(np.all(np.isnan(got)))
+
+
+class _ImpossibleAcvf:
+    """A state space whose ACVF exceeds its own variance at non-zero lag.
+
+    Fault injection, not a mock of a collaborator: no registered family can
+    produce `|rho| > 1`, so the only way to reach the guard through the public
+    `n_eff_bic` entry point is to supply an ACVF that violates the definition.
+    That is exactly the state a broken family or a degenerate fit would create,
+    and it is what the guard exists for.
+    """
+
+    def acvf(self, theta: np.ndarray, lags: np.ndarray) -> np.ndarray:  # noqa: D102 - see class docstring
+        out = np.full((np.shape(theta)[0], np.size(lags)), 1.5, dtype=np.float64)
+        out[:, np.asarray(lags) == 0.0] = 1.0
+        return out
+
+
+@pytest.mark.parametrize("path", ["fft", "dense"])
+def test_n_eff_bic_rejects_an_impossible_autocorrelation_on_both_paths(path):
+    """|rho| > 1 is refused through the state-space route, not just the array one.
+
+    Expected behaviour by hand: an ACVF of 1.0 at lag 0 and 1.5 elsewhere gives
+    rho = 1.5, which no autocorrelation can take. Left unguarded the
+    participation ratio would still return a plausible positive number -- the
+    brief's code gives 0.449 at n = 50 for a constant rho of 1.5 -- rather than
+    anything recognisably wrong.
+
+    Bug this catches: validating the magnitude only inside
+    `n_eff_bic_closed_form`, so that the path actually used in production
+    accepts a broken family's output. Parametrized over both paths because they
+    reach the shared check by different routes (one lag vector, one lag block).
+    """
+    t = np.arange(20.0) if path == "fft" else np.cumsum(np.arange(1.0, 21.0))
+    with pytest.raises(ValueError, match="magnitude"):
+        n_eff_bic(
+            _ImpossibleAcvf(),  # type: ignore[arg-type]
+            np.array([[1.0, 5.0]]),
+            t,
+            mask=np.ones((1, 20), dtype=bool),
+            outcome=OK,
+            path=path,
+        )
+
+
+def test_rtol_decides_which_path_a_near_regular_axis_takes():
+    """The regularity tolerance is a real parameter, and it changes the dispatch.
+
+    The axis below is arange(100) with a single 1e-6 perturbation, so its steps
+    are 1.0 and 1.000001. At the default rtol of 1e-9 those are two distinct
+    steps and the axis is irregular; at rtol = 1e-5 they cluster into one and it
+    is regular. The dispatch must follow, which is asserted by matching the auto
+    result against the forced path on each side.
+
+    Bug this catches: ignoring the rtol argument and always consulting
+    unique_dt at its own default, which would silently route every near-regular
+    axis -- the common case for real instrument records -- to the slow path.
+    """
+    spec = ProcessSpec((_term("matern12"),))
+    ss = StateSpace.from_spec(spec)
+    t = np.arange(100.0)
+    t[50:] += 1e-6
+    theta = np.array([[1.0, 8.0]])
+    mask = np.ones((1, 100), dtype=bool)
+    assert StateSpace.unique_dt(t).size == 2
+    assert StateSpace.unique_dt(t, rtol=1e-5).size == 1
+
+    with pytest.raises(ValueError, match="irregular"):
+        n_eff_bic(ss, theta, t, mask=mask, outcome=OK, path="fft")
+    loose = float(n_eff_bic(ss, theta, t, mask=mask, outcome=OK, rtol=1e-5)[0])
+    forced_fft = float(
+        n_eff_bic(ss, theta, t, mask=mask, outcome=OK, path="fft", rtol=1e-5)[0]
+    )
+    tight = float(n_eff_bic(ss, theta, t, mask=mask, outcome=OK)[0])
+    forced_dense = float(
+        n_eff_bic(ss, theta, t, mask=mask, outcome=OK, path="dense")[0]
+    )
+    assert loose == forced_fft
+    assert tight == forced_dense
 
 
 def test_n_eff_bic_rejects_an_unknown_path():
