@@ -9,6 +9,19 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterator
 from importlib.metadata import entry_points
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    # Import-time cycle, resolved by deferring this to type-check time only.
+    # `registry` -> `families.base` drags in the `families` *package* __init__,
+    # which imports `white` and `matern12`, which import `kernel_registry` back
+    # out of this module while it is still executing:
+    #   ImportError: cannot import name 'kernel_registry' from partially
+    #   initialized module 'metamer.core.registry'
+    # `from __future__ import annotations` above keeps the annotation on
+    # `kernel_registry` unevaluated at runtime, so the deferred import is
+    # enough -- the registry never needs `Family` as a runtime object.
+    from metamer.core.families.base import Family
 
 REGISTRY_VERSION = "1"
 """Stamped into provenance so a name cannot silently change meaning."""
@@ -94,7 +107,7 @@ class Registry[T]:
         return iter(sorted(self._items))
 
 
-kernel_registry: Registry[Callable[..., object]] = Registry(
+kernel_registry: Registry[Callable[..., Family]] = Registry(
     "kernel_registry", entry_point_group="metamer.kernels"
 )
 recipe_registry: Registry[Callable[..., object]] = Registry("recipe_registry")

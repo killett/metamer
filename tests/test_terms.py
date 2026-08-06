@@ -439,7 +439,12 @@ def test_term_engine_costs_resolve_from_kernel_registry():
     value instead of its `.engine_costs` attribute.
     """
     costs = {EngineId.KALMAN: CostClass.LINEAR, EngineId.WHITTLE: CostClass.NLOGN}
-    kernel_registry.register("throwaway_engine_costs_a")(lambda: _FakeFamily(costs))
+    # `_FakeFamily` carries only `.engine_costs`, which is the entire point:
+    # it isolates the registry lookup from family conformance. Since Task 4
+    # retyped kernel_registry as Registry[Callable[..., Family]], mypy sees the
+    # mismatch; silencing it here keeps the probe minimal rather than growing
+    # it into a second full family implementation.
+    kernel_registry.register("throwaway_engine_costs_a")(lambda: _FakeFamily(costs))  # type: ignore[arg-type,return-value]
     try:
         term = TermSpec(kind="throwaway_engine_costs_a", params={})
         assert term.engine_costs() == costs
