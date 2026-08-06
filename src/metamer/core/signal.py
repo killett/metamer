@@ -300,29 +300,74 @@ class DesignInfo:
     a distinct case from an all-zero column) or is otherwise exactly singular
     (an all-zero column, e.g. an offset epoch after the last sample).
 
-    `rank` and `is_deficient` are **batch-level**: the design may be shared
-    across a batch of series, but the Kalman engine accumulates
-    `X'Sigma^-1 X` only over each series' *unmasked* epochs, so a design full
-    rank here can still be singular for a series whose gaps remove all support
-    for one column (an offset or rate-change epoch falling inside a masked
-    stretch is the ordinary case, not a contrived one -- see
-    `test_shared_design_full_rank_but_per_series_restricted_deficient`). This
-    check is therefore necessary but not sufficient; the per-series
-    classification happens in Task 8's objective, not here.
+    `rank`, `gram_logdet` and `condition_number` ARE ALL PER SERIES, shape
+    `(B,)`, and describe **X restricted to that series' unmasked rows** -- call
+    it `X_r`. They are not batch-level summaries of the shared `matrix`.
+
+    The reason is Harville's REML form, which needs `rank(X)` and `log|X'X|`
+    over the SAME design the quadratic form is built on. The Kalman engine
+    accumulates `X' Sigma^-1 X` only over each series' unmasked epochs, so that
+    design is `X_r`, not `X`. Using the full-design values for a gapped series
+    is wrong by `0.5 * (log|X'X| - log|X_r'X_r|)` in the log-likelihood. That
+    error is THETA-FREE, so it cancels in every delta-IC and no differential
+    test can see it -- the same defect class as a wrong REML constant, one
+    level down -- while the stored absolute `log_lik` is wrong for every series
+    with a gap, which is every real series. Measured on a 10-epoch gap:
+    -95.7269 against the oracle's -95.9113.
+
+    THIS DOES NOT UNDO THE HOISTING. These quantities depend on `(matrix,
+    mask)` and nothing else; the mask is DATA, not theta, so they stay constant
+    across an optimization and are still computed exactly once, at setup, by
+    `SignalSpec.design_info`. Widening them from scalars to `(B,)` arrays
+    changes their shape, not when they are computed. Nothing in the likelihood
+    may recompute them.
+
+    `rank` IS NOT `ScoredResult.rank_x`, and the two must not be conflated.
+    This one is `rank(X_r)`: a property of the DESIGN alone, independent of
+    Sigma, thresholded on X's own singular values at `X_RANK_RTOL`. The
+    engine's `rank_x` is the rank of the WHITENED Gram `X_r' Sigma^-1 X_r`,
+    thresholded at `kalman._RANK_RTOL`, and therefore depends on theta. They
+    answer different questions and disagree at moderate condition numbers (see
+    `X_RANK_RTOL`'s docstring for the measured five-orders-of-magnitude gap).
+    Harville's rank constant is THIS one; the engine's is what
+    `ObjectiveResult.rank_x` carries for Task 9's effective sample size.
+
+    `gram_logdet` is log|X_r'X_r| -- the FULL determinant's log, NOT half of
+    it. Harville's (1974) basis-invariance term is `+ (1/2) * log|X'X|` in the
+    log-likelihood; Task 8's objective applies that one-half itself.
+
+    `condition_number` is cond(X_r) = s_max/s_min from X_r's OWN singular
+    values (not the Gram's -- see `X_RANK_RTOL`'s docstring). The design doc
+    requires a condition-number diagnostic that WARNS rather than blocks
+    (SS4.8, SS8.5); this field is that number and nothing in this module blocks
+    on it. Infinite where X_r is exactly singular or has more columns than
+    unmasked rows.
+
+    `n_rows` is the per-series count of unmasked epochs this object was built
+    from. It exists to be CHECKED against the mask the objective is evaluated
+    with: a `DesignInfo` built from one mask and used with another yields a
+    silently wrong absolute REML value and no other symptom, which is precisely
+    the failure class the per-series widening exists to remove. It equals
+    `ScoredResult.n_used` for the same mask.
 
     SEAM (Phase 2, per-point regressors): when a regressor is a per-point field
-    -- a GIA model -- `matrix` becomes (B, N, k), `rank` and `gram_logdet`
-    become shape (B,), and `per_point` becomes True. Every consumer already
-    takes this object rather than a loose (design, rank) pair, so that change is
-    a shape widening, not a signature rewrite. It also triggers the
-    N*k_beta*8-per-series memory term, which dominates the per-series budget.
+    -- a GIA model -- `matrix` becomes (B, N, k) and `per_point` becomes True.
+    The derived fields are already (B,), so that change no longer widens them.
+    It does trigger the N*k_beta*8-per-series memory term, which dominates the
+    per-series budget.
     """
 
     matrix: NDArray[np.float64]
-    rank: int
-    gram_logdet: float
-    condition_number: float
+    rank: NDArray[np.int64]
+    gram_logdet: NDArray[np.float64]
+    condition_number: NDArray[np.float64]
+    n_rows: NDArray[np.int64]
     per_point: bool = False
+
+    @property
+    def batch(self) -> int:
+        """Number of series these derived quantities describe."""
+        return int(self.rank.shape[0])
 
     @property
     def n_beta(self) -> int:
@@ -330,9 +375,9 @@ class DesignInfo:
         return int(self.matrix.shape[-1])
 
     @property
-    def is_deficient(self) -> bool:
-        """Whether the design is rank-deficient (batch-level; see class docstring)."""
-        return self.rank < self.n_beta
+    def is_deficient(self) -> NDArray[np.bool_]:
+        """Per-series rank deficiency of X_r, shape (B,)."""
+        return np.asarray(self.rank < self.n_beta, dtype=np.bool_)
 
 
 @dataclass(frozen=True)
@@ -350,83 +395,177 @@ class SignalSpec:
         """Freeze `terms` into a tuple so `SignalSpec` is hashable (Task 16)."""
         object.__setattr__(self, "terms", tuple(self.terms))
 
-    def design_info(self, t: NDArray[np.float64]) -> DesignInfo:
-        """Build the design matrix and its theta-free derived quantities once.
+    def design_info(
+        self, t: NDArray[np.float64], mask: NDArray[np.bool_]
+    ) -> DesignInfo:
+        """Build the design matrix and its per-series theta-free quantities once.
+
+        THE MASK IS REQUIRED, and the returned `rank`, `gram_logdet`,
+        `condition_number` and `n_rows` all describe **X restricted to each
+        series' unmasked rows** -- see `DesignInfo`'s docstring for why
+        Harville's REML form needs the restricted design and not the full one.
+        There is deliberately no default: an implicit "all epochs present"
+        would produce a plausible, silently wrong absolute REML value for every
+        gapped series, which is exactly the failure this signature prevents.
+
+        CALL THIS ONCE PER FIT, at setup. Everything it returns is theta-free
+        (the mask is data), so it is constant across an optimization and must
+        never be recomputed inside the likelihood.
 
         Args:
-            t: Time axis, shape (n,), in decimal years -- see the module
+            t: Time axis, shape (N,), in decimal years -- see the module
                 docstring's TIME-AXIS UNIT CONTRACT.
+            mask: Presence mask, shape (B, N), True where an observation
+                exists. The SAME mask must later be passed to the objective.
 
         Returns:
-            A DesignInfo. `gram_logdet` reaches -inf only when X is EXACTLY
-            singular (an all-zero column, or more columns than rows); a
-            merely NUMERICALLY rank-deficient design still has a finite
-            `gram_logdet`. **`is_deficient` is the gate the caller must use
-            for RANK_DEFICIENT_X, not `gram_logdet == -inf`** -- see
-            `DesignInfo`'s docstring for the measured counter-example.
-            `rank`/`is_deficient` are batch-level -- see `DesignInfo`'s
-            docstring.
+            A DesignInfo whose derived fields are all shape (B,).
+            `gram_logdet` is -inf exactly where the restricted design is rank
+            deficient; a design that is merely ILL-CONDITIONED still has a
+            finite (if very negative) value, so **`is_deficient` is the gate a
+            caller must use for RANK_DEFICIENT_X, never `gram_logdet == -inf`**
+            -- see `DesignInfo`'s docstring for the measured counter-example.
+
+        Raises:
+            ValueError: If `mask` is not two-dimensional or its time axis
+                disagrees with `t`.
         """
         t = np.asarray(t, dtype=np.float64)
-        matrix, rank = self.design_matrix(t)
-        n_beta = matrix.shape[-1]
+        mask = np.asarray(mask, dtype=bool)
+        if mask.ndim != 2 or mask.shape[1] != t.size:
+            raise ValueError(
+                f"mask shape {mask.shape} does not match the time axis "
+                f"(N = {t.size}): a presence mask must be (B, N)"
+            )
+        matrix = self.design_matrix(t)[0]
+        batch, n_beta = mask.shape[0], matrix.shape[-1]
+        n_rows = np.count_nonzero(mask, axis=1).astype(np.int64)
+
         if n_beta == 0:
             # No columns at all: nothing can be rank-deficient, and X'X is the
-            # 0x0 empty matrix. Handled explicitly rather than routed through
-            # slogdet, whose empty-matrix convention isn't something to lean
-            # on for a case with a well-defined trivial answer.
-            return DesignInfo(matrix, 0, 0.0, condition_number=1.0)
-        if t.size == 0:
-            # Zero-length time axis: X'X is a k x k all-zero matrix (summed
-            # over zero samples) -- exactly singular -- so every column is
-            # unidentifiable and gram_logdet is -inf. `matrix.size` is ALSO 0
-            # here (zero rows this time, not zero columns), which is why
-            # branching on `matrix.size == 0` alone conflates this case with
-            # the one above: doing so would report a finite, innocuous-looking
-            # gram_logdet = 0.0 and (via `bool(matrix.size and ...)`) a False
-            # is_deficient for a design that cannot estimate anything.
-            return DesignInfo(matrix, 0, float("-inf"), condition_number=float("inf"))
-        condition_number, gram_logdet = self._svd_diagnostics(matrix)
-        return DesignInfo(matrix, rank, gram_logdet, condition_number=condition_number)
+            # 0x0 empty matrix, whose determinant is 1 and whose log is 0.
+            # Handled explicitly rather than routed through the SVD, whose
+            # empty-matrix conventions aren't something to lean on for a case
+            # with a well-defined trivial answer. Distinct from the zero-ROWS
+            # case, which the general path below handles correctly (all
+            # singular values structurally zero => rank 0 < n_beta).
+            return DesignInfo(
+                matrix,
+                rank=np.zeros(batch, dtype=np.int64),
+                gram_logdet=np.zeros(batch, dtype=np.float64),
+                condition_number=np.ones(batch, dtype=np.float64),
+                n_rows=n_rows,
+            )
+
+        values = self._restricted_singular_values(matrix, mask)
+        condition_number, gram_logdet, rank = self._diagnostics(values)
+        return DesignInfo(
+            matrix,
+            rank=rank,
+            gram_logdet=gram_logdet,
+            condition_number=condition_number,
+            n_rows=n_rows,
+        )
 
     @staticmethod
-    def _svd_diagnostics(x: NDArray[np.float64]) -> tuple[float, float]:
-        """cond(X) and log|X'X|, both from ONE SVD of X, not from three.
+    def _restricted_singular_values(
+        x: NDArray[np.float64], mask: NDArray[np.bool_]
+    ) -> NDArray[np.float64]:
+        """Singular values of each series' restricted design, shape (B, k).
 
-        `log|X'X| = 2 * sum(log(s))` exactly, for any X: `X'X = V diag(s^2)
-        V'` is a similarity transform of `diag(s^2)`, whose determinant is
-        `prod(s^2)` regardless of the orthogonal U used to build X. This is
-        far more accurate than `slogdet(X'X)` at large cond(X), because
-        forming the Gram squares the condition number and `slogdet`'s LU
-        factorization inherits that loss -- see `DesignInfo.gram_logdet`'s
-        docstring for the measured error and the spurious-sign failure this
-        replaces. Reuses `_condition_number`'s decomposition rather than
-        paying for a second `svdvals` call plus a `slogdet` call, which the
-        pre-fix `design_info` did (three decompositions total across
-        `design_matrix`'s rank, this method's old `slogdet`, and
-        `_condition_number`'s own `svdvals`; now two, since this method
-        replaces the latter two with one shared call).
+        ZEROING A ROW AND DELETING IT GIVE THE SAME GRAM, hence the same
+        non-zero singular values: `(M X)'(M X) = X_r' X_r` for `M = diag(mask)`.
+        So one batched `svdvals` of `X[None] * mask[..., None]` serves the whole
+        batch without materializing B differently-shaped submatrices, and a
+        series keeping fewer rows than columns simply picks up structural zeros
+        -- which is the correct answer, not an error.
+
+        THREE TIERS, cheapest first, because the batched route allocates
+        `B * N * k * 8` bytes (320 MB at B = 10^4, N = 10^3, k = 4) and the two
+        degenerate mask patterns are the common ones:
+
+          1. The mask keeps every row for every series: one SVD of X itself.
+          2. Every series shares one mask: one SVD of the zero-masked design.
+          3. Masks differ: one batched SVD.
+
+        The result is padded to width `n_beta` so callers can index `[:, -1]`
+        for the smallest singular value even when `N < k` (`svdvals` returns
+        only `min(N, k)` values, so a "wide" design's structurally-zero values
+        never appear in that array at all -- reading s_min from the ones that
+        DO appear would silently miss the singularity).
 
         Args:
-            x: The design matrix, shape (n, k) with n >= 1 and k >= 1 -- the
-                `n_beta == 0` and `t.size == 0` cases are handled by the
-                caller before this is reached.
+            x: The shared design matrix, shape (N, k) with k >= 1.
+            mask: Presence mask, shape (B, N).
 
         Returns:
-            (condition_number, gram_logdet). Both are the appropriate
-            infinity when X has more columns than rows or has an
-            exactly-zero singular value -- see `_condition_number`'s
-            docstring for why the more-columns-than-rows case needs its own
-            check.
+            Descending singular values per series, shape (B, k).
         """
-        if x.shape[0] < x.shape[1]:
-            return float("inf"), float("-inf")
-        values = np.linalg.svdvals(x)
-        if values[-1] == 0.0:
-            return float("inf"), float("-inf")
-        condition_number = float(values[0] / values[-1])
-        gram_logdet = float(2.0 * np.sum(np.log(values)))
-        return condition_number, gram_logdet
+        batch, n_beta = mask.shape[0], x.shape[-1]
+        if bool(mask.all()):
+            values = np.linalg.svdvals(x)[None, :]
+        elif bool(np.array_equal(mask, np.broadcast_to(mask[0], mask.shape))):
+            values = np.linalg.svdvals(x * mask[0][:, None])[None, :]
+        else:
+            values = np.linalg.svdvals(x[None, :, :] * mask[:, :, None])
+        if values.shape[1] < n_beta:
+            values = np.pad(values, ((0, 0), (0, n_beta - values.shape[1])))
+        return np.asarray(np.broadcast_to(values, (batch, n_beta)), dtype=np.float64)
+
+    @staticmethod
+    def _diagnostics(
+        values: NDArray[np.float64],
+    ) -> tuple[NDArray[np.float64], NDArray[np.float64], NDArray[np.int64]]:
+        """cond(X_r), log|X_r'X_r| and rank(X_r) from one stack of singular values.
+
+        `log|X'X| = 2 * sum(log(s))` exactly, for any X: `X'X = V diag(s^2) V'`
+        is a similarity transform of `diag(s^2)`, whose determinant is
+        `prod(s^2)` regardless of the orthogonal U used to build X. THIS IS NOT
+        `slogdet(X'X)` ON PURPOSE -- forming the Gram squares the condition
+        number and `slogdet`'s LU factorization inherits that loss: measured
+        (Task 7) at +3.20 nats of error at cond(X) = 1e9 and +8.58 at 1e10,
+        both silently finite, and at cond(X) = 1e9 one fixed-seed construction
+        made `slogdet` return a spurious NEGATIVE sign for a genuinely positive
+        semidefinite Gram.
+
+        Args:
+            values: Descending singular values per series, shape (B, k),
+                already padded to the full column count by
+                `_restricted_singular_values` so `[:, -1]` is the true
+                smallest singular value even for a "wide" design.
+
+        Returns:
+            (condition_number, gram_logdet, rank), each shape (B,).
+
+            `gram_logdet` IS -inf ONLY WHERE X_r IS EXACTLY SINGULAR (a
+            smallest singular value of exactly zero: an all-zero column, or
+            more columns than unmasked rows). A design that is merely
+            NUMERICALLY deficient -- its smallest singular value clears zero
+            but falls below `X_RANK_RTOL` -- keeps a finite, if very negative,
+            determinant, because that is its true value: singular values
+            [1, 1e-2, 1e-11] give rank 2 of 3 with log|X'X| = -59.9, not -inf.
+            Gating the determinant on `rank == n_beta` instead would report
+            -inf for a matrix whose determinant is genuinely nonzero. **The
+            caller's gate for RANK_DEFICIENT_X is `rank`, never this field.**
+            The condition number is +inf in exactly the same cases.
+        """
+        largest = values[:, :1]
+        rank = np.asarray((values > X_RANK_RTOL * largest).sum(axis=1), dtype=np.int64)
+        nonsingular = values[:, -1] > 0.0
+        with np.errstate(divide="ignore", invalid="ignore"):
+            gram_logdet = np.where(
+                nonsingular,
+                2.0 * np.log(np.where(values > 0.0, values, 1.0)).sum(axis=1),
+                -np.inf,
+            )
+            condition_number = np.where(
+                nonsingular, values[:, 0] / values[:, -1], np.inf
+            )
+        return (
+            np.asarray(condition_number, dtype=np.float64),
+            np.asarray(gram_logdet, dtype=np.float64),
+            rank,
+        )
 
     @staticmethod
     def _condition_number(x: NDArray[np.float64]) -> float:

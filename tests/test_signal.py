@@ -25,6 +25,17 @@ from metamer.core.signal import (
     Trend,
 )
 
+
+def _present(t, batch=1):
+    """An all-present (B, N) mask for the tests whose subject is X itself.
+
+    `design_info` requires a mask because its derived quantities are per
+    series; where a test is about the FULL design, the all-present mask is
+    what makes X_r = X, and the single-series results are read at index 0.
+    """
+    return np.ones((batch, np.size(t)), dtype=bool)
+
+
 # --- Original acceptance-criteria tests (task-7-brief.md Step 1) -----------
 
 
@@ -160,11 +171,11 @@ def test_design_info_zero_columns_is_not_deficient():
     zero-*rows* case below, where the same guard gives the WRONG answer.
     """
     t = np.arange(5.0)
-    info = SignalSpec([]).design_info(t)
+    info = SignalSpec([]).design_info(t, _present(t))
     assert info.n_beta == 0
-    assert info.rank == 0
-    assert info.gram_logdet == 0.0
-    assert info.is_deficient is False
+    assert info.rank[0] == 0
+    assert info.gram_logdet[0] == 0.0
+    assert info.is_deficient[0] is np.False_
 
 
 def test_design_info_empty_time_axis_is_deficient():
@@ -178,11 +189,78 @@ def test_design_info_empty_time_axis_is_deficient():
     PASS a design with zero observations. Correct behavior: rank stays 0,
     n_beta is 1, so `rank < n_beta` must be True.
     """
-    info = SignalSpec([Constant()]).design_info(np.array([]))
+    t = np.array([])
+    info = SignalSpec([Constant()]).design_info(t, _present(t))
     assert info.n_beta == 1
-    assert info.rank == 0
-    assert info.is_deficient is True
-    assert not np.isfinite(info.gram_logdet)
+    assert info.rank[0] == 0
+    assert info.is_deficient[0] is np.True_
+    assert not np.isfinite(info.gram_logdet[0])
+
+
+# --- Task 8 correction C: DesignInfo is per series, computed from the mask --
+
+
+def test_design_info_derived_quantities_are_per_series_from_the_mask():
+    """rank, gram_logdet and condition_number all describe X RESTRICTED by the mask.
+
+    The design that actually enters `X' Sigma^-1 X` for a series is X over
+    that series' unmasked rows, so every theta-free quantity Harville's REML
+    form needs -- `rank(X_r)` and `log|X_r'X_r|` -- belongs to X_r, not to X.
+    All three expected values below come from an explicit `matrix_rank`,
+    `slogdet` and `cond` on each restricted matrix, sharing no code with
+    `design_info`.
+
+    Bug this catches: computing these once for the batch and broadcasting. It
+    is theta-INDEPENDENT, so it cancels in every delta-IC and no differential
+    test can see it -- while the stored absolute REML log-likelihood is wrong
+    for every series with a gap, which is every real series. Series 1 below
+    keeps the offset's support and series 2 loses it entirely, so a batch-level
+    answer is wrong for at least one of them whichever value it picks.
+    """
+    t = np.arange(20.0)
+    spec = SignalSpec([Constant(), Trend(), Offset(epoch=15.0)])
+    mask = np.ones((3, t.size), dtype=bool)
+    mask[1, 5:10] = False
+    mask[2, 15:] = False
+
+    info = spec.design_info(t, mask)
+
+    assert info.rank.shape == (3,)
+    assert info.gram_logdet.shape == (3,)
+    assert info.condition_number.shape == (3,)
+    assert info.is_deficient.shape == (3,)
+    np.testing.assert_array_equal(info.n_rows, [20, 15, 15])
+
+    for series in (0, 1):
+        rows = info.matrix[mask[series]]
+        _, expected_logdet = np.linalg.slogdet(rows.T @ rows)
+        assert info.rank[series] == int(np.linalg.matrix_rank(rows))
+        assert info.gram_logdet[series] == pytest.approx(expected_logdet, rel=1e-10)
+        assert info.condition_number[series] == pytest.approx(
+            float(np.linalg.cond(rows)), rel=1e-10
+        )
+    assert info.gram_logdet[0] != pytest.approx(info.gram_logdet[1], abs=1e-6)
+
+    # Series 2 loses every row supporting the offset: exactly singular.
+    assert info.rank[2] == 2
+    assert info.gram_logdet[2] == -np.inf
+    assert info.condition_number[2] == np.inf
+    np.testing.assert_array_equal(info.is_deficient, [False, False, True])
+
+
+def test_design_info_rejects_a_mask_whose_time_axis_disagrees():
+    """A mask of the wrong width is refused, not broadcast into a wrong answer.
+
+    Bug this catches: accepting a (B, N') mask and silently zero-padding or
+    broadcasting it, which produces a plausible per-series design for rows that
+    do not exist.
+    """
+    t = np.arange(10.0)
+    spec = SignalSpec([Constant(), Trend()])
+    with pytest.raises(ValueError, match="mask"):
+        spec.design_info(t, np.ones((2, 9), dtype=bool))
+    with pytest.raises(ValueError, match="mask"):
+        spec.design_info(t, np.ones(10, dtype=bool))
 
 
 # --- Correction 6: is_deficient is batch-level, not per-series -------------
@@ -201,9 +279,9 @@ def test_shared_design_full_rank_but_per_series_restricted_deficient():
     """
     t = np.arange(20.0)
     spec = SignalSpec([Constant(), Trend(), Offset(epoch=15.0)])
-    info = spec.design_info(t)
-    assert info.rank == 3
-    assert info.is_deficient is False
+    info = spec.design_info(t, _present(t))
+    assert info.rank[0] == 3
+    assert info.is_deficient[0] is np.False_
 
     mask = t < 15.0
     restricted = info.matrix[mask]
@@ -238,11 +316,13 @@ def test_offset_at_last_epoch_is_not_deficient_but_is_ill_conditioned():
     """
     t = np.arange(5.0)
     spec = SignalSpec([Constant(), Offset(epoch=4.0)])
-    info = spec.design_info(t)
-    assert info.rank == 2
-    assert info.is_deficient is False
+    info = spec.design_info(t, _present(t))
+    assert info.rank[0] == 2
+    assert info.is_deficient[0] is np.False_
     expected_condition_number = (3.0 + np.sqrt(5.0)) / 2.0
-    assert info.condition_number == pytest.approx(expected_condition_number, rel=1e-12)
+    assert info.condition_number[0] == pytest.approx(
+        expected_condition_number, rel=1e-12
+    )
 
 
 def test_offset_after_last_sample_condition_number_is_infinite():
@@ -254,8 +334,8 @@ def test_offset_after_last_sample_condition_number_is_infinite():
     singular X has.
     """
     t = np.arange(5.0)
-    info = SignalSpec([Constant(), Offset(epoch=99.0)]).design_info(t)
-    assert info.condition_number == float("inf")
+    info = SignalSpec([Constant(), Offset(epoch=99.0)]).design_info(t, _present(t))
+    assert info.condition_number[0] == float("inf")
 
 
 # --- Correction 3: the time-axis unit contract ------------------------------
@@ -280,15 +360,15 @@ def test_decimal_years_vs_seconds_since_1970_condition_number():
     n = 20 * 12
     t_years = 2000.0 + np.arange(n) / 12.0
     spec = SignalSpec([Constant(), Trend(), Accel(), Annual(), SemiAnnual()])
-    years_info = spec.design_info(t_years)
-    assert years_info.rank == 7
-    assert years_info.condition_number < 1e3
+    years_info = spec.design_info(t_years, _present(t_years))
+    assert years_info.rank[0] == 7
+    assert years_info.condition_number[0] < 1e3
 
     seconds_per_year = 365.25 * 86400
     t_seconds = (t_years - 1970.0) * seconds_per_year
-    seconds_info = spec.design_info(t_seconds)
-    assert seconds_info.rank == 2
-    assert seconds_info.condition_number > 1e20
+    seconds_info = spec.design_info(t_seconds, _present(t_seconds))
+    assert seconds_info.rank[0] == 2
+    assert seconds_info.condition_number[0] > 1e20
 
 
 # --- Correction 8: frozen dataclasses holding unhashable payloads ----------
@@ -355,8 +435,8 @@ def test_design_info_equality_does_not_raise_on_its_array_field():
     does not resurface as a fresh instance of the bug Correction 8 describes.
     """
     t = np.arange(5.0)
-    info = SignalSpec([Constant()]).design_info(t)
-    other = SignalSpec([Constant()]).design_info(t)
+    info = SignalSpec([Constant()]).design_info(t, _present(t))
+    other = SignalSpec([Constant()]).design_info(t, _present(t))
     assert (info == other) is False  # eq=False: identity comparison
     assert isinstance(hash(info), int)
 
@@ -426,7 +506,7 @@ def test_log_decay_is_constructible_and_raises_from_every_entry_point():
     with pytest.raises(NotImplementedError, match="nonlinear"):
         spec.design_matrix(t)
     with pytest.raises(NotImplementedError, match="nonlinear"):
-        spec.design_info(t)
+        spec.design_info(t, _present(t))
     with pytest.raises(NotImplementedError, match="nonlinear"):
         spec.n_beta(t)
 
@@ -488,11 +568,11 @@ def test_design_info_gram_logdet_matches_hand_computation():
     sum(trend) = 0), det = 6, log(6) = 1.791759469228055.
     """
     t = np.array([0.0, 1.0, 2.0])
-    info = SignalSpec([Constant(), Trend()]).design_info(t)
-    assert info.gram_logdet == pytest.approx(np.log(6.0), rel=1e-12)
-    assert info.rank == 2
+    info = SignalSpec([Constant(), Trend()]).design_info(t, _present(t))
+    assert info.gram_logdet[0] == pytest.approx(np.log(6.0), rel=1e-12)
+    assert info.rank[0] == 2
     assert info.n_beta == 2
-    assert info.is_deficient is False
+    assert info.is_deficient[0] is np.False_
     assert info.per_point is False
 
 
@@ -505,9 +585,9 @@ def test_design_info_n_beta_counts_columns_not_rank():
     design doc warns about for k-counting.
     """
     t = np.arange(5.0)
-    info = SignalSpec([Constant(), Offset(epoch=99.0)]).design_info(t)
+    info = SignalSpec([Constant(), Offset(epoch=99.0)]).design_info(t, _present(t))
     assert info.n_beta == 2
-    assert info.rank == 1
+    assert info.rank[0] == 1
 
 
 def test_design_info_per_point_field_defaults_false():
@@ -518,8 +598,15 @@ def test_design_info_per_point_field_defaults_false():
     branch for every ordinary (non-SEAM) design.
     """
     matrix = np.ones((3, 1))
-    info = DesignInfo(matrix, rank=1, gram_logdet=0.0, condition_number=1.0)
+    info = DesignInfo(
+        matrix,
+        rank=np.array([1]),
+        gram_logdet=np.array([0.0]),
+        condition_number=np.array([1.0]),
+        n_rows=np.array([3]),
+    )
     assert info.per_point is False
+    assert info.batch == 1
 
 
 # --- Fix round 1 (external review): Important 1-3 ---------------------------
@@ -548,14 +635,15 @@ def test_numerically_deficient_design_has_finite_gram_logdet():
     x = u @ np.diag(singular_values) @ v.T
     expected_gram_logdet = 2.0 * np.sum(np.log(singular_values))
 
+    t = np.arange(3.0)
     info = SignalSpec([Regressor(x[:, i]) for i in range(3)]).design_info(
-        np.arange(3.0)
+        t, _present(t)
     )
-    assert info.rank == 2
+    assert info.rank[0] == 2
     assert info.n_beta == 3
-    assert info.is_deficient is True  # THE gate
-    assert np.isfinite(info.gram_logdet)  # NOT -inf, despite being deficient
-    assert info.gram_logdet == pytest.approx(expected_gram_logdet, rel=1e-6)
+    assert info.is_deficient[0] is np.True_  # THE gate
+    assert np.isfinite(info.gram_logdet[0])  # NOT -inf, despite being deficient
+    assert info.gram_logdet[0] == pytest.approx(expected_gram_logdet, rel=1e-6)
 
 
 def test_condition_number_infinite_for_more_columns_than_rows():
@@ -575,8 +663,8 @@ def test_condition_number_infinite_for_more_columns_than_rows():
 
     Checks `_condition_number` directly (the method Important 2 names) as
     well as `design_info`'s output (the actual production hot path, which
-    computes the same answer via `_svd_diagnostics` instead of calling
-    `_condition_number` again, to avoid a second SVD -- see Important 3):
+    computes the same answer via the batched `_diagnostics` route instead of
+    calling `_condition_number` again, to avoid a second SVD -- Important 3):
     both must independently agree the design is infinitely conditioned.
     """
     x = np.array([[1.0, 3.0, 2.0], [2.0, 1.0, 5.0]])
@@ -584,18 +672,19 @@ def test_condition_number_infinite_for_more_columns_than_rows():
 
     t = np.arange(2.0)
     spec = SignalSpec([Regressor(x[:, i]) for i in range(3)])
-    info = spec.design_info(t)
+    info = spec.design_info(t, _present(t))
     assert info.n_beta == 3
-    assert info.rank == 2
-    assert info.is_deficient is True
-    assert info.condition_number == float("inf")
+    assert info.rank[0] == 2
+    assert info.is_deficient[0] is np.True_
+    assert info.condition_number[0] == float("inf")
 
 
 def test_condition_number_direct_finite_and_zero_singular_value_cases():
     """`_condition_number`'s two non-structural branches, exercised directly.
 
     Bug this catches: `design_info` no longer calls `_condition_number` (it
-    uses `_svd_diagnostics` to share one SVD with `gram_logdet`, Important 3),
+    routes through `_restricted_singular_values` and `_diagnostics`, which
+    share one SVD across cond, log|X'X| and rank, Important 3),
     so without a direct test `_condition_number`'s ordinary finite-ratio
     return and its `values[-1] == 0.0` guard would be unreachable dead code --
     a correctly-fixed method nobody actually exercises. `np.eye(3)` has all
@@ -638,12 +727,13 @@ def test_gram_logdet_accurate_at_cond_1e9_slogdet_route_fails():
     x = u @ np.diag(singular_values) @ v.T
     expected_gram_logdet = 36.0 * np.log(10.0)
 
+    t = np.arange(20.0)
     info = SignalSpec([Regressor(x[:, i]) for i in range(4)]).design_info(
-        np.arange(20.0)
+        t, _present(t)
     )
-    assert info.rank == 4
-    assert info.is_deficient is False
-    assert info.gram_logdet == pytest.approx(expected_gram_logdet, rel=1e-6)
+    assert info.rank[0] == 4
+    assert info.is_deficient[0] is np.False_
+    assert info.gram_logdet[0] == pytest.approx(expected_gram_logdet, rel=1e-6)
 
     # Confirm the slogdet route this fix replaces actually fails, deliberate
     # breakage evidence rather than a bare assertion: at this conditioning it
