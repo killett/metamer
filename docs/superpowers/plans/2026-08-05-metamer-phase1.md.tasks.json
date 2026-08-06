@@ -148,7 +148,7 @@
       "id": 16,
       "planTask": 8,
       "subject": "Task 8: GLS profiling, ML and REML objectives",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         14,
         15
