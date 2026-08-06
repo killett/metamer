@@ -155,23 +155,35 @@ class Matern32:
 
     State-space: d = 2, H = [1, 0], no measurement-noise contribution.
 
-    CAVEAT ON `engine_costs`. KALMAN is exact here. The celerite2/n2 route
-    represents this kernel only approximately: those solvers handle sums of
-    (complex) exponentials, and the repeated root has to be split by a small
-    perturbation first. The cost class is declared because the family is not
-    *eliminated* there -- `intersect_engine_costs` drops any engine a single
-    term fails to declare -- but an engine-selection layer that cares about
-    exactness must treat celerite2 for this family as approximate.
+    THIS FAMILY DOES NOT DECLARE CELERITE2, and that omission is deliberate.
+    `engine_costs` says which engines can evaluate this kernel WITHOUT ALTERING
+    IT, not which are fast. celerite2's basis is sums of exp(-c tau) cos(d tau)
+    and exp(-c tau) sin(d tau); the tau exp(-lam tau) term in
+    (1 + lam|tau|) exp(-lam|tau|) is not in that span, which is why celerite2
+    offers Matern 3/2 only as an approximation built by splitting the repeated
+    root with a small epsilon. Declaring it would let `intersect_engine_costs`
+    route a nu=3/2 composite to an engine returning the likelihood of a
+    DIFFERENT kernel, reported as this model's -- and every score in this
+    project carries an engine tag precisely so an approximation is never
+    compared against an exact one. The repeated root is also the whole point of
+    this family: it is the case that breaks eigendecomposition and that
+    `eigen_transition` refuses, so epsilon-splitting it to fit another basis is
+    exactly the fudge the defective-root guard exists to detect.
+
+    KALMAN, WHITTLE and TOEPLITZ are all exact here: the state-space triple
+    above, the closed-form spectral density S(w) proportional to
+    lam^4 / (lam^2 + w^2)^2, and the closed-form ACVF respectively.
     """
 
     kind = "matern32"
     state_dim = 2
     ordering_param = "rho"
+    # No CELERITE2: see the class docstring. The repeated root is not in the
+    # celerite basis, and an omitted engine is an eliminated engine by design.
     engine_costs = {
         EngineId.KALMAN: CostClass.LINEAR,
         EngineId.WHITTLE: CostClass.NLOGN,
         EngineId.TOEPLITZ: CostClass.CUBIC,
-        EngineId.CELERITE2: CostClass.LINEAR,
     }
     # Declared FD for the same reason as White and Matern12: no analytic
     # derivative is implemented yet, and a family must never advertise ANALYTIC

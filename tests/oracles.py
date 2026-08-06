@@ -8,8 +8,6 @@ from decimal import Decimal, localcontext
 
 import numpy as np
 from numpy.typing import NDArray
-
-# scipy ships no type stubs and `scipy-stubs` is not a project dependency, so
 from scipy.linalg import expm, solve_continuous_lyapunov
 
 

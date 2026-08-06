@@ -18,6 +18,82 @@ from tests.oracles import (
     process_noise_from_stationary,
 )
 
+# WHAT EACH FAMILY DECLARES, WRITTEN OUT PER FAMILY RATHER THAN DERIVED FROM
+# THE ENUMS.
+#
+# `engine_costs` is a capability declaration, not a performance hint. A family
+# that omits an engine is not "slow" there, it is ELIMINATED there:
+# `intersect_engine_costs` drops any engine that a single term fails to declare,
+# so one missing key removes that engine from every composite the family appears
+# in. The standard for declaring an engine is therefore:
+#
+#     can this engine evaluate ITS OWN objective for this family's kernel,
+#     without altering the kernel?
+#
+# That is deliberately NOT "is this engine exact in absolute terms". Whittle is
+# an approximate objective by construction, but the approximation belongs to the
+# engine -- which tags every score it produces, so a Whittle score is never
+# compared against an exact one -- and Whittle can represent any kernel with a
+# closed-form spectral density, which all three families have. What the standard
+# forbids is an engine that silently substitutes a DIFFERENT kernel and reports
+# the result as this model's likelihood.
+#
+# celerite2 is exactly that case for Matern nu=3/2. Its basis is sums of
+# exp(-c tau) cos(d tau) and exp(-c tau) sin(d tau); the tau exp(-lambda tau)
+# term in (1 + lambda|tau|) exp(-lambda|tau|) is not in that span, which is why
+# celerite2 offers Matern 3/2 only as an approximation built by splitting the
+# repeated root with a small epsilon. That repeated root is the entire point of
+# the family -- it is the case that breaks eigendecomposition and that
+# `statespace.eigen_transition` refuses -- so epsilon-splitting it to fit another
+# engine's basis is precisely the fudge the defective-root guard exists to
+# detect. matern32 therefore does NOT declare CELERITE2, and
+# `test_a_matern32_composite_is_eliminated_from_celerite2` pins the consequence.
+#
+# White and Matern 1/2 ARE in the celerite basis exactly -- a diagonal nugget is
+# celerite2's jitter term, and sigma^2 exp(-tau/rho) is a single real
+# exponential with a = sigma^2, c = 1/rho, b = d = 0 -- so they keep it.
+EXPECTED_ENGINE_COSTS = {
+    "white": {
+        EngineId.KALMAN: CostClass.LINEAR,
+        EngineId.WHITTLE: CostClass.NLOGN,
+        EngineId.TOEPLITZ: CostClass.CUBIC,
+        EngineId.CELERITE2: CostClass.LINEAR,
+    },
+    "matern12": {
+        EngineId.KALMAN: CostClass.LINEAR,
+        EngineId.WHITTLE: CostClass.NLOGN,
+        EngineId.TOEPLITZ: CostClass.CUBIC,
+        EngineId.CELERITE2: CostClass.LINEAR,
+    },
+    "matern32": {
+        EngineId.KALMAN: CostClass.LINEAR,
+        EngineId.WHITTLE: CostClass.NLOGN,
+        EngineId.TOEPLITZ: CostClass.CUBIC,
+    },
+}
+
+# `gradient_modes`, by contrast, MUST cover every Objective: ML and REML are
+# objectives over the same likelihood, not representations, so every family
+# supports both and a missing key means "no gradient rule" -- a defect. The
+# per-family table exists here for a different reason: Task 12 gives matern12 an
+# ANALYTIC derivative, and a single global `all(mode is FINITE_DIFFERENCE)`
+# assertion would then have to be loosened for every family at once, which is
+# how a family comes to advertise ANALYTIC without shipping the derivatives.
+EXPECTED_GRADIENT_MODES = {
+    "white": {
+        Objective.ML: GradientMode.FINITE_DIFFERENCE,
+        Objective.REML: GradientMode.FINITE_DIFFERENCE,
+    },
+    "matern12": {
+        Objective.ML: GradientMode.FINITE_DIFFERENCE,
+        Objective.REML: GradientMode.FINITE_DIFFERENCE,
+    },
+    "matern32": {
+        Objective.ML: GradientMode.FINITE_DIFFERENCE,
+        Objective.REML: GradientMode.FINITE_DIFFERENCE,
+    },
+}
+
 
 @pytest.mark.parametrize("family", [White(), Matern12(), Matern32()])
 def test_every_builtin_family_satisfies_the_family_protocol(family):
@@ -53,19 +129,27 @@ def test_every_builtin_family_satisfies_the_family_protocol(family):
         assert callable(getattr(family, member)), member
     assert isinstance(family.kind, str) and family.kind
     assert isinstance(family.state_dim, int)
-    # Not a truthiness check: any non-empty dict passes that, including one
-    # that has quietly dropped an engine. A family that omits an engine from
-    # `engine_costs` is not "cheap" there, it is *eliminated* there --
-    # `intersect_engine_costs` drops any engine that a single term fails to
-    # declare, so one missing key silently removes an engine from every
-    # composite the family appears in. Both families support all four engines
-    # in Phase 1, and both objectives are declared FD.
-    assert set(family.engine_costs) == set(EngineId), family.kind
-    assert set(family.gradient_modes) == set(Objective)
-    assert all(isinstance(c, CostClass) for c in family.engine_costs.values())
-    assert all(
-        m is GradientMode.FINITE_DIFFERENCE for m in family.gradient_modes.values()
-    )
+    # Asserted against the per-family table above, NOT against `set(EngineId)`.
+    # Requiring every family to declare every engine forces a family to claim an
+    # engine that cannot evaluate it -- Matern 3/2 and celerite2 is the concrete
+    # case, see the table's comment -- and a family declaring an engine it
+    # cannot evaluate exactly is the bug this guards. Declaring too FEW is
+    # equally a bug, since an omitted engine is eliminated from every composite
+    # the family joins, so equality is asserted rather than a subset either way.
+    declared = family.engine_costs
+    assert declared == EXPECTED_ENGINE_COSTS[family.kind], family.kind
+    assert declared, "a family declaring no engine cannot be fitted at all"
+    assert all(isinstance(e, EngineId) for e in declared), family.kind
+    assert all(isinstance(c, CostClass) for c in declared.values()), family.kind
+    # Phase 1 implements only KALMAN, so a family that could not be evaluated
+    # there would be unfittable today whatever else it declares.
+    assert EngineId.KALMAN in declared, family.kind
+
+    modes = family.gradient_modes
+    assert modes == EXPECTED_GRADIENT_MODES[family.kind], family.kind
+    assert set(modes) == set(Objective), family.kind
+    assert all(isinstance(o, Objective) for o in modes), family.kind
+    assert all(isinstance(m, GradientMode) for m in modes.values()), family.kind
 
 
 def test_param_specs_declaration_order_matches_theta_column_order():
@@ -545,10 +629,13 @@ def test_registry_lookup_returns_a_conforming_family(kind):
     each of those now carries a `# type: ignore`, so before this test nothing
     exercised the registry with a conforming family at all.
 
-    Expected value determined independently: the engine cost mapping is read
-    from the family's own class-level declaration, and all three Phase 1
-    families declare all four engines. `intersect_engine_costs` over a single
-    term is the identity, so a one-term spec must report exactly that mapping.
+    Expected value determined independently: the engine cost mapping comes from
+    `EXPECTED_ENGINE_COSTS`, which is written out per family from the capability
+    standard rather than read off the class. `intersect_engine_costs` over a
+    single term is the identity, so a one-term spec must report exactly that
+    mapping -- including matern32's three-engine mapping, so this test also
+    checks that a family with a SHORTER declaration survives the intersection
+    intact rather than being padded back out to the full enum.
 
     Bug this catches: a registration that stores the instance rather than the
     class (so the lookup returns a `Family`, and calling it raises
@@ -560,11 +647,40 @@ def test_registry_lookup_returns_a_conforming_family(kind):
     assert isinstance(family, Family)
     assert family.kind == kind
 
-    expected = {
-        EngineId.KALMAN: CostClass.LINEAR,
-        EngineId.WHITTLE: CostClass.NLOGN,
-        EngineId.TOEPLITZ: CostClass.CUBIC,
-        EngineId.CELERITE2: CostClass.LINEAR,
-    }
+    expected = EXPECTED_ENGINE_COSTS[kind]
     assert family.engine_costs == expected
     assert TermSpec(kind=kind, params={}).engine_costs() == expected
+
+
+def test_a_matern32_composite_is_eliminated_from_celerite2():
+    """Any composite containing Matern 3/2 loses celerite2, keeping the rest.
+
+    Behaviour: this is the whole consequence of matern32 not declaring
+    CELERITE2, and until now it was asserted only on the family in isolation.
+    `intersect_engine_costs` drops an engine that any single term fails to
+    declare, so `matern12 + matern32` -- where matern12 DOES support celerite2
+    exactly -- must still be refused celerite2, because the composite kernel
+    contains a term celerite2 cannot represent without altering it.
+
+    Expected values determined independently, by intersecting the two tables by
+    hand: matern12 declares four engines, matern32 three, and the intersection
+    is matern32's three. The cost classes are the elementwise maxima, which for
+    identical declarations are those values unchanged.
+
+    Bugs this catches:
+      * re-adding CELERITE2 to matern32 "for consistency with the other
+        families", which would let a nu=3/2 composite be routed to an engine
+        that returns an epsilon-split approximation and report it as this
+        model's likelihood;
+      * an `intersect_engine_costs` that unions rather than intersects, which
+        would keep celerite2 alive because one term happens to support it --
+        the failure mode that matters, since the engine would then be selected
+        precisely when the model is cheapest-looking and least representable.
+    """
+    spec = TermSpec(kind="matern12", params={}) + TermSpec(kind="matern32", params={})
+    costs = spec.engine_costs()
+    assert EngineId.CELERITE2 not in costs
+    assert costs == EXPECTED_ENGINE_COSTS["matern32"]
+
+    solo = TermSpec(kind="matern12", params={}) + TermSpec(kind="white", params={})
+    assert EngineId.CELERITE2 in solo.engine_costs()
