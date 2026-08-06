@@ -9,9 +9,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 # scipy ships no type stubs and `scipy-stubs` is not a project dependency, so
-# mypy cannot resolve this import. Narrowed to the one error code so a genuine
-# import failure here still surfaces.
-from scipy.linalg import expm, solve_continuous_lyapunov  # type: ignore[import-untyped]
+from scipy.linalg import expm, solve_continuous_lyapunov
 
 
 def expm_transition(drift: NDArray[np.float64], dt: float) -> NDArray[np.float64]:
