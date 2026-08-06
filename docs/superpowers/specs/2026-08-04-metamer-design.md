@@ -876,10 +876,12 @@ Path B:  bytes ≈ B × ( N×9 + X_term + out(M, p, k_β) )  +  T × c_B(d, k_β
   N×9      = data tile: 8 bytes float64 y + 1 byte mask
   X_term   = 0                if all regressors are shared (one copy, negligible)
            = N × k_β × 8      if ANY regressor is a per-point field
-  out(...) = M × (2p + 2k_β + 2) × 8 + M × 3      output slots, held until tile write
-             (θ̂, θ̂_err, β, β_err, log_lik, k as float64;
+  out(...) = M × (2p + 2k_β + 4) × 8 + M × 3      output slots, held until tile write
+             (θ̂, θ̂_err, β, β_err, log_lik, k, n_eff_trend, n_eff_bic as float64;
               iterations uint16 + status uint8 = 3 B.
-              n_eff is per point, not per candidate.)
+              Both n_eff variants are per candidate, not per point: each is a
+              function of the fitted model -- n_eff_bic through the model ACF,
+              n_eff_trend through the fitted Sigma. See §10.1.)
   T        = thread count
 ```
 
@@ -985,6 +987,27 @@ a category error. Both are stored (§12), and **they must never be interchanged.
 ```
 n_eff = n² / ‖R‖²_F = n² / ( n + 2 Σ_{k=1}^{n-1} (n−k) ρ_k² )
 ```
+
+**That closed form assumes a complete, regularly sampled series and is wrong under a mask.**
+With gaps the pairs actually present are not the `(n−k)` implied by the lag-`k` count. The
+general form is a sum over *realized* pairs:
+
+```
+n_eff = n_used² / Σ_{i,j ∈ used} ρ(t_i − t_j)²
+```
+
+which is exact for any mask and any time axis, reduces to the closed form when the series is
+complete and regular, and is `O(n_used²)` to evaluate directly. At `N = 630` that is roughly
+400 000 evaluations per series — far too slow inside a fit, and perfectly affordable once.
+**Compute it once, after convergence, never in the objective.** Keep the closed form as a
+fast path for the complete regular case and assert the two agree; that agreement is also the
+cheapest available check that the general form is right.
+
+**`ρ` comes from the fitted model, not from the data**: `ρ(τ)` is the model autocorrelation
+at the fitted `θ`, evaluated from the family's analytic ACF. That makes `n_eff_bic` a
+function of the selected model, so it is stored **per (point, candidate)** — `n_eff_bic[y,x,m]`
+— not per point. The same argument applies to `n_eff_trend`, whose GLS trend variance is
+taken under the fitted `Σ`.
 
 Chosen because it is always in `[1, n]`, always well-defined, monotone in correlation
 strength, computable directly from the fitted model's ACF without forming `R`, and it
@@ -1226,7 +1249,7 @@ noise parameters, which are secondary diagnostics.
 /signal/          dense   beta[y,x,m,b], beta_err[y,x,m,b]      (selected + model-averaged)
 /selection/       dense   delta_ic[y,x,m,c], weight[y,x,m,c], ic_best[y,x,c],
                           selected[y,x,c], n_valid[y,x]
-/primitives/      dense   log_lik[y,x,m], k[y,x,m], n_eff_trend[y,x], n_eff_bic[y,x],
+/primitives/      dense   log_lik[y,x,m], k[y,x,m], n_eff_trend[y,x,m], n_eff_bic[y,x,m],
                           iterations[y,x,m]
 /noise/           ragged  theta[y,x,P_total], theta_err[y,x,P_total]
 /status/          dense   outcome[y,x,m] (enum), outcome[y,x] (aggregate)
