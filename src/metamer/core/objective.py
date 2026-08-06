@@ -37,15 +37,26 @@ precise ambiguity the exact power-law path exists to eliminate.
 
 EVERY QUANTITY IN THAT FORMULA IS PER SERIES. `n`, `Sigma`, `X`, `rank(X)` and
 `log|X'X|` all refer to the design and covariance RESTRICTED TO ONE SERIES'
-UNMASKED ROWS, because that is what the filter accumulates. Using the
-batch-level `DesignInfo.gram_logdet` and `DesignInfo.rank` for a gapped series
-is wrong by `0.5 * (log|X'X| - log|X_r'X_r|)`, which is again theta-free and so
-again invisible to every differential test -- the same defect class as a wrong
-constant, one level down. Since auditability is the entire reason an absolute
-`log_lik` is stored, and real data always has gaps, that is not a corner case.
-See `restricted_design_terms`, which computes the per-series pair (and takes the
-precomputed batch-level value only when the mask keeps every row, where the two
-are the same number).
+UNMASKED ROWS, because that is what the filter accumulates. Using a
+batch-level `log|X'X|` and `rank(X)` for a gapped series is wrong by
+`0.5 * (log|X'X| - log|X_r'X_r|)`, which is again theta-free and so again
+invisible to every differential test -- the same defect class as a wrong
+constant, one level down. Measured on a 10-epoch gap: -95.7269 against the
+oracle's -95.9113, the difference being exactly that half-difference to 13
+digits. Since auditability is the entire reason an absolute `log_lik` is
+stored, and real data always has gaps, that is not a corner case.
+
+`DesignInfo` therefore carries `rank` and `gram_logdet` as `(B,)` arrays built
+from the mask -- see `signal.DesignInfo`. THIS DOES NOT UNDO THE HOISTING: both
+depend on (design, mask) and nothing else, both theta-free, so they are still
+computed exactly once per fit at setup and this module only reads them.
+
+`design.rank` IS NOT `ScoredResult.rank_x`. The first is `rank(X_r)`, a
+property of the design alone, independent of Sigma, and it is the one Harville's
+constant `(n - rank(X)) log 2 pi` refers to. The second is the rank of the
+WHITENED Gram and depends on theta. `ObjectiveResult.rank_x` carries the
+engine's, for Task 9's effective sample size; the REML constant here uses the
+design's. Conflating them is a silent off-by-one in one place or the other.
 
 OPEN: verify which convention Hector uses and record it in the design doc. If it
 differs, the cross-validation carries a documented offset, not a mystery.
@@ -78,87 +89,113 @@ from metamer.core.engines.kalman import _RANK_RTOL
 from metamer.core.engines.protocol import Engine
 from metamer.core.outcomes import Outcome, outcome_array
 from metamer.core.params import ParamSpec
-from metamer.core.signal import X_RANK_RTOL, DesignInfo
+from metamer.core.signal import DesignInfo
 from metamer.core.statespace import StateSpace
 from metamer.core.terms import ProcessSpec, free_param_index
 
-CONDITION_LOG_LIMIT = 6.907755278982137
+_EPS = float(np.finfo(np.float64).eps)
+
+CONDITION_LOG_LIMIT: float = -0.25 * float(np.log(_EPS))
 """Largest log cond(X_w) tolerated before X'Sigma^-1X reads as ILL_CONDITIONED_X.
 
-Natural log, stated in the WHITENED DESIGN's units: the diagnostic is
+DERIVED FROM float64, NOT CALIBRATED AGAINST A FIXTURE. Tuning a production
+threshold until a chosen test case fires is circular: it pins the constant to
+whatever that case happens to measure -- usually its row count -- and tells you
+nothing about any other design. Everything below follows from the arithmetic.
 
-    log cond(X_w) = 0.5 * (log s_max - log s_min)
+UNITS: the natural log of cond(X_w), where `X_w = Sigma^(-1/2) X_r` is the
+WHITENED restricted design. Both limits in this module are stated in these
+units so they are directly comparable; a threshold stated on the Gram is off by
+a factor of two in the log, which is where most of the confusion about this
+value came from. The diagnostic is computed from the accumulated Gram's own
+singular values,
 
-over the singular values of the accumulated Gram `X' Sigma^-1 X`, halved
-because the Gram's singular values are the SQUARES of X_w's. That is exactly
-the construction `kalman._RANK_RTOL`'s docstring prescribes for separating
-"barely identified" from "singular" at a finer scale than the rank cutoff --
-derived from the Gram's own singular values, not from a diagonal proxy. An
-earlier draft used an AM-GM bound on the diagonal (`k log(tr(A)/k) - log|A|`),
-which is scale-free only in the sense of being blind: it cannot distinguish a
-column with two supporting samples from one with twenty, since both enter the
-trace at their own scale.
+    log cond(X_w) = 0.5 * (log s_max - log s_min),
 
-VALUE: log(1e3) = 6.9078, i.e. cond(X_w) = 1000. The worst-determined direction
-then has 1e6 times the variance of the best-determined one, and the solve has
-lost about three of its sixteen digits.
+halved because the Gram's singular values are the SQUARES of X_w's. That is the
+construction `kalman._RANK_RTOL`'s docstring prescribes. An earlier draft used
+an AM-GM bound on the Gram's DIAGONAL (`k log(tr(A)/k) - log|A|`) as a
+cheap-inside-the-loop proxy; this check runs once per fit at the optimum, not
+per iteration, so the approximation bought nothing and cost accuracy.
 
-REACHABILITY, which the value it replaced did not have. `kalman._RANK_RTOL`
-declares the Gram rank-deficient at s_min/s_max = 1e-10, i.e. at
-cond(X_w) = 1e5, i.e. at log cond(X_w) = 11.5129. Any limit at or above that is
-NEVER RETURNED -- the rank test fires first and the series comes back
-RANK_DEFICIENT_X -- so ILL_CONDITIONED_X would be dead code. The brief's 30.0
-(applied as k * 30 = 90 nats, cond(X_w) ~ 1e39) was three times past the point
-of unreachability. This value sits 4.6 nats below the cutoff.
+THE DERIVATION. The GLS solve here runs on the NORMAL EQUATIONS -- the
+accumulator IS `X'Sigma^-1X`, and `gls_solution` factorizes it with a Cholesky.
+The forward error of that solve goes like `eps * cond(Gram)`, and
+`cond(Gram) = cond(X_w)^2`, so the error goes like `eps * cond(X_w)^2`. Roughly
+half the significant digits are gone when it reaches `sqrt(eps)`:
 
-CALIBRATED ON ONE SYNTHETIC CASE, named here with its measured numbers so the
-next person can re-run it. `tests/test_objective.py::_gapped_setup`: 60 daily
-samples on a decimal-years axis, design [Constant, Trend, Offset(day 40),
-RateChange(day 40)] -- a coseismic step plus a postseismic rate change, the
-ordinary reason a geodetic design carries both at one epoch -- with
-theta = (matern12 sigma 0.4, rho 1.2, white sigma 6.0). Measured through the
-engine's own accumulated Gram:
+    eps * cond(X_w)^2 = sqrt(eps)   =>   cond(X_w) = eps^(-1/4) = 8192
 
-    rows   post-break samples   cond(X_w)    log cond(X_w)   s_min/s_max (Gram)
-      42          20              141.1         4.9495          5.023e-05
-      42           2             3085.4         8.0344          1.050e-07
-      40           0              inf           inf             0.0
+giving `log cond(X_w) = 9.0109`. NOTE THE EXPONENT. The familiar `1/sqrt(eps) =
+6.7e7` is the half-digit point for a solve performed on X_w ITSELF (a QR of the
+whitened design); forming the Gram squares the condition number, so in cond(X_w)
+units the boundary is the SQUARE ROOT of that. Stating it as 6.7e7 here would
+put the ill-conditioned limit ABOVE the rank cutoff and make ILL_CONDITIONED_X
+unreachable all over again -- the same factor-of-two-in-the-log mistake, one
+level up. If the solve is ever changed to run on X_w directly, this exponent
+changes with it.
 
-The first two rows KEEP THE SAME NUMBER OF SAMPLES, so what separates them is
-the offset's support, not the sample count. The limit sits between them with a
-factor of 7.1 below and 3.1 above (1.96 and 1.13 nats), and the ill-conditioned
-case still sits three decades above the rank cutoff -- which is what keeps
-RANK_DEFICIENT_X (a term with no support at all, exactly singular) and
-ILL_CONDITIONED_X (a term identified by a handful of samples) distinct
-outcomes. Which one happened where is the point of the failure map.
+THE LADDER IS ORDERED, and that is a module invariant, checked at import below
+and pinned by `test_the_conditioning_ladder_is_ordered_and_derived_from_float64`:
 
-ONE SYNTHETIC POINT IS BOOTSTRAPPING A THRESHOLD THAT HAS TO GENERALIZE, and it
-is worth being explicit about which way the error falls. cond(X_w) is not
+    ILL_CONDITIONED at 9.0109 nats  (cond(X_w) = 8.19e3)
+    RANK_DEFICIENT  at 11.5129 nats (cond(X_w) = 1.00e5)
+
+a band 2.50 nats (a factor of 12.2) wide. The brief's value made this band
+EMPTY: at `k * 30 = 90` nats, cond(X_w) ~ 1e39, the rank test fired first for
+every design and ILL_CONDITIONED_X was dead code -- a named outcome the failure
+map could never show.
+
+WHAT THE FIXTURE IS FOR, now that it does not set this number. It shows the
+band is REACHABLE by an actual masked design -- see
+`test_the_fixture_lands_in_all_three_bands`, which measures where its three
+cases fall and compares them to these constants rather than to pinned values.
+It can be retuned freely; this constant does not move with it.
+
+KNOWN LIMITATION, stated because the error direction matters. cond(X_w) is not
 invariant to column scaling, and `signal.py` deliberately does not rescale
-columns (doing so would shift `gram_logdet` and corrupt the REML term). So the
-raw condition number of a WELL-supported design still grows with the record's
-time span, because the trend column's norm does: measured on full-support
-[Constant, Trend, Accel, Annual, SemiAnnual] over monthly data,
-cond(X_w) = 2.8 (5 yr), 33.9 (20 yr), 76.0 (30 yr), 210.6 (50 yr), 840.7
-(100 yr); and on full-support [Constant, Trend, Offset] over annual data, 26.1
-(20 yr), 77.9 (60 yr), 129.8 (100 yr). All clear 1000 -- but the century-long
-record with an acceleration term clears it by 0.17 nats, so a ~110-year record
-with that design would be flagged on a design that is perfectly well supported.
-THE ERROR THEREFORE FALLS TOWARD
-FALSE ILL_CONDITIONED_X ON VERY LONG, WELL-SUPPORTED RECORDS, not toward
-missing a genuinely unidentified term -- and the failure is loud (a named
-outcome on the map) rather than a silently wrong fit. Recalibrate against a
-real record before Phase 2, and if the false-positive direction bites, the fix
+columns (doing so would shift `gram_logdet` and corrupt the REML term). The raw
+condition number of a WELL-supported design therefore grows with the record's
+span, because the trend and acceleration columns' norms do. So the error falls
+toward FALSE ILL_CONDITIONED_X on very long, well-supported records rather than
+toward missing a genuinely unidentified term -- and it is loud (a named outcome
+on the map) rather than a silently wrong fit. If that direction bites, the fix
 is a scale-aware diagnostic, not a bigger constant.
 
 THE DIAGNOSTIC IS THETA-DEPENDENT, because the Gram is. The same mask on the
-same design classifies differently at different noise parameters: at
-theta = (2.0, 0.1, 0.5) the two-post-break case above measures
-cond(X_w) = 437, i.e. OK. That is correct -- identifiability really is a
-property of X' Sigma^-1 X, not of X alone -- but it means a series can change
-outcome as the optimizer walks, so Task 13 must treat the resulting NaN as a
-barrier and record the outcome at the FINAL theta, not the first one it saw.
+same design classifies differently at different noise parameters. That is
+correct -- identifiability really is a property of `X' Sigma^-1 X`, not of X
+alone -- but it means a series can change outcome as the optimizer walks, so
+Task 13 must treat the resulting NaN as a barrier and record the outcome at the
+FINAL theta, not the first one it saw.
 """
+
+RANK_DEFICIENT_LOG_LIMIT: float = -0.5 * float(np.log(_RANK_RTOL))
+"""Largest log cond(X_w) tolerated before X'Sigma^-1X reads as RANK_DEFICIENT_X.
+
+`kalman._RANK_RTOL` is a relative singular-value cutoff on the GRAM. Restating
+it in this module's cond(X_w) units is exactly what that constant's docstring
+instructs Task 8 to do -- "halve the exponent to state it in X's units" -- and
+it is the ONLY way the two limits here can be compared at all:
+
+    s_min/s_max = _RANK_RTOL on the Gram
+      <=> cond(Gram) = 1/_RANK_RTOL = 1e10
+      <=> cond(X_w)  = _RANK_RTOL^(-1/2) = 1e5
+      <=> log cond(X_w) = 11.5129
+
+THE CONSTANT ITSELF IS NOT MOVED HERE, deliberately: `_RANK_RTOL` decides where
+rank stops, it is calibrated in its own module against measured Gram spectra,
+and this is a restatement of it, not a second opinion. Anything this module
+calls ill-conditioned rather than deficient must sit strictly below this value.
+"""
+
+if not CONDITION_LOG_LIMIT < RANK_DEFICIENT_LOG_LIMIT:  # pragma: no cover
+    raise ValueError(
+        "outcome ladder inverted: ILL_CONDITIONED_X would be unreachable "
+        f"({CONDITION_LOG_LIMIT} >= {RANK_DEFICIENT_LOG_LIMIT}). The rank test "
+        "fires first, so every ill-conditioned series would come back "
+        "RANK_DEFICIENT_X and the milder outcome would be dead code."
+    )
 
 _NEGATIVE_REDUCTION_RTOL = 1e-6
 """Relative size of a residual-reduction excursion below zero that is not rounding."""
@@ -229,47 +266,104 @@ class ObjectiveResult:
     rank_x: NDArray[np.int64]
 
 
-_MORE_SPECIFIC = (Outcome.RANK_DEFICIENT_X.code, Outcome.ILL_CONDITIONED_X.code)
+OUTCOME_PRECEDENCE: tuple[Outcome, ...] = (
+    Outcome.INSUFFICIENT_DATA,
+    Outcome.NOT_ATTEMPTED,
+    Outcome.RANK_DEFICIENT_X,
+    Outcome.ILL_CONDITIONED_X,
+    Outcome.NONFINITE_OBJECTIVE,
+    Outcome.OK,
+)
+"""Causal ordering of the outcomes this module can combine: EARLIEST CAUSE WINS.
+
+Precedence is DECLARED HERE, once, rather than decided by which call site runs
+last. Several places combine two verdicts -- the design precheck, the engine and
+the GLS solve all classify the same series -- and an inline "the later one wins
+unless the earlier one is special" at each of them is how two sites come to
+disagree about what a series failed of.
+
+Reading the ladder top to bottom:
+
+  * INSUFFICIENT_DATA and NOT_ATTEMPTED are DATA-LEVEL facts and outrank
+    everything. An all-masked series is land or permanent ice: `is_failure` is
+    False and `is_eligible` is False, so design doc section 8.6 excludes it from
+    the failure-rate denominator. The engine poisons such a series' accumulator
+    to NaN, so this module's independent view of it is "non-finite" -- and
+    taking that view would relabel every land pixel a failure, moving it into
+    the numerator AND inflating the denominator the exclusion protects, which
+    would make every reported failure rate meaningless. **A land pixel yielding
+    NaN is not a numerical failure, and this ordering is what encodes that.**
+  * RANK_DEFICIENT_X then ILL_CONDITIONED_X are DESIGN-LEVEL causes, the second
+    milder than the first: a term with no support at all versus a term
+    identified by a handful of samples. Which one happened where is the point of
+    the failure map, so they stay distinct.
+  * NONFINITE_OBJECTIVE is NUMERICAL and names a symptom, not a cause, so any
+    named cause refines it.
+  * OK is last and can never displace a cause.
+
+An outcome not listed here (a Task 13 optimizer verdict, say) is still a
+failure: it outranks OK and nothing else. It is deliberately not silently
+promoted above a cause this module actually diagnosed.
+"""
+
+# Doubled ranks leave the odd slot `_UNRANKED` free between the last named
+# cause and OK, which is where an outcome outside the ladder belongs.
+_PRECEDENCE_RANK: dict[int, int] = {
+    outcome.code: 2 * position for position, outcome in enumerate(OUTCOME_PRECEDENCE)
+}
+_UNRANKED = 2 * len(OUTCOME_PRECEDENCE) - 3
+_RANK_TABLE: NDArray[np.int64] = np.full(
+    max(_PRECEDENCE_RANK) + 1, _UNRANKED, dtype=np.int64
+)
+for _code, _rank in _PRECEDENCE_RANK.items():
+    _RANK_TABLE[_code] = _rank
 
 
-def merge_outcomes(
-    engine: NDArray[np.uint8], objective: NDArray[np.uint8]
-) -> NDArray[np.uint8]:
-    """Combine the engine's per-series verdict with this module's own.
+def merge_outcomes(*outcomes: NDArray[np.uint8]) -> NDArray[np.uint8]:
+    """Combine per-series verdicts under `OUTCOME_PRECEDENCE`.
 
-    MERGE, NEVER REPLACE. The engine has already classified each series, and
-    two of its verdicts are more informative than anything this module can say
-    about the same series:
-
-      * INSUFFICIENT_DATA (all-masked: land, permanent ice) is an EXPECTED
-        outcome. `is_failure` is False and `is_eligible` is False, so it is
-        excluded from the failure-rate denominator of design doc section 8.6.
-        The engine poisons such a series' accumulator to NaN, so this module's
-        independent view of it is "non-finite" -- and taking that view would
-        relabel every land point a failure and inflate precisely the
-        denominator the exclusion protects.
-      * NONFINITE_OBJECTIVE from a degenerate innovation variance says where
-        the trouble started, which "rank deficient" would not.
-
-    The one case that goes the other way is a strictly MORE SPECIFIC verdict:
-    RANK_DEFICIENT_X and ILL_CONDITIONED_X name a cause where
-    NONFINITE_OBJECTIVE only names a symptom, so they refine it. Nothing
-    refines an expected outcome.
+    MERGE, NEVER REPLACE, and merge through the declared ladder rather than by
+    inline comparison at each site. The result is symmetric in its arguments:
+    the merged verdict is whichever input names the earliest cause, so it does
+    not matter which classifier ran first.
 
     Args:
-        engine: Per-series codes from the engine, shape (B,) uint8.
-        objective: Per-series codes from `gls_solution`, shape (B,) uint8.
+        *outcomes: Two or more per-series code arrays, each shape (B,) uint8.
 
     Returns:
         The merged per-series codes, shape (B,) uint8.
+
+    Raises:
+        ValueError: If fewer than two arrays are given -- a single-argument
+            call is almost certainly a merge site that lost one of its inputs.
     """
-    merged: NDArray[np.uint8] = np.asarray(engine, dtype=np.uint8).copy()
-    refines = np.isin(objective, np.asarray(_MORE_SPECIFIC, dtype=np.uint8))
-    replaceable = (merged == Outcome.OK.code) | (
-        (merged == Outcome.NONFINITE_OBJECTIVE.code) & refines
-    )
-    merged[replaceable] = np.asarray(objective, dtype=np.uint8)[replaceable]
-    return merged
+    if len(outcomes) < 2:
+        raise ValueError(
+            f"merge_outcomes needs at least two verdicts, got {len(outcomes)}"
+        )
+    best = np.asarray(outcomes[0], dtype=np.uint8)
+    best_rank = _rank_of(best)
+    for other in outcomes[1:]:
+        candidate = np.asarray(other, dtype=np.uint8)
+        rank = _rank_of(candidate)
+        take = rank < best_rank
+        best = np.where(take, candidate, best).astype(np.uint8)
+        best_rank = np.where(take, rank, best_rank)
+    return np.asarray(best, dtype=np.uint8)
+
+
+def _rank_of(codes: NDArray[np.uint8]) -> NDArray[np.int64]:
+    """Look up each code's precedence rank, treating unlisted codes uniformly.
+
+    Args:
+        codes: Per-series outcome codes, shape (B,) uint8.
+
+    Returns:
+        Precedence ranks, shape (B,); lower binds tighter.
+    """
+    index = np.asarray(codes, dtype=np.int64)
+    inside = index < _RANK_TABLE.size
+    return np.where(inside, _RANK_TABLE[np.where(inside, index, 0)], _UNRANKED)
 
 
 def negative_reduction_mask(
@@ -302,99 +396,6 @@ def negative_reduction_mask(
     with np.errstate(invalid="ignore"):
         flagged = rss_reduction < -_NEGATIVE_REDUCTION_RTOL * scale
     return np.asarray(flagged & np.isfinite(rss_reduction), dtype=np.bool_)
-
-
-def _terms_from_singular_values(
-    values: NDArray[np.float64], n_beta: int
-) -> tuple[NDArray[np.float64], NDArray[np.int64]]:
-    """Turn a stack of design singular values into (log|X'X|, rank).
-
-    `log|X'X| = 2 sum log s` exactly, for any X: `X'X = V diag(s^2) V'`. This is
-    NOT `slogdet(X'X)` on purpose -- forming the Gram squares the condition
-    number, and at cond(X) = 1e9 `slogdet` has been measured (Task 7) returning
-    a NEGATIVE sign for a genuinely positive semidefinite Gram, which would
-    yield -inf and a spurious RANK_DEFICIENT_X for a full-rank design.
-
-    Args:
-        values: Singular values, shape (B, m) with m <= n_beta, descending.
-        n_beta: Number of design columns.
-
-    Returns:
-        (log|X'X| per series, rank per series). The determinant is -inf for any
-        series whose rank falls short of `n_beta`, which is the true value.
-    """
-    largest = values[:, :1]
-    rank = np.asarray((values > X_RANK_RTOL * largest).sum(axis=1), dtype=np.int64)
-    full = rank == n_beta
-    with np.errstate(divide="ignore", invalid="ignore"):
-        logdet = np.where(
-            full, 2.0 * np.log(np.where(values > 0.0, values, 1.0)).sum(axis=1), -np.inf
-        )
-    return np.asarray(logdet, dtype=np.float64), rank
-
-
-def restricted_design_terms(
-    design: DesignInfo, mask: NDArray[np.bool_]
-) -> tuple[NDArray[np.float64], NDArray[np.int64]]:
-    """Return per-series `log|X_r'X_r|` and `rank(X_r)` for the masked design.
-
-    X_r is X restricted to one series' unmasked rows -- the design that
-    actually enters `X' Sigma^-1 X`, and therefore the one Harville's
-    basis-invariance term and rank constant refer to.
-
-    THREE TIERS, cheapest first:
-
-      1. The mask keeps every row. X_r IS X, so the precomputed
-         `DesignInfo.gram_logdet` and `DesignInfo.rank` are returned unchanged
-         and nothing is decomposed. This is the "computed once on DesignInfo"
-         path, and it is the common case for a gap-free record.
-      2. Every series shares the same mask. One SVD of the restricted design
-         serves the whole batch.
-      3. Masks differ. One batched SVD of the ZERO-MASKED design
-         `X[None] * mask[..., None]`, whose non-zero singular values are
-         exactly those of each X_r (zeroing a row and deleting it give the same
-         Gram, hence the same singular values plus structural zeros).
-
-    COST OF TIER 3, for Task 17's budget. It allocates `B * N * k_beta * 8`
-    bytes -- 320 MB at B = 10^4, N = 10^3, k = 4, which is the same
-    `N * k_beta * 8`-per-series term `DesignInfo`'s Phase 2 note already flags
-    as dominating -- and costs O(B N k^2) per call. Both are avoidable by
-    chunking the batch. More importantly the result is THETA-FREE: it depends
-    only on (design, mask), so Task 14 should compute it once per fit rather
-    than once per objective evaluation, or the ~50 evaluations an optimizer
-    takes multiply it by 50. It is computed here, not cached here, because this
-    module does not own the fit loop.
-
-    Args:
-        design: The built design matrix and its theta-free quantities.
-        mask: Presence mask, shape (B, N).
-
-    Returns:
-        (log|X_r'X_r|, rank(X_r)), both shape (B,). The determinant is -inf
-        where the restricted design is rank deficient.
-    """
-    if design.per_point:
-        raise NotImplementedError(
-            "per-point designs are Phase 2; restricted_design_terms assumes (N, k)"
-        )
-    x = np.asarray(design.matrix, dtype=np.float64)
-    batch = mask.shape[0]
-    n_beta = design.n_beta
-
-    if bool(mask.all()):
-        return (
-            np.full(batch, design.gram_logdet, dtype=np.float64),
-            np.full(batch, design.rank, dtype=np.int64),
-        )
-
-    first = mask[0]
-    if bool(np.array_equal(mask, np.broadcast_to(first, mask.shape))):
-        shared = np.linalg.svdvals(x[first])[None, :]
-        logdet, rank = _terms_from_singular_values(shared, n_beta)
-        return np.repeat(logdet, batch), np.repeat(rank, batch)
-
-    restricted = x[None, :, :] * mask[:, :, None].astype(np.float64)
-    return _terms_from_singular_values(np.linalg.svdvals(restricted), n_beta)
 
 
 def gls_solution(accum: NDArray[np.float64]) -> GlsResult:
@@ -435,18 +436,32 @@ def gls_solution(accum: NDArray[np.float64]) -> GlsResult:
         sign, log_abs_det = np.linalg.slogdet(xtx)
 
     # Conditioning from the GRAM'S OWN SINGULAR VALUES, as `kalman._RANK_RTOL`
-    # prescribes, halved to state it in the whitened design's units. svdvals
-    # raises for the whole stack on a non-finite member, so it sees only the
-    # finite subset -- the same classify-first rule as above.
+    # prescribes, via a batched `eigvalsh`: the Gram is symmetric positive
+    # semidefinite, so its eigenvalues ARE its singular values, and the
+    # symmetric routine is both cheaper and better conditioned than a general
+    # SVD. It raises for the whole stack on a non-finite member, so it sees
+    # only the finite subset -- the same classify-first rule as above. At
+    # k <~ 8 the cost is irrelevant either way; this runs once per fit at the
+    # optimum, not once per iteration, which is why the diagonal AM-GM proxy an
+    # earlier draft used bought nothing.
     values = np.zeros((batch, k), dtype=np.float64)
     if finite.any():
-        values[finite] = np.linalg.svdvals(xtx[finite])
+        # eigvalsh returns ASCENDING; flip so [:, 0] is the largest, matching
+        # the singular-value convention the thresholds are written against.
+        # Clip at zero: a semidefinite Gram can produce a small negative
+        # eigenvalue by rounding, and a negative "singular value" would make
+        # the log below a NaN instead of the -inf that means "singular".
+        values[finite] = np.maximum(np.linalg.eigvalsh(xtx[finite])[:, ::-1], 0.0)
     with np.errstate(divide="ignore", invalid="ignore"):
         log_cond = 0.5 * (np.log(values[:, 0]) - np.log(values[:, -1]))
 
+    # BOTH LIMITS ARE STATED IN log cond(X_w), so the ladder is one comparison
+    # on one quantity and the two are directly comparable. The module asserts at
+    # import that CONDITION_LOG_LIMIT < RANK_DEFICIENT_LOG_LIMIT, so the `ill`
+    # band below is always non-empty -- the brief's constant made it empty and
+    # ILL_CONDITIONED_X unreachable.
     positive_definite = (sign > 0) & np.isfinite(log_abs_det)
-    full_rank = values[:, -1] > _RANK_RTOL * values[:, 0]
-    singular = finite & ~(positive_definite & full_rank)
+    singular = finite & ~(positive_definite & (log_cond <= RANK_DEFICIENT_LOG_LIMIT))
     ill = finite & ~singular & (log_cond > CONDITION_LOG_LIMIT)
     valid = finite & ~singular & ~ill
     outcome[singular] = Outcome.RANK_DEFICIENT_X.code
@@ -514,31 +529,37 @@ class ConcentratedObjective:
     objective: Objective
 
     def check_design(self, design: DesignInfo, batch: int) -> NDArray[np.uint8]:
-        """Classify the design matrix before it reaches the likelihood.
+        """Classify each series' restricted design before it reaches the likelihood.
 
-        THIS CHECK IS NECESSARY BUT NOT SUFFICIENT. It sees only the global
-        rank of X. The design that actually enters X' Sigma^-1 X for a given
-        series is X RESTRICTED TO THAT SERIES' UNMASKED ROWS, because the filter
-        accumulates only over unmasked epochs -- so effective rank is per-series
-        whenever masks differ, which in real gridded data is always. A shared,
-        globally full-rank X still yields a singular system for any series whose
-        gaps remove all support for one of its columns. `gls_solution` is what
-        catches that, per series.
-
-        Returns the per-series form for the same reason: a scalar that later has
-        to be broadcast is exactly how a per-series concept gets implemented at
-        batch granularity.
+        THIS CHECK IS NECESSARY BUT NOT SUFFICIENT, and the reason is now Sigma
+        rather than the mask. It sees `rank(X_r)`, a property of the DESIGN
+        alone; the system that is actually factorized is the WHITENED Gram
+        `X_r' Sigma^-1 X_r`, which depends on theta. A design this check calls
+        full rank is routinely reported ill-conditioned -- or, at a whitened
+        condition number past 1e5, rank deficient -- once the engine forms that
+        Gram, because the Gram squares the condition number and because Sigma
+        reweights the rows. `gls_solution` is what catches that, per series, at
+        each theta. Identifiability really is a property of `X' Sigma^-1 X`, not
+        of X alone.
 
         Args:
-            design: The built design matrix and its derived quantities.
-            batch: Number of series.
+            design: The built design matrix and its per-series quantities.
+            batch: Number of series, which must match `design.batch`.
 
         Returns:
-            Per-series outcome codes, shape (B,).
+            Per-series outcome codes, shape (B,). RANK_DEFICIENT_X exactly
+            where `X_r` is rank deficient.
         """
-        if design.is_deficient or not np.isfinite(design.gram_logdet):
-            return outcome_array(batch, Outcome.RANK_DEFICIENT_X)
-        return outcome_array(batch, Outcome.OK)
+        codes = outcome_array(batch, Outcome.OK)
+        # `is_deficient` is THE gate, not `gram_logdet == -inf`: a merely
+        # NUMERICALLY deficient design keeps a finite (very negative) log|X'X|
+        # -- singular values [1, 1e-2, 1e-11] give rank 2 of 3 with -59.9 -- so
+        # the determinant sentinel alone would pass a design that cannot
+        # identify its own columns. The finiteness test is kept as a second,
+        # weaker guard on a hand-built DesignInfo, not as the primary one.
+        deficient = design.is_deficient | ~np.isfinite(design.gram_logdet)
+        codes[deficient] = Outcome.RANK_DEFICIENT_X.code
+        return codes
 
     def loglik(
         self,
@@ -599,25 +620,35 @@ class ConcentratedObjective:
         y = np.asarray(y, dtype=np.float64)
         mask = np.asarray(mask, dtype=bool)
         batch = y.shape[0]
+        n_used_from_mask = np.count_nonzero(mask, axis=1).astype(np.int64)
 
-        # Rank deficiency is classified BEFORE any factorization: a singular
-        # X' Sigma^-1 X would otherwise reach cholesky, which raises for the
-        # WHOLE STACK if any one member is not positive definite.
+        has_design = design is not None and design.n_beta > 0
+        precheck = outcome_array(batch, Outcome.OK)
         matrix: NDArray[np.float64] | None = None
-        if design is not None and design.n_beta > 0:
+        if design is not None:
+            self._validate_design(design, batch, n_used_from_mask)
+        if has_design and design is not None:
+            # Rank deficiency is classified BEFORE any factorization: a singular
+            # X' Sigma^-1 X would otherwise reach cholesky, which raises for the
+            # WHOLE STACK if any one member is not positive definite.
             precheck = self.check_design(design, batch)
-            if np.any(precheck != Outcome.OK.code):
-                # n_used is a real count even here: the protocol pins it as the
-                # one field that stays meaningful for a failed series. rank_x is
-                # the -1 "not computed" sentinel, since nothing was factorized.
+            matrix = design.matrix
+            if not np.any(precheck == Outcome.OK.code):
+                # ONLY short-circuit when EVERY series fails. A per-series
+                # precheck that returned early on `np.any(... != OK)` would deny
+                # 9,999 healthy grid points their fit because one neighbour's
+                # gap removed a column's support -- the exact batched-granularity
+                # failure this module exists to prevent. n_used is a real count
+                # even here (the protocol pins it as the one field that stays
+                # meaningful for a failed series); rank_x is the -1 "not
+                # computed" sentinel, since nothing was factorized.
                 return ObjectiveResult(
                     np.full(batch, np.nan),
                     None,
                     precheck,
-                    np.count_nonzero(mask, axis=1).astype(np.int64),
+                    n_used_from_mask,
                     np.full(batch, -1, dtype=np.int64),
                 )
-            matrix = design.matrix
 
         result = self.engine.score(
             self.state_space, self.hydrate(theta), y, mask, t, matrix, self.objective
@@ -628,7 +659,7 @@ class ConcentratedObjective:
             )
 
         gls = gls_solution(result.normal_equations)
-        outcome = merge_outcomes(result.outcome, gls.outcome)
+        outcome = merge_outcomes(precheck, result.outcome, gls.outcome)
         ok = outcome == Outcome.OK.code
         rank_x = np.where(ok, result.rank_x, -1).astype(np.int64)
 
@@ -639,17 +670,59 @@ class ConcentratedObjective:
         # REML, Harville form -- see the module docstring. The two terms beyond
         # the penalty are constant in theta and cancel in delta-IC, which is
         # exactly why their absence cannot be detected by a differential test.
-        # Both belong to the RESTRICTED design, not the batch-level one.
-        gram_logdet, rank = restricted_design_terms(design, mask)
+        # BOTH BELONG TO THE RESTRICTED DESIGN X_r, and `DesignInfo` already
+        # holds them per series, built from this same mask at setup: they are
+        # theta-free, so they are read here and never recomputed. `design.rank`
+        # is rank(X_r), NOT the engine's whitened `rank_x` -- see the module
+        # docstring for why those two must not be interchanged.
         reml = np.where(
             ok,
             concentrated
-            + 0.5 * rank.astype(np.float64) * np.log(2.0 * np.pi)
-            + 0.5 * gram_logdet
+            + 0.5 * design.rank.astype(np.float64) * np.log(2.0 * np.pi)
+            + 0.5 * design.gram_logdet
             - 0.5 * gls.logdet,
             np.nan,
         )
         return ObjectiveResult(reml, gls, outcome, result.n_used, rank_x)
+
+    @staticmethod
+    def _validate_design(
+        design: DesignInfo, batch: int, n_used: NDArray[np.int64]
+    ) -> None:
+        """Refuse a DesignInfo that does not belong to this batch and this mask.
+
+        Every per-series field on `DesignInfo` is derived from a mask. Pairing
+        it with a DIFFERENT mask yields a REML value wrong by a theta-free
+        constant: finite, plausible, invisible to every differential test, and
+        therefore exactly the failure mode the per-series widening exists to
+        remove. `n_rows` is carried on `DesignInfo` so the mismatch is loud
+        instead. The check is O(B N) on a boolean array, negligible beside the
+        O(B N d^2) filter sweep it guards.
+
+        Args:
+            design: The design under evaluation.
+            batch: Number of series in `y`.
+            n_used: Unmasked epochs per series implied by the mask, shape (B,).
+
+        Raises:
+            NotImplementedError: If the design is per-point (Phase 2).
+            ValueError: If the design's batch or its originating mask disagrees.
+        """
+        if design.per_point:
+            raise NotImplementedError(
+                "per-point designs are Phase 2; this objective assumes (N, k)"
+            )
+        if design.batch != batch:
+            raise ValueError(
+                f"design describes {design.batch} series but y has {batch}: "
+                "DesignInfo's derived fields are per series"
+            )
+        if not np.array_equal(design.n_rows, n_used):
+            raise ValueError(
+                "design was built from a different mask than the one passed to "
+                "evaluate (unmasked-row counts disagree); rebuild it with "
+                "SignalSpec.design_info(t, mask)"
+            )
 
     def unconstrained_loglik(
         self,

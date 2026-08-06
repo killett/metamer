@@ -14,11 +14,12 @@ from metamer.core.capability import Objective
 from metamer.core.engines.kalman import _RANK_RTOL, KalmanEngine
 from metamer.core.objective import (
     CONDITION_LOG_LIMIT,
+    OUTCOME_PRECEDENCE,
+    RANK_DEFICIENT_LOG_LIMIT,
     ConcentratedObjective,
     gls_solution,
     merge_outcomes,
     negative_reduction_mask,
-    restricted_design_terms,
 )
 from metamer.core.outcomes import Outcome, outcome_array
 from metamer.core.signal import (
@@ -45,7 +46,7 @@ def _setup(seed=3, n=40):
     theta = np.array([[0.4, 1.2, 6.0]])
     t = np.arange(float(n))
     signal = SignalSpec([Constant(), Trend()])
-    design = signal.design_info(t)
+    design = signal.design_info(t, np.ones((1, n), dtype=bool))
     cov = _covariance(ss, theta, t)
     rng = np.random.default_rng(seed)
     y = (rng.multivariate_normal(np.zeros(n), cov) + 2.0 + 0.05 * (t - t.mean()))[
@@ -57,38 +58,59 @@ def _setup(seed=3, n=40):
 # ---------------------------------------------------------------------------
 # The conditioning fixture.
 #
-# 60 DAILY samples (decimal years, as the time-axis contract requires), an
-# offset and a rate change at day 40 -- a coseismic step plus a postseismic
-# rate change, the ordinary reason a design carries both at one epoch. Two
-# post-break samples leave both extra columns supported by two rows whose
-# {1, t} extrapolation nearly spans them, which is what makes the case
-# genuinely ill-conditioned rather than merely noisy. Measured through the
-# engine's own accumulated Gram at theta = (0.4, 1.2, 6.0):
+# ITS JOB IS TO SHOW THE LADDER IS REACHABLE, NOT TO SET THE THRESHOLD. Both
+# limits are derived from float64 and from `kalman._RANK_RTOL` (see
+# `objective.CONDITION_LOG_LIMIT`); nothing here may be tuned to move them. It
+# may be adjusted freely, so long as the three cases still land in the three
+# bands -- which `test_the_fixture_lands_in_all_three_bands` checks explicitly
+# against the constants rather than against pinned numbers.
 #
-#     rows   post-break   cond(X_w)    log cond(X_w)   s_min/s_max (Gram)
-#       42       20          141.1        4.9495          5.023e-05
-#       42        2         3085.4        8.0344          1.050e-07
-#       40        0          inf          inf             0.0
+# 60 samples at 3-HOURLY spacing on a decimal-years axis (a week and a half of
+# high-rate data, as the time-axis contract requires), with an offset and a
+# rate change at sample 40 -- a coseismic step plus a postseismic rate change,
+# the ordinary reason a design carries both at one epoch. The sampling interval
+# is the lever: with two post-break samples the rate-change column restricted to
+# them has a single non-zero entry of size dt, so cond(X_r) grows like 1/dt.
+# Measured through the engine's own accumulated Gram at theta = (0.4, 1.2, 6.0):
 #
-# The first two keep the SAME NUMBER OF ROWS, so the separation is the offset's
-# support, not the sample count.
+#     rows   post-break   cond(X_w)   log cond(X_w)   band     margin
+#       42       20         1125.6       7.0261       OK       7.3x below ILL
+#       42        2        24623.        10.1114      ILL      3.0x above ILL,
+#                                                              4.1x below RANK
+#       40        0            inf          inf       RANK
+#
+# The first two keep the SAME NUMBER OF ROWS, so what separates them is the
+# offset's support, not the sample count -- a threshold that could not tell
+# those two apart would be measuring sample size.
 # ---------------------------------------------------------------------------
 _GAP_N = 60
 _GAP_BREAK_INDEX = 40
 _GAP_ROWS = 42
+_GAP_T = np.arange(float(_GAP_N)) / (365.25 * 8.0)
 
 
-def _gapped_setup():
-    """Shared design with an offset and a rate change, so gaps remove support."""
+def _gapped_signal(t):
+    """The shared [Constant, Trend, Offset, RateChange] spec for the break epoch."""
+    epoch = float(t[_GAP_BREAK_INDEX])
+    return SignalSpec(
+        [Constant(), Trend(), Offset(epoch=epoch), RateChange(epoch=epoch)]
+    )
+
+
+def _gapped_setup(mask=None, batch=1):
+    """Shared design with an offset and a rate change, so gaps remove support.
+
+    `design_info` needs the mask the fit will use, so the caller passes the one
+    it is about to evaluate with; `None` means every epoch present.
+    """
     spec = ProcessSpec((_term("white"), _term("matern12")))
     ss = StateSpace.from_spec(spec)
     theta = np.array([[0.4, 1.2, 6.0]])
-    t = np.arange(float(_GAP_N)) / 365.25
-    epoch = float(t[_GAP_BREAK_INDEX])
-    design = SignalSpec(
-        [Constant(), Trend(), Offset(epoch=epoch), RateChange(epoch=epoch)]
-    ).design_info(t)
-    return spec, ss, theta, t, design
+    t = _GAP_T
+    if mask is None:
+        mask = np.ones((batch, t.size), dtype=bool)
+    design = _gapped_signal(t).design_info(t, mask)
+    return spec, ss, theta, t, design, mask
 
 
 def _window(post_break_kept, rows=_GAP_ROWS):
@@ -169,6 +191,36 @@ def test_concentrated_loglik_matches_profiled_mvn():
     assert value[0] == pytest.approx(
         mvn_loglik(y[0], cov, design=design.matrix), abs=1e-9
     )
+
+
+def test_concentrated_loglik_on_a_gapped_series_matches_the_restricted_oracle():
+    """The ABSOLUTE ML value is right for a gapped series, not just a full one.
+
+    `n log(2 pi)` is theta-independent, so a count taken over ALL epochs rather
+    than the UNMASKED ones cancels in every delta-IC and no differential test
+    can see it -- the same defect class as a wrong REML constant. The oracle
+    here is evaluated on the restricted data and the restricted Sigma, which is
+    the definition of the quantity the filter accumulates.
+
+    Bug this catches: `n_used` counting masked epochs. The 10-epoch gap below
+    moves the constant by 10 * log(2 pi) = 18.4 nats, so the test is not
+    remotely tolerance-limited.
+    """
+    spec, ss, theta, t, _, cov, y = _setup()
+    mask = np.ones_like(y, dtype=bool)
+    mask[0, 15:25] = False
+    keep = np.flatnonzero(mask[0])
+    design = SignalSpec([Constant(), Trend()]).design_info(t, mask)
+
+    obj = ConcentratedObjective(spec, ss, KalmanEngine(), Objective.ML)
+    got = obj.loglik(theta, y, mask, t, design)[0]
+    expected = mvn_loglik(
+        y[0][keep], cov[np.ix_(keep, keep)], design=design.matrix[keep]
+    )
+    assert got == pytest.approx(expected, abs=1e-9)
+
+    full = obj.loglik(theta, y, np.ones_like(y, dtype=bool), t, _setup()[4])[0]
+    assert abs(got - full) > 1.0, "the gap must move the value"
 
 
 def test_negative_residual_reduction_is_flagged_but_rounding_is_not():
@@ -280,22 +332,29 @@ def test_gls_solution_names_every_failure_when_nothing_is_solvable():
     assert np.all(np.isnan(gls.rss_reduction))
 
 
-def test_restricted_design_terms_refuses_a_per_point_design():
+def test_evaluate_refuses_a_per_point_design():
     """The Phase 2 seam fails loudly rather than computing the wrong thing.
 
-    A per-point design is (B, N, k); this function's zero-masking and SVD
-    assume (N, k) and would silently produce per-series determinants for the
-    wrong axis.
+    A per-point design is (B, N, k); every per-series quantity on `DesignInfo`
+    is built assuming (N, k), and the objective would otherwise add
+    determinants computed for the wrong axis to every log-likelihood.
 
-    Bug this catches: Phase 2 widening `DesignInfo.matrix` and this function
-    quietly returning garbage that REML then adds to every log-likelihood.
+    Bug this catches: Phase 2 widening `DesignInfo.matrix` while this module
+    keeps reading it as shared, which produces finite, plausible REML values
+    that are simply wrong.
     """
-    _, _, _, t, design = _gapped_setup()
+    spec, ss, theta, t, design, _, y = _setup()
     per_point = DesignInfo(
-        design.matrix, design.rank, design.gram_logdet, design.condition_number, True
+        design.matrix,
+        design.rank,
+        design.gram_logdet,
+        design.condition_number,
+        design.n_rows,
+        True,
     )
+    obj = ConcentratedObjective(spec, ss, KalmanEngine(), Objective.ML)
     with pytest.raises(NotImplementedError, match="per-point designs are Phase 2"):
-        restricted_design_terms(per_point, np.ones((2, t.size), dtype=bool))
+        obj.evaluate(theta, y, np.ones_like(y, dtype=bool), t, per_point)
 
 
 # ---------------------------------------------------------------------------
@@ -368,14 +427,18 @@ def test_reml_on_a_gapped_series_uses_that_series_restricted_design():
     REML constant, one level down. The gap below moves `log|X'X|` by 0.369
     nats, i.e. 0.185 in the log-likelihood, ~8 orders above the tolerance.
     """
-    spec, ss, theta, t, design, cov, y = _setup()
+    spec, ss, theta, t, full_design, cov, y = _setup()
     mask = np.ones_like(y, dtype=bool)
     mask[0, 15:25] = False
     keep = np.flatnonzero(mask[0])
+    design = SignalSpec([Constant(), Trend()]).design_info(t, mask)
 
     restricted = design.matrix[keep]
     _, logdet_restricted = np.linalg.slogdet(restricted.T @ restricted)
-    assert abs(design.gram_logdet - logdet_restricted) > 0.1, "gap must move log|X'X|"
+    assert abs(full_design.gram_logdet[0] - logdet_restricted) > 0.1, (
+        "the gap must move log|X'X|, or this test cannot see the defect"
+    )
+    assert design.gram_logdet[0] == pytest.approx(logdet_restricted, rel=1e-10)
 
     obj = ConcentratedObjective(spec, ss, KalmanEngine(), Objective.REML)
     got = obj.loglik(theta, y, mask, t, design)
@@ -383,65 +446,71 @@ def test_reml_on_a_gapped_series_uses_that_series_restricted_design():
     assert got[0] == pytest.approx(expected, abs=1e-9)
 
 
-def test_full_design_gram_logdet_is_read_from_design_info_only_when_it_applies():
-    """log|X'X| comes from DesignInfo when the mask keeps every row, never otherwise.
+@pytest.mark.parametrize("gap", [False, True])
+def test_gram_logdet_is_read_from_design_info_and_never_recomputed(gap):
+    """log|X_r'X_r| always comes from DesignInfo, gap or no gap.
 
-    Poisoning `DesignInfo.gram_logdet` by a known amount must shift the
-    no-gap REML value by exactly half of it (the Harville term carries the
-    one-half), and must leave the gapped value untouched, because there the
-    determinant belongs to the restricted design and has to be recomputed.
+    Poisoning `DesignInfo.gram_logdet` by a known amount must shift the REML
+    value by exactly half of it (the Harville term carries the one-half) on
+    BOTH paths, because `DesignInfo` is the single place that quantity is
+    computed. It depends on (design, mask) and nothing else -- both theta-free
+    -- so it is computed once at setup and the likelihood only reads it.
 
-    Bug this catches, in one direction: recomputing log|X'X| inside the
-    likelihood on the no-gap path, which throws away the precomputed field and
-    repeats an O(N k^2) decomposition ~50 times per fit per candidate per grid
-    point. In the other: reusing the precomputed full-design value on the
-    gapped path, which is the wrong number.
+    Bug this catches: recomputing log|X_r'X_r| inside the likelihood, which
+    repeats an O(N k^2) decomposition ~50 times per fit, 12 candidates per
+    point, 10^7 points. The gapped case is parametrized alongside the
+    gap-free one because an implementation that reads the field only when the
+    mask is full -- and silently recomputes otherwise -- passes the gap-free
+    half on its own.
     """
-    spec, ss, theta, t, design, _, y = _setup()
+    spec, ss, theta, t, _, _, y = _setup()
+    mask = np.ones_like(y, dtype=bool)
+    if gap:
+        mask[0, 15:25] = False
+    design = SignalSpec([Constant(), Trend()]).design_info(t, mask)
+
     obj = ConcentratedObjective(spec, ss, KalmanEngine(), Objective.REML)
     poisoned = DesignInfo(
-        design.matrix, design.rank, design.gram_logdet + 3.0, design.condition_number
+        design.matrix,
+        design.rank,
+        design.gram_logdet + 3.0,
+        design.condition_number,
+        design.n_rows,
     )
-
-    full = np.ones_like(y, dtype=bool)
-    assert obj.loglik(theta, y, full, t, poisoned)[0] - obj.loglik(
-        theta, y, full, t, design
-    )[0] == pytest.approx(1.5, abs=1e-9)
-
-    gapped = np.ones_like(y, dtype=bool)
-    gapped[0, 15:25] = False
-    assert obj.loglik(theta, y, gapped, t, poisoned)[0] == pytest.approx(
-        obj.loglik(theta, y, gapped, t, design)[0], abs=1e-12
+    shift = (
+        obj.loglik(theta, y, mask, t, poisoned)[0]
+        - obj.loglik(theta, y, mask, t, design)[0]
     )
+    assert shift == pytest.approx(1.5, abs=1e-9)
 
 
-def test_restricted_design_terms_are_per_series_in_value_and_rank():
-    """The per-series log|X_r'X_r| and rank(X_r) are what the mask implies.
+def test_evaluate_refuses_a_design_built_from_a_different_mask():
+    """A DesignInfo and the mask it is evaluated with must agree, or it raises.
 
-    Three series share one globally full-rank design: one keeps everything,
-    one loses a middle stretch, one loses every row supporting the offset and
-    the rate change. Expected values from an explicit `slogdet` and
-    `matrix_rank` on each restricted matrix.
+    Every per-series quantity on `DesignInfo` is derived from a mask. Pairing
+    it with a different one produces a REML value that is wrong by a
+    theta-free constant -- finite, plausible, and invisible to every
+    differential test, which is the exact failure the per-series widening
+    exists to remove. `n_rows` is carried so the mismatch is loud.
 
-    Bug this catches: computing these once for the batch and broadcasting,
-    which hands Task 9 a scalar effective sample size `n - rank(X)` that is
-    off by one (or two) for every gapped series, silently, inside BIC.
+    Bug this catches: building the design once with an all-present mask (the
+    natural thing to do at setup) and then evaluating a gappy tile against it.
     """
-    _, _, _, t, design = _gapped_setup()
-    masks = np.array([np.ones(_GAP_N, bool), _window(20), _window(0)])
+    spec, ss, theta, t, _, _, y = _setup()
+    obj = ConcentratedObjective(spec, ss, KalmanEngine(), Objective.ML)
+    full = np.ones_like(y, dtype=bool)
+    design = SignalSpec([Constant(), Trend()]).design_info(t, full)
 
-    logdet, rank = restricted_design_terms(design, masks)
+    gapped = full.copy()
+    gapped[0, 15:25] = False
+    with pytest.raises(ValueError, match="mask"):
+        obj.evaluate(theta, y, gapped, t, design)
 
-    assert logdet.shape == (3,)
-    assert rank.shape == (3,)
-    for index in (0, 1):
-        rows = design.matrix[masks[index]]
-        _, expected = np.linalg.slogdet(rows.T @ rows)
-        assert logdet[index] == pytest.approx(expected, abs=1e-8)
-        assert rank[index] == int(np.linalg.matrix_rank(rows))
-    assert rank[2] == 2, "offset and rate change lose all support"
-    assert logdet[2] == -np.inf
-    assert logdet[0] != pytest.approx(logdet[1], abs=1e-6)
+    wider = SignalSpec([Constant(), Trend()]).design_info(
+        t, np.ones((3, t.size), dtype=bool)
+    )
+    with pytest.raises(ValueError, match="3 series but y has 1"):
+        obj.evaluate(theta, y, full, t, wider)
 
 
 # ---------------------------------------------------------------------------
@@ -463,16 +532,25 @@ def test_rank_deficient_design_is_a_named_outcome_not_an_exception(mode):
     """
     spec, ss, theta, t, _, _, y = _setup()
     obj = ConcentratedObjective(spec, ss, KalmanEngine(), Objective.REML)
+    present = np.ones((1, t.size), dtype=bool)
     if mode == "duplicate_column":
         x_bad = np.column_stack([np.ones(t.size), np.ones(t.size)])
-        # A duplicated column makes X'X exactly singular: log|X'X| = -inf and
-        # cond(X) = inf, both stated here from the mathematics, not read back
-        # from the code that computes them.
-        bad = DesignInfo(x_bad, 1, float("-inf"), float("inf"))
+        # A duplicated column makes X'X exactly singular: rank 1 of 2,
+        # log|X'X| = -inf and cond(X) = inf, all stated here from the
+        # mathematics, not read back from the code that computes them.
+        bad = DesignInfo(
+            x_bad,
+            np.array([1]),
+            np.array([-np.inf]),
+            np.array([np.inf]),
+            np.array([t.size]),
+        )
     else:
-        bad = SignalSpec([Constant(), Offset(epoch=float(t[0]))]).design_info(t)
+        bad = SignalSpec([Constant(), Offset(epoch=float(t[0]))]).design_info(
+            t, present
+        )
 
-    assert bad.is_deficient
+    assert np.all(bad.is_deficient)
     assert np.all(obj.check_design(bad, 1) == Outcome.RANK_DEFICIENT_X.code)
 
     result = obj.evaluate(theta, y, np.ones_like(y, dtype=bool), t, bad)
@@ -498,7 +576,13 @@ def test_precheck_carries_the_real_unmasked_counts():
     mask[1, :3] = False
     mask[2, 10:] = False
     x_bad = np.column_stack([np.ones(t.size), np.ones(t.size)])
-    bad = DesignInfo(x_bad, 1, float("-inf"), float("inf"))
+    bad = DesignInfo(
+        x_bad,
+        np.ones(batch, dtype=np.int64),
+        np.full(batch, -np.inf),
+        np.full(batch, np.inf),
+        np.count_nonzero(mask, axis=1),
+    )
 
     obj = ConcentratedObjective(spec, ss, KalmanEngine(), Objective.ML)
     result = obj.evaluate(np.repeat(theta, batch, axis=0), y, mask, t, bad)
@@ -537,12 +621,12 @@ def test_effective_rank_is_per_series_because_the_mask_restricts_the_design(
     the tile grid. Every small-B test passes, because there the batch is the
     series.
     """
-    spec, ss, theta, t, design = _gapped_setup()
     batch = 5
     rng = np.random.default_rng(21)
-    y = rng.standard_normal((batch, t.size))
+    y = rng.standard_normal((batch, _GAP_T.size))
     mask = np.ones_like(y, dtype=bool)
     mask[2] = _window(post_break_kept, rows)
+    spec, ss, theta, t, design, _ = _gapped_setup(mask)
 
     obj = ConcentratedObjective(spec, ss, KalmanEngine(), Objective.ML)
     result = obj.evaluate(np.repeat(theta, batch, axis=0), y, mask, t, design)
@@ -557,28 +641,105 @@ def test_effective_rank_is_per_series_because_the_mask_restricts_the_design(
     assert np.all(result.outcome[others] == Outcome.OK.code)
     assert np.all(np.isfinite(result.loglik[others]))
 
-    solo = obj.evaluate(theta, y[3:4], mask[3:4], t, design)
+    solo_design = _gapped_signal(t).design_info(t, mask[3:4])
+    solo = obj.evaluate(theta, y[3:4], mask[3:4], t, solo_design)
     assert result.loglik[3] == pytest.approx(solo.loglik[0], rel=1e-12)
+
+
+def test_the_conditioning_ladder_is_ordered_and_derived_from_float64():
+    """Both limits come from float64 and _RANK_RTOL, and ILL sits BELOW RANK.
+
+    Stated in one unit -- log cond(X_w), the whitened design's condition
+    number -- so the two are directly comparable. The GLS solve here runs on
+    the NORMAL EQUATIONS: the accumulator is X'Sigma^-1X and it is factorized
+    by Cholesky, so the forward error goes like eps * cond(Gram) =
+    eps * cond(X_w)^2. Half the significant digits are gone when that reaches
+    sqrt(eps), i.e. at cond(X_w) = eps^(-1/4) = 8192. Rank deficiency sits
+    further out at the engine's cutoff, s_min/s_max = _RANK_RTOL on the Gram,
+    i.e. cond(X_w) = _RANK_RTOL^(-1/2) = 1e5. Neither number comes from a
+    fixture.
+
+    Bug this catches: THE unreachability defect. The brief set the limit so
+    high (k * 30 = 90 nats, cond(X_w) ~ 1e39) that the rank cutoff at 11.5
+    nats always fired first and ILL_CONDITIONED_X was dead code -- a named
+    outcome the failure map could never show. Any future edit that raises the
+    ill-conditioned limit past the rank limit, or lowers the rank cutoff below
+    it, fails here regardless of what any fixture happens to measure.
+    """
+    eps = float(np.finfo(np.float64).eps)
+    assert CONDITION_LOG_LIMIT == pytest.approx(-0.25 * np.log(eps), rel=1e-15)
+    assert RANK_DEFICIENT_LOG_LIMIT == pytest.approx(
+        -0.5 * np.log(_RANK_RTOL), rel=1e-15
+    )
+
+    # The ladder invariant itself, depending on no fixture whatsoever.
+    assert CONDITION_LOG_LIMIT < RANK_DEFICIENT_LOG_LIMIT
+
+    # And the band is wide enough to be reachable in practice, not merely
+    # ordered by a rounding error.
+    assert RANK_DEFICIENT_LOG_LIMIT - CONDITION_LOG_LIMIT > 1.0
+    assert np.exp(CONDITION_LOG_LIMIT) == pytest.approx(8192.0, rel=1e-9)
+    assert np.exp(RANK_DEFICIENT_LOG_LIMIT) == pytest.approx(1e5, rel=1e-9)
+
+
+@pytest.mark.parametrize(
+    "post_break_kept, expected",
+    [(20, Outcome.OK), (2, Outcome.ILL_CONDITIONED_X), (0, Outcome.RANK_DEFICIENT_X)],
+)
+def test_the_fixture_lands_in_all_three_bands(post_break_kept, expected):
+    """Each band of the derived ladder is reachable by a real masked design.
+
+    THE FIXTURE'S JOB IS REACHABILITY, NOT CALIBRATION. The bands are the
+    module constants; this measures where each case actually falls and checks
+    it against those constants rather than against a pinned number, so the
+    fixture can be retuned freely without touching a production threshold.
+
+    Bug this catches: a threshold whose ILL band no observable design can enter
+    -- which is what "unreachable" means concretely, and which a test asserting
+    only that the OK and RANK cases work would never notice.
+    """
+    mask = np.ones((1, _GAP_T.size), dtype=bool)
+    mask[0] = _window(post_break_kept)
+    spec, ss, theta, t, design, _ = _gapped_setup(mask)
+
+    scored = KalmanEngine().score(
+        ss, theta, np.zeros((1, t.size)), mask, t, design.matrix
+    )
+    log_cond = _log_cond_whitened(scored.normal_equations[0, 1:, 1:])
+
+    if expected is Outcome.OK:
+        assert log_cond < CONDITION_LOG_LIMIT
+    elif expected is Outcome.ILL_CONDITIONED_X:
+        assert CONDITION_LOG_LIMIT < log_cond < RANK_DEFICIENT_LOG_LIMIT
+    else:
+        assert log_cond > RANK_DEFICIENT_LOG_LIMIT
+
+    y = np.random.default_rng(31).standard_normal((1, t.size))
+    obj = ConcentratedObjective(spec, ss, KalmanEngine(), Objective.ML)
+    assert obj.evaluate(theta, y, mask, t, design).outcome[0] == expected.code
 
 
 def test_the_conditioning_split_is_driven_by_support_not_by_row_count():
     """ILL_CONDITIONED_X fires on lost support at an unchanged sample count.
 
     Both series below keep exactly 42 rows of the same design; they differ
-    only in how many of those rows fall after the breakpoint. The measured
-    whitened condition numbers straddle CONDITION_LOG_LIMIT, and the
-    ill-conditioned one still sits three decades above the engine's rank
-    cutoff, which is what keeps ILL_CONDITIONED_X and RANK_DEFICIENT_X
-    distinct outcomes rather than two names for the same event.
+    only in how many of those rows fall after the breakpoint, so whatever
+    separates them is the offset's SUPPORT and not the sample count. The
+    measured whitened condition numbers straddle CONDITION_LOG_LIMIT, and the
+    ill-conditioned one still sits strictly below RANK_DEFICIENT_LOG_LIMIT --
+    which is what keeps ILL_CONDITIONED_X ("a term identified by a handful of
+    samples") and RANK_DEFICIENT_X ("a term with no support at all") distinct
+    outcomes rather than two names for one event. Which happened where is the
+    point of the failure map.
 
-    Bug this catches: calibrating the constant against a pair of cases that
-    differ in row count, so the threshold is really measuring sample size --
-    and, since the constant is the only thing separating the two outcomes,
-    making ILL_CONDITIONED_X unreachable or arbitrary.
+    Bug this catches: a threshold that really measures sample size, which two
+    cases differing in row count could not distinguish from one measuring
+    support -- and, since the ladder is the only thing separating the two
+    outcomes, would make ILL_CONDITIONED_X arbitrary.
     """
-    spec, ss, theta, t, design = _gapped_setup()
     masks = np.array([_window(20), _window(2)])
     assert masks[0].sum() == masks[1].sum() == _GAP_ROWS
+    spec, ss, theta, t, design, _ = _gapped_setup(masks)
 
     scored = KalmanEngine().score(
         ss, np.repeat(theta, 2, axis=0), np.zeros((2, t.size)), masks, t, design.matrix
@@ -587,9 +748,11 @@ def test_the_conditioning_split_is_driven_by_support_not_by_row_count():
         [_log_cond_whitened(g) for g in scored.normal_equations[:, 1:, 1:]]
     )
 
-    assert log_cond[0] < CONDITION_LOG_LIMIT < log_cond[1]
-    # Still far above the rank cutoff: this is "barely identified", not singular.
-    assert np.exp(-2.0 * log_cond[1]) > 100.0 * _RANK_RTOL
+    # Stated in the ladder's own units, so the two thresholds are directly
+    # comparable: series 0 is below the ill limit, series 1 is inside the band
+    # between the two -- barely identified, not singular.
+    assert log_cond[0] < CONDITION_LOG_LIMIT
+    assert CONDITION_LOG_LIMIT < log_cond[1] < RANK_DEFICIENT_LOG_LIMIT
 
     rng = np.random.default_rng(7)
     y = rng.standard_normal((2, t.size))
@@ -608,18 +771,21 @@ def test_batch_level_rank_check_is_necessary_but_not_sufficient():
     check_design returns OK for every series -- and one of them is nonetheless
     singular once its mask is applied.
     """
-    spec, ss, theta, t, design = _gapped_setup()
-    assert not design.is_deficient
+    mask = np.ones((3, _GAP_T.size), dtype=bool)
+    mask[1] = _window(2)
+    spec, ss, theta, t, design, _ = _gapped_setup(mask)
+
+    # Every series' RESTRICTED design is full rank -- the mask cannot make this
+    # verdict wrong, because check_design already sees it.
+    assert not np.any(design.is_deficient)
     obj = ConcentratedObjective(spec, ss, KalmanEngine(), Objective.ML)
     codes = obj.check_design(design, 3)
-    assert np.all(codes == Outcome.OK.code)
+    np.testing.assert_array_equal(codes, np.full(3, Outcome.OK.code))
     assert codes.shape == (3,)
 
     y = np.random.default_rng(5).standard_normal((3, t.size))
-    mask = np.ones_like(y, dtype=bool)
-    mask[1] = _window(0)
     result = obj.evaluate(np.repeat(theta, 3, axis=0), y, mask, t, design)
-    assert result.outcome[1] == Outcome.RANK_DEFICIENT_X.code
+    assert result.outcome[1] == Outcome.ILL_CONDITIONED_X.code
     assert np.all(result.outcome[[0, 2]] == Outcome.OK.code)
 
 
@@ -642,11 +808,12 @@ def test_an_all_masked_series_stays_insufficient_data_with_a_design():
     Bug this catches: `outcome = gls.outcome`, i.e. replacing the engine's
     per-series verdict instead of merging with it.
     """
-    spec, ss, theta, t, design, _, _ = _setup()
+    spec, ss, theta, t, _, _, _ = _setup()
     batch = 3
     y = np.zeros((batch, t.size))
     mask = np.ones((batch, t.size), dtype=bool)
     mask[1] = False
+    design = SignalSpec([Constant(), Trend()]).design_info(t, mask)
 
     obj = ConcentratedObjective(spec, ss, KalmanEngine(), Objective.ML)
     result = obj.evaluate(np.repeat(theta, batch, axis=0), y, mask, t, design)
@@ -681,40 +848,130 @@ def test_an_all_masked_series_stays_insufficient_data_without_a_design():
     assert np.isfinite(result.loglik[1])
 
 
-def test_merge_outcomes_keeps_the_engine_verdict_unless_the_objective_is_more_specific():
-    """Merging is asymmetric: only a strictly more specific verdict overrides.
+def test_outcome_precedence_is_the_declared_causal_ladder():
+    """The ladder is a declared constant, ordered earliest-cause-first.
 
-    Bug this catches: either half of the wrong merge. Overriding everything
-    loses INSUFFICIENT_DATA (case 2); overriding nothing loses the objective's
-    RANK_DEFICIENT_X for a series the engine was happy with (case 1), which is
-    the whole point of classifying per series here.
+    Precedence is a stated property of the taxonomy, not an emergent
+    consequence of which call site happens to run last. The order below is
+    transcribed from the design rule -- data-level facts outrank design-level
+    ones, which outrank numerical ones, which outrank OK -- rather than read
+    back from the module.
+
+    Bug this catches: expressing precedence as inline comparisons at each merge
+    site, so two sites disagree and the reported cause depends on call order.
     """
-    engine = outcome_array(5)
-    engine[1] = Outcome.INSUFFICIENT_DATA.code
-    engine[2] = Outcome.NONFINITE_OBJECTIVE.code
-    engine[3] = Outcome.NONFINITE_OBJECTIVE.code
-    engine[4] = Outcome.INSUFFICIENT_DATA.code
+    assert OUTCOME_PRECEDENCE == (
+        Outcome.INSUFFICIENT_DATA,
+        Outcome.NOT_ATTEMPTED,
+        Outcome.RANK_DEFICIENT_X,
+        Outcome.ILL_CONDITIONED_X,
+        Outcome.NONFINITE_OBJECTIVE,
+        Outcome.OK,
+    )
+    assert OUTCOME_PRECEDENCE[-1] is Outcome.OK, "OK must never outrank a cause"
+    assert len(set(OUTCOME_PRECEDENCE)) == len(OUTCOME_PRECEDENCE)
 
-    objective = outcome_array(5)
-    objective[0] = Outcome.RANK_DEFICIENT_X.code
+
+@pytest.mark.parametrize(
+    "codes, expected",
+    [
+        # Earliest cause wins, in every pairing and in both argument orders.
+        ((Outcome.OK, Outcome.RANK_DEFICIENT_X), Outcome.RANK_DEFICIENT_X),
+        ((Outcome.RANK_DEFICIENT_X, Outcome.OK), Outcome.RANK_DEFICIENT_X),
+        (
+            (Outcome.INSUFFICIENT_DATA, Outcome.NONFINITE_OBJECTIVE),
+            Outcome.INSUFFICIENT_DATA,
+        ),
+        (
+            (Outcome.NONFINITE_OBJECTIVE, Outcome.INSUFFICIENT_DATA),
+            Outcome.INSUFFICIENT_DATA,
+        ),
+        (
+            (Outcome.INSUFFICIENT_DATA, Outcome.RANK_DEFICIENT_X),
+            Outcome.INSUFFICIENT_DATA,
+        ),
+        ((Outcome.NOT_ATTEMPTED, Outcome.RANK_DEFICIENT_X), Outcome.NOT_ATTEMPTED),
+        (
+            (Outcome.NONFINITE_OBJECTIVE, Outcome.ILL_CONDITIONED_X),
+            Outcome.ILL_CONDITIONED_X,
+        ),
+        (
+            (Outcome.RANK_DEFICIENT_X, Outcome.ILL_CONDITIONED_X),
+            Outcome.RANK_DEFICIENT_X,
+        ),
+        (
+            (Outcome.NONFINITE_OBJECTIVE, Outcome.NONFINITE_OBJECTIVE),
+            Outcome.NONFINITE_OBJECTIVE,
+        ),
+        ((Outcome.OK, Outcome.OK), Outcome.OK),
+        # An outcome outside the ladder is still a failure and must beat OK,
+        # while never displacing a named cause.
+        ((Outcome.OK, Outcome.DIAGNOSTIC_LIMIT), Outcome.DIAGNOSTIC_LIMIT),
+        (
+            (Outcome.INSUFFICIENT_DATA, Outcome.DIAGNOSTIC_LIMIT),
+            Outcome.INSUFFICIENT_DATA,
+        ),
+        (
+            (Outcome.NONFINITE_OBJECTIVE, Outcome.DIAGNOSTIC_LIMIT),
+            Outcome.NONFINITE_OBJECTIVE,
+        ),
+        # Three-way, which is what `evaluate` actually calls.
+        (
+            (
+                Outcome.INSUFFICIENT_DATA,
+                Outcome.NONFINITE_OBJECTIVE,
+                Outcome.RANK_DEFICIENT_X,
+            ),
+            Outcome.INSUFFICIENT_DATA,
+        ),
+        (
+            (Outcome.OK, Outcome.OK, Outcome.ILL_CONDITIONED_X),
+            Outcome.ILL_CONDITIONED_X,
+        ),
+    ],
+)
+def test_merge_outcomes_applies_the_precedence_ladder(codes, expected):
+    """Merging is order-independent and always reports the earliest cause.
+
+    The pairs are given in BOTH argument orders where they differ, because a
+    merge implemented as "the second argument wins unless the first is special"
+    is asymmetric and would pass one order while failing the other.
+
+    Bug this catches: `outcome = gls.outcome`, i.e. replacing the engine's
+    verdict instead of merging with it. That relabels an all-masked series
+    (land, permanent ice) NONFINITE_OBJECTIVE, moving it from the excluded
+    category into the failure NUMERATOR and inflating precisely the denominator
+    `Outcome.is_eligible` exists to protect -- which would make every reported
+    failure rate meaningless.
+    """
+    arrays = [outcome_array(4, code) for code in codes]
+    merged = merge_outcomes(*arrays)
+    assert merged.dtype == np.uint8
+    assert merged.shape == (4,)
+    np.testing.assert_array_equal(merged, np.full(4, expected.code))
+
+
+def test_merge_outcomes_is_per_series_not_a_batch_verdict():
+    """Each series is merged independently; one bad series marks only itself.
+
+    Bug this catches: reducing the batch to a single worst-case verdict, which
+    at B = 10^4 turns the spatial failure map into a picture of the tile grid.
+    """
+    engine = outcome_array(4)
+    engine[1] = Outcome.INSUFFICIENT_DATA.code
+    objective = outcome_array(4)
     objective[1] = Outcome.NONFINITE_OBJECTIVE.code
     objective[2] = Outcome.ILL_CONDITIONED_X.code
-    objective[3] = Outcome.NONFINITE_OBJECTIVE.code
-    objective[4] = Outcome.RANK_DEFICIENT_X.code
-
-    merged = merge_outcomes(engine, objective)
 
     np.testing.assert_array_equal(
-        merged,
+        merge_outcomes(engine, objective),
         [
-            Outcome.RANK_DEFICIENT_X.code,  # engine OK, objective more specific
-            Outcome.INSUFFICIENT_DATA.code,  # generic objective must not relabel
-            Outcome.ILL_CONDITIONED_X.code,  # NONFINITE refined by the objective
-            Outcome.NONFINITE_OBJECTIVE.code,  # nothing more specific to say
-            Outcome.INSUFFICIENT_DATA.code,  # expected outcome outranks a failure
+            Outcome.OK.code,
+            Outcome.INSUFFICIENT_DATA.code,
+            Outcome.ILL_CONDITIONED_X.code,
+            Outcome.OK.code,
         ],
     )
-    assert merged.dtype == np.uint8
 
 
 def test_rank_x_is_carried_per_series_from_the_engine():
@@ -729,10 +986,10 @@ def test_rank_x_is_carried_per_series_from_the_engine():
     a failed series is asserted alongside because it is NOT fail-loud under
     that subtraction and a consumer must gate on the outcome first.
     """
-    spec, ss, theta, t, design = _gapped_setup()
-    y = np.random.default_rng(11).standard_normal((3, t.size))
+    y = np.random.default_rng(11).standard_normal((3, _GAP_T.size))
     mask = np.ones_like(y, dtype=bool)
     mask[1] = _window(0)
+    spec, ss, theta, t, design, _ = _gapped_setup(mask)
 
     obj = ConcentratedObjective(spec, ss, KalmanEngine(), Objective.ML)
     result = obj.evaluate(np.repeat(theta, 3, axis=0), y, mask, t, design)
@@ -740,7 +997,11 @@ def test_rank_x_is_carried_per_series_from_the_engine():
     assert result.rank_x.shape == (3,)
     assert result.rank_x.dtype == np.int64
     np.testing.assert_array_equal(result.rank_x, [4, -1, 4])
-    assert design.rank == 4
+    # The engine's whitened rank and the design's own rank are DIFFERENT
+    # quantities; for the healthy series they agree at 4, and for the gapped
+    # one the design already knows it is 2 while the engine reports the -1
+    # "not computed" sentinel.
+    np.testing.assert_array_equal(design.rank, [4, 2, 4])
 
 
 # ---------------------------------------------------------------------------
