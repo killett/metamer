@@ -130,6 +130,15 @@ cannot reconstruct them.
   scientific facts, and the point of the failure map is which one happened where.
   `CONDITION_LOG_LIMIT` has no independently correct value — calibrate it against the
   two-post-breakpoint-samples test case rather than loosening that test.
+- **A fully-masked tile must stay `INSUFFICIENT_DATA`, and the short-circuit is where it
+  gets lost.** `objective.evaluate` returns early when no series passes the precheck, so the
+  engine never runs and its `INSUFFICIENT_DATA` never enters the outcome merge. Measured: a
+  tile where *every* series is all-masked comes back `RANK_DEFICIENT_X` with
+  `is_failure=True` and `is_eligible=True` — every land pixel in both the numerator and the
+  denominator of the §8.6 failure rate, which is the exact corruption the precedence ladder
+  exists to prevent. It hides from any test that masks only *some* series, because then
+  `np.any(precheck == OK)` is True and the branch is never entered. The Antarctic interior is
+  an ordinary whole-tile case, not an edge case.
 - **`rank_x = -1` is the failed-series sentinel, and it is a trap for Task 9.** `rank_x` is an
   integer, so NaN is unavailable and `-1` is used instead. It is unambiguous as a *check*
   (real ranks are non-negative) but it is **not fail-loud under arithmetic**: REML's effective
@@ -155,6 +164,30 @@ cannot reconstruct them.
   (the Matérn ν=1/2 `Δt = 0` case exists precisely because of them), so this is reachable,
   not hypothetical. Whatever builds Σ must key the nugget on *index* identity, not on the
   lag being zero.
+- **`cond(X_w)` is invariant under a uniform rescale of Σ — so you cannot make a design
+  ill-conditioned by shrinking σ.** This is analytic, not empirical, and the derivation is
+  what stops the retry: `X_w = Σ^{-1/2}X`, so `Σ → cΣ` sends `X_w → c^{-1/2}X_w`, and
+  `cond(αA) = cond(A)` for any `α ≠ 0` because every singular value scales by `|α|` while
+  the ratio does not. Where white noise dominates, `Σ ≈ σ²I`, so changing σ *is* that
+  uniform rescale to within the other terms' contribution. What does move the conditioning
+  is giving the design more post-breakpoint degrees of freedom than the post-breakpoint
+  samples can carry. Do not go looking for a σ that works; there isn't one.
+- **The conditioning thresholds are derived from float64, not calibrated against a fixture**,
+  and both are stated in `log cond(X_w)` units so they are directly comparable:
+  `CONDITION_LOG_LIMIT = −¼·log(eps) = 9.0109` (cond 8.2e3) and
+  `RANK_DEFICIENT_LOG_LIMIT = −½·log(_RANK_RTOL) = 11.5129` (cond 1e5). The exponent is
+  **−1/4, not −1/2**, because the solve runs on the normal equations so the Cholesky sees
+  `cond(X_w)²`. Taking `1/√eps ≈ 6.7e7` literally puts the ill-conditioned boundary *above*
+  the rank cutoff and makes `ILL_CONDITIONED_X` unreachable — which is the defect the
+  import-time ordering invariant now guards. A fixture's job is only to prove all three
+  bands are **reachable**; it must never specify a production constant, because tuning a
+  threshold until a hand-built case fires specifies nothing.
+- **Condition number grows with record span even for a well-supported design**, so the
+  false-positive direction is real. Measured on full-support
+  `[Constant, Trend, Accel, Annual, SemiAnnual]` monthly data: `cond(X_w)` = 2.8 (5 yr),
+  33.9 (20 yr), 76.0 (30 yr), 210.6 (50 yr), 840.7 (100 yr). Against the derived 8.2e3 the
+  century-long worst case clears by about 10×; against a calibrated 1e3 it cleared by
+  0.17 nats. Re-measure against real records before Phase 2.
 - **Never take `log|XᵀX|` via `slogdet(XᵀX)`.** Forming the Gram squares the condition number,
   and `slogdet` then returns a **negative sign** for a design that is genuinely full rank —
   measured at `cond(X) = 1e9`, where the `sign > 0 else -inf` idiom produced `gram_logdet =
@@ -248,6 +281,21 @@ question; compute/bandwidth roofline pair for cross-machine prediction) are in d
 - **`psutil` added no `pixi.lock` diff** (Task 0): it was already resolved on all four
   platforms as a transitive dependency. The lock-size limit raise still matters — Task 17
   adds `numba` and `celerite2`, which will genuinely rewrite it.
+- **Two implementation agents were run against this one working tree at once, and one reset
+  the branch over the other's pushed commits.** Task 8 was built twice: A committed
+  `36fca08` (fixture-calibrated threshold), B built on A's tree and committed `ed0b15f`
+  (derived thresholds, per-series `DesignInfo`), then B reset to `5b6c5ab` and re-committed
+  the identical tree as `d7d69c1` to get a clean single-commit history — taking two
+  already-pushed commits off the branch. Reconciled with `git merge -s ours origin/phase-1`
+  (`0134154`): tree unchanged, both commits ancestors again, nothing force-pushed.
+  **A behaviour-level diff of `36fca08` against HEAD found exactly one thing B had lost** —
+  see the fully-masked-tile entry above. B's version otherwise dominates: it merges strictly
+  more outcomes, its `DesignInfo` widening removes θ-free work A repeated every iteration,
+  its `eigvalsh` route classifies a negative-definite Gram that A's `svdvals` route could not
+  see at all (singular values are absolute eigenvalues, so they cannot tell `−I` from `+I`),
+  and its 72 tests subsume A's 62 with no assertion lost. Constraints against a recurrence
+  are now in the user's global `CLAUDE.md`: one writer per working tree, and never rewind a
+  branch whose commits have been pushed.
 - Per user global instructions: never do investigative `git checkout <sha>` inside the
   working tree. Use `git show <sha>:<path>`, `git worktree add`, or `git diff <sha>`.
 
