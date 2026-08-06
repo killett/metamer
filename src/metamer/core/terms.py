@@ -6,10 +6,28 @@ import hashlib
 import json
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 
 from metamer.core.params import ParamSpec
 from metamer.core.transforms import Bijector
+
+if TYPE_CHECKING:
+    from typing import Protocol
+
+    from metamer.core.capability import CostClass, EngineId
+
+    class _EngineCostSource(Protocol):
+        """Structural stand-in for the `Family` protocol landing in Task 4.
+
+        `kernel_registry` is currently typed `Registry[Callable[..., object]]`,
+        so `kernel_registry[self.kind]()` has static type `object`, which has
+        no `.engine_costs` attribute under mypy strict. This protocol gives
+        `cast` below a typed target without introducing the real `Family`
+        protocol early. Delete this class and the `cast` call once Task 4
+        types `kernel_registry` against `Family` directly.
+        """
+
+        engine_costs: dict[EngineId, CostClass]
 
 
 def _transform_args_canonical(transform: Bijector) -> dict[str, str]:
@@ -135,6 +153,13 @@ class TermSpec:
             },
         }
 
+    def engine_costs(self) -> dict[EngineId, CostClass]:
+        """Return this term's per-engine cost classes from its family."""
+        from metamer.core.registry import kernel_registry
+
+        family = cast("_EngineCostSource", kernel_registry[self.kind]())
+        return family.engine_costs
+
     def __add__(self, other: TermSpec | ProcessSpec) -> ProcessSpec:
         """Compose with another term or process."""
         return ProcessSpec((self,)) + other
@@ -194,6 +219,14 @@ class ProcessSpec:
     def canonical(self) -> dict[str, Any]:
         """Render the whole composition to a JSON-safe canonical dict."""
         return {"terms": [term.canonical() for term in self.terms]}
+
+    def engine_costs(self) -> dict[EngineId, CostClass]:
+        """Resolve composite engine capability by intersection across terms."""
+        from metamer.core.capability import intersect_engine_costs
+
+        return intersect_engine_costs(
+            zip(self.labels(), (t.engine_costs() for t in self.terms), strict=True)
+        )
 
     def spec_hash(self) -> str:
         """Return a stable 16-character hash of the canonical form."""

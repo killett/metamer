@@ -2,9 +2,18 @@ import json
 
 import pytest
 
+from metamer.core.capability import CostClass, EngineId, IncompatibleSpecError
 from metamer.core.params import ParamSpec
+from metamer.core.registry import kernel_registry
 from metamer.core.terms import ProcessSpec, TermSpec, free_param_index
 from metamer.core.transforms import Log, Logit
+
+
+class _FakeFamily:
+    """Throwaway stand-in for a kernel family, used only to probe engine_costs wiring."""
+
+    def __init__(self, costs):
+        self.engine_costs = costs
 
 
 def _param(name: str, default: float) -> ParamSpec:
@@ -382,3 +391,95 @@ def test_labels_are_independent_of_construction_order():
     b = _white() + _matern12(2.0) + _matern12(50.0)
     assert a.labels() == ("matern12[0]", "matern12[1]", "white[0]")
     assert b.labels() == ("matern12[0]", "matern12[1]", "white[0]")
+
+
+def test_term_engine_costs_resolve_from_kernel_registry():
+    """TermSpec.engine_costs() looks up `kind` in kernel_registry and returns
+    the registered family's `.engine_costs` attribute.
+
+    Task-3 brief correction 5: none of the brief's own test files exercised
+    this wiring, and it is the only new code touching an already-committed
+    module (terms.py) -- exactly where correction 3's two mypy defects live.
+
+    Bug this catches: engine_costs() reading from the wrong registry (e.g.
+    recipe_registry, which would KeyError here since the kind is only
+    registered in kernel_registry), or returning the factory's raw return
+    value instead of its `.engine_costs` attribute.
+    """
+    costs = {EngineId.KALMAN: CostClass.LINEAR, EngineId.WHITTLE: CostClass.NLOGN}
+    kernel_registry.register("throwaway_engine_costs_a")(lambda: _FakeFamily(costs))
+    try:
+        term = TermSpec(kind="throwaway_engine_costs_a", params={})
+        assert term.engine_costs() == costs
+    finally:
+        kernel_registry.unregister("throwaway_engine_costs_a")
+
+
+def test_process_spec_engine_costs_intersects_with_worst_cost_per_engine():
+    """ProcessSpec.engine_costs() is the per-engine worst cost, intersected
+    across every term via TermSpec.engine_costs().
+
+    Expected value determined independently: both throwaway terms support
+    only KALMAN, at LINEAR and CUBIC respectively; the worst of the two is
+    CUBIC, computed on paper via CostClass's declared ordering, not by
+    re-running intersect_engine_costs mentally.
+
+    Bug this catches: ProcessSpec.engine_costs() not calling
+    intersect_engine_costs at all (e.g. returning only the first term's
+    costs), or intersecting without taking the max, which would let a
+    composite report a cheaper cost class than its most expensive term.
+    """
+    kernel_registry.register("throwaway_engine_costs_b1")(
+        lambda: _FakeFamily({EngineId.KALMAN: CostClass.LINEAR})
+    )
+    kernel_registry.register("throwaway_engine_costs_b2")(
+        lambda: _FakeFamily({EngineId.KALMAN: CostClass.CUBIC})
+    )
+    try:
+        spec = ProcessSpec(
+            (
+                TermSpec(kind="throwaway_engine_costs_b1", params={}),
+                TermSpec(kind="throwaway_engine_costs_b2", params={}),
+            )
+        )
+        assert spec.engine_costs() == {EngineId.KALMAN: CostClass.CUBIC}
+    finally:
+        kernel_registry.unregister("throwaway_engine_costs_b1")
+        kernel_registry.unregister("throwaway_engine_costs_b2")
+
+
+def test_process_spec_engine_costs_raises_naming_a_term_when_no_engine_survives():
+    """A composite whose terms share no common engine raises
+    IncompatibleSpecError naming the terms responsible.
+
+    Expected value determined independently: the two throwaway terms support
+    disjoint engines (KALMAN only vs. TOEPLITZ only), so by set intersection
+    done on paper the surviving set is empty and both term labels must appear
+    in the error, one as KALMAN's eliminator and one as TOEPLITZ's.
+
+    Bug this catches: ProcessSpec.engine_costs() swallowing the empty
+    intersection instead of propagating IncompatibleSpecError, or passing
+    plain `kind` strings instead of `labels()` into intersect_engine_costs
+    and losing the per-term label the error is supposed to carry.
+    """
+    kernel_registry.register("throwaway_engine_costs_c1")(
+        lambda: _FakeFamily({EngineId.KALMAN: CostClass.LINEAR})
+    )
+    kernel_registry.register("throwaway_engine_costs_c2")(
+        lambda: _FakeFamily({EngineId.TOEPLITZ: CostClass.CUBIC})
+    )
+    try:
+        spec = ProcessSpec(
+            (
+                TermSpec(kind="throwaway_engine_costs_c1", params={}),
+                TermSpec(kind="throwaway_engine_costs_c2", params={}),
+            )
+        )
+        with pytest.raises(IncompatibleSpecError) as excinfo:
+            spec.engine_costs()
+        message = str(excinfo.value)
+        assert "throwaway_engine_costs_c1[0]" in message
+        assert "throwaway_engine_costs_c2[0]" in message
+    finally:
+        kernel_registry.unregister("throwaway_engine_costs_c1")
+        kernel_registry.unregister("throwaway_engine_costs_c2")
