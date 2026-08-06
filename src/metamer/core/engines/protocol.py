@@ -37,13 +37,32 @@ class ScoredResult:
         n_used: Number of unmasked observations per series, shape (B,). This is
             valid even for a failed series: a count of unmasked epochs is true
             regardless of how the fit went. It is the ONLY field that stays
-            meaningful when `outcome` is not OK.
+            meaningful when `outcome` is not OK, and it carries NO sentinel --
+            every value it ever holds is a real count, so unlike `rank_x` it is
+            safe to do arithmetic on without gating. The one value worth
+            expecting is 0, for an INSUFFICIENT_DATA series; that is a true
+            count, and a consumer dividing by it fails loudly (zero-division or
+            inf) rather than plausibly. Deliberately left un-poisoned for that
+            reason.
         rank_x: Numerical rank of the accumulated `X' Sigma^-1 X` per series,
             shape (B,). Zero when there is no design; **-1 when `outcome` is not
             OK**, meaning "not computed", which is distinct from a genuine rank
             of 0. This is the PER-SERIES effective rank, not the batch-level
             rank of X: a gap that removes every row supporting a column makes
             that column unidentifiable for that series alone.
+
+            CHECK `outcome` BEFORE CONSUMING, AND NEVER DO ARITHMETIC ON THIS
+            VALUE WITHOUT GATING ON IT. -1 is structurally unambiguous as a
+            *comparison* -- real ranks are non-negative, so `rank_x < 0` is a
+            clean test -- but it is NOT fail-loud under arithmetic, which is the
+            trap. The concrete case: REML's effective sample size is
+            `n_obs - rank_x`, and at -1 that silently yields `n_obs + 1` -- a
+            sample size LARGER than the number of observations, entirely
+            plausible-looking, feeding straight into BIC. Unlike
+            `normal_equations`, which is NaN for a failed series and so poisons
+            any expression it enters, this sentinel propagates quietly. Gate on
+            `outcome`, or on `rank_x >= 0`, before any subtraction, division or
+            degrees-of-freedom count.
 
             THE RANK IS THRESHOLDED ON THE GRAM, WHICH SQUARES THE CONDITION
             NUMBER. The cutoff is a relative singular-value tolerance of 1e-10
