@@ -1510,8 +1510,10 @@ git commit -m "feat: add capability resolution, registries, and failure taxonomy
 - Create: `tests/oracles.py`, `tests/test_families.py`
 
 **Acceptance Criteria:**
-- [ ] `matern12.transition(theta, dt)` matches `scipy.linalg.expm(A*dt)` to 1e-12
-- [ ] `matern12.process_noise` matches `P∞ − F P∞ Fᵀ` computed from a Lyapunov solve to 1e-12
+- [ ] `matern12.transition(theta, dt)` matches `scipy.linalg.expm(A*dt)` to `rtol=1e-12, atol=1e-14`
+- [ ] `matern12.process_noise` matches `P∞ − F P∞ Fᵀ` computed from a Lyapunov solve to
+      `rtol=1e-11, atol=1e-13` — the looser of the two, because the difference form loses
+      precision at small nonzero `Δt` at every state dimension
 - [ ] `matern12.acvf(τ) == sigma² exp(−|τ|/rho)` — a closed form taken from the literature, not from the implementation
 - [ ] White noise reports `state_dim == 0` and contributes only to `measurement_variance`
 - [ ] All family methods accept `theta` of shape `(B, p)` and return leading batch axes
