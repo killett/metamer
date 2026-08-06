@@ -247,22 +247,25 @@ def test_negative_residual_reduction_is_flagged_but_rounding_is_not():
     np.testing.assert_array_equal(got, [False, False, False, True, False])
 
 
-def test_gls_solution_isolates_a_member_that_defeats_the_pre_classification():
-    """One member that reaches cholesky and fails does not fail the stack.
+def test_a_negative_definite_member_is_classified_not_left_to_cholesky():
+    """diag(-1, -1) is named RANK_DEFICIENT_X, and its neighbours are unharmed.
 
-    `xtx = diag(-1, -1)` is the case the pre-classification cannot see: its
-    determinant is +1 (so `slogdet` reports a positive sign) and its singular
-    values are (1, 1) (so it is neither rank deficient nor ill conditioned),
-    yet it is negative definite and `np.linalg.cholesky` raises -- for the
-    WHOLE (B, k, k) stack, not for the one member.
+    This member is invisible to two of the three things one might classify on.
+    Its determinant is +1, so `slogdet` reports a POSITIVE sign; and its
+    SINGULAR values are (1, 1), so it looks perfectly conditioned and full
+    rank. It is nonetheless negative definite, and `np.linalg.cholesky` raises
+    for the WHOLE (B, k, k) stack when it meets one.
+
+    Bug this catches: classifying on `svdvals` rather than `eigvalsh`. For a
+    symmetric matrix the singular values are the ABSOLUTE VALUES of the
+    eigenvalues, so a singular-value route cannot tell -I from +I and would let
+    this member through to the factorization -- taking its two healthy
+    batch-mates down with it, which at B = 10^4 is 9,999 destroyed fits per bad
+    grid point. Only the eigenvalue routine sees the sign.
 
     Expected values are hand-computed for the two healthy members:
     G = [[4, 1], [1, 3]] has det 11 and G^-1 = [[3, -1], [-1, 4]] / 11, so
     beta = [5, 2] / 11 and y'SX beta = 12 / 11.
-
-    Bug this catches: letting the LinAlgError propagate (or catching it and
-    failing the whole subset), which at B = 10^4 destroys 9,999 good fits over
-    one grid point.
     """
     gram = np.array([[4.0, 1.0], [1.0, 3.0]])
     accum = np.zeros((3, 3, 3))
@@ -290,15 +293,16 @@ def test_gls_solution_isolates_a_member_that_defeats_the_pre_classification():
     assert np.isnan(gls.logdet[1])
 
 
-def test_gls_solution_handles_every_member_failing_the_factorization():
-    """When the whole valid subset fails cholesky, all of it is named.
+def test_every_member_negative_definite_leaves_no_series_tagged_ok():
+    """With no healthy member left, the valid subset is empty and all are named.
 
-    Same construction as above with no healthy member left, so the backstop's
-    surviving index is empty.
+    Same construction as above with every member negative definite, so nothing
+    survives classification and the factorization is never entered at all.
 
-    Bug this catches: falling through to `factors[keep]` and the solves with an
-    empty index, which either raises on the (0, k, k) stack or writes nothing
-    while leaving the outcomes at OK -- NaN values tagged as a good fit.
+    Bug this catches: falling through to the solves with an empty index, which
+    either raises on the (0, k, k) stack or writes nothing while leaving the
+    outcomes at their OK initial value -- NaN values tagged as a good fit,
+    which is the one combination the store's status invariant forbids.
     """
     accum = np.zeros((2, 3, 3))
     accum[:, 1:, 1:] = -np.eye(2)
@@ -310,6 +314,116 @@ def test_gls_solution_handles_every_member_failing_the_factorization():
     assert np.all(gls.outcome == Outcome.RANK_DEFICIENT_X.code)
     assert np.all(np.isnan(gls.beta))
     assert np.all(np.isnan(gls.rss_reduction))
+
+
+def test_the_cholesky_backstop_isolates_one_member_when_lapack_fails(monkeypatch):
+    """A batched factorization failure is retried per member, not abandoned.
+
+    The pre-classification above is strong enough that no MATRIX now reaches
+    `np.linalg.cholesky` and fails, so the only way into this path is LAPACK
+    itself failing on a stack it should have handled -- a convergence failure,
+    a marginally-definite matrix on a different BLAS. That is a genuine
+    external boundary, and it is the only thing mocked here: the recovery loop
+    under test runs for real, and the healthy members are solved by the real
+    factorization through the same patched entry point.
+
+    Bug this catches: letting the LinAlgError propagate out of `gls_solution`
+    (which at 10^7 points aborts a tile instead of recording an outcome), or
+    catching it and marking the WHOLE valid subset failed -- 9,999 destroyed
+    fits for one bad neighbour, the batched-granularity failure this module
+    exists to prevent.
+
+    Expected values are hand-computed, not read back: G = [[4, 1], [1, 3]] has
+    det 11 and G^-1 = [[3, -1], [-1, 4]] / 11, so beta = [5, 2] / 11,
+    log|G| = log 11, and y'SX beta = 12 / 11.
+    """
+    gram = np.array([[4.0, 1.0], [1.0, 3.0]])
+    accum = np.zeros((3, 3, 3))
+    for index in range(3):
+        accum[index, 1:, 1:] = gram
+        accum[index, 1:, 0] = [2.0, 1.0]
+        accum[index, 0, 0] = 10.0
+    # Member 1 is the one LAPACK will refuse; it is numerically identical to
+    # its neighbours, so nothing but the patch can distinguish them -- which is
+    # what makes this a test of the recovery path and not of the classifier.
+    doomed = 1
+    real_cholesky = np.linalg.cholesky
+    seen: list[int] = []
+
+    def flaky(a):
+        arr = np.asarray(a)
+        if arr.ndim == 3:
+            raise np.linalg.LinAlgError("simulated batched LAPACK failure")
+        # The members are numerically identical, so the refusal is keyed on the
+        # POSITION LAPACK is asked about, not on the matrix. That is what makes
+        # this a test of the recovery loop's bookkeeping -- does the right
+        # series get marked? -- rather than of the classifier.
+        seen.append(len(seen))
+        if seen[-1] == doomed:
+            raise np.linalg.LinAlgError("simulated per-member LAPACK failure")
+        return real_cholesky(arr)
+
+    monkeypatch.setattr(np.linalg, "cholesky", flaky)
+
+    gls = gls_solution(accum)
+
+    np.testing.assert_array_equal(
+        gls.outcome,
+        [Outcome.OK.code, Outcome.RANK_DEFICIENT_X.code, Outcome.OK.code],
+    )
+    for index in (0, 2):
+        np.testing.assert_allclose(
+            gls.beta[index], [5.0 / 11.0, 2.0 / 11.0], rtol=1e-12
+        )
+        assert gls.logdet[index] == pytest.approx(np.log(11.0), rel=1e-12)
+        assert gls.rss_reduction[index] == pytest.approx(12.0 / 11.0, rel=1e-12)
+    assert np.all(np.isnan(gls.beta[doomed]))
+    assert np.isnan(gls.logdet[doomed])
+    assert np.isnan(gls.rss_reduction[doomed])
+    assert len(seen) == 3, "every member of the valid subset must be retried"
+
+
+def test_the_cholesky_backstop_names_every_member_when_all_of_them_fail(monkeypatch):
+    """When the per-member retry saves nobody, nothing is left tagged OK.
+
+    Bug this catches: the empty-surviving-index branch falling through to the
+    solves, which either raises on a (0, k, k) stack or writes nothing while
+    leaving every outcome at its OK initial value -- NaN values tagged as a
+    good fit.
+    """
+    accum = np.zeros((2, 3, 3))
+    accum[:, 1:, 1:] = np.array([[4.0, 1.0], [1.0, 3.0]])
+    accum[:, 1:, 0] = [2.0, 1.0]
+    accum[:, 0, 0] = 10.0
+
+    def always_fails(a):
+        raise np.linalg.LinAlgError("simulated LAPACK failure")
+
+    monkeypatch.setattr(np.linalg, "cholesky", always_fails)
+
+    gls = gls_solution(accum)
+
+    np.testing.assert_array_equal(
+        gls.outcome, np.full(2, Outcome.RANK_DEFICIENT_X.code)
+    )
+    assert np.all(np.isnan(gls.beta))
+    assert np.all(np.isnan(gls.logdet))
+    assert np.all(np.isnan(gls.rss_reduction))
+
+
+def test_merge_outcomes_refuses_a_single_verdict(monkeypatch):
+    """Merging one verdict is refused: a merge site has lost an input.
+
+    Bug this catches: a refactor that reduces
+    `merge_outcomes(precheck, engine, gls)` to `merge_outcomes(gls)` -- which
+    would silently return the objective's verdict alone and reinstate the
+    outcome laundering the ladder exists to prevent, with no shape or type
+    error anywhere to signal it.
+    """
+    with pytest.raises(ValueError, match="at least two verdicts, got 1"):
+        merge_outcomes(outcome_array(3))
+    with pytest.raises(ValueError, match="at least two verdicts, got 0"):
+        merge_outcomes()
 
 
 def test_gls_solution_names_every_failure_when_nothing_is_solvable():
