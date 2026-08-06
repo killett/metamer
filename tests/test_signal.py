@@ -8,9 +8,8 @@ derived independently of the implementation.
 import numpy as np
 import pytest
 
-from metamer.core.engines.kalman import _RANK_RTOL as GRAM_RANK_RTOL
+from metamer.core.engines.kalman import KalmanEngine
 from metamer.core.signal import (
-    X_RANK_RTOL,
     Accel,
     Annual,
     Constant,
@@ -126,10 +125,14 @@ def test_signal_rank_and_gram_rank_disagree_at_cond_1e7():
     with singular values fixed at [1e7, 1e4, 1.0] (cond(X) = 1e7). At
     X_RANK_RTOL = 1e-10 all three singular values clear `1e-10 * s_max`
     (ratios 1, 1e-3, 1e-7, all above 1e-10) so SignalSpec.rank = 3. The Gram's
-    singular values are the squares [1e14, 1e8, 1.0]; at GRAM_RANK_RTOL =
-    1e-10 the ratio for the third is (1e-7)**2 = 1e-14 < 1e-10, so it is
-    dropped and the Gram rank is 2. Verified numerically before writing this
-    test (see task-7-report.md); pinned here as a recorded fact.
+    singular values are the squares [1e14, 1e8, 1.0]; at the engine's
+    GRAM_RANK_RTOL = 1e-10 the ratio for the third is (1e-7)**2 = 1e-14 <
+    1e-10, so it is dropped and the Gram rank is 2. The Gram rank is computed
+    by calling the REAL `KalmanEngine._rank` (fix round 1: the first version
+    of this test reimplemented the engine's threshold rule inline, which
+    would keep passing if the engine's own rule ever changed -- the one thing
+    this test exists to catch) rather than restated here, so this pins actual
+    engine behavior, not a copy of it.
     """
     rng = np.random.default_rng(20260805)
     u, _ = np.linalg.qr(rng.standard_normal((10, 3)))
@@ -139,22 +142,10 @@ def test_signal_rank_and_gram_rank_disagree_at_cond_1e7():
 
     assert SignalSpec.rank(x) == 3
 
-    gram = x.T @ x
-    gram_svals = np.linalg.svdvals(gram)
-    gram_rank = int((gram_svals > GRAM_RANK_RTOL * gram_svals[0]).sum())
-    assert gram_rank == 2
-
-
-def test_x_rank_rtol_and_gram_rank_rtol_are_the_same_literal_value():
-    """The two tolerances share a literal (1e-10) but threshold different things.
-
-    Bug this catches: someone "fixing" the naming collision by deleting one
-    constant instead of documenting both -- this pins that both still exist,
-    independently, at the same numeric value the design intends.
-    """
-    assert X_RANK_RTOL == 1e-10
-    assert GRAM_RANK_RTOL == 1e-10
-    assert X_RANK_RTOL == GRAM_RANK_RTOL  # same literal, different matrices
+    gram_batch = (x.T @ x)[None, :, :]  # KalmanEngine._rank expects (B, k, k)
+    gram_rank, gram_ok = KalmanEngine._rank(gram_batch)
+    assert bool(gram_ok[0])
+    assert int(gram_rank[0]) == 2
 
 
 # --- Correction 5: zero columns vs zero rows are different failures --------
@@ -231,17 +222,27 @@ def test_offset_at_last_epoch_is_not_deficient_but_is_ill_conditioned():
     example (SS5.2). `condition_number` is what distinguishes this from a
     healthy full-rank design.
 
-    Expected condition number determined independently: measured directly via
-    `np.linalg.svd` on X = [ones(5), offset] before writing this assertion
-    (task-7-report.md records the measurement); pinned to that value rather
-    than re-derived from the implementation under test.
+    Expected condition number derived analytically (fix round 1: the original
+    version of this test pinned a value obtained by running the code, at a
+    tolerance tight enough to hide a difference in the last three digits from
+    the true closed form -- caught in review). For t = arange(5.0) and
+    Offset(epoch=4.0), X = [ones(5), offset] with offset = [0,0,0,0,1], so
+    X'X = [[5, 1], [1, 1]] (col1.col1 = 5, col1.col2 = col2.col1 =
+    sum(offset) = 1, col2.col2 = sum(offset^2) = 1). Its eigenvalues solve
+    lambda^2 - 6*lambda + 4 = 0 (trace 6, det 5*1 - 1*1 = 4), giving
+    lambda = 3 +/- sqrt(5). X's singular values are the square roots of
+    X'X's eigenvalues, so cond(X) = sqrt((3+sqrt5)/(3-sqrt5)), which
+    simplifies -- since (3+sqrt5)(3-sqrt5) = 9-5 = 4, so
+    (3+sqrt5)/(3-sqrt5) = ((3+sqrt5)/2)^2 -- to exactly (3+sqrt5)/2 = phi^2,
+    the golden ratio squared.
     """
     t = np.arange(5.0)
     spec = SignalSpec([Constant(), Offset(epoch=4.0)])
     info = spec.design_info(t)
     assert info.rank == 2
     assert info.is_deficient is False
-    assert info.condition_number == pytest.approx(2.6180339887498953, rel=1e-9)
+    expected_condition_number = (3.0 + np.sqrt(5.0)) / 2.0
+    assert info.condition_number == pytest.approx(expected_condition_number, rel=1e-12)
 
 
 def test_offset_after_last_sample_condition_number_is_infinite():
@@ -268,10 +269,13 @@ def test_decimal_years_vs_seconds_since_1970_condition_number():
     Annual, SemiAnnual] (task-7-report.md records the exact script and
     output): decimal years gives cond(X) ~ 3.4e1 and rank 7/7; the identical
     record in seconds since 1970 (period left un-converted, the ordinary way
-    this contract gets violated) gives cond(X) > 1e30 and rank 2 of 7. This
-    test pins the qualitative claim (years >> better conditioned, seconds
-    loses rank) at a coarser tolerance than the exact measured constants,
-    since the precise value is sensitive to the exact epoch chosen.
+    this contract gets violated) gives cond(X) > 1e30 and rank 2 of 7 --
+    pinned exactly (fix round 1: the original version only asserted
+    `rank < 7`, which a broken column that merely dropped rank by one, to 6,
+    would also have passed). The condition-number bounds stay coarse, since
+    the precise value is sensitive to the exact epoch chosen (see
+    task-7-report.md for what was actually measured), but the rank collapse
+    itself is deterministic for this fixed t and is pinned exactly.
     """
     n = 20 * 12
     t_years = 2000.0 + np.arange(n) / 12.0
@@ -283,7 +287,7 @@ def test_decimal_years_vs_seconds_since_1970_condition_number():
     seconds_per_year = 365.25 * 86400
     t_seconds = (t_years - 1970.0) * seconds_per_year
     seconds_info = spec.design_info(t_seconds)
-    assert seconds_info.rank < 7
+    assert seconds_info.rank == 2
     assert seconds_info.condition_number > 1e20
 
 
@@ -516,3 +520,134 @@ def test_design_info_per_point_field_defaults_false():
     matrix = np.ones((3, 1))
     info = DesignInfo(matrix, rank=1, gram_logdet=0.0, condition_number=1.0)
     assert info.per_point is False
+
+
+# --- Fix round 1 (external review): Important 1-3 ---------------------------
+
+
+def test_numerically_deficient_design_has_finite_gram_logdet():
+    """A numerically (not exactly) deficient design has a FINITE gram_logdet.
+
+    Bug this catches (Important 1): the pre-fix `design_info` docstring
+    claimed `gram_logdet` is -inf for a rank-deficient design. That claim is
+    false, and a caller (Task 8) gating on the -inf sentinel rather than on
+    `is_deficient` would silently accept a deficient design whose Gram
+    determinant merely happens to still be nonzero to float64 precision.
+
+    Expected values determined independently: X is built by SVD synthesis
+    with singular values fixed at [1, 1e-2, 1e-11]. At X_RANK_RTOL = 1e-10
+    the ratio 1e-11/1 = 1e-11 is below tolerance, so rank = 2 of 3
+    (deficient), but log|X'X| = 2*sum(log(s)) = 2*(log(1) + log(1e-2) +
+    log(1e-11)) = -59.867..., a large negative but perfectly finite number,
+    not -inf.
+    """
+    rng = np.random.default_rng(1)
+    u, _ = np.linalg.qr(rng.standard_normal((3, 3)))
+    v, _ = np.linalg.qr(rng.standard_normal((3, 3)))
+    singular_values = np.array([1.0, 1e-2, 1e-11])
+    x = u @ np.diag(singular_values) @ v.T
+    expected_gram_logdet = 2.0 * np.sum(np.log(singular_values))
+
+    info = SignalSpec([Regressor(x[:, i]) for i in range(3)]).design_info(
+        np.arange(3.0)
+    )
+    assert info.rank == 2
+    assert info.n_beta == 3
+    assert info.is_deficient is True  # THE gate
+    assert np.isfinite(info.gram_logdet)  # NOT -inf, despite being deficient
+    assert info.gram_logdet == pytest.approx(expected_gram_logdet, rel=1e-6)
+
+
+def test_condition_number_infinite_for_more_columns_than_rows():
+    """cond(X) is +inf when X is structurally singular (more columns than rows).
+
+    Bug this catches (Important 2): `np.linalg.svdvals` on a "wide" (n < k)
+    matrix returns only `min(n, k) = n` singular values -- the `k - n`
+    structurally-zero ones simply never appear in that array -- so reading
+    s_min from it alone computes a FINITE ratio and misses the singularity
+    entirely. Before this fix, n=2, k=3 gave a finite `cond(X) ~ 2.0`, flatly
+    contradicting `rank(2) < n_beta(3)` on the very same DesignInfo.
+
+    Columns chosen independently of any rank computation (three arbitrary,
+    non-proportional 2-vectors); the only fact this test relies on is
+    n_rows=2 < n_cols=3, which alone forces rank <= 2 < 3 for ANY choice of
+    columns.
+
+    Checks `_condition_number` directly (the method Important 2 names) as
+    well as `design_info`'s output (the actual production hot path, which
+    computes the same answer via `_svd_diagnostics` instead of calling
+    `_condition_number` again, to avoid a second SVD -- see Important 3):
+    both must independently agree the design is infinitely conditioned.
+    """
+    x = np.array([[1.0, 3.0, 2.0], [2.0, 1.0, 5.0]])
+    assert SignalSpec._condition_number(x) == float("inf")
+
+    t = np.arange(2.0)
+    spec = SignalSpec([Regressor(x[:, i]) for i in range(3)])
+    info = spec.design_info(t)
+    assert info.n_beta == 3
+    assert info.rank == 2
+    assert info.is_deficient is True
+    assert info.condition_number == float("inf")
+
+
+def test_condition_number_direct_finite_and_zero_singular_value_cases():
+    """`_condition_number`'s two non-structural branches, exercised directly.
+
+    Bug this catches: `design_info` no longer calls `_condition_number` (it
+    uses `_svd_diagnostics` to share one SVD with `gram_logdet`, Important 3),
+    so without a direct test `_condition_number`'s ordinary finite-ratio
+    return and its `values[-1] == 0.0` guard would be unreachable dead code --
+    a correctly-fixed method nobody actually exercises. `np.eye(3)` has all
+    singular values equal to 1, so cond = 1 exactly (an independently obvious
+    fact, not derived from running the code); a column of zeros makes the
+    smallest singular value exactly 0, hence cond = +inf.
+    """
+    assert SignalSpec._condition_number(np.eye(3)) == pytest.approx(1.0)
+
+    x_with_zero_column = np.array([[1.0, 0.0], [1.0, 0.0], [1.0, 0.0]])
+    assert SignalSpec._condition_number(x_with_zero_column) == float("inf")
+
+
+def test_gram_logdet_accurate_at_cond_1e9_slogdet_route_fails():
+    """gram_logdet stays accurate at cond(X) = 1e9; slogdet(X'X) does not.
+
+    Bug this catches (Important 3): computing gram_logdet via `slogdet(X'X)`
+    instead of `2 * sum(log(svdvals(X)))`. Forming the Gram squares the
+    condition number (X'X's condition number is cond(X)^2 = 1e18, deep in
+    float64's ~1e16 precision-loss regime), and `slogdet`'s LU factorization
+    inherits that loss. At the fixed seed used here it does not merely lose a
+    few digits: `np.linalg.slogdet` returns a NEGATIVE sign for this exactly
+    positive-semidefinite Gram matrix -- which the pre-fix `design_info`
+    (`float(logdet) if sign > 0 else float("-inf")`) would have turned into
+    `gram_logdet = -inf`, misclassifying a design that is actually full rank
+    (4 of 4, since s_min/s_max = 1e-9 clears X_RANK_RTOL = 1e-10) as exactly
+    singular -- a far worse failure than an imprecise-but-finite number.
+
+    Expected value determined independently, on paper, not by running the
+    code under test: X is built by SVD synthesis with singular values fixed
+    at [1e9, 1e6, 1e3, 1.0] (cond(X) = 1e9), so log|X'X| = 2 * sum(log(s)) =
+    2 * (9 + 6 + 3 + 0) * ln(10) = 36 * ln(10) exactly -- X'X = V diag(s^2) V'
+    is a similarity transform of diag(s^2), whose determinant is the product
+    of the s_i^2 regardless of the orthogonal U, V used to build X.
+    """
+    rng = np.random.default_rng(1090)
+    u, _ = np.linalg.qr(rng.standard_normal((20, 4)))
+    v, _ = np.linalg.qr(rng.standard_normal((4, 4)))
+    singular_values = np.array([1e9, 1e6, 1e3, 1.0])
+    x = u @ np.diag(singular_values) @ v.T
+    expected_gram_logdet = 36.0 * np.log(10.0)
+
+    info = SignalSpec([Regressor(x[:, i]) for i in range(4)]).design_info(
+        np.arange(20.0)
+    )
+    assert info.rank == 4
+    assert info.is_deficient is False
+    assert info.gram_logdet == pytest.approx(expected_gram_logdet, rel=1e-6)
+
+    # Confirm the slogdet route this fix replaces actually fails, deliberate
+    # breakage evidence rather than a bare assertion: at this conditioning it
+    # does not reproduce the analytic answer AND flips to a spurious negative
+    # sign for a matrix that is genuinely positive semidefinite.
+    sign, slogdet_value = np.linalg.slogdet(x.T @ x)
+    assert not (sign > 0 and abs(slogdet_value - expected_gram_logdet) < 1.0)

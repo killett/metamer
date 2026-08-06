@@ -264,17 +264,41 @@ class DesignInfo:
     but the identical bug on the identical kind of field, fixed here for the
     same reason before it resurfaces as a "new" instance of it.
 
-    `gram_logdet` is log|X'X|, the REML basis-invariance term. It is a property
-    of X alone, so computing it inside the likelihood would recompute a fixed
-    quantity ~50 times per fit, 12 candidates per point, 10^7 points.
+    `gram_logdet` is log|X'X| -- the FULL determinant's log, NOT half of it.
+    Harville's (1974) REML basis-invariance term is `+ (1/2) * log|X'X|` in
+    the log-likelihood; Task 8's objective must apply that one-half itself,
+    since this field does not. It is a property of X alone, so computing it
+    inside the likelihood would recompute a fixed quantity ~50 times per fit,
+    12 candidates per point, 10^7 points.
+
+    Computed as `2 * sum(log(svdvals(X)))` from the SAME SVD as
+    `condition_number` (see `SignalSpec._svd_diagnostics`), not from
+    `slogdet(X'X)`. Forming the Gram squares the condition number, and
+    `slogdet`'s LU factorization inherits that loss: measured (fix round 1,
+    task-7-report.md) at +3.20 nats of error at cond(X) = 1e9 and +8.58 nats
+    at cond(X) = 1e10 in one construction, both silently reported as finite;
+    a second, fixed-seed construction at cond(X) = 1e9 went further and made
+    `slogdet` return a spurious NEGATIVE sign for a matrix that is genuinely
+    positive semidefinite, which the old `sign > 0 else -inf` branch would
+    have turned into `gram_logdet = -inf` for a design that is actually full
+    rank. **`gram_logdet` reaches -inf ONLY when X is EXACTLY singular** (an
+    all-zero column, or more columns than rows); a design that is merely
+    NUMERICALLY rank-deficient (its smallest singular value clears zero but
+    falls below `X_RANK_RTOL`) still has a finite, if very negative,
+    `gram_logdet` -- e.g. singular values `[1, 1e-2, 1e-11]` give rank 2 of 3
+    (the last value is below `X_RANK_RTOL * s_max`) with `gram_logdet` ~
+    -59.9, not -inf. **`is_deficient` is the gate for rank deficiency; a
+    finite `gram_logdet` is not proof of full rank, and `gram_logdet == -inf`
+    is only one of the ways a deficient design can show up.**
 
     `condition_number` is cond(X) = s_max/s_min from X's OWN singular values
     (not the Gram's -- see `X_RANK_RTOL`'s docstring). The design doc requires
     a condition-number diagnostic that WARNS rather than blocks (SS4.8, SS8.5:
     "Warn, do not block -- but say it out loud"); this field is that number.
-    Nothing in this module blocks on it. Infinite where X has zero rows or is
-    exactly singular (an all-zero column, e.g. an offset epoch after the last
-    sample).
+    Nothing in this module blocks on it. Infinite where X has more columns
+    than rows (see `SignalSpec._condition_number`'s docstring for why that is
+    a distinct case from an all-zero column) or is otherwise exactly singular
+    (an all-zero column, e.g. an offset epoch after the last sample).
 
     `rank` and `is_deficient` are **batch-level**: the design may be shared
     across a batch of series, but the Kalman engine accumulates
@@ -334,9 +358,13 @@ class SignalSpec:
                 docstring's TIME-AXIS UNIT CONTRACT.
 
         Returns:
-            A DesignInfo. `gram_logdet` is -inf for a rank-deficient design;
-            the caller classifies that as RANK_DEFICIENT_X rather than using
-            it. `rank`/`is_deficient` are batch-level -- see `DesignInfo`'s
+            A DesignInfo. `gram_logdet` reaches -inf only when X is EXACTLY
+            singular (an all-zero column, or more columns than rows); a
+            merely NUMERICALLY rank-deficient design still has a finite
+            `gram_logdet`. **`is_deficient` is the gate the caller must use
+            for RANK_DEFICIENT_X, not `gram_logdet == -inf`** -- see
+            `DesignInfo`'s docstring for the measured counter-example.
+            `rank`/`is_deficient` are batch-level -- see `DesignInfo`'s
             docstring.
         """
         t = np.asarray(t, dtype=np.float64)
@@ -358,19 +386,68 @@ class SignalSpec:
             # gram_logdet = 0.0 and (via `bool(matrix.size and ...)`) a False
             # is_deficient for a design that cannot estimate anything.
             return DesignInfo(matrix, 0, float("-inf"), condition_number=float("inf"))
-        sign, logdet = np.linalg.slogdet(matrix.T @ matrix)
-        gram_logdet = float(logdet) if sign > 0 else float("-inf")
-        return DesignInfo(
-            matrix, rank, gram_logdet, condition_number=self._condition_number(matrix)
-        )
+        condition_number, gram_logdet = self._svd_diagnostics(matrix)
+        return DesignInfo(matrix, rank, gram_logdet, condition_number=condition_number)
+
+    @staticmethod
+    def _svd_diagnostics(x: NDArray[np.float64]) -> tuple[float, float]:
+        """cond(X) and log|X'X|, both from ONE SVD of X, not from three.
+
+        `log|X'X| = 2 * sum(log(s))` exactly, for any X: `X'X = V diag(s^2)
+        V'` is a similarity transform of `diag(s^2)`, whose determinant is
+        `prod(s^2)` regardless of the orthogonal U used to build X. This is
+        far more accurate than `slogdet(X'X)` at large cond(X), because
+        forming the Gram squares the condition number and `slogdet`'s LU
+        factorization inherits that loss -- see `DesignInfo.gram_logdet`'s
+        docstring for the measured error and the spurious-sign failure this
+        replaces. Reuses `_condition_number`'s decomposition rather than
+        paying for a second `svdvals` call plus a `slogdet` call, which the
+        pre-fix `design_info` did (three decompositions total across
+        `design_matrix`'s rank, this method's old `slogdet`, and
+        `_condition_number`'s own `svdvals`; now two, since this method
+        replaces the latter two with one shared call).
+
+        Args:
+            x: The design matrix, shape (n, k) with n >= 1 and k >= 1 -- the
+                `n_beta == 0` and `t.size == 0` cases are handled by the
+                caller before this is reached.
+
+        Returns:
+            (condition_number, gram_logdet). Both are the appropriate
+            infinity when X has more columns than rows or has an
+            exactly-zero singular value -- see `_condition_number`'s
+            docstring for why the more-columns-than-rows case needs its own
+            check.
+        """
+        if x.shape[0] < x.shape[1]:
+            return float("inf"), float("-inf")
+        values = np.linalg.svdvals(x)
+        if values[-1] == 0.0:
+            return float("inf"), float("-inf")
+        condition_number = float(values[0] / values[-1])
+        gram_logdet = float(2.0 * np.sum(np.log(values)))
+        return condition_number, gram_logdet
 
     @staticmethod
     def _condition_number(x: NDArray[np.float64]) -> float:
         """cond(X) = s_max / s_min from X's own singular values.
 
-        Not the Gram's -- see `X_RANK_RTOL`'s docstring. Infinite where X is
-        exactly singular (s_min == 0), which includes an all-zero column.
+        Not the Gram's -- see `X_RANK_RTOL`'s docstring. Infinite where X has
+        more columns than rows: `np.linalg.svdvals` returns only
+        `min(n_rows, n_cols)` values, so a "wide" X's `n_cols - n_rows`
+        structurally-zero singular values never appear in that array at all,
+        and reading s_min from the values that ARE returned would silently
+        miss the singularity -- measured before this fix: n=2, k=3 returned a
+        finite cond ~2.0, contradicting `rank(2) < n_beta(3)`. Also infinite
+        where the smallest RETURNED singular value is exactly zero (e.g. an
+        all-zero column, distinct from the more-columns-than-rows case above).
+        Kept as a standalone method (used directly by
+        `test_condition_number_infinite_for_more_columns_than_rows`) even
+        though `design_info`'s hot path calls `_svd_diagnostics` instead, to
+        avoid paying for this decomposition twice.
         """
+        if x.shape[0] < x.shape[1]:
+            return float("inf")
         values = np.linalg.svdvals(x)
         if values[-1] == 0.0:
             return float("inf")
