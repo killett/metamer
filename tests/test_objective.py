@@ -763,13 +763,20 @@ def test_the_conditioning_split_is_driven_by_support_not_by_row_count():
     )
 
 
-def test_batch_level_rank_check_is_necessary_but_not_sufficient():
-    """check_design passes a design that still fails per series.
+def test_check_design_is_necessary_but_not_sufficient_because_it_cannot_see_sigma():
+    """check_design passes a design the per-series solve still rejects.
 
-    Bug this catches: believing the batch-level rank(X) is the whole story, and
-    so never classifying per series at all. X here is globally full rank, so
-    check_design returns OK for every series -- and one of them is nonetheless
-    singular once its mask is applied.
+    `check_design` now sees the mask -- `DesignInfo` is per series -- so the
+    "gap removes a column's support" case is caught there. What remains, and
+    what makes the check insufficient, is SIGMA: identifiability is a property
+    of `X' Sigma^-1 X`, not of X alone. Every restricted design below is full
+    rank, so check_design returns OK for all three; series 1 is nonetheless
+    ill-conditioned once the Gram is formed, at this theta.
+
+    Bug this catches: treating a design-level rank verdict as the whole story
+    and never classifying at the solve at all -- which would report OK, with a
+    finite log-likelihood and a beta covariance understated by orders of
+    magnitude, for a term the data barely identifies.
     """
     mask = np.ones((3, _GAP_T.size), dtype=bool)
     mask[1] = _window(2)
