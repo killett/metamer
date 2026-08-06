@@ -198,6 +198,13 @@ question; compute/bandwidth roofline pair for cross-machine prediction) are in d
   was itself rejected by another hook. Leave a task `pending` while its implementer works
   and mark it `completed` after the commit lands. Never work around this with `--no-verify`
   or by editing `settings.json`.
+- **`ruff format .` at the repo root used to rewrite the plan document.** ruff 0.16 formats
+  Python code fences inside markdown when it walks a directory, and this plan's fences are
+  the specification — they are extracted verbatim into per-task briefs and transcribed into
+  code, so reformatting them silently changes what gets implemented. Verified by copying the
+  plan and running the formatter on the copy: "1 file reformatted". Fixed by
+  `extend-exclude = ["*.md"]` under `[tool.ruff]` in `pyproject.toml`; re-verified after.
+  The pre-commit hooks were never affected — they are `types: [python]`-filtered.
 - **`psutil` added no `pixi.lock` diff** (Task 0): it was already resolved on all four
   platforms as a transitive dependency. The lock-size limit raise still matters — Task 17
   adds `numba` and `celerite2`, which will genuinely rewrite it.

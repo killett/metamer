@@ -4,6 +4,15 @@ version = "0.1.0"  # Required by PEP 621. Keep set even without a [build-system]
 requires-python = ">=3.12,<3.14"
 dependencies = []
 
+[tool.ruff]
+# ruff 0.16 formats Python code fences inside markdown when it walks a directory, so a bare
+# `ruff format .` at the repo root rewrites docs/superpowers/plans/*.md. Those fences are the
+# specification: they are extracted verbatim into per-task briefs and transcribed into code,
+# so reformatting them silently changes what gets implemented. Verified on a copy — the plan
+# document came back "1 file reformatted". The pre-commit hooks are already safe because they
+# are `types: [python]`-filtered; this closes the direct-invocation path.
+extend-exclude = ["*.md"]
+
 [tool.ruff.lint]
 select = [
     "F",      # Pyflakes — unused imports, undefined names, etc.

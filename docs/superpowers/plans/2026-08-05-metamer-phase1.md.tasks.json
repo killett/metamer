@@ -40,7 +40,7 @@
       "id": 10,
       "planTask": 2,
       "subject": "Task 2: Kernel algebra, canonical ordering, hashing",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         9
       ],
@@ -56,7 +56,7 @@
       "id": 11,
       "planTask": 3,
       "subject": "Task 3: Capability, registries, failure taxonomy",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         10
       ],
