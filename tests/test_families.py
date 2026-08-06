@@ -1,9 +1,15 @@
+import subprocess
+import sys
+
 import numpy as np
 import pytest
 
+from metamer.core.capability import CostClass, EngineId, GradientMode, Objective
 from metamer.core.families.base import Family
 from metamer.core.families.matern12 import Matern12
 from metamer.core.families.white import White
+from metamer.core.registry import kernel_registry
+from metamer.core.terms import TermSpec
 from metamer.core.transforms import Log
 from tests.oracles import (
     expm_transition,
@@ -46,7 +52,19 @@ def test_every_builtin_family_satisfies_the_family_protocol(family):
         assert callable(getattr(family, member)), member
     assert isinstance(family.kind, str) and family.kind
     assert isinstance(family.state_dim, int)
-    assert family.engine_costs and family.gradient_modes
+    # Not a truthiness check: any non-empty dict passes that, including one
+    # that has quietly dropped an engine. A family that omits an engine from
+    # `engine_costs` is not "cheap" there, it is *eliminated* there --
+    # `intersect_engine_costs` drops any engine that a single term fails to
+    # declare, so one missing key silently removes an engine from every
+    # composite the family appears in. Both families support all four engines
+    # in Phase 1, and both objectives are declared FD.
+    assert set(family.engine_costs) == set(EngineId)
+    assert set(family.gradient_modes) == set(Objective)
+    assert all(isinstance(c, CostClass) for c in family.engine_costs.values())
+    assert all(
+        m is GradientMode.FINITE_DIFFERENCE for m in family.gradient_modes.values()
+    )
 
 
 def test_param_specs_declaration_order_matches_theta_column_order():
@@ -184,17 +202,111 @@ def test_matern12_at_zero_lag_is_identity_and_exactly_noiseless(sigma, rho):
     The assertions are exact equality precisely because "small" is not good
     enough here.
 
-    Checked, and NOT claimed: at d = 1 the literal difference form
-    P_inf - F P_inf F' is *also* exactly zero at dt = 0 -- verified numerically
-    with F both analytic and from `scipy.linalg.expm`, since expm(0) returns
-    exactly I. So this test does not distinguish the factored form from the
-    difference form for Matern12. That distinction only becomes testable for
-    the d > 1 families, where F P_inf F' is a sum of products.
+    Checked, and NOT claimed: the literal difference form P_inf - F P_inf F'
+    is *also* exactly zero here -- verified numerically with F both analytic
+    and from `scipy.linalg.expm`. That holds at any state dimension, not just
+    d = 1: if F is exactly I then F P_inf F' is exactly P_inf and the
+    subtraction is exact, whatever the size of the block. So dt = 0 does not
+    distinguish the two forms at all. The difference form's real weakness is
+    small *nonzero* dt, at every d, and that is what
+    `test_matern12_process_noise_is_accurate_for_tiny_steps` covers.
     """
     theta = np.array([[sigma, rho]])
     fam = Matern12()
     np.testing.assert_array_equal(fam.transition(theta, 0.0), np.ones((1, 1, 1)))
     np.testing.assert_array_equal(fam.process_noise(theta, 0.0), np.zeros((1, 1, 1)))
+
+
+@pytest.mark.parametrize(
+    ("rho", "dt"),
+    [
+        (1.0e6, 1.0e-4),
+        (1.0e3, 1.0e-11),
+        (5.0, 1.0e-13),
+        (1.0e6, 1.0e-11),
+    ],
+)
+def test_matern12_process_noise_is_accurate_for_tiny_steps(rho, dt):
+    """Q keeps full relative precision as dt/rho -> 0, and stays strictly positive.
+
+    Behaviour: Q(dt) must be accurate *relatively*, not just absolutely. It is
+    a variance that the Kalman filter divides by, so a Q that is 0.08% low --
+    or zero -- is not a rounding detail, it is a wrong innovation variance.
+
+    This regime is reachable, not contrived: `rho`'s diagnostic upper limit is
+    1e6 and the user chooses the time units, so rho = 1e6 with a sub-second
+    step is an ordinary combination. It is also exactly the near-duplicate
+    timestamp case that
+    `test_matern12_at_zero_lag_is_identity_and_exactly_noiseless` argues is
+    ordinary in real records -- dt = 0 is handled exactly, and it would be
+    incoherent for dt = 1e-11 to be handled badly.
+
+    Expected value determined independently of the implementation, from the
+    Maclaurin series 1 - e^-x = x - x^2/2 + x^3/6 - ... with x = 2 dt / rho.
+    Every x here is below 1e-9, so the truncation error after the cubic term
+    is under x^4/24 < 1e-37 relative -- far below double precision. The series
+    is therefore an exact reference in this regime, and crucially it never
+    forms the difference `1 - (something near 1)`.
+
+    Bug this catches: computing Q as `sigma^2 * (1.0 - np.exp(-2 dt / rho))`.
+    exp(-x) is near 1 for small x, so the subtraction is catastrophic
+    cancellation. Measured against the series above: 8.3e-8 relative error at
+    x = 2e-10, 8.0e-4 at x = 2e-14, and at x = 2e-17 exp(-x) rounds to exactly
+    1.0 so Q flushes to exactly 0 -- zero process noise on a nonzero step,
+    i.e. the filter told the state evolves deterministically. `-expm1(-x)` is
+    the standard remedy and reproduces the series to the last bit.
+    """
+    sigma = 2.0
+    x = 2.0 * dt / rho
+    expected = sigma**2 * (x - x**2 / 2.0 + x**3 / 6.0)
+
+    q = Matern12().process_noise(np.array([[sigma, rho]]), dt)
+    assert q.shape == (1, 1, 1)
+    assert q[0, 0, 0] > 0.0, "a strictly positive step must give strictly positive Q"
+    np.testing.assert_allclose(q[0, 0, 0], expected, rtol=1e-14)
+
+
+def test_acvf_agrees_with_the_state_space_triple():
+    """acvf(tau) equals H F(tau) P_inf H' -- the two routes are joined by a test.
+
+    Behaviour: a family ships two descriptions of the same process, an
+    analytic autocovariance and a state-space triple (H, F, P_inf), and the
+    engines use both. Until now they were joined only by a derivation written
+    in a docstring: `test_matern12_acvf_matches_textbook_closed_form` checks
+    the ACF against the literature, and the expm/Lyapunov tests check the
+    triple, but nothing checked the two against *each other*.
+
+    Expected value determined independently of both: the stationary
+    cross-covariance identity Cov(y_t, y_{t+tau}) = H F(tau) P_inf H' is a
+    property of any linear-Gaussian state-space model, not of this family, and
+    is written here in terms the family exposes. It does not restate the OU
+    closed form, and it does not go near the SDE-to-matrix mapping that the
+    Lyapunov test has to assume -- so it is independent of that shared
+    assumption too.
+
+    Bug this catches: a sigma-versus-sigma^2 slip between the two routes --
+    for instance P_inf = sigma (a std where a variance belongs) while the ACF
+    correctly returns sigma^2 exp(-|tau|/rho). Each half stays
+    self-consistent and every existing test still passes; only the comparison
+    between them fails. The result would be a Kalman likelihood and a
+    Toeplitz/Whittle likelihood that disagree for the same fitted parameters.
+    """
+    theta = np.array([[1.5, 4.0], [0.5, 0.25], [3.0, 100.0]])
+    fam = Matern12()
+    lags = np.array([0.0, 0.3, 1.0, 7.5, 250.0])
+
+    h = fam.observation(theta)
+    pinf = fam.stationary_cov(theta)
+    from_triple = np.stack(
+        [
+            np.einsum("bi,bij,bjk,bk->b", h, fam.transition(theta, tau), pinf, h)
+            for tau in lags
+        ],
+        axis=1,
+    )
+
+    assert from_triple.shape == (3, lags.size)
+    np.testing.assert_allclose(fam.acvf(theta, lags), from_triple, rtol=1e-13)
 
 
 @pytest.mark.parametrize("rho", [0.5, 3.0, 40.0])
@@ -207,10 +319,14 @@ def test_matern12_at_long_lag_forgets_the_state(rho):
 
     Expected values derived from the mathematics, not by running the code. At
     dt = 200 rho the exponent is exactly -200 regardless of rho, so
-    F = exp(-200) = 1.4e-87, and
-    Q = sigma^2 (1 - exp(-400)) = sigma^2 (1 - 1.9e-174),
-    which is sigma^2 to the last bit in float64. The thresholds below are
-    slack around those two hand-computed numbers.
+    F = exp(-200) = 1.3838965267367376e-87, and
+    Q = sigma^2 (1 - exp(-400)) = sigma^2 (1 - 1.9151695967140057e-174),
+    which is sigma^2 to the last bit in float64.
+
+    F is pinned to that value rather than bounded below some threshold. A
+    bound like `< 1e-80` is satisfied by exp(-400) = 1.9e-174 too, so it would
+    not notice a doubled exponent -- and doubling is the specific confusion
+    available here, since Q legitimately carries the factor 2 that F does not.
 
     Bugs this catches:
       * a sign error in the exponent -- F = exp(+dt/rho) overflows to inf
@@ -228,7 +344,7 @@ def test_matern12_at_long_lag_forgets_the_state(rho):
 
     f = fam.transition(theta, dt)
     assert f.shape == (1, 1, 1)
-    assert abs(float(f[0, 0, 0])) < 1e-80
+    np.testing.assert_allclose(f[0, 0, 0], 1.3838965267367376e-87, rtol=1e-13)
 
     np.testing.assert_allclose(fam.process_noise(theta, dt), [[[sigma**2]]], rtol=1e-15)
     np.testing.assert_allclose(
@@ -361,3 +477,79 @@ def test_matern12_batch_members_do_not_share_parameters():
     np.testing.assert_allclose(
         fam.stationary_cov(theta)[:, 0, 0], [1.0, 4.0, 0.25], rtol=1e-15
     )
+
+
+def test_importing_metamer_core_registers_the_builtin_families():
+    """`import metamer.core` is enough to populate `kernel_registry`.
+
+    Behaviour: `TermSpec.engine_costs()` resolves `kind` through
+    `kernel_registry`, so every family must be registered before any spec can
+    be costed. Registration happens as an import side effect of
+    `metamer.core.families`, and *something* has to trigger that import.
+
+    Run in a subprocess, like `test_core_imports_without_batch_dependencies`,
+    because this module's own top-level imports of `Matern12` and `White`
+    already register both families. In-process the assertion would pass no
+    matter where (or whether) the triggering import lives -- it would be a
+    test of this file's import list, not of the package.
+
+    Bug this catches, and which was live until this commit: nothing in `src/`
+    imported `metamer.core.families` and no `metamer.kernels` entry points
+    were declared, so a fresh interpreter had an empty registry and
+    `TermSpec(kind="matern12", params={}).engine_costs()` raised
+    `KeyError: kernel_registry: unknown key 'matern12'. Available: ` -- with
+    the available list empty. Every test passed regardless, because the test
+    modules imported the families directly.
+
+    `metamer.core` is the right trigger rather than the top-level
+    `metamer`: `terms.py` and `registry.py` both live under `metamer.core`,
+    so `import metamer.core` alone must yield a working registry.
+    """
+    code = (
+        "import metamer.core\n"
+        "from metamer.core.registry import kernel_registry\n"
+        "from metamer.core.terms import TermSpec\n"
+        "missing = {'white', 'matern12'} - set(kernel_registry)\n"
+        "assert not missing, (missing, sorted(kernel_registry))\n"
+        "costs = TermSpec(kind='matern12', params={}).engine_costs()\n"
+        "assert costs, costs\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True
+    )
+    assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize("kind", ["white", "matern12"])
+def test_registry_lookup_returns_a_conforming_family(kind):
+    """A registry lookup yields a real `Family`, and costing a term works.
+
+    Behaviour: the registry's contract is that `kernel_registry[kind]()`
+    returns something satisfying `Family`. Every other registry test uses a
+    throwaway probe -- `lambda: 1`, `lambda: "kernel"`, `_FakeFamily` -- and
+    each of those now carries a `# type: ignore`, so before this test nothing
+    exercised the registry with a conforming family at all.
+
+    Expected value determined independently: the engine cost mapping is read
+    from the family's own class-level declaration, and both Phase 1 families
+    declare all four engines. `intersect_engine_costs` over a single term is
+    the identity, so a one-term spec must report exactly that mapping.
+
+    Bug this catches: a registration that stores the instance rather than the
+    class (so the lookup returns a `Family`, and calling it raises
+    `TypeError: 'White' object is not callable`), or a `kind` string that does
+    not match the registry key it is filed under -- which would make
+    `TermSpec(kind=...)` unresolvable for that family alone.
+    """
+    family = kernel_registry[kind]()
+    assert isinstance(family, Family)
+    assert family.kind == kind
+
+    expected = {
+        EngineId.KALMAN: CostClass.LINEAR,
+        EngineId.WHITTLE: CostClass.NLOGN,
+        EngineId.TOEPLITZ: CostClass.CUBIC,
+        EngineId.CELERITE2: CostClass.LINEAR,
+    }
+    assert family.engine_costs == expected
+    assert TermSpec(kind=kind, params={}).engine_costs() == expected

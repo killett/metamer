@@ -134,6 +134,18 @@ cannot reconstruct them.
 - **No reordering, reparameterization, or preconditioner refresh mid-optimization** without
   an explicit curvature-history reset.
 - **Never interpolate gaps** — mask the update, keep the prediction.
+- **The white-noise nugget is keyed on exact `lag == 0.0`, which is a trap for Task 8.**
+  When the objective builds Σ from `|t_i − t_j|`, two *distinct* observations that share a
+  timestamp both get σ² placed **off-diagonal** — perfectly correlated measurement noise
+  rather than two independent draws. Duplicate timestamps are ordinary in real records
+  (the Matérn ν=1/2 `Δt = 0` case exists precisely because of them), so this is reachable,
+  not hypothetical. Whatever builds Σ must key the nugget on *index* identity, not on the
+  lag being zero.
+- **Compute `1 − e^{−x}` as `-np.expm1(-x)`, never as `1.0 - np.exp(-x)`.** In the Matérn
+  ν=1/2 `Q(Δt) = σ²(1 − e^{−2Δt/ρ})` the naive form loses all significant digits for small
+  `Δt/ρ`: measured relative error 8e-8 at `Δt/ρ = 1e-10`, 8e-4 at 1e-14, and `Q` flushes to
+  exactly zero below ~5e-17. `ρ`'s diagnostic limit is 1e6 and the user chooses the time
+  units, so this is reachable. Every later family with an exponential `Q` inherits the rule.
 - **Analytic `F`, `Q`, `P∞` per family.** The general `expm`/Lyapunov path is a test
   reference and a degeneracy fallback; frequent firing is a bug signal.
 - **Scores carry an engine tag AND an objective tag**; ranking across either is a hard error.

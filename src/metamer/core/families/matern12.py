@@ -32,15 +32,21 @@ class Matern12:
         Q(dt) = P_inf - F P_inf F' = sigma^2 (1 - exp(-2 dt / rho))
         k(tau) = sigma^2 exp(-|tau| / rho)
 
-    Q is written in that factored form rather than as the literal difference
-    P_inf - F P_inf F'. At d = 1 the two agree bit for bit -- including at
-    dt = 0, where both give exactly zero, checked numerically with F analytic
-    and with F from `scipy.linalg.expm` -- so the choice buys nothing here and
-    is made for the d > 1 families to follow, where the difference form is a
-    sum of products and does lose cancellation. What matters at every d is
-    that dt = 0 must yield F = I and Q = 0 exactly: repeated timestamps are
-    ordinary in real records, and any floor on dt or jitter added to Q for
-    Cholesky stability injects process noise the model does not contain.
+    Q is written in that factored form, evaluated with `-expm1`, rather than
+    as the literal difference P_inf - F P_inf F'. The two agree exactly at
+    dt = 0 -- where F is exactly I, so the subtraction is exact at any state
+    dimension, checked numerically with F analytic and with F from
+    `scipy.linalg.expm`. The difference form's weakness is small *nonzero*
+    dt, at every d: F is then near I, P_inf - F P_inf F' is a difference of
+    nearly equal quantities, and the relative accuracy of Q collapses. Q is a
+    variance the filter divides by, so relative accuracy is what matters.
+
+    Two separate requirements, both load-bearing:
+      * dt = 0 must give F = I and Q = 0 exactly. Repeated timestamps are
+        ordinary in real records, and any floor on dt or jitter added to Q for
+        Cholesky stability injects process noise the model does not contain.
+      * dt > 0 must give Q > 0 with full relative precision, however small
+        dt/rho is -- see the `-expm1` note in `process_noise`.
 
     State-space: d = 1, H = [1], no measurement-noise contribution.
     """
@@ -118,7 +124,13 @@ class Matern12:
         """
         arr = np.asarray(theta, dtype=np.float64)
         sigma, rho = arr[:, 0], arr[:, 1]
-        noise = sigma**2 * (1.0 - np.exp(-2.0 * float(dt) / rho))
+        # -expm1(-x), never 1 - exp(-x). For small x = 2 dt / rho, exp(-x) is
+        # near 1 and the subtraction is catastrophic cancellation: measured
+        # relative error 8.3e-8 at x = 2e-10 and 8.0e-4 at x = 2e-14, and
+        # below x ~ 5e-17 exp(-x) rounds to exactly 1.0 so Q flushes to zero
+        # -- zero process noise on a nonzero step. That regime is reachable:
+        # rho's diagnostic limit is 1e6 and the caller picks the time units.
+        noise = sigma**2 * -np.expm1(-2.0 * float(dt) / rho)
         return np.asarray(noise[:, None, None], dtype=np.float64)
 
     def observation(self, theta: NDArray[np.float64]) -> NDArray[np.float64]:
