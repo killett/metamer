@@ -946,6 +946,117 @@ def test_an_all_masked_series_stays_insufficient_data_with_a_design():
     assert result.n_used[1] == 0
 
 
+@pytest.mark.parametrize("with_design", [False, True])
+def test_a_WHOLLY_masked_tile_is_insufficient_data_not_a_failure(with_design):
+    """A tile where EVERY series is all-masked is expected, not failed.
+
+    Antarctic interior, or open ocean under permanent ice: an entire tile with
+    no usable observation anywhere in it is ordinary, not an edge case. Design
+    doc section 8.6 excludes such a point from the failure-rate denominator
+    entirely -- `Outcome.INSUFFICIENT_DATA` has `is_failure` False AND
+    `is_eligible` False -- and those two properties, not the code, are what
+    this test asserts, so it is pinned to the taxonomy's documented meaning
+    rather than to an integer.
+
+    Bug this catches: `evaluate` short-circuiting on the design precheck and
+    returning BEFORE the engine runs, so the data-level verdict never reaches
+    the merge. The design-level verdict that wins instead is not even wrong on
+    its own terms -- an all-masked restricted design genuinely IS rank
+    deficient -- which is exactly why only the PRECEDENCE LADDER can settle it.
+    Measured before the fix: RANK_DEFICIENT_X for all three, giving
+    `is_failure=True` and `is_eligible=True`, so every land pixel of the tile
+    entered BOTH the numerator and the denominator of the failure rate. That
+    makes every reported failure rate meaningless, which is the precise
+    corruption `OUTCOME_PRECEDENCE`'s docstring says the ladder exists to
+    prevent.
+
+    Parametrized over both paths because they are two INDEPENDENT
+    implementations of the same rule -- the engine derives it from its own
+    epoch count, the precheck from the mask -- so requiring them to agree is
+    also a divergence check between the two. The existing all-masked test
+    masks 1 of 3 series, so `np.any(precheck == OK)` stays True there and the
+    short-circuit is never entered: it cannot see this.
+    """
+    spec, ss, theta, t, _, _, _ = _setup()
+    batch = 3
+    y = np.zeros((batch, t.size))
+    mask = np.zeros((batch, t.size), dtype=bool)
+    design = (
+        SignalSpec([Constant(), Trend()]).design_info(t, mask) if with_design else None
+    )
+
+    obj = ConcentratedObjective(spec, ss, KalmanEngine(), Objective.ML)
+    result = obj.evaluate(np.repeat(theta, batch, axis=0), y, mask, t, design)
+
+    np.testing.assert_array_equal(
+        result.outcome, np.full(batch, Outcome.INSUFFICIENT_DATA.code)
+    )
+    outcomes = [Outcome.from_code(code) for code in result.outcome]
+    assert not any(o.is_failure for o in outcomes), "land is not a failure"
+    assert not any(o.is_eligible for o in outcomes), "land is not in the denominator"
+
+    assert np.all(np.isnan(result.loglik))
+    # n_used carries no sentinel: 0 is a true count of unmasked epochs.
+    np.testing.assert_array_equal(result.n_used, np.zeros(batch, dtype=np.int64))
+    np.testing.assert_array_equal(result.rank_x, np.full(batch, -1))
+
+
+def test_a_wholly_masked_tile_agrees_with_and_without_a_design():
+    """The two paths give the identical verdict for the identical tile.
+
+    Bug this catches: fixing one path and not the other, which leaves the
+    reported outcome for a land tile depending on whether a design happened to
+    be supplied -- a difference no consumer of the failure map could explain.
+    """
+    spec, ss, theta, t, _, _, _ = _setup()
+    batch = 3
+    y = np.zeros((batch, t.size))
+    mask = np.zeros((batch, t.size), dtype=bool)
+    obj = ConcentratedObjective(spec, ss, KalmanEngine(), Objective.ML)
+    theta_b = np.repeat(theta, batch, axis=0)
+
+    design = SignalSpec([Constant(), Trend()]).design_info(t, mask)
+    np.testing.assert_array_equal(
+        obj.evaluate(theta_b, y, mask, t, design).outcome,
+        obj.evaluate(theta_b, y, mask, t, None).outcome,
+    )
+
+
+def test_a_partly_masked_tile_still_separates_land_from_a_bad_design():
+    """Data-level and design-level verdicts coexist in one batch, per series.
+
+    Series 0 is land (all-masked); series 1 and 2 have data but share a design
+    whose offset column has no support in EITHER of them, so they are
+    genuinely rank deficient. The tile must report both facts, not collapse to
+    whichever was computed last.
+
+    Bug this catches: fixing the wholly-masked case by simply forcing
+    INSUFFICIENT_DATA whenever the precheck short-circuits, which would relabel
+    two genuinely rank-deficient series as land and hide a real design error.
+    """
+    spec, ss, theta, t, _, _, _ = _setup()
+    batch = 3
+    y = np.zeros((batch, t.size))
+    mask = np.ones((batch, t.size), dtype=bool)
+    mask[0] = False
+    mask[1:, 10:] = False  # removes all support for the offset at epoch 15
+    design = SignalSpec([Constant(), Offset(epoch=15.0)]).design_info(t, mask)
+    assert np.all(design.is_deficient), "every restricted design must be deficient"
+
+    obj = ConcentratedObjective(spec, ss, KalmanEngine(), Objective.ML)
+    result = obj.evaluate(np.repeat(theta, batch, axis=0), y, mask, t, design)
+
+    np.testing.assert_array_equal(
+        result.outcome,
+        [
+            Outcome.INSUFFICIENT_DATA.code,
+            Outcome.RANK_DEFICIENT_X.code,
+            Outcome.RANK_DEFICIENT_X.code,
+        ],
+    )
+    np.testing.assert_array_equal(result.n_used, [0, 10, 10])
+
+
 def test_an_all_masked_series_stays_insufficient_data_without_a_design():
     """The no-design branch reports the engine's verdict, not a blanket OK.
 

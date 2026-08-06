@@ -162,12 +162,61 @@ toward missing a genuinely unidentified term -- and it is loud (a named outcome
 on the map) rather than a silently wrong fit. If that direction bites, the fix
 is a scale-aware diagnostic, not a bigger constant.
 
+MEASURED, on FULL-SUPPORT designs at theta = (0.4, 1.2, 6.0), through the
+engine's own accumulated Gram (`scratchpad/spans.py`; reproduce by growing the
+span and reading `0.5 * (log lambda_max - log lambda_min)`). This is the only
+quantitative check anyone has run on that false-positive direction, and it is
+recorded here because it ARGUES FOR the derived constant over the calibrated
+one it replaced. Margins are how far each case sits BELOW the limit, so larger
+is safer:
+
+    [Constant, Trend, Accel, Annual, SemiAnnual], monthly
+      years   cond(X_w)      log   vs 8192 (derived)   vs 1e3 (calibrated)
+          5       2.805   1.0314        +7.9795 nats          +5.8763 nats
+         20       33.89   3.5231        +5.4878               +3.3846
+         30       76.02   4.3310        +4.6799               +2.5767
+         50       210.6   5.3502        +3.6608               +1.5576
+        100       840.7   6.7342        +2.2767               +0.1735
+
+    [Constant, Trend, Offset(midpoint)], annual
+      years   cond(X_w)      log   vs 8192 (derived)   vs 1e3 (calibrated)
+         20       26.12   3.2625        +5.7484 nats          +3.6452 nats
+         60       77.88   4.3552        +4.6557               +2.5525
+        100       129.8   4.8657        +4.1452               +2.0420
+
+READ THE LAST ROW OF THE FIRST TABLE. A century-long monthly record with an
+acceleration term is perfectly well supported, and against the fixture-calibrated
+1e3 it cleared by **0.1735 nats** -- a factor of 1.19, so a record only ~10%
+longer would have been flagged ILL_CONDITIONED_X for no reason but its span.
+Against the derived 8192 the same case clears by 2.2767 nats, a factor of 9.7.
+The float64 derivation is thus not merely better justified than the calibrated
+value, it is roughly ten times safer in the direction that actually bites, and
+the margin is a full order of magnitude on every case measured.
+
 THE DIAGNOSTIC IS THETA-DEPENDENT, because the Gram is. The same mask on the
-same design classifies differently at different noise parameters. That is
-correct -- identifiability really is a property of `X' Sigma^-1 X`, not of X
-alone -- but it means a series can change outcome as the optimizer walks, so
-Task 13 must treat the resulting NaN as a barrier and record the outcome at the
-FINAL theta, not the first one it saw.
+same design classifies differently at different noise parameters. Measured on
+the fixture's ill-conditioned case -- identical X, identical 42-row mask, only
+theta varied (`scratchpad/theta_dep.py`):
+
+    theta (m12 sigma, rho, white sigma)   cond(X_w)      log   band
+    (0.4,  1.2,  6.0  )                      24623    10.1114  ILL
+    (2.0,  0.1,  0.5  )                       4452.5   8.4012  OK
+    (0.4,  1.2,  0.05 )                       4920.1   8.5011  OK
+    (5.0,  0.02, 0.01 )                       2981.5   8.0002  OK
+
+That is CORRECT, not a defect -- identifiability really is a property of
+`X' Sigma^-1 X`, not of X alone -- but it means a series can change outcome as
+the optimizer walks, so Task 13 must treat the resulting NaN as a barrier and
+record the outcome at the FINAL theta, not the first one it saw.
+
+IT IS, HOWEVER, INVARIANT TO THE OVERALL NOISE SCALE, which follows from the
+definition rather than from any measurement: `X_w = Sigma^(-1/2) X`, so
+`Sigma -> c Sigma` gives `X_w -> c^(-1/2) X_w`, and `cond(alpha A) = cond(A)`
+for any non-zero alpha. So the limit cannot be tripped by a series simply being
+noisier than its neighbours -- only by the SHAPE of Sigma relative to X.
+Confirmed numerically on the same case by scaling every kernel amplitude by c
+(hence `Sigma -> c^2 Sigma`): log cond(X_w) = 10.1114205303 at c = 1, 10 and
+100, drifting by 1.8e-15 over four orders of magnitude, i.e. float64 noise.
 """
 
 RANK_DEFICIENT_LOG_LIMIT: float = -0.5 * float(np.log(_RANK_RTOL))
@@ -622,26 +671,60 @@ class ConcentratedObjective:
         batch = y.shape[0]
         n_used_from_mask = np.count_nonzero(mask, axis=1).astype(np.int64)
 
+        # THE DATA-LEVEL VERDICT IS FORMED FIRST, FROM THE MASK ALONE. It needs
+        # no filter pass and no design, and it OUTRANKS every design-level and
+        # numerical verdict in OUTCOME_PRECEDENCE. That ordering is load-bearing
+        # here rather than decorative: a series with no unmasked epoch has an
+        # all-zero restricted design, so `check_design` calls it
+        # RANK_DEFICIENT_X -- and is not wrong to, on its own terms. Only the
+        # ladder can settle which fact is REPORTED, and the answer is the
+        # data-level one, because a land pixel or a permanently ice-covered
+        # ocean cell is an EXPECTED outcome and must stay out of both the
+        # numerator and the denominator of the section 8.6 failure rate.
+        data_level = outcome_array(batch, Outcome.OK)
+        data_level[n_used_from_mask == 0] = Outcome.INSUFFICIENT_DATA.code
+
         has_design = design is not None and design.n_beta > 0
-        precheck = outcome_array(batch, Outcome.OK)
+        precheck = data_level
         matrix: NDArray[np.float64] | None = None
         if design is not None:
             self._validate_design(design, batch, n_used_from_mask)
         if has_design and design is not None:
             # Rank deficiency is classified BEFORE any factorization: a singular
             # X' Sigma^-1 X would otherwise reach cholesky, which raises for the
-            # WHOLE STACK if any one member is not positive definite.
-            precheck = self.check_design(design, batch)
+            # WHOLE STACK if any one member is not positive definite. Merged
+            # with the data-level verdict through the ladder rather than
+            # replacing it -- the two describe different series in general, and
+            # where they describe the same one, precedence decides.
+            precheck = merge_outcomes(data_level, self.check_design(design, batch))
             matrix = design.matrix
             if not np.any(precheck == Outcome.OK.code):
                 # ONLY short-circuit when EVERY series fails. A per-series
                 # precheck that returned early on `np.any(... != OK)` would deny
                 # 9,999 healthy grid points their fit because one neighbour's
                 # gap removed a column's support -- the exact batched-granularity
-                # failure this module exists to prevent. n_used is a real count
-                # even here (the protocol pins it as the one field that stays
-                # meaningful for a failed series); rank_x is the -1 "not
-                # computed" sentinel, since nothing was factorized.
+                # failure this module exists to prevent.
+                #
+                # THE SHORT-CIRCUIT IS KEPT, and it is safe to keep only because
+                # `data_level` above was folded in first. Returning
+                # `check_design`'s verdict alone here skipped the engine, and
+                # with it the engine's INSUFFICIENT_DATA, so a WHOLLY masked
+                # tile came back RANK_DEFICIENT_X: `is_failure` True AND
+                # `is_eligible` True, putting every pixel of an all-land tile
+                # into both halves of the failure rate. The saving is worth
+                # keeping -- a tile with no usable data anywhere is exactly
+                # where a B x N filter sweep buys nothing -- and nothing is lost
+                # by keeping it, because "no unmasked epoch" is derivable from
+                # the mask and the engine could tell us nothing more.
+                #
+                # `kalman.score` applies the same `n_used == 0` rule; the two
+                # are pinned to agree by
+                # `test_a_wholly_masked_tile_agrees_with_and_without_a_design`.
+                #
+                # n_used is a real count even here (the protocol pins it as the
+                # one field that stays meaningful for a failed series); rank_x
+                # is the -1 "not computed" sentinel, since nothing was
+                # factorized.
                 return ObjectiveResult(
                     np.full(batch, np.nan),
                     None,
