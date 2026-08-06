@@ -5,8 +5,9 @@
 - **Branch:** `phase-1` (work here, not `main`). Both branches are pushed.
 - **Remote:** https://github.com/killett/metamer — public. Run `git log --oneline -5` for the latest commit.
 - **Done:** design document, Phase 1 implementation plan, two rounds of plan review applied.
-  Phase 1 **Tasks 0–5** are implemented, reviewed, and committed.
-- **Pending:** Phase 1 Tasks 6–19.
+  Phase 1 **Tasks 0–6** are implemented, reviewed, and committed — the likelihood spine now
+  runs end to end from a `ProcessSpec` to a scored, per-series result.
+- **Pending:** Phase 1 Tasks 7–19.
 - **A pre-flight audit of each task brief is now a standing step**, run before dispatching an
   implementer. Every brief audited so far carried at least one defect that verbatim
   transcription would have committed — a test contradicting its own implementation, an
@@ -14,7 +15,7 @@
   design doc §8.6, a registry never populated at runtime, and two separate catastrophic
   cancellations. It is far cheaper than a fix round and catches what post-hoc review cannot,
   because by then the defect is already the code.
-- **Next action:** implement **Task 6** (engine protocol and the batched Kalman filter) from
+- **Next action:** implement **Task 7** (signal spec, design matrix, `rank(X)`) from
   [`docs/superpowers/plans/2026-08-05-metamer-phase1.md`](docs/superpowers/plans/2026-08-05-metamer-phase1.md).
   The draft PR command is below and has not been run yet.
 - **Execution workspace:** `.superpowers/sdd/2026-08-05-metamer-phase1/` (git-ignored) holds

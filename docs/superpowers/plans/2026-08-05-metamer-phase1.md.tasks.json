@@ -115,7 +115,7 @@
       "id": 14,
       "planTask": 6,
       "subject": "Task 6: Engine protocol and batched Kalman filter",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         13
       ],
