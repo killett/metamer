@@ -64,7 +64,10 @@ def intersect_engine_costs(
 
     Raises:
         IncompatibleSpecError: If no engine survives. The message names every
-            candidate engine together with the term that eliminated it.
+            candidate engine together with the term that eliminated it. If
+            every term declares an empty engine mapping, `candidates` itself
+            is empty and there is no per-engine elimination to report; the
+            message instead names every term responsible.
     """
     items = list(per_term)
     if not items:
@@ -73,6 +76,18 @@ def intersect_engine_costs(
     candidates: set[EngineId] = set()
     for _, costs in items:
         candidates.update(costs)
+
+    if not candidates:
+        # The union of every term's engine set is empty, which is only
+        # possible if every term's own mapping is empty -- there is no
+        # per-engine elimination to report here (the loop below never runs),
+        # so naming *which* term(s) declared no engines at all is the only
+        # way this error stays informative instead of reading "... : ".
+        labels = ", ".join(label for label, _ in items)
+        raise IncompatibleSpecError(
+            "No engine can evaluate this composite: no term declared any "
+            f"supported engines ({labels})"
+        )
 
     surviving: dict[EngineId, CostClass] = {}
     eliminated_by: dict[EngineId, str] = {}

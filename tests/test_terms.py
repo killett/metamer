@@ -1,4 +1,5 @@
 import json
+from contextlib import contextmanager
 
 import pytest
 
@@ -14,6 +15,37 @@ class _FakeFamily:
 
     def __init__(self, costs):
         self.engine_costs = costs
+
+
+@contextmanager
+def _registered_kernels(**factories):
+    """Register throwaway kernels for the block, unregistering only what registered.
+
+    Registers `factories` one key at a time. If a later `register()` call
+    raises -- e.g. DuplicateRegistrationError from stale state left behind by
+    an earlier crashed run -- only the keys that were *successfully*
+    registered before the failure are unregistered in `finally`. A bare
+    `kernel_registry.unregister(key)` for every key, called unconditionally
+    after two back-to-back `register()` calls with no `try` around the first
+    one, would instead leak the first key past this test whenever the second
+    `register()` raises, poisoning every later test in the same session that
+    happens to reuse that key.
+
+    Args:
+        **factories: Registry key to zero-arg factory, registered in order.
+
+    Yields:
+        None. The block runs with every key in `factories` registered.
+    """
+    registered: list[str] = []
+    try:
+        for key, factory in factories.items():
+            kernel_registry.register(key)(factory)
+            registered.append(key)
+        yield
+    finally:
+        for key in registered:
+            kernel_registry.unregister(key)
 
 
 def _param(name: str, default: float) -> ParamSpec:
@@ -429,13 +461,14 @@ def test_process_spec_engine_costs_intersects_with_worst_cost_per_engine():
     costs), or intersecting without taking the max, which would let a
     composite report a cheaper cost class than its most expensive term.
     """
-    kernel_registry.register("throwaway_engine_costs_b1")(
-        lambda: _FakeFamily({EngineId.KALMAN: CostClass.LINEAR})
-    )
-    kernel_registry.register("throwaway_engine_costs_b2")(
-        lambda: _FakeFamily({EngineId.KALMAN: CostClass.CUBIC})
-    )
-    try:
+    with _registered_kernels(
+        throwaway_engine_costs_b1=lambda: _FakeFamily(
+            {EngineId.KALMAN: CostClass.LINEAR}
+        ),
+        throwaway_engine_costs_b2=lambda: _FakeFamily(
+            {EngineId.KALMAN: CostClass.CUBIC}
+        ),
+    ):
         spec = ProcessSpec(
             (
                 TermSpec(kind="throwaway_engine_costs_b1", params={}),
@@ -443,9 +476,6 @@ def test_process_spec_engine_costs_intersects_with_worst_cost_per_engine():
             )
         )
         assert spec.engine_costs() == {EngineId.KALMAN: CostClass.CUBIC}
-    finally:
-        kernel_registry.unregister("throwaway_engine_costs_b1")
-        kernel_registry.unregister("throwaway_engine_costs_b2")
 
 
 def test_process_spec_engine_costs_raises_naming_a_term_when_no_engine_survives():
@@ -462,13 +492,14 @@ def test_process_spec_engine_costs_raises_naming_a_term_when_no_engine_survives(
     plain `kind` strings instead of `labels()` into intersect_engine_costs
     and losing the per-term label the error is supposed to carry.
     """
-    kernel_registry.register("throwaway_engine_costs_c1")(
-        lambda: _FakeFamily({EngineId.KALMAN: CostClass.LINEAR})
-    )
-    kernel_registry.register("throwaway_engine_costs_c2")(
-        lambda: _FakeFamily({EngineId.TOEPLITZ: CostClass.CUBIC})
-    )
-    try:
+    with _registered_kernels(
+        throwaway_engine_costs_c1=lambda: _FakeFamily(
+            {EngineId.KALMAN: CostClass.LINEAR}
+        ),
+        throwaway_engine_costs_c2=lambda: _FakeFamily(
+            {EngineId.TOEPLITZ: CostClass.CUBIC}
+        ),
+    ):
         spec = ProcessSpec(
             (
                 TermSpec(kind="throwaway_engine_costs_c1", params={}),
@@ -480,6 +511,3 @@ def test_process_spec_engine_costs_raises_naming_a_term_when_no_engine_survives(
         message = str(excinfo.value)
         assert "throwaway_engine_costs_c1[0]" in message
         assert "throwaway_engine_costs_c2[0]" in message
-    finally:
-        kernel_registry.unregister("throwaway_engine_costs_c1")
-        kernel_registry.unregister("throwaway_engine_costs_c2")
