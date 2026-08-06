@@ -1992,11 +1992,22 @@ actually being measured.
   agreement test are actually exercised, and whether Windows could ever be claimed.
 - **Index-space vs area-weighted adjacency** for the §14.2 clustering statistic — index-space
   is the recommendation, but the choice is recorded as not-yet-final.
+- **Which REML convention Hector uses.** This design pins Harville (1974): constant
+  `(n − rank(X))·log(2π)`, basis-invariance term `+½log|XᵀX|` included. Both corrections are
+  constant in `θ`, so they cancel in every ΔIC and **no differential test can detect their
+  absence** — which is how a wrong constant once survived a review here. Until Hector's
+  convention is confirmed, any cross-validation against it carries an undetermined constant
+  offset rather than a mystery. Needed before the external cross-validation, not before
+  Phase 1 ships.
+- **The 64-core box's RAM.** Unknown, and it gates the §9.2 stage-1 run: that machine is the
+  only valid place for the 19 ms budget comparison, and the tile-size arithmetic needs its
+  memory before the run can be planned. Establish it before Task 18.
 
 ### Closed since first draft
 
 - **Hardware for the §9.2 spike** — resolved by the one-machine thread-sweep rule (§9.2),
-  with the 4-core / 16 GB mini PC as the primary development machine.
+  with the 4-core / 16 GB mini PC as the primary development machine. **The *machine list* is
+  settled; the 64-core box's RAM is not** — see the open item above.
 - **`n_eff_bic` estimator** — participation-ratio form, §10.1.
 - **Criterion 10's pull on analytic gradients** — Matérn ν=1/2 analytic gradients plus a
   test-only stub family (§18 note).

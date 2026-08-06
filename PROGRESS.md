@@ -7,14 +7,14 @@
 - **Done:** design document, Phase 1 implementation plan, two rounds of plan review applied.
   Phase 1 **Tasks 0–9** are implemented, reviewed, and committed — the likelihood spine now
   runs end to end from a `ProcessSpec` to a scored, per-series result.
-- **Pending:** Phase 1 Tasks 10–19.
-- **A pre-flight audit of each task brief is now a standing step**, run before dispatching an
-  implementer. Every brief audited so far carried at least one defect that verbatim
-  transcription would have committed — a test contradicting its own implementation, an
-  implementation violating two of its acceptance criteria, an enum property contradicting
-  design doc §8.6, a registry never populated at runtime, and two separate catastrophic
-  cancellations. It is far cheaper than a fix round and catches what post-hoc review cannot,
-  because by then the defect is already the code.
+- **Pending:** Phase 1 Tasks 10–19. **Task 18 is a user gate — stop there and report.**
+- **State at handoff:** Task 9 completed at `b40e412`; **376 tests pass**, `mypy --strict`
+  clean, `pre-commit run --all-files` clean, working tree clean, local and `origin/phase-1`
+  in sync. Verify with `pixi run test && pixi run typecheck`.
+- **A pre-flight audit of each task brief is a required step** before dispatching an
+  implementer — see [Required pre-flight](#required-pre-flight-for-every-remaining-task)
+  below. Every brief audited so far carried at least one defect that verbatim transcription
+  would have committed.
 - **Next action:** implement **Task 10** (criteria and the comparability guards) from
   [`docs/superpowers/plans/2026-08-05-metamer-phase1.md`](docs/superpowers/plans/2026-08-05-metamer-phase1.md).
   The draft PR command is below and has not been run yet.
@@ -38,6 +38,62 @@
 | Original build prompt | [`metamer-build-prompt.md`](metamer-build-prompt.md) — **superseded** by design doc §2 where they conflict |
 
 Phase list is design doc §17. Phase 1 exit criteria are §18. Do not duplicate either here.
+
+---
+
+## Required pre-flight for every remaining task
+
+Run this against the task brief **before dispatching an implementer**, and fold what it
+finds into the dispatch as explicit corrections.
+
+**Why it exists.** Across Tasks 8 and 9 every substantive defect passed the brief's own
+tests: the REML constant (a differential test is blind to a constant offset), the outcome
+laundering, the unmerged exit paths, and the total absence of mask handling in a module
+whose seven tests all passed. **Brief-generated tests validate the brief's model of the
+problem, so they cannot detect that the model omitted something.** That is the whole
+argument — a passing suite is not evidence the brief is right.
+
+- **(a) Absolute vs differential.** Is any quantity entering an absolute log-likelihood
+  verified only by a difference? Constants in `θ` cancel in every ΔIC and are invisible to
+  every differential test.
+- **(b) Batch vs series.** Is any per-series fact computed at batch level, or any
+  per-candidate fact stored per point?
+- **(c) Exit paths.** Enumerate every `return` and every `raise`; does each pass through the
+  outcome ladder? **Enumerate, never assert a count** — an asserted count is how two
+  bypassed exits survived Task 8, and how a report claimed "exactly one early return" where
+  there were four.
+- **(d) Grep for the vocabulary the task requires.** "mask", "n_used", "realized" appearing
+  **zero** times in a 234-line brief was detectable in one command.
+- **(e) Do the tests bite?** Delete the guard each one protects and confirm it fails. Two of
+  Task 9's tests replaced assertions that could not fail at all.
+- **(f) Does the brief contradict a docstring already in the tree?** `objective.py` named
+  `design_rank` in two places and the brief still passed `rank_x`.
+
+Also run the brief's code if it supplies any: the two highest-yield audits did, and one
+found three collection errors and six failing tests out of twelve.
+
+### What Task 10 inherits
+
+Task 10 builds the criteria (AIC, AICc, BIC, HQIC, and the effective-sample-size BIC
+variant) and the **comparability guards**. A session starting there has no memory of why
+the guards exist, so:
+
+- **`k` and `n` are objective-dependent, as definitions rather than adjustments.**
+  ML: `k = k_θ + k_β`, `n = n_used`. REML: `k = k_θ`, `n = n_used − design_rank`. `k_β` is
+  `rank(X_r)` under both — see the `k_β` entry below. Two definitions on two model classes;
+  there is no single formula with a correction term.
+- **Every score carries an `engine` tag AND an `objective` tag, and ranking across either is
+  a hard error — not a warning, not a coerced comparison.**
+- **The reason, which is the part that does not survive without being written down:** a
+  Whittle score and a Kalman score are *commensurable-looking and not commensurable*. Both
+  are log-likelihoods, both are negative, both move the right way with fit quality — and
+  differencing them produces a number that ranks candidates plausibly and wrongly. The
+  same holds for ML against REML, which are likelihoods of different quantities entirely.
+  At 10⁷ series nobody inspects an individual fit, so a plausible-and-wrong ΔIC becomes a
+  plausible-and-wrong *map*. The guard is the only thing standing between those two
+  outcomes, which is why it refuses rather than warns.
+- `penalty_terms` in `counting.py` is a pure function Task 10 calls directly; it already
+  carries the ML `k_β = rank` contract test that the pipeline cannot currently reach.
 
 **The Phase 1 branch point:** Task 18 is a user gate needing runs on the 64-core box and
 the MacBook. **Task 19 is built only if Task 18's verdict is "inconclusive"** — if path B
@@ -139,6 +195,13 @@ cannot reconstruct them.
   exists to prevent. It hides from any test that masks only *some* series, because then
   `np.any(precheck == OK)` is True and the branch is never entered. The Antarctic interior is
   an ordinary whole-tile case, not an edge case.
+- **There are two ranks and they are not interchangeable.** `ObjectiveResult.design_rank` is
+  the **design-level** `rank(X_r)` — the design restricted to that series' unmasked epochs.
+  It is what Harville's constant uses and what REML's `n = n_used − rank` must use.
+  `ObjectiveResult.rank_x` is the **whitened-Gram** rank the engine reports, and it carries
+  the `-1` failed-series sentinel. They are equal on every passing path today, which is
+  exactly why the distinction is written down and pinned by a test asserting they *can*
+  differ — "equal in practice" is how an off-by-one reaches BIC. Count with `design_rank`.
 - **`rank_x = -1` is the failed-series sentinel, and it is a trap for Task 9.** `rank_x` is an
   integer, so NaN is unavailable and `-1` is used instead. It is unambiguous as a *check*
   (real ranks are non-negative) but it is **not fail-loud under arithmetic**: REML's effective
@@ -229,6 +292,22 @@ cannot reconstruct them.
   closed form is a fast path for the complete regular case only. Measured error from using
   the closed form under a half-mask: **−48.16%**. Both `n_eff` variants are per
   `(point, candidate)` because both are functions of the fitted model.
+- **`n_eff_bic` is computed once at the optimum, never inside the objective.** The
+  realized-pairs sum is `O(n_used²)` — about 400 000 evaluations per series at `N = 630`.
+  Anything that calls it in a fit loop is a bug.
+- **The FFT pair-count path is refused on an irregular axis, not approximated.** Exact
+  integer pair counts per lag come from an FFT autocorrelation of the mask indicator, which
+  is valid only when every `t_i − t_j` lands on an integer multiple of a common step.
+  Measured on `t = cumsum(U[0.5, 2.5])` using the step `unique_dt` actually picks:
+  **−61.07%**. Regularity is decided by `statespace.unique_dt` (reused, not re-rolled); an
+  irregular axis falls back to a chunked dense sum with a stated memory bound. Both paths
+  are capped by `max_pair_bytes` — the FFT path blocks over *series*, which is exact because
+  series are independent there (peak flat at 1.06 MB from B=100 to B=4000 against 141 MB
+  uncapped, values bit-identical).
+- **The memory formula's output-slot count is `M × (2p + 2k_β + 4) × 8 + M × 3`.** The `4`
+  is `log_lik`, `k`, `n_eff_trend`, `n_eff_bic` as float64 — it was `2` while both `n_eff`
+  variants were believed per-point. **Task 17 consumes this**; the tile-size arithmetic in
+  design doc §9.4 changes with it.
 - **float64 throughout `core`**; float32 only at the batch/IO boundary, converted per dask
   chunk so both representations never coexist.
 - **Parallelism is within a tile, never across tiles** — that is what keeps peak RAM
