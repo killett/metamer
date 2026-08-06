@@ -4,6 +4,7 @@ Independently-derived references. Nothing here may import the code under test.
 """
 
 from collections.abc import Callable
+from decimal import Decimal, localcontext
 
 import numpy as np
 from numpy.typing import NDArray
@@ -34,6 +35,58 @@ def process_noise_from_stationary(
 ) -> NDArray[np.float64]:
     """Q = P_inf - F P_inf F' for a stationary initialisation."""
     return stationary - transition @ stationary @ transition.T
+
+
+def matern32_process_noise_exact(
+    sigma: float, rho: float, dt: float, digits: int = 60
+) -> NDArray[np.float64]:
+    """Q = P_inf - F P_inf F' for Matern nu=3/2, evaluated at `digits` digits.
+
+    The float64 evaluation of Q is the whole numerical difficulty of the family
+    (Q_11 is cubic in the step while the terms subtracted to reach it are O(1)),
+    so a reference has to be free of that cancellation rather than merely
+    written differently. Decimal arithmetic at 60 significant digits leaves
+    roughly 45 digits of headroom over the worst cancellation reachable here, so
+    the result is exact to the last bit once rounded back to float64.
+
+    This deliberately uses the SAME expression the naive implementation would --
+    the literal difference P_inf - F P_inf F', with F the Jordan-block form and
+    P_inf = diag(sigma^2, sigma^2 lambda^2) -- and NOT the small-step series the
+    implementation switches to. So it is not a mirror of the code under test: a
+    slip in the series derivation shows up here as a disagreement, while a slip
+    in F or P_inf is caught separately by the expm and Lyapunov references
+    above. What it does share, and does not test, is the SDE-to-matrix mapping
+    (lambda = sqrt(3)/rho, A, L) stated in the `Matern32` class docstring.
+
+    Args:
+        sigma: Marginal standard deviation.
+        rho: Correlation timescale.
+        dt: Step length, non-negative.
+        digits: Decimal working precision.
+
+    Returns:
+        Q, shape (2, 2), rounded to float64.
+    """
+    with localcontext() as ctx:
+        ctx.prec = digits
+        s, t = Decimal(repr(sigma)), Decimal(repr(dt))
+        lam = Decimal(3).sqrt() / Decimal(repr(rho))
+        decay = (-lam * t).exp()
+        f = [
+            [decay * (1 + lam * t), decay * t],
+            [-decay * lam * lam * t, decay * (1 - lam * t)],
+        ]
+        p = [s * s, s * s * lam * lam]
+        # (F P F')_ij = sum_k F_ik P_kk F_jk, with P diagonal.
+        fpf = [
+            [sum(f[i][k] * p[k] * f[j][k] for k in (0, 1)) for j in (0, 1)]
+            for i in (0, 1)
+        ]
+        q = [
+            [(p[i] if i == j else Decimal(0)) - fpf[i][j] for j in (0, 1)]
+            for i in (0, 1)
+        ]
+        return np.array([[float(q[i][j]) for j in (0, 1)] for i in (0, 1)])
 
 
 def mvn_loglik(

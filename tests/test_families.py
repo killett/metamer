@@ -7,6 +7,7 @@ import pytest
 from metamer.core.capability import CostClass, EngineId, GradientMode, Objective
 from metamer.core.families.base import Family
 from metamer.core.families.matern12 import Matern12
+from metamer.core.families.matern32 import Matern32
 from metamer.core.families.white import White
 from metamer.core.registry import kernel_registry
 from metamer.core.terms import TermSpec
@@ -18,7 +19,7 @@ from tests.oracles import (
 )
 
 
-@pytest.mark.parametrize("family", [White(), Matern12()])
+@pytest.mark.parametrize("family", [White(), Matern12(), Matern32()])
 def test_every_builtin_family_satisfies_the_family_protocol(family):
     """Each shipped family provides the full `Family` surface at runtime.
 
@@ -59,7 +60,7 @@ def test_every_builtin_family_satisfies_the_family_protocol(family):
     # declare, so one missing key silently removes an engine from every
     # composite the family appears in. Both families support all four engines
     # in Phase 1, and both objectives are declared FD.
-    assert set(family.engine_costs) == set(EngineId)
+    assert set(family.engine_costs) == set(EngineId), family.kind
     assert set(family.gradient_modes) == set(Objective)
     assert all(isinstance(c, CostClass) for c in family.engine_costs.values())
     assert all(
@@ -76,10 +77,15 @@ def test_param_specs_declaration_order_matches_theta_column_order():
     Nothing enforces that those two agree, so it is asserted here.
 
     Expected values determined independently, by hand: assemble theta by name
-    from sigma=3.0, rho=7.0 and use the closed forms. P_inf = sigma^2 = 9.0,
-    and at dt = 7.0, F = exp(-7/7) = exp(-1). If `param_specs()` listed rho
-    first, theta would be [7.0, 3.0] and the same call would yield P_inf = 49
-    and F = exp(-7/3) instead.
+    from sigma=3.0, rho=7.0 and use the closed forms. For Matern12,
+    P_inf = sigma^2 = 9.0, and at dt = 7.0, F = exp(-7/7) = exp(-1). If
+    `param_specs()` listed rho first, theta would be [7.0, 3.0] and the same
+    call would yield P_inf = 49 and F = exp(-7/3) instead.
+
+    For Matern32 the same substitution is caught by P_inf[1, 1], which is
+    sigma^2 lambda^2 = 9 * 3/49 = 27/49; with the columns swapped it would be
+    49 * 3/9 = 49/3, a factor of 88 out. Its P_inf[0, 0] is again sigma^2 = 9.0,
+    since `sigma` is the marginal standard deviation in both families.
 
     Bug this catches: reordering (or renaming) a family's declared parameters
     without changing its positional indexing. The optimizer would then search
@@ -97,12 +103,21 @@ def test_param_specs_declaration_order_matches_theta_column_order():
         fam.transition(theta, 7.0)[0, 0, 0], np.exp(-1.0), rtol=1e-15
     )
 
+    fam32 = Matern32()
+    specs32 = fam32.param_specs()
+    assert list(specs32) == ["sigma", "rho"]
+    theta32 = np.array([[values[name] for name in specs32]])
+    p_inf32 = fam32.stationary_cov(theta32)[0]
+    np.testing.assert_allclose(p_inf32[0, 0], 9.0, rtol=1e-15)
+    np.testing.assert_allclose(p_inf32[1, 1], 27.0 / 49.0, rtol=1e-15)
+
     assert list(White().param_specs()) == ["sigma"]
-    for spec in (*specs.values(), *White().param_specs().values()):
+    for spec in (*specs.values(), *specs32.values(), *White().param_specs().values()):
         assert isinstance(spec.transform, Log), spec.name
         assert spec.bounds[0] == 0.0, spec.name
         assert spec.default > 0.0, spec.name
     assert specs["rho"].unit == "time"
+    assert specs32["rho"].unit == "time"
 
 
 @pytest.mark.parametrize("dt", [0.1, 1.0, 7.0])
@@ -509,7 +524,7 @@ def test_importing_metamer_core_registers_the_builtin_families():
         "import metamer.core\n"
         "from metamer.core.registry import kernel_registry\n"
         "from metamer.core.terms import TermSpec\n"
-        "missing = {'white', 'matern12'} - set(kernel_registry)\n"
+        "missing = {'white', 'matern12', 'matern32'} - set(kernel_registry)\n"
         "assert not missing, (missing, sorted(kernel_registry))\n"
         "costs = TermSpec(kind='matern12', params={}).engine_costs()\n"
         "assert costs, costs\n"
@@ -520,7 +535,7 @@ def test_importing_metamer_core_registers_the_builtin_families():
     assert result.returncode == 0, result.stderr
 
 
-@pytest.mark.parametrize("kind", ["white", "matern12"])
+@pytest.mark.parametrize("kind", ["white", "matern12", "matern32"])
 def test_registry_lookup_returns_a_conforming_family(kind):
     """A registry lookup yields a real `Family`, and costing a term works.
 
@@ -531,9 +546,9 @@ def test_registry_lookup_returns_a_conforming_family(kind):
     exercised the registry with a conforming family at all.
 
     Expected value determined independently: the engine cost mapping is read
-    from the family's own class-level declaration, and both Phase 1 families
-    declare all four engines. `intersect_engine_costs` over a single term is
-    the identity, so a one-term spec must report exactly that mapping.
+    from the family's own class-level declaration, and all three Phase 1
+    families declare all four engines. `intersect_engine_costs` over a single
+    term is the identity, so a one-term spec must report exactly that mapping.
 
     Bug this catches: a registration that stores the instance rather than the
     class (so the lookup returns a `Family`, and calling it raises
