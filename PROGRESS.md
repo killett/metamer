@@ -129,6 +129,12 @@ cannot reconstruct them.
   scientific facts, and the point of the failure map is which one happened where.
   `CONDITION_LOG_LIMIT` has no independently correct value — calibrate it against the
   two-post-breakpoint-samples test case rather than loosening that test.
+- **`rank_x = -1` is the failed-series sentinel, and it is a trap for Task 9.** `rank_x` is an
+  integer, so NaN is unavailable and `-1` is used instead. It is unambiguous as a *check*
+  (real ranks are non-negative) but it is **not fail-loud under arithmetic**: REML's effective
+  sample size is `n_obs − rank(X)`, and `n_obs − (−1)` silently gives `n_obs + 1` — a sample
+  size larger than the number of observations, entirely plausible-looking, feeding straight
+  into BIC. Gate on `outcome == OK` before doing arithmetic on `rank_x`, never after.
 - **Failed series carry NaN, not −inf,** in anything destined for the store. −inf is a
   finite-looking sentinel that survives some consumers' checks. It is the optimizer's
   internal barrier value only.
