@@ -165,7 +165,19 @@ def test_matern32_process_noise_matches_lyapunov_route(dt):
 @pytest.mark.parametrize("rho", [0.1, 1.0, 1000.0])
 @pytest.mark.parametrize(
     "dt",
-    [1.0e-8, 1.0e-6, 1.0e-5, 1.0e-4, 1.0e-2, 0.1, 0.28867513459481287, 0.5, 2.0, 20.0],
+    [
+        1.0e-8,
+        1.0e-6,
+        1.0e-5,
+        1.0e-4,
+        1.0e-2,
+        0.1,
+        0.28867513459481287,  # u = 0.9999999999999999 at rho=1: series, just below
+        0.2947,  # u = 1.0208707459810962 at rho=1: direct, just above
+        0.5,
+        2.0,
+        20.0,
+    ],
 )
 def test_matern32_process_noise_is_accurate_for_tiny_steps(rho, dt):
     """Every entry of Q keeps full relative precision as dt -> 0.
@@ -182,9 +194,12 @@ def test_matern32_process_noise_is_accurate_for_tiny_steps(rho, dt):
     nothing is subtracted from it -- and is asserted here so that a "fix" which
     quietly zeroes the off-diagonal cannot pass.
 
-    The dt grid straddles the implementation's crossover: 2 lambda dt = 1 at
-    dt = rho / (2 sqrt 3), which is 0.2887 at rho = 1, so both branches and the
-    join itself are exercised at every rho.
+    The dt grid straddles the implementation's crossover from BOTH sides.
+    2 lambda dt = 1 at dt = rho / (2 sqrt 3): at rho = 1, dt = 0.28867513459481287
+    gives u = 0.9999999999999999, which is the SERIES branch, so that value alone
+    tests the join only from below. dt = 0.2947 gives u = 1.0208707459810962,
+    landing on the direct branch just above the switch -- which is where the
+    piecewise scheme's global worst error lives (3.1e-15, measured at u = 1.021).
 
     Expected value determined independently of the implementation, by
     `matern32_process_noise_exact`: the literal difference P_inf - F P_inf F'
@@ -199,24 +214,43 @@ def test_matern32_process_noise_is_accurate_for_tiny_steps(rho, dt):
     still cancels two O(u) terms against an O(u^3) answer, and measures 4.7e-2
     relative error at u = 1e-7.
 
-    WHY THERE IS AN atol AS WELL. At rho = 0.1, dt = 20 the exponent is
-    u = 692.82, which float64 can represent only to 1.17e-13 ABSOLUTE. That
-    error passes into exp(-u) one-for-one as a relative error, measured at
-    1.17e-13, plus 1.5e-14 from `np.exp` itself -- so Q_12 there disagrees with
-    the exact value by 1.3e-13 relative no matter how Q is computed. It is the
-    conditioning of exp at a large argument, not a property of this family. The
-    entry in question is 2.2e-294 against a diagonal of 1.2e+03, i.e. 5.4e-295
-    of the matrix, so an atol at 1e-13 of the largest entry excuses exactly that
-    and nothing that could ever matter. Where Q_12 IS significant -- at
-    dt = 1e-8, rho = 1 it is 4.2e-15 against an atol of 8.3e-20 -- the relative
-    assertion still binds, so a "fix" that zeroes the off-diagonal still fails.
+    WHY THE atol IS CONFINED TO THE OFF-DIAGONAL. At rho = 0.1, dt = 20 the
+    exponent is u = 692.82, which float64 can represent only to 1.17e-13
+    ABSOLUTE. That error passes into exp(-u) one-for-one as a relative error,
+    measured at 1.17e-13, plus 1.5e-14 from `np.exp` itself -- so Q_12 there
+    disagrees with the exact value by 1.3e-13 relative no matter how Q is
+    computed. It is the conditioning of exp at a large argument, not a property
+    of this family, and the entry concerned is 2.2e-294 against a diagonal of
+    1.2e+03.
+
+    An earlier version applied `atol = 1e-13 * max|Q|` to the WHOLE matrix, and
+    that silently destroyed this test. The maximum is set by Q_22, which exceeds
+    Q_11 by a factor of 3/dt^2, so at dt = 1e-8 the tolerance was 3.0e3 times
+    Q_11 itself -- for every rho tested. Replacing Q_11 with exactly 0.0 still
+    passed. The series branch went untested at precisely the step where it is
+    the only thing standing between the filter and a negative variance. So the
+    diagonal is now checked with rtol ONLY, and the atol applies to the
+    off-diagonal alone, where the exp conditioning actually lives. Where Q_12 is
+    significant -- at dt = 1e-8, rho = 1 it is 4.2e-15 against an atol of
+    8.3e-20 -- its relative assertion still binds, so zeroing the off-diagonal
+    still fails.
     """
     sigma = 2.0
     q = Matern32().process_noise(np.array([[sigma, rho]]), dt)
     assert q.shape == (1, 2, 2)
     exact = matern32_process_noise_exact(sigma, rho, dt)
+
+    # Diagonal: relative accuracy only. These are the cancelling entries and the
+    # whole reason the series branch exists; no absolute floor may excuse them.
     np.testing.assert_allclose(
-        q[0], exact, rtol=1e-13, atol=1e-13 * np.abs(exact).max()
+        [q[0, 0, 0], q[0, 1, 1]], [exact[0, 0], exact[1, 1]], rtol=1e-13
+    )
+    # Off-diagonal: rtol, floored by the matrix scale for the large-u regime
+    # where exp's argument conditioning dominates. Q is exactly symmetric by
+    # construction, so that is asserted rather than checked twice.
+    assert q[0, 0, 1] == q[0, 1, 0]
+    np.testing.assert_allclose(
+        q[0, 0, 1], exact[0, 1], rtol=1e-13, atol=1e-13 * np.abs(exact).max()
     )
 
 
@@ -665,6 +699,42 @@ def test_unique_dt_keeps_genuinely_distinct_steps_apart():
     assert StateSpace.unique_dt(np.array([5.0])).size == 0
 
 
+def test_unique_dt_tolerance_is_local_not_scaled_by_the_longest_gap():
+    """One long gap must not regularise the rest of the axis.
+
+    Behaviour: the tolerance has to be relative to each step being compared, not
+    to the largest step in the record. A global scale means a single long gap
+    inflates the tolerance for every other pair, and the ratio needed is
+    ordinary -- sub-second sampling inside a multi-year record puts gap/step
+    above 1e9 routinely.
+
+    Expected values determined by hand: the steps of `[0, 1, 2, 3.003, 4e9]` are
+    1.0, 1.0, 1.003 and about 4e9. Steps 1.0 and 1.003 differ by 0.003, three
+    million times the 1e-9 relative tolerance at their own scale, so they are
+    distinct, giving 3 steps in all. The invariant asserted alongside it is that
+    the SAME axis with the gap removed gives exactly one fewer -- 2, being 1.0
+    and 1.003 -- because deleting a far-away gap cannot change whether two short
+    steps are the same length. That is what pins the tolerance as local: it is a
+    statement about the other pairs, not about the gap.
+
+    Bug this catches, and which `tol = rtol * max|step|` has: the global
+    tolerance here is 1e-9 * 4e9 = 4.0 ABSOLUTE, so 1.0 and 1.003 merge and the
+    gapped axis reports 2 steps while the ungapped one still reports 2 -- the
+    counts stop differing by one. The filter would then advance a 1.003-long
+    interval with the F and Q built for a 1.0-long one: a wrong transition
+    applied to a whole stretch of the series, silently, with no shape or count
+    to notice.
+    """
+    gapped = np.array([0.0, 1.0, 2.0, 3.003, 4.0e9])
+    steps = StateSpace.unique_dt(gapped)
+    assert steps.size == 3, steps
+    np.testing.assert_allclose(steps[:2], [1.0, 1.003], rtol=1e-12)
+
+    ungapped = np.array([0.0, 1.0, 2.0, 3.003])
+    assert StateSpace.unique_dt(ungapped).size == 2
+    assert steps.size == StateSpace.unique_dt(ungapped).size + 1
+
+
 def test_unique_dt_handles_duplicate_and_single_timestamps():
     """An axis of repeated timestamps has one step, exactly zero; one sample has none.
 
@@ -692,13 +762,13 @@ def test_unique_dt_handles_duplicate_and_single_timestamps():
     ss = StateSpace.from_spec(spec)
     theta = np.array([[1.0, 2.0, 1.0, 9.0]])
 
-    single = ss.step_matrices(theta, np.array([4.0]))
+    single = ss._step_matrices(theta, np.array([4.0]))
     assert single.steps.size == 0
     assert single.index.shape == (0,)
     assert single.transition.shape == (0, 1, 3, 3)
     assert single.process_noise.shape == (0, 1, 3, 3)
 
-    repeated = ss.step_matrices(theta, np.array([3.0, 3.0, 3.0]))
+    repeated = ss._step_matrices(theta, np.array([3.0, 3.0, 3.0]))
     assert repeated.steps.size == 1
     np.testing.assert_array_equal(repeated.index, [0, 0])
     np.testing.assert_array_equal(repeated.transition[0], np.eye(3)[None])
@@ -728,7 +798,7 @@ def test_step_matrices_evaluates_each_unique_step_once():
     theta = np.array([[1.0, 2.0, 1.0, 9.0], [0.5, 4.0, 2.0, 3.0]])
 
     regular = np.linspace(0.0, 5.0, 501)
-    steps = ss.step_matrices(theta, regular)
+    steps = ss._step_matrices(theta, regular)
     assert steps.steps.size == 1
     assert steps.transition.shape == (1, 2, 3, 3)
     assert steps.process_noise.shape == (1, 2, 3, 3)
@@ -736,7 +806,7 @@ def test_step_matrices_evaluates_each_unique_step_once():
     np.testing.assert_array_equal(steps.index, 0)
 
     irregular = np.array([0.0, 1.0, 3.0, 6.0, 7.0])
-    steps = ss.step_matrices(theta, irregular)
+    steps = ss._step_matrices(theta, irregular)
     assert steps.steps.size == 3
     assert steps.transition.shape == (3, 2, 3, 3)
     np.testing.assert_array_equal(steps.index, [0, 1, 2, 0])
@@ -810,22 +880,35 @@ def test_eigen_transition_refuses_the_defective_matern32_drift(rho):
 
 
 @pytest.mark.parametrize(
-    ("drift", "expected_cond"),
+    "drift",
     [
-        (np.array([[-1.0, 0.0], [0.0, -3.0]]), 1.0),
-        (np.array([[-1.0, 0.5], [0.25, -4.0]]), 1.084395),
+        np.array([[-1.0, 0.0], [0.0, -3.0]]),
+        np.array([[-1.0, 0.5], [0.25, -4.0]]),
     ],
 )
-def test_eigen_transition_accepts_a_well_conditioned_drift(drift, expected_cond):
+def test_eigen_transition_accepts_a_well_conditioned_drift(drift):
     """The guard does NOT fire on a comfortably diagonalizable drift.
 
     Behaviour: a guard that refuses everything is not a guard, it is a rename of
     the fallback. The acceptance criterion says frequent firing is a bug signal,
     so the negative control is as load-bearing as the positive one.
 
-    Expected values determined independently: `diag(-1, -3)` has orthonormal
-    eigenvectors, so cond(V) = 1 exactly by hand; the generic matrix measures
-    1.084395, eight decades below the limit. The returned F is checked against
+    Expected values determined independently, by mathematics rather than by
+    running `np.linalg.cond` and writing down what it said. `np.linalg.eig`
+    returns unit-norm eigenvectors, so V has unit columns and V^H V = [[1, c],
+    [c*, 1]] with c the Hermitian inner product of the two. Its eigenvalues are
+    1 +- |c|, so the singular values of V are sqrt(1 +- |c|) and
+
+        cond_2(V) = sqrt((1 + |c|) / (1 - |c|)).
+
+    That identity is asserted here. For `diag(-1, -3)` the eigenvectors are
+    orthogonal, c = 0, and it gives exactly 1. For the generic matrix it gives
+    1.084394792, agreeing with `np.linalg.cond` to nine decimals -- but the
+    assertion is on the identity, so it characterises cond(V), not the fixture.
+
+    The property that actually matters is asserted separately: both drifts sit
+    at least six decades below the limit, which is what makes them a negative
+    control rather than a coincidence. The returned F is checked against
     `scipy.linalg.expm`, which shares no code with the eigen route.
 
     Bug this catches: a threshold accidentally written as a lower bound, or
@@ -835,7 +918,14 @@ def test_eigen_transition_accepts_a_well_conditioned_drift(drift, expected_cond)
     and fire on every well-behaved model.
     """
     _, vectors = np.linalg.eig(drift)
-    assert float(np.linalg.cond(vectors)) == pytest.approx(expected_cond, rel=1e-5)
+    np.testing.assert_allclose(np.linalg.norm(vectors, axis=0), 1.0, rtol=1e-15)
+    # numpy 2's `eig` returns complex128 unconditionally, so the inner product
+    # must be the Hermitian one -- which is also the form the identity needs.
+    cosine = abs(np.vdot(vectors[:, 0], vectors[:, 1]))
+    cond = float(np.linalg.cond(vectors))
+    assert cond == pytest.approx(np.sqrt((1.0 + cosine) / (1.0 - cosine)), rel=1e-12)
+    assert cond < EIGEN_CONDITION_LIMIT / 1e6
+
     np.testing.assert_allclose(
         eigen_transition(drift, 0.7), expm(drift * 0.7), rtol=1e-12, atol=1e-14
     )
@@ -869,7 +959,9 @@ def test_safe_transition_counts_the_fallback_and_matches_expm():
     )
 
     healthy = np.array([[-1.0, 0.5], [0.25, -4.0]])
-    assert safe_transition(healthy, 0.4, counter) is not None
+    np.testing.assert_allclose(
+        safe_transition(healthy, 0.4, counter), expm(healthy * 0.4), rtol=1e-12
+    )
     assert counter == {"fallback": 1}
 
 

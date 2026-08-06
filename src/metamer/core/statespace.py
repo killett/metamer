@@ -13,14 +13,23 @@ from metamer.core.families.base import Family
 from metamer.core.registry import kernel_registry
 from metamer.core.terms import ProcessSpec
 
-EIGEN_CONDITION_LIMIT = 1e8
+EIGEN_TARGET_ACCURACY = 1e-8
+"""Relative accuracy required of F from the eigen route.
+
+Eight digits: well above what the likelihood itself needs, but far enough below
+full precision to leave the optimizer's finite differences meaningful.
+"""
+
+EIGEN_CONDITION_LIMIT = EIGEN_TARGET_ACCURACY / float(np.finfo(np.float64).eps)
 """Maximum eigenvector-matrix condition number the eigen route will accept.
 
-DERIVATION. The eigen route's relative error is roughly cond(V) * eps. With
-eps = 2.2e-16 and a target relative accuracy of 1e-8 for F -- eight digits, well
-above what the likelihood needs but far enough below full precision to leave the
-optimizer's finite differences meaningful -- the limit is 1e-8 / 2.2e-16, i.e.
-about 4.5e7, rounded to 1e8.
+DERIVATION, evaluated rather than transcribed. The eigen route's relative error
+is roughly cond(V) * eps, so requiring `cond * eps <= target` gives
+`cond <= target / eps` = 1e-8 / 2.220446049250313e-16 = 4.5035996273704956e+07.
+The constant IS that expression: an earlier version rounded it to 1e8, which is
+2.2x more permissive than its own stated derivation and in the direction that
+weakens the guard. A derivation that does not produce the constant beside it is
+worse than no derivation, so the rounding is gone.
 
 CALIBRATION CASE, recorded because this constant has no independently correct
 value and must be specified by the case it has to catch rather than have that
@@ -29,19 +38,19 @@ A = [[0, 1], [-lam^2, -2 lam]], lam = sqrt(3)/rho, measured with
 `np.linalg.cond(np.linalg.eig(A)[1])` on numpy 2.x / OpenBLAS:
 
     rho = 0.1  -> 1.80e+16
-    rho = 1    -> 2.03e+08     <-- factor 2.0 of margin
-    rho = 10   -> 4.58e+08     <-- factor 4.6 of margin
+    rho = 1    -> 2.03e+08     <-- factor 4.5 of margin (was 2.0 at 1e8)
+    rho = 10   -> 4.58e+08     <-- factor 10.2 of margin (was 4.6 at 1e8)
     rho = 100  -> inf
 
-The margin at rho = 1 is a factor of two: UNDER ONE DECADE, on a quantity whose
-value depends on the LAPACK build. Raising this limit past 2.03e8 would send the
-single most defective matrix in the library down the eigen route and return a
-silently wrong F. `test_eigen_transition_refuses_the_defective_matern32_drift`
-is the standing guard: it re-measures cond(V) and asserts it still exceeds this
-limit, so a LAPACK change that erodes the margin fails loudly.
+Raising this limit past 2.03e8 would send the single most defective matrix in
+the library down the eigen route and return a silently wrong F.
+`test_eigen_transition_refuses_the_defective_matern32_drift` is the standing
+guard: it re-measures cond(V) and asserts it still exceeds this limit, so a
+LAPACK change that erodes the margin fails loudly.
 
-For contrast, well-conditioned drifts sit eight decades below: diag(-1, -3)
-measures 1.0 exactly and a generic non-normal 2x2 measures 1.08.
+Tightening to the derived value costs nothing on the other side. Well-conditioned
+drifts sit more than seven decades below: diag(-1, -3) measures 1.0 exactly (its
+eigenvectors are orthonormal) and a generic non-normal 2x2 measures 1.084.
 """
 
 UNIQUE_DT_RTOL = 1e-9
@@ -128,6 +137,9 @@ def safe_transition(
 class StepMatrices:
     """F and Q evaluated once per distinct timestep, plus the interval mapping.
 
+    PROVISIONAL: the return type of `StateSpace._step_matrices`, whose docstring
+    explains why that method is private and why Task 6 may replace both.
+
     Attributes:
         steps: The distinct timesteps, ascending, shape (S,).
         index: For each of the n-1 intervals of the time axis, the index into
@@ -213,17 +225,29 @@ class StateSpace:
         amortization on most real time axes while appearing to work on
         `np.arange(0, 10, 1.0)`.
 
+        THE TOLERANCE IS LOCAL, NOT GLOBAL. Each adjacent pair of sorted steps
+        is compared against `rtol` times its OWN magnitude, never against
+        `rtol * max|step|`. A global scale is set by the largest step in the
+        record, so a single long gap inflates the tolerance everywhere: on
+        `[0, 1, 2, 3.003, 4e9]` the global tolerance is 4.0 ABSOLUTE, which
+        merges the genuinely distinct steps 1.0 and 1.003 and reports 2 steps
+        where the same axis without the gap correctly reports 3. That is not an
+        exotic input -- sub-second sampling inside a multi-year record puts
+        gap/step above 1e9 routinely.
+
         The grouping is single-linkage on the sorted steps: a new group starts
-        wherever consecutive sorted steps differ by more than
-        `rtol * max|step|`, and each group is represented by its smallest
-        member. Single linkage can in principle chain -- a dense ladder of steps
-        each within tolerance of the next merges end to end -- but at
-        rtol = 1e-9 that needs about 1e9 intermediate steps spanning one
-        tolerance width, which no real time axis has.
+        wherever an adjacent pair differs by more than the local tolerance, and
+        each group is represented by its smallest member. Single linkage chains:
+        a dense ladder of steps each within `rtol` of the next merges end to
+        end, so a group can in principle span a factor of `(1 + rtol)^k` after k
+        links. Reaching even a factor of two that way needs
+        `ln 2 / rtol ~ 7e8` intermediate steps, so it is a property to know
+        about rather than a hazard in practice -- but it does mean this returns
+        representatives of clusters, not a partition into exactly-equal values.
 
         Args:
             t: Timestamps, shape (n,). Fewer than two entries gives no steps.
-            rtol: Relative tolerance, scaled by the largest step magnitude.
+            rtol: Relative tolerance, applied to each adjacent pair's own scale.
 
         Returns:
             The distinct steps, ascending, shape (S,).
@@ -231,21 +255,31 @@ class StateSpace:
         steps = np.sort(np.diff(np.asarray(t, dtype=np.float64)))
         if steps.size == 0:
             return steps
-        tol = float(rtol) * float(np.max(np.abs(steps)))
-        if not tol > 0.0:
-            return np.asarray(np.unique(steps), dtype=np.float64)
+        # Local scale: the larger magnitude of the pair, so the comparison is
+        # symmetric and stays meaningful for a negative step (an unsorted axis).
+        scale = np.maximum(np.abs(steps[1:]), np.abs(steps[:-1]))
         starts = np.empty(steps.size, dtype=bool)
         starts[0] = True
-        starts[1:] = np.diff(steps) > tol
+        # An all-duplicate axis gives scale 0 and diff 0, so `0 > 0` is False
+        # and the steps merge -- which is correct, and needs no special case.
+        starts[1:] = np.diff(steps) > float(rtol) * scale
         return np.asarray(steps[starts], dtype=np.float64)
 
-    def step_matrices(
+    def _step_matrices(
         self,
         theta: NDArray[np.float64],
         t: NDArray[np.float64],
         rtol: float = UNIQUE_DT_RTOL,
     ) -> StepMatrices:
         """Build F and Q once per distinct timestep, with the interval mapping.
+
+        PROVISIONAL, AND PRIVATE FOR THAT REASON. Task 5 needed something to
+        make the amortization real rather than merely claimed, but nothing in
+        this task chose the shape deliberately, and the eager
+        `(S, B, d, d)` materialisation is the wrong one for a chunked filter --
+        see the cost note below. Task 6 owns the batched Kalman engine and
+        should feel free to replace this outright rather than treat it as
+        settled API.
 
         THIS IS THE MEMOIZATION, done explicitly rather than as a hidden cache:
         a regular axis of n points has n-1 intervals but one distinct step, so
@@ -254,8 +288,9 @@ class StateSpace:
         Cost note for the caller: the returned stacks are S * B * d^2 floats
         each. On a regular grid S = 1; on a fully irregular one S = n-1 and this
         degenerates to materializing every interval's matrices at once, which is
-        exactly the amortization failing. An engine driving a long irregular
-        series must chunk rather than call this once for the whole axis.
+        exactly the amortization failing and which would break the Task 17
+        memory budget. An engine driving a long irregular series must chunk
+        rather than call this once for the whole axis.
 
         Args:
             theta: Parameters, shape (B, p) -- the FULL vector, see `from_spec`.
