@@ -49,6 +49,15 @@ warn_return_any = true
 warn_unused_configs = true
 mypy_path = "src"
 
+# scipy ships no type stubs. Task 4 needed a per-file `# type: ignore[import-untyped]` in
+# tests/oracles.py, and Task 5 brings scipy into src/ (statespace.py's expm fallback), so
+# without this the ignores multiply across the package. Declared centrally instead, which
+# is the pattern this file already anticipated for rasterio/netCDF4 below. Revisit if
+# scipy-stubs becomes worth the dependency: real stubs would catch misuse that this hides.
+[[tool.mypy.overrides]]
+module = ["scipy.*"]
+ignore_missing_imports = true
+
 # Uncomment when using rasterio or netCDF4:
 # [[tool.mypy.overrides]]
 # module = ["rasterio.*", "netCDF4.*"]
