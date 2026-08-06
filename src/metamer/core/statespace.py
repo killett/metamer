@@ -134,27 +134,6 @@ def safe_transition(
 
 
 @dataclass(frozen=True)
-class StepMatrices:
-    """F and Q evaluated once per distinct timestep, plus the interval mapping.
-
-    PROVISIONAL: the return type of `StateSpace._step_matrices`, whose docstring
-    explains why that method is private and why Task 6 may replace both.
-
-    Attributes:
-        steps: The distinct timesteps, ascending, shape (S,).
-        index: For each of the n-1 intervals of the time axis, the index into
-            `steps` of the step it belongs to, shape (n-1,).
-        transition: F at each distinct step, shape (S, B, d, d).
-        process_noise: Q at each distinct step, shape (S, B, d, d).
-    """
-
-    steps: NDArray[np.float64]
-    index: NDArray[np.intp]
-    transition: NDArray[np.float64]
-    process_noise: NDArray[np.float64]
-
-
-@dataclass(frozen=True)
 class StateSpace:
     """A composite state space assembled block-diagonally from its terms.
 
@@ -264,57 +243,6 @@ class StateSpace:
         # and the steps merge -- which is correct, and needs no special case.
         starts[1:] = np.diff(steps) > float(rtol) * scale
         return np.asarray(steps[starts], dtype=np.float64)
-
-    def _step_matrices(
-        self,
-        theta: NDArray[np.float64],
-        t: NDArray[np.float64],
-        rtol: float = UNIQUE_DT_RTOL,
-    ) -> StepMatrices:
-        """Build F and Q once per distinct timestep, with the interval mapping.
-
-        PROVISIONAL, AND PRIVATE FOR THAT REASON. Task 5 needed something to
-        make the amortization real rather than merely claimed, but nothing in
-        this task chose the shape deliberately, and the eager
-        `(S, B, d, d)` materialisation is the wrong one for a chunked filter --
-        see the cost note below. Task 6 owns the batched Kalman engine and
-        should feel free to replace this outright rather than treat it as
-        settled API.
-
-        THIS IS THE MEMOIZATION, done explicitly rather than as a hidden cache:
-        a regular axis of n points has n-1 intervals but one distinct step, so
-        one F and one Q are built and `index` points every interval at them.
-
-        Cost note for the caller: the returned stacks are S * B * d^2 floats
-        each. On a regular grid S = 1; on a fully irregular one S = n-1 and this
-        degenerates to materializing every interval's matrices at once, which is
-        exactly the amortization failing and which would break the Task 17
-        memory budget. An engine driving a long irregular series must chunk
-        rather than call this once for the whole axis.
-
-        Args:
-            theta: Parameters, shape (B, p) -- the FULL vector, see `from_spec`.
-            t: Timestamps, shape (n,).
-            rtol: Relative tolerance forwarded to `unique_dt`.
-
-        Returns:
-            A `StepMatrices` whose `steps`, `transition` and `process_noise`
-            share a leading axis, and whose `index` has one entry per interval.
-        """
-        arr = np.asarray(theta, dtype=np.float64)
-        raw = np.diff(np.asarray(t, dtype=np.float64))
-        steps = self.unique_dt(t, rtol=rtol)
-        if steps.size == 0:
-            empty = np.zeros((0, arr.shape[0], self.state_dim, self.state_dim))
-            return StepMatrices(steps, np.zeros(0, dtype=np.intp), empty, empty)
-        # `steps` is ascending and each group is represented by its smallest
-        # member, so every raw step is at or above its own representative.
-        index = np.clip(
-            np.searchsorted(steps, raw, side="right") - 1, 0, steps.size - 1
-        ).astype(np.intp)
-        transition = np.stack([self.transition(arr, float(s)) for s in steps])
-        process_noise = np.stack([self.process_noise(arr, float(s)) for s in steps])
-        return StepMatrices(steps, index, transition, process_noise)
 
     def _assemble(
         self, theta: NDArray[np.float64], method: str, *args: float

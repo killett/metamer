@@ -6,10 +6,15 @@ Cholesky and no pivoting anywhere in the filter. And P_inf is analytic per
 family, so there is no Lyapunov solve either. The filter is therefore analytic
 in theta end to end, which is what makes exact-gradient options available.
 
-(The project's rule that validity is classified with the non-raising batched
-`slogdet` before any subset is handed to `np.linalg.cholesky` -- which raises
-for the WHOLE stack if one member fails -- is vacuous while S is scalar, but it
-binds anything added here that factorizes a matrix.)
+THE "CLASSIFY FIRST, FACTORIZE THE VALID SUBSET" RULE IS NOT VACUOUS HERE, and
+an earlier version of this docstring wrongly said it was on the grounds that S
+is scalar. The scalar S removes the Cholesky from the *filter recursion*; it
+does not remove batched LAPACK from this module. `_rank` calls
+`np.linalg.svdvals` on the stack of accumulated Gram blocks, and that raises
+`LinAlgError` for the WHOLE stack if any single series' block is non-finite --
+one NaN theta out of B would deny every healthy series its result. `_rank`
+therefore masks with `np.isfinite(...).all(axis=(1, 2))` and factorizes only the
+valid subset, which is exactly what the rule demands.
 
 Because P and S do not depend on the data, one covariance recursion serves the
 observation column and every design column at once: the filter runs on the
@@ -48,7 +53,7 @@ from numpy.typing import NDArray
 from metamer.core.capability import EngineId, Objective
 from metamer.core.engines.protocol import ScoredResult
 from metamer.core.outcomes import Outcome, outcome_array
-from metamer.core.statespace import StateSpace
+from metamer.core.statespace import UNIQUE_DT_RTOL, StateSpace
 
 _RANK_RTOL = 1e-10
 """Relative singular-value cutoff for the rank of the accumulated X'Sigma^-1 X.
@@ -144,7 +149,7 @@ class KalmanEngine:
         cols = self._augment(y, design, batch, n_time)
         n_cols = cols.shape[2]
 
-        steps, index, matrices = self._step_matrices(state_space, theta, t)
+        index, matrices = self._step_matrices(state_space, theta, t)
 
         h = state_space.observation(theta)
         r = state_space.measurement_variance(theta)
@@ -205,16 +210,17 @@ class KalmanEngine:
         loglik = -0.5 * (
             n_used.astype(np.float64) * np.log(2.0 * np.pi) + sum_log_s + accum[:, 0, 0]
         )
-        rank_x = (
-            self._rank(accum[:, 1:, 1:])
-            if n_cols > 1
-            else np.zeros(batch, dtype=np.int64)
-        )
+        if n_cols > 1:
+            rank_x, gram_ok = self._rank(accum[:, 1:, 1:])
+        else:
+            rank_x = np.zeros(batch, dtype=np.int64)
+            gram_ok = np.ones(batch, dtype=bool)
 
         outcome = outcome_array(batch)
         # A non-finite score is a NONFINITE_OBJECTIVE however it arose -- the
-        # degenerate S above, or a NaN sitting at an UNmasked epoch.
-        failed = degenerate | ~np.isfinite(loglik)
+        # degenerate S above, a NaN sitting at an UNmasked epoch, or a Gram
+        # block that could not be factorized at all.
+        failed = degenerate | ~np.isfinite(loglik) | ~gram_ok
         outcome[failed] = Outcome.NONFINITE_OBJECTIVE.code
         # An all-masked series is a legitimate expected outcome (land, permanent
         # ice), and it is diagnosed last because it is the more specific fact.
@@ -223,6 +229,18 @@ class KalmanEngine:
         empty = n_used == 0
         outcome[empty] = Outcome.INSUFFICIENT_DATA.code
         loglik = np.where(failed | empty, np.nan, loglik)
+
+        # POISON THE CROSS-PRODUCTS OF EVERY NON-OK SERIES. For a degenerate
+        # series `accum` is a FINITE matrix assembled partly from the
+        # `safe_s = 1.0` substitutions above, and for an all-masked series it is
+        # all zeros. Both are plausible and both are wrong. Task 8 profiles beta
+        # out of exactly this matrix, so leaving them would hand it a credible
+        # finite answer built from a substitution that never happened. NaN makes
+        # the misuse fail loudly instead. `n_used` is deliberately NOT poisoned:
+        # a count of unmasked epochs is true regardless of how the fit went.
+        not_ok = outcome != Outcome.OK.code
+        accum = np.where(not_ok[:, None, None], np.nan, accum)
+        rank_x = np.where(not_ok, -1, rank_x).astype(np.int64)
 
         return ScoredResult(
             loglik=loglik,
@@ -239,12 +257,17 @@ class KalmanEngine:
         state_space: StateSpace,
         theta: NDArray[np.float64],
         t: NDArray[np.float64],
+        rtol: float = UNIQUE_DT_RTOL,
     ) -> tuple[
-        NDArray[np.float64],
         NDArray[np.intp],
         list[tuple[NDArray[np.float64], NDArray[np.float64]]],
     ]:
         """Build F and Q once per DISTINCT timestep, with the interval mapping.
+
+        THIS IS THE ONLY IMPLEMENTATION of the cluster-index invariant.
+        `StateSpace._step_matrices` was a second, near-verbatim copy of it and
+        has been deleted; this project already learned from five copies of the
+        parameter-layout loop that the invariant needs one home.
 
         THE INTERVAL IS MAPPED THROUGH THE REPRESENTATIVES, NOT LOOKED UP BY
         VALUE. `unique_dt` returns tolerance-clustered representatives, so the
@@ -262,15 +285,19 @@ class KalmanEngine:
             state_space: The composite state space.
             theta: Parameters, shape (B, p).
             t: Timestamps, shape (N,).
+            rtol: Relative tolerance forwarded to `unique_dt`. Forwarded rather
+                than left at the default from the only caller, so the clustering
+                scale stays adjustable from outside -- the same reason
+                `safe_transition` forwards `cond_threshold`.
 
         Returns:
-            The distinct steps, the per-interval index into them (length N-1),
-            and the (F, Q) pair for each distinct step.
+            The per-interval index into the distinct steps (length N-1), and the
+            (F, Q) pair for each distinct step.
         """
         raw = np.diff(t)
-        steps = state_space.unique_dt(t)
+        steps = state_space.unique_dt(t, rtol=rtol)
         if steps.size == 0:
-            return steps, np.zeros(0, dtype=np.intp), []
+            return np.zeros(0, dtype=np.intp), []
         index = np.clip(
             np.searchsorted(steps, raw, side="right") - 1, 0, steps.size - 1
         ).astype(np.intp)
@@ -281,7 +308,7 @@ class KalmanEngine:
             )
             for step in steps
         ]
-        return steps, index, matrices
+        return index, matrices
 
     @staticmethod
     def _augment(
@@ -329,8 +356,21 @@ class KalmanEngine:
         return np.concatenate([y[:, :, None], x], axis=2)
 
     @staticmethod
-    def _rank(gram: NDArray[np.float64]) -> NDArray[np.int64]:
+    def _rank(
+        gram: NDArray[np.float64],
+    ) -> tuple[NDArray[np.int64], NDArray[np.bool_]]:
         """Numerical rank of each accumulated X' Sigma^-1 X block.
+
+        CLASSIFY FIRST, FACTORIZE ONLY THE VALID SUBSET. `np.linalg.svdvals`
+        raises `LinAlgError` for the ENTIRE stack if any one member fails to
+        converge, so handing it a batch containing a single non-finite block
+        denies every healthy series its result -- the precise batch-wide failure
+        the project rule forbids. A NaN theta reaching here is not hypothetical:
+        Task 13's optimizer will produce one, and Task 8 supplies the X that
+        makes this path live at all.
+
+        The validity test is `np.isfinite`, which cannot raise, rather than a
+        trial factorization.
 
         Thresholds the GRAM's singular values, whose scale is the square of
         X's -- see `_RANK_RTOL`, which states what that costs.
@@ -339,8 +379,13 @@ class KalmanEngine:
             gram: The accumulated blocks, shape (B, k, k).
 
         Returns:
-            The per-series rank, shape (B,).
+            The per-series rank (0 where the block was not factorizable), and
+            the per-series validity mask, both shape (B,).
         """
-        values = np.linalg.svdvals(gram)
-        tol = _RANK_RTOL * values[:, :1]
-        return np.asarray((values > tol).sum(axis=1), dtype=np.int64)
+        ok = np.asarray(np.isfinite(gram).all(axis=(1, 2)))
+        rank = np.zeros(gram.shape[0], dtype=np.int64)
+        if ok.any():
+            values = np.linalg.svdvals(gram[ok])
+            tol = _RANK_RTOL * values[:, :1]
+            rank[ok] = (values > tol).sum(axis=1)
+        return rank, ok

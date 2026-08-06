@@ -747,7 +747,7 @@ def test_unique_dt_handles_duplicate_and_single_timestamps():
 
     Expected values determined by hand: `[3.0, 3.0, 3.0]` has two intervals both
     exactly 0.0, so one distinct step whose value is exactly 0.0; a one-sample
-    axis has no intervals at all, so no steps and empty stacks.
+    axis has no intervals at all, so no steps.
 
     Bug this catches: dividing by the largest step (0/0 -> nan, and every step
     then compares unequal, so a duplicate-heavy axis reports n-1 distinct steps
@@ -758,69 +758,7 @@ def test_unique_dt_handles_duplicate_and_single_timestamps():
     assert duplicates.size == 1
     assert duplicates[0] == 0.0
 
-    spec = ProcessSpec((_term("matern12"), _term("matern32")))
-    ss = StateSpace.from_spec(spec)
-    theta = np.array([[1.0, 2.0, 1.0, 9.0]])
-
-    single = ss._step_matrices(theta, np.array([4.0]))
-    assert single.steps.size == 0
-    assert single.index.shape == (0,)
-    assert single.transition.shape == (0, 1, 3, 3)
-    assert single.process_noise.shape == (0, 1, 3, 3)
-
-    repeated = ss._step_matrices(theta, np.array([3.0, 3.0, 3.0]))
-    assert repeated.steps.size == 1
-    np.testing.assert_array_equal(repeated.index, [0, 0])
-    np.testing.assert_array_equal(repeated.transition[0], np.eye(3)[None])
-    np.testing.assert_array_equal(repeated.process_noise[0], np.zeros((1, 3, 3)))
-
-
-def test_step_matrices_evaluates_each_unique_step_once():
-    """F and Q are built once per unique step and indexed back to the intervals.
-
-    Behaviour: this is the memoization the acceptance criterion names. On a
-    regular grid of n points there are n-1 intervals but ONE distinct step, so
-    exactly one F and one Q are built; `index` maps every interval onto it.
-
-    Expected values determined independently: the number of stacked matrices is
-    asserted to equal the number of unique steps (1 for a 501-point regular
-    grid, 3 for the irregular fixture), and each stacked matrix is compared
-    against the family's own `transition`/`process_noise` at that interval's
-    own step -- so a cache that returned the wrong entry for some interval
-    fails even though the count is right.
-
-    Bug this catches: returning n-1 matrices on a regular grid (no amortization
-    at all -- 500x the work and 500x the memory here), or an off-by-one in the
-    interval-to-step index, which would advance the filter with the wrong step.
-    """
-    spec = ProcessSpec((_term("matern12"), _term("matern32")))
-    ss = StateSpace.from_spec(spec)
-    theta = np.array([[1.0, 2.0, 1.0, 9.0], [0.5, 4.0, 2.0, 3.0]])
-
-    regular = np.linspace(0.0, 5.0, 501)
-    steps = ss._step_matrices(theta, regular)
-    assert steps.steps.size == 1
-    assert steps.transition.shape == (1, 2, 3, 3)
-    assert steps.process_noise.shape == (1, 2, 3, 3)
-    assert steps.index.shape == (500,)
-    np.testing.assert_array_equal(steps.index, 0)
-
-    irregular = np.array([0.0, 1.0, 3.0, 6.0, 7.0])
-    steps = ss._step_matrices(theta, irregular)
-    assert steps.steps.size == 3
-    assert steps.transition.shape == (3, 2, 3, 3)
-    np.testing.assert_array_equal(steps.index, [0, 1, 2, 0])
-    for interval, dt in enumerate(np.diff(irregular)):
-        np.testing.assert_allclose(
-            steps.transition[steps.index[interval]],
-            ss.transition(theta, float(dt)),
-            rtol=1e-14,
-        )
-        np.testing.assert_allclose(
-            steps.process_noise[steps.index[interval]],
-            ss.process_noise(theta, float(dt)),
-            rtol=1e-14,
-        )
+    assert StateSpace.unique_dt(np.array([4.0])).size == 0
 
 
 # --------------------------------------------------------------------------

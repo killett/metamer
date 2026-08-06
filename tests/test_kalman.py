@@ -235,8 +235,12 @@ def test_masked_epochs_score_identically_to_deleted_epochs_with_a_design():
 
     assert masked.n_used[0] == absent.n_used[0] == int(keep.sum())
     assert masked.loglik[0] == pytest.approx(absent.loglik[0], abs=1e-12)
+    # Measured max |diff| on this configuration is 7.1e-15, against a smallest
+    # checked entry of 1.05e-2, so atol=1e-12 passes with 141x headroom over the
+    # residual. An earlier version used 1e-11 on the belief that d=2 across five
+    # gaps needed it; that was wrong, and measuring said so.
     np.testing.assert_allclose(
-        masked.normal_equations[0], absent.normal_equations[0], rtol=0, atol=1e-11
+        masked.normal_equations[0], absent.normal_equations[0], rtol=0, atol=1e-12
     )
     assert masked.rank_x[0] == absent.rank_x[0] == 3
 
@@ -363,9 +367,17 @@ def test_transition_and_process_noise_are_computed_once_per_unique_dt():
 def test_two_distinct_steps_build_two_pairs_of_matrices():
     """The memo is keyed on the step, so two distinct steps cost two builds.
 
-    Bug this catches: a memo that collapses everything to a single entry (for
-    instance keying on the first interval only), which would pass the regular-grid
-    counter above while filtering an irregular axis with the wrong F entirely.
+    The call COUNT is only half of it. This also runs real data through a
+    genuinely irregular axis and checks the log-likelihood against the MVN
+    oracle, because a count of two proves only that two pairs were built, not
+    that each interval was advanced with its OWN pair. An off-by-one in the
+    interval-to-step index builds exactly two pairs and then uses the wrong one.
+
+    Bug this catches: a memo that collapses everything to a single entry (which
+    would pass the regular-grid counter above while filtering an irregular axis
+    with the wrong F entirely), and separately any misindexing of the
+    multi-representative index map -- which every other test covers only
+    transitively, through an axis with one representative.
     """
     spec = ProcessSpec((_term("matern12"),))
     ss = StateSpace.from_spec(spec)
@@ -383,12 +395,17 @@ def test_two_distinct_steps_build_two_pairs_of_matrices():
 
     object.__setattr__(ss, "transition", counting_f)
     object.__setattr__(ss, "process_noise", counting_q)
+    # Steps are 1, 1, 2, 1, 2 -> two distinct representatives, and the intervals
+    # alternate between them, so an off-by-one lands on the wrong one.
     t = np.array([0.0, 1.0, 2.0, 4.0, 5.0, 7.0])
-    y = np.zeros((1, 6))
-    KalmanEngine().score(
-        ss, np.array([[1.0, 4.0]]), y, np.ones_like(y, dtype=bool), t, design=None
+    theta = np.array([[1.0, 4.0]])
+    cov = _covariance(ss, theta, t)
+    y = np.random.default_rng(13).multivariate_normal(np.zeros(t.size), cov)[None, :]
+    result = KalmanEngine().score(
+        ss, theta, y, np.ones_like(y, dtype=bool), t, design=None
     )
     assert calls == {"f": 2, "q": 2}
+    assert result.loglik[0] == pytest.approx(mvn_loglik(y[0], cov), abs=1e-12)
 
 
 def test_result_carries_engine_and_objective_tags():
@@ -615,6 +632,97 @@ def test_rank_x_detects_a_duplicated_column():
         ss, theta, y, np.ones_like(y, dtype=bool), t, design=design
     )
     assert result.rank_x.tolist() == [2]
+
+
+def test_one_series_with_nonfinite_theta_does_not_deny_the_batch_its_rank():
+    """A NaN theta must not raise for the whole stack inside `_rank`.
+
+    `np.linalg.svdvals` raises `LinAlgError` for the ENTIRE batch if any one
+    member's Gram block is non-finite, so a single bad series would deny every
+    healthy one its result. Validity is therefore classified with a non-raising
+    `np.isfinite` test and only the valid subset is factorized -- the same rule
+    that keeps `np.linalg.cholesky` off an unclassified stack.
+
+    This path is live only when a design is supplied (`n_cols > 1`), which is
+    Task 8, and NaN thetas are what Task 13's optimizer produces.
+
+    Bug this catches: calling the batched factorization unmasked. Before the
+    fix this raised `LinAlgError: SVD did not converge` and returned nothing at
+    all -- not a failed series, no result whatsoever.
+    """
+    spec = ProcessSpec((_term("matern12"),))
+    ss = StateSpace.from_spec(spec)
+    theta = np.array([[1.0, 3.0], [np.nan, 3.0]])
+    t = np.arange(10.0)
+    rng = np.random.default_rng(21)
+    y = rng.standard_normal((2, 10))
+    mask = np.ones((2, 10), dtype=bool)
+    design = np.column_stack([np.ones(10), t / 10.0])
+
+    engine = KalmanEngine()
+    result = engine.score(ss, theta, y, mask, t, design=design)
+
+    # The healthy series is scored exactly as if it had travelled alone.
+    solo = engine.score(ss, theta[:1], y[:1], mask[:1], t, design=design)
+    assert result.outcome[0] == Outcome.OK.code
+    assert result.loglik[0] == pytest.approx(solo.loglik[0], rel=1e-13)
+    assert result.rank_x[0] == solo.rank_x[0] == 2
+    np.testing.assert_allclose(
+        result.normal_equations[0], solo.normal_equations[0], rtol=1e-13, atol=0
+    )
+
+    # The poisoned series is a tagged failure, not an exception.
+    assert result.outcome[1] == Outcome.NONFINITE_OBJECTIVE.code
+    assert np.isnan(result.loglik[1])
+    assert result.rank_x[1] == -1
+
+
+def test_failed_series_carry_nan_normal_equations():
+    """A non-OK series' cross-products are NaN, not a plausible finite matrix.
+
+    The raw accumulator for a degenerate series is FINITE -- it is assembled
+    partly from the engine's substituted innovation variances -- and for an
+    all-masked series it is all zeros. Task 8 profiles beta out of exactly this
+    matrix, so either would hand it a credible, finite, wrong answer.
+
+    Bug this catches: returning the raw accumulator for a failed series.
+    `loglik` alone being NaN is not enough, because the consumer of
+    `normal_equations` is a different consumer.
+    """
+    spec = ProcessSpec((_term("white"), _term("matern12")))
+    ss = StateSpace.from_spec(spec)
+    # Series 0: R = 0 with a repeated timestamp -> S = 0 -> NONFINITE_OBJECTIVE.
+    # Series 1: healthy. Series 2: fully masked -> INSUFFICIENT_DATA.
+    theta = np.array([[1.0, 5.0, 0.0], [1.0, 5.0, 1.0], [1.0, 5.0, 1.0]])
+    t = np.array([0.0, 0.0, 1.0, 2.0])
+    y = np.array([[0.5, 0.5, -0.3, 0.1]] * 3)
+    mask = np.ones((3, 4), dtype=bool)
+    mask[2] = False
+    design = np.column_stack([np.ones(4), t / 4.0])
+
+    engine = KalmanEngine()
+    result = engine.score(ss, theta, y, mask, t, design=design)
+
+    assert result.outcome.tolist() == [
+        Outcome.NONFINITE_OBJECTIVE.code,
+        Outcome.OK.code,
+        Outcome.INSUFFICIENT_DATA.code,
+    ]
+    assert np.isnan(result.normal_equations[0]).all()
+    assert np.isnan(result.normal_equations[2]).all()
+    assert result.rank_x[0] == -1
+    assert result.rank_x[2] == -1
+
+    # The healthy batch-mate keeps exact cross-products, checked against the
+    # dense-Sigma oracle rather than merely against itself.
+    assert np.isfinite(result.normal_equations[1]).all()
+    cov = _covariance(ss, theta[1:2], t)
+    aug = np.column_stack([y[1], design])
+    np.testing.assert_allclose(
+        result.normal_equations[1], aug.T @ np.linalg.inv(cov) @ aug, rtol=1e-9, atol=0
+    )
+    # n_used stays valid for every series: it is a count, not a fit result.
+    assert result.n_used.tolist() == [4, 4, 0]
 
 
 def test_single_epoch_series_scores_from_the_stationary_covariance():
