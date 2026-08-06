@@ -5,9 +5,16 @@
 - **Branch:** `phase-1` (work here, not `main`). Both branches are pushed.
 - **Remote:** https://github.com/killett/metamer — public. Run `git log --oneline -5` for the latest commit.
 - **Done:** design document, Phase 1 implementation plan, two rounds of plan review applied.
-  Phase 1 **Tasks 0 and 1** are implemented, reviewed, and committed.
-- **Pending:** Phase 1 Tasks 2–19.
-- **Next action:** implement **Task 2** (kernel algebra) from
+  Phase 1 **Tasks 0–5** are implemented, reviewed, and committed.
+- **Pending:** Phase 1 Tasks 6–19.
+- **A pre-flight audit of each task brief is now a standing step**, run before dispatching an
+  implementer. Every brief audited so far carried at least one defect that verbatim
+  transcription would have committed — a test contradicting its own implementation, an
+  implementation violating two of its acceptance criteria, an enum property contradicting
+  design doc §8.6, a registry never populated at runtime, and two separate catastrophic
+  cancellations. It is far cheaper than a fix round and catches what post-hoc review cannot,
+  because by then the defect is already the code.
+- **Next action:** implement **Task 6** (engine protocol and the batched Kalman filter) from
   [`docs/superpowers/plans/2026-08-05-metamer-phase1.md`](docs/superpowers/plans/2026-08-05-metamer-phase1.md).
   The draft PR command is below and has not been run yet.
 - **Execution workspace:** `.superpowers/sdd/2026-08-05-metamer-phase1/` (git-ignored) holds
@@ -141,6 +148,9 @@ cannot reconstruct them.
   (the Matérn ν=1/2 `Δt = 0` case exists precisely because of them), so this is reachable,
   not hypothetical. Whatever builds Σ must key the nugget on *index* identity, not on the
   lag being zero.
+- **numpy 2's `np.linalg.eig` returns `complex128` unconditionally**, even for a real matrix
+  with real eigenvalues. Any inner product on its eigenvectors must be Hermitian
+  (`np.vdot`, not `@`), or the imaginary part is silently truncated with a `ComplexWarning`.
 - **Compute `1 − e^{−x}` as `-np.expm1(-x)`, never as `1.0 - np.exp(-x)`.** In the Matérn
   ν=1/2 `Q(Δt) = σ²(1 − e^{−2Δt/ρ})` the naive form loses all significant digits for small
   `Δt/ρ`: measured relative error 8e-8 at `Δt/ρ = 1e-10`, 8e-4 at 1e-14, and `Q` flushes to

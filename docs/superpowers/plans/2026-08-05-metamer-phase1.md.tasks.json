@@ -97,7 +97,7 @@
       "id": 13,
       "planTask": 5,
       "subject": "Task 5: Matern 3/2, composite assembly, defective-root guard",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         12
       ],
