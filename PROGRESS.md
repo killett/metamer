@@ -5,9 +5,9 @@
 - **Branch:** `phase-1` (work here, not `main`). Both branches are pushed.
 - **Remote:** https://github.com/killett/metamer — public. Run `git log --oneline -5` for the latest commit.
 - **Done:** design document, Phase 1 implementation plan, two rounds of plan review applied.
-  Phase 1 **Tasks 0–6** are implemented, reviewed, and committed — the likelihood spine now
+  Phase 1 **Tasks 0–7** are implemented, reviewed, and committed — the likelihood spine now
   runs end to end from a `ProcessSpec` to a scored, per-series result.
-- **Pending:** Phase 1 Tasks 7–19.
+- **Pending:** Phase 1 Tasks 8–19.
 - **A pre-flight audit of each task brief is now a standing step**, run before dispatching an
   implementer. Every brief audited so far carried at least one defect that verbatim
   transcription would have committed — a test contradicting its own implementation, an
@@ -15,7 +15,7 @@
   design doc §8.6, a registry never populated at runtime, and two separate catastrophic
   cancellations. It is far cheaper than a fix round and catches what post-hoc review cannot,
   because by then the defect is already the code.
-- **Next action:** implement **Task 7** (signal spec, design matrix, `rank(X)`) from
+- **Next action:** implement **Task 8** (GLS profiling, ML and REML objectives) from
   [`docs/superpowers/plans/2026-08-05-metamer-phase1.md`](docs/superpowers/plans/2026-08-05-metamer-phase1.md).
   The draft PR command is below and has not been run yet.
 - **Execution workspace:** `.superpowers/sdd/2026-08-05-metamer-phase1/` (git-ignored) holds
@@ -155,6 +155,17 @@ cannot reconstruct them.
   (the Matérn ν=1/2 `Δt = 0` case exists precisely because of them), so this is reachable,
   not hypothetical. Whatever builds Σ must key the nugget on *index* identity, not on the
   lag being zero.
+- **Never take `log|XᵀX|` via `slogdet(XᵀX)`.** Forming the Gram squares the condition number,
+  and `slogdet` then returns a **negative sign** for a design that is genuinely full rank —
+  measured at `cond(X) = 1e9`, where the `sign > 0 else -inf` idiom produced `gram_logdet =
+  -inf` for a 4/4-rank design, i.e. a spurious `RANK_DEFICIENT_X`. Use `2 · Σ log s` from
+  `svdvals(X)` instead: it is accurate to ~1e-8 absolute at that conditioning and needs one
+  fewer decomposition. The same trap applies anywhere a Gram log-determinant is wanted.
+- **The time axis is decimal years.** In seconds since 1970 the same 20-year monthly design
+  goes from `cond(X) = 3.4e1` to `3.3e32` and from rank 7/7 to 2/7 — `cos(annual)` becomes
+  identically 1.0 and the sine columns lose all float64 phase. Design columns are
+  deliberately **not** auto-scaled: normalising shifts `gram_logdet` by `2 Σ log s_j`, which
+  corrupts the REML constant unless the scale vector is carried and unwound in the objective.
 - **numpy 2's `np.linalg.eig` returns `complex128` unconditionally**, even for a real matrix
   with real eigenvalues. Any inner product on its eigenvectors must be Hermitian
   (`np.vdot`, not `@`), or the imaginary part is silently truncated with a `ComplexWarning`.

@@ -132,7 +132,7 @@
       "id": 15,
       "planTask": 7,
       "subject": "Task 7: Signal spec, design matrix, rank(X)",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         10
       ],
