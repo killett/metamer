@@ -54,9 +54,17 @@ computed exactly once per fit at setup and this module only reads them.
 `design.rank` IS NOT `ScoredResult.rank_x`. The first is `rank(X_r)`, a
 property of the design alone, independent of Sigma, and it is the one Harville's
 constant `(n - rank(X)) log 2 pi` refers to. The second is the rank of the
-WHITENED Gram and depends on theta. `ObjectiveResult.rank_x` carries the
-engine's, for Task 9's effective sample size; the REML constant here uses the
-design's. Conflating them is a silent off-by-one in one place or the other.
+WHITENED Gram and depends on theta. `ObjectiveResult` carries BOTH, as
+`design_rank` and `rank_x`, precisely because they answer different questions.
+
+TASK 9 MUST COUNT WITH `design_rank`, not `rank_x`. REML's effective sample size
+`n_obs - rank(X)` has to use the same rank the constant above was computed with,
+or the counting is inconsistent with the likelihood it is counting for. An
+earlier version of this paragraph directed Task 9 to `rank_x`, which was wrong
+and was harmless only because the two agree on every path that produces a finite
+value -- a deficient `X_r` fails its series before it is scored. Two quantities
+that agree in practice and are documented as one are how an off-by-one reaches
+BIC, so both are carried and both are named.
 
 OPEN: verify which convention Hector uses and record it in the design doc. If it
 differs, the cross-validation carries a documented offset, not a mystery.
@@ -163,8 +171,7 @@ on the map) rather than a silently wrong fit. If that direction bites, the fix
 is a scale-aware diagnostic, not a bigger constant.
 
 MEASURED, on FULL-SUPPORT designs at theta = (0.4, 1.2, 6.0), through the
-engine's own accumulated Gram (`scratchpad/spans.py`; reproduce by growing the
-span and reading `0.5 * (log lambda_max - log lambda_min)`). This is the only
+engine's own accumulated Gram (reproduction recipe below). This is the only
 quantitative check anyone has run on that false-positive direction, and it is
 recorded here because it ARGUES FOR the derived constant over the calibrated
 one it replaced. Margins are how far each case sits BELOW the limit, so larger
@@ -184,6 +191,34 @@ is safer:
          60       77.88   4.3552        +4.6557               +2.5525
         100       129.8   4.8657        +4.1452               +2.0420
 
+TO REPRODUCE EVERY NUMBER IN THIS DOCSTRING, stated here in full rather than
+cited to a script, because a citation to a file nobody can open is worse than
+no citation at all:
+
+    t = 2000.0 + np.arange(round(years * per_year)) / per_year
+    mask = np.ones((1, t.size), bool)
+    x = SignalSpec(terms).design_info(t, mask).matrix
+    gram = KalmanEngine().score(
+        state_space, theta, np.zeros((1, t.size)), mask, t, x
+    ).normal_equations[0, 1:, 1:]
+    lam = np.linalg.eigvalsh(gram)[::-1]
+    log_cond = 0.5 * (np.log(lam[0]) - np.log(lam[-1]))
+
+with `state_space = StateSpace.from_spec(ProcessSpec((white, matern12)))`
+(`metamer.core.statespace`, `metamer.core.terms`) and `theta =
+np.array([[0.4, 1.2, 6.0]])`. That parameter order is not a convention to
+guess: `ProcessSpec` sorts its terms canonically, and `free_param_index` on
+this spec returns matern12 sigma, matern12 rho, white sigma, in that order.
+
+WHICH KNOBS EACH TABLE TURNS. The two tables above vary `years`, `per_year`
+and `terms` only, at fixed theta. The table under THE DIAGNOSTIC IS
+THETA-DEPENDENT varies `theta` alone, and it is measured NOT on a full-support
+design but on the conditioning fixture in `tests/test_objective.py`: substitute
+`t = _GAP_T`, `mask = _window(2)[None, :]` (the 42-row ILL case) and
+`x = _gapped_signal(t).design_info(t, mask).matrix` for the first three lines,
+leaving the rest as written. The scale-invariance figure at the end of this
+docstring uses that same fixture with every amplitude multiplied by c.
+
 READ THE LAST ROW OF THE FIRST TABLE. A century-long monthly record with an
 acceleration term is perfectly well supported, and against the fixture-calibrated
 1e3 it cleared by **0.1735 nats** -- a factor of 1.19, so a record only ~10%
@@ -196,7 +231,7 @@ the margin is a full order of magnitude on every case measured.
 THE DIAGNOSTIC IS THETA-DEPENDENT, because the Gram is. The same mask on the
 same design classifies differently at different noise parameters. Measured on
 the fixture's ill-conditioned case -- identical X, identical 42-row mask, only
-theta varied (`scratchpad/theta_dep.py`):
+theta varied:
 
     theta (m12 sigma, rho, white sigma)   cond(X_w)      log   band
     (0.4,  1.2,  6.0  )                      24623    10.1114  ILL
@@ -295,10 +330,11 @@ class ObjectiveResult:
             for a failed series, including on the design-precheck path, and
             carries no sentinel -- the same contract as `ScoredResult.n_used`.
         rank_x: Numerical rank of the accumulated `X' Sigma^-1 X` PER SERIES,
-            shape (B,) int64, carried through from the engine. NOT the scalar
-            `DesignInfo.rank`: a gap that removes every row supporting a column
-            drops that series' effective rank alone, and Task 9's REML
-            effective sample size `n_obs - rank(X)` is computed per series.
+            shape (B,) int64, carried through from the engine. THETA-DEPENDENT:
+            it is the rank of the WHITENED Gram, thresholded at
+            `kalman._RANK_RTOL`, so the same design can yield different values
+            at different noise parameters. It is a NUMERICAL DIAGNOSTIC of the
+            solve, not a parameter count.
 
             **-1 where `outcome` is not OK**, meaning "not computed", exactly as
             on `ScoredResult` so the two objects cannot be read under different
@@ -306,6 +342,29 @@ class ObjectiveResult:
             NOT fail-loud under arithmetic -- `n_obs - rank_x` at -1 yields
             `n_obs + 1`, a sample size larger than the number of observations,
             which looks entirely plausible in BIC.
+        design_rank: `rank(X_r)` PER SERIES, shape (B,) int64 -- the rank of the
+            design restricted to that series' unmasked rows, read from
+            `DesignInfo.rank`. THETA-FREE, and carrying NO SENTINEL: it is a
+            true fact about the design whether or not the fit succeeded, so it
+            is populated on every path, including the failure paths where
+            `rank_x` is -1. Zero when there is no design, which is its true
+            value.
+
+            **THIS IS THE ONE TASK 9 MUST USE** for REML's effective sample
+            size `n_obs - rank(X)`. It is the rank that Harville's constant
+            `(n - rank(X)) log 2 pi` was actually computed with in this module
+            (see `evaluate`), so using anything else makes the counting
+            inconsistent with the likelihood it is counting for.
+
+            TWO RANKS ARE CARRIED DELIBERATELY, and they are not
+            interchangeable. `rank_x` answers "how well conditioned was the
+            solve at this theta"; `design_rank` answers "how many linearly
+            independent columns does this series' design have". They are equal
+            on every path that currently produces a finite log-likelihood -- a
+            deficient `X_r` fails the series before it is scored -- which is
+            exactly why the distinction must be written down rather than
+            discovered: two quantities that agree in practice and are
+            documented as one are how an off-by-one reaches BIC.
     """
 
     loglik: NDArray[np.float64]
@@ -313,6 +372,7 @@ class ObjectiveResult:
     outcome: NDArray[np.uint8]
     n_used: NDArray[np.int64]
     rank_x: NDArray[np.int64]
+    design_rank: NDArray[np.int64]
 
 
 OUTCOME_PRECEDENCE: tuple[Outcome, ...] = (
@@ -415,36 +475,55 @@ def _rank_of(codes: NDArray[np.uint8]) -> NDArray[np.int64]:
     return np.where(inside, _RANK_TABLE[np.where(inside, index, 0)], _UNRANKED)
 
 
-def negative_reduction_mask(
+def implausible_reduction_mask(
     rss_reduction: NDArray[np.float64], quadratic: NDArray[np.float64]
 ) -> NDArray[np.bool_]:
-    """Flag residual reductions that are negative by more than rounding.
+    """Flag residual reductions outside their mathematically valid range.
 
-    `rss_reduction = y'SX (X'SX)^-1 X'Sy` is a quadratic form in a positive
-    definite matrix, so it is non-negative in exact arithmetic. The
-    concentrated value is formed as `engine_loglik + 0.5 * rss_reduction`, a
-    difference of two large positives, and a badly conditioned Gram can round
-    the reduction slightly below zero. Nothing takes a log or a sqrt of it, so
-    the worst case is a log-likelihood slightly too HIGH rather than a NaN --
-    benign, and deliberately not flagged.
+    TWO QUANTITIES ARE AT RISK HERE, IN OPPOSITE DIRECTIONS, and guarding only
+    one of them leaves the other free to inflate a log-likelihood while the
+    series still reports OK. Both are quadratic forms in positive semidefinite
+    matrices, so in exact arithmetic
 
-    A LARGE negative excursion is a different animal: it means the accumulator
-    is not the matrix it claims to be, and the series would otherwise come back
-    OK with an inflated likelihood. It is recorded as an outcome rather than
-    raised, because raising for one series aborts a tile of 10^4.
+        0  <=  rss_reduction = y'SX (X'SX)^-1 X'Sy  <=  y'Sy = quadratic
+
+    and the residual form the likelihood actually uses is the DIFFERENCE
+
+        y'Py = quadratic - rss_reduction,
+
+    formed by cancelling two large positives. The concentrated value is
+    `-0.5 * (n log 2pi + log|Sigma| + y'Py)`, so:
+
+      * `rss_reduction < 0` (the lower bound) means the accumulator is not the
+        matrix it claims to be;
+      * `rss_reduction > quadratic` (the upper bound) drives `y'Py` NEGATIVE,
+        which raises the log-likelihood above its true value -- the more
+        dangerous direction, because a too-high value wins model selection.
+
+    Nothing takes a log or a sqrt of either, so neither produces a NaN; the
+    failure is silent in both directions, which is why it is checked rather
+    than left to surface downstream. Small excursions of ORDER ROUNDING are
+    deliberately NOT flagged: at cancellation they are expected, and the
+    resulting error in the log-likelihood is of the same relative order.
+
+    Recorded as an outcome rather than raised, because raising for one series
+    aborts a tile of 10^4.
 
     Args:
         rss_reduction: The residual reductions, shape (B,).
-        quadratic: `y' Sigma^-1 y` per series, the natural scale to measure
-            against, shape (B,).
+        quadratic: `y' Sigma^-1 y` per series -- both the upper bound and the
+            natural scale to measure the tolerance against, shape (B,).
 
     Returns:
-        True where the reduction is negative beyond tolerance, shape (B,).
+        True where the reduction falls outside `[0, quadratic]` by more than
+        tolerance, shape (B,).
     """
     scale = np.maximum(np.abs(quadratic), 1.0)
+    slack = _NEGATIVE_REDUCTION_RTOL * scale
     with np.errstate(invalid="ignore"):
-        flagged = rss_reduction < -_NEGATIVE_REDUCTION_RTOL * scale
-    return np.asarray(flagged & np.isfinite(rss_reduction), dtype=np.bool_)
+        below = rss_reduction < -slack
+        above = rss_reduction > quadratic + slack
+    return np.asarray((below | above) & np.isfinite(rss_reduction), dtype=np.bool_)
 
 
 def gls_solution(accum: NDArray[np.float64]) -> GlsResult:
@@ -524,8 +603,22 @@ def gls_solution(accum: NDArray[np.float64]) -> GlsResult:
     try:
         lower = np.linalg.cholesky(sub)
     except LinAlgError:
-        # Backstop for the marginally positive-definite case: identify the
-        # offending members individually rather than failing the whole subset.
+        # Backstop: identify the offending members individually rather than
+        # failing the whole subset.
+        #
+        # THE OFFENDER IS NUMERICAL, NOT STRUCTURAL, and the ladder ranks those
+        # differently, so the distinction is not cosmetic. Every member reaching
+        # here has already passed `eigvalsh` with a smallest eigenvalue above
+        # the rank cutoff AND a positive `slogdet` sign: its structure is fine
+        # and this module has said so. What failed afterwards is the
+        # FACTORIZATION -- a LAPACK convergence failure, or a matrix definite by
+        # its spectrum yet not factorizable at the working precision on this
+        # BLAS. That is a property of the arithmetic, not of the design, and
+        # `RANK_DEFICIENT_X` would attribute it to a design that is not at
+        # fault. Attribution is the entire point of a failure taxonomy: a map
+        # showing "rank deficient" where the truth is "the numerics fell over"
+        # sends the reader to the design when they should be looking at the
+        # platform.
         keep = np.ones(index.size, dtype=bool)
         factors = np.full((index.size, k, k), np.nan)
         for position in range(index.size):
@@ -533,7 +626,7 @@ def gls_solution(accum: NDArray[np.float64]) -> GlsResult:
                 factors[position] = np.linalg.cholesky(sub[position])
             except LinAlgError:
                 keep[position] = False
-        outcome[index[~keep]] = Outcome.RANK_DEFICIENT_X.code
+        outcome[index[~keep]] = Outcome.NONFINITE_OBJECTIVE.code
         index = index[keep]
         if index.size == 0:
             return GlsResult(beta, beta_cov, logdet, rss_reduction, outcome)
@@ -555,10 +648,12 @@ def gls_solution(accum: NDArray[np.float64]) -> GlsResult:
 
     # Unconditional rather than guarded by `bad.any()`: every assignment below
     # is a no-op on an empty mask, and the guard would be a branch no test can
-    # reach -- the form is non-negative for any matrix that survived the
-    # classification above, which is exactly why this is a backstop and not a
-    # code path (see `negative_reduction_mask`).
-    bad = negative_reduction_mask(rss_reduction, accum[:, 0, 0]) & valid
+    # reach -- the reduction stays inside its bounds for any matrix that
+    # survived the classification above, which is exactly why this is a
+    # backstop and not a code path (see `implausible_reduction_mask`, which
+    # guards BOTH bounds: the upper one is what keeps `y'Py = y'Sy -
+    # rss_reduction` from going negative and inflating the log-likelihood).
+    bad = implausible_reduction_mask(rss_reduction, accum[:, 0, 0]) & valid
     outcome[bad] = Outcome.NONFINITE_OBJECTIVE.code
     beta[bad] = np.nan
     beta_cov[bad] = np.nan
@@ -684,6 +779,16 @@ class ConcentratedObjective:
         data_level = outcome_array(batch, Outcome.OK)
         data_level[n_used_from_mask == 0] = Outcome.INSUFFICIENT_DATA.code
 
+        # rank(X_r), the DESIGN-level rank, carried separately from the
+        # engine's whitened `rank_x` -- see `ObjectiveResult` for which is
+        # which and which Task 9 must use. Zero where there is no design, which
+        # is its true value: no columns, so nothing to subtract.
+        design_rank = (
+            design.rank.astype(np.int64)
+            if design is not None
+            else np.zeros(batch, dtype=np.int64)
+        )
+
         has_design = design is not None and design.n_beta > 0
         precheck = data_level
         matrix: NDArray[np.float64] | None = None
@@ -731,14 +836,33 @@ class ConcentratedObjective:
                     precheck,
                     n_used_from_mask,
                     np.full(batch, -1, dtype=np.int64),
+                    design_rank,
                 )
 
         result = self.engine.score(
             self.state_space, self.hydrate(theta), y, mask, t, matrix, self.objective
         )
         if matrix is None or design is None:
+            # THIS PATH MERGES TOO. It is the one exit where the objective has
+            # nothing of its own to add about the fit, which is exactly what
+            # makes handing back `result.outcome` verbatim tempting -- and
+            # wrong. `data_level` was computed from the mask before the engine
+            # ran, and the ladder, not the engine, decides. Returning the
+            # engine's word unmerged is benign only for as long as
+            # `kalman.score` keeps applying the same `n_used == 0` rule; the
+            # moment the two drift, an all-masked series comes back OK carrying
+            # a finite log-likelihood. The value is re-gated alongside the
+            # outcome so the store's status invariant holds in both directions
+            # on every exit, not just on the ones with a design.
+            outcome = merge_outcomes(data_level, result.outcome)
+            usable = outcome == Outcome.OK.code
             return ObjectiveResult(
-                result.loglik, None, result.outcome, result.n_used, result.rank_x
+                np.where(usable, result.loglik, np.nan),
+                None,
+                outcome,
+                result.n_used,
+                np.where(usable, result.rank_x, -1).astype(np.int64),
+                design_rank,
             )
 
         gls = gls_solution(result.normal_equations)
@@ -748,7 +872,9 @@ class ConcentratedObjective:
 
         concentrated = np.where(ok, result.loglik + 0.5 * gls.rss_reduction, np.nan)
         if self.objective is Objective.ML:
-            return ObjectiveResult(concentrated, gls, outcome, result.n_used, rank_x)
+            return ObjectiveResult(
+                concentrated, gls, outcome, result.n_used, rank_x, design_rank
+            )
 
         # REML, Harville form -- see the module docstring. The two terms beyond
         # the penalty are constant in theta and cancel in delta-IC, which is
@@ -766,7 +892,7 @@ class ConcentratedObjective:
             - 0.5 * gls.logdet,
             np.nan,
         )
-        return ObjectiveResult(reml, gls, outcome, result.n_used, rank_x)
+        return ObjectiveResult(reml, gls, outcome, result.n_used, rank_x, design_rank)
 
     @staticmethod
     def _validate_design(

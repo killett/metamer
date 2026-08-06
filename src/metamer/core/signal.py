@@ -264,42 +264,6 @@ class DesignInfo:
     but the identical bug on the identical kind of field, fixed here for the
     same reason before it resurfaces as a "new" instance of it.
 
-    `gram_logdet` is log|X'X| -- the FULL determinant's log, NOT half of it.
-    Harville's (1974) REML basis-invariance term is `+ (1/2) * log|X'X|` in
-    the log-likelihood; Task 8's objective must apply that one-half itself,
-    since this field does not. It is a property of X alone, so computing it
-    inside the likelihood would recompute a fixed quantity ~50 times per fit,
-    12 candidates per point, 10^7 points.
-
-    Computed as `2 * sum(log(svdvals(X)))` from the SAME SVD as
-    `condition_number` (see `SignalSpec._svd_diagnostics`), not from
-    `slogdet(X'X)`. Forming the Gram squares the condition number, and
-    `slogdet`'s LU factorization inherits that loss: measured (fix round 1,
-    task-7-report.md) at +3.20 nats of error at cond(X) = 1e9 and +8.58 nats
-    at cond(X) = 1e10 in one construction, both silently reported as finite;
-    a second, fixed-seed construction at cond(X) = 1e9 went further and made
-    `slogdet` return a spurious NEGATIVE sign for a matrix that is genuinely
-    positive semidefinite, which the old `sign > 0 else -inf` branch would
-    have turned into `gram_logdet = -inf` for a design that is actually full
-    rank. **`gram_logdet` reaches -inf ONLY when X is EXACTLY singular** (an
-    all-zero column, or more columns than rows); a design that is merely
-    NUMERICALLY rank-deficient (its smallest singular value clears zero but
-    falls below `X_RANK_RTOL`) still has a finite, if very negative,
-    `gram_logdet` -- e.g. singular values `[1, 1e-2, 1e-11]` give rank 2 of 3
-    (the last value is below `X_RANK_RTOL * s_max`) with `gram_logdet` ~
-    -59.9, not -inf. **`is_deficient` is the gate for rank deficiency; a
-    finite `gram_logdet` is not proof of full rank, and `gram_logdet == -inf`
-    is only one of the ways a deficient design can show up.**
-
-    `condition_number` is cond(X) = s_max/s_min from X's OWN singular values
-    (not the Gram's -- see `X_RANK_RTOL`'s docstring). The design doc requires
-    a condition-number diagnostic that WARNS rather than blocks (SS4.8, SS8.5:
-    "Warn, do not block -- but say it out loud"); this field is that number.
-    Nothing in this module blocks on it. Infinite where X has more columns
-    than rows (see `SignalSpec._condition_number`'s docstring for why that is
-    a distinct case from an all-zero column) or is otherwise exactly singular
-    (an all-zero column, e.g. an offset epoch after the last sample).
-
     `rank`, `gram_logdet` and `condition_number` ARE ALL PER SERIES, shape
     `(B,)`, and describe **X restricted to that series' unmasked rows** -- call
     it `X_r`. They are not batch-level summaries of the shared `matrix`.
@@ -329,12 +293,38 @@ class DesignInfo:
     thresholded at `kalman._RANK_RTOL`, and therefore depends on theta. They
     answer different questions and disagree at moderate condition numbers (see
     `X_RANK_RTOL`'s docstring for the measured five-orders-of-magnitude gap).
-    Harville's rank constant is THIS one; the engine's is what
-    `ObjectiveResult.rank_x` carries for Task 9's effective sample size.
+    Harville's rank constant is THIS one, and `ObjectiveResult.design_rank`
+    is where it is carried through to Task 9, which MUST compute REML's
+    effective sample size `n_obs - rank(X)` from it. `ObjectiveResult.rank_x`
+    carries the engine's whitened rank instead, as a numerical diagnostic of
+    the solve at that theta, and counting with it makes the count inconsistent
+    with the constant the likelihood was built from. Both are carried on
+    `ObjectiveResult` precisely so neither has to be inferred; see its
+    docstring for which is which.
 
     `gram_logdet` is log|X_r'X_r| -- the FULL determinant's log, NOT half of
     it. Harville's (1974) basis-invariance term is `+ (1/2) * log|X'X|` in the
     log-likelihood; Task 8's objective applies that one-half itself.
+
+    It is computed as `2 * sum(log(s))` over X_r's singular values, from the
+    SAME decomposition as `condition_number` (see `_restricted_singular_values`
+    and `_diagnostics`), and NOT from `slogdet(X'X)`. Forming the Gram squares
+    the condition number and `slogdet`'s LU factorization inherits that loss:
+    measured (task-7-report.md) at +3.20 nats of error at cond(X) = 1e9 and
+    +8.58 nats at 1e10, both silently reported as finite; and at cond(X) = 1e9
+    one fixed-seed construction made `slogdet` return a spurious NEGATIVE sign
+    for a matrix that is genuinely positive semidefinite, which a
+    `sign > 0 else -inf` branch would have turned into `gram_logdet = -inf` for
+    a design that is actually full rank.
+
+    **`gram_logdet` reaches -inf ONLY when X_r is EXACTLY singular** (an
+    all-zero column, or more columns than unmasked rows). A design that is
+    merely NUMERICALLY rank-deficient -- its smallest singular value clears
+    zero but falls below `X_RANK_RTOL` -- still has a finite, if very negative,
+    value: singular values `[1, 1e-2, 1e-11]` give rank 2 of 3 with
+    `gram_logdet` ~ -59.9, not -inf. **`is_deficient` is the gate for rank
+    deficiency; a finite `gram_logdet` is not proof of full rank, and
+    `gram_logdet == -inf` is only one of the ways a deficient design shows up.**
 
     `condition_number` is cond(X_r) = s_max/s_min from X_r's OWN singular
     values (not the Gram's -- see `X_RANK_RTOL`'s docstring). The design doc
@@ -582,8 +572,10 @@ class SignalSpec:
         all-zero column, distinct from the more-columns-than-rows case above).
         Kept as a standalone method (used directly by
         `test_condition_number_infinite_for_more_columns_than_rows`) even
-        though `design_info`'s hot path calls `_svd_diagnostics` instead, to
-        avoid paying for this decomposition twice.
+        though `design_info`'s hot path routes through
+        `_restricted_singular_values` and `_diagnostics` instead, which share
+        one decomposition across cond, log|X'X| and rank, to avoid paying for
+        it twice.
         """
         if x.shape[0] < x.shape[1]:
             return float("inf")

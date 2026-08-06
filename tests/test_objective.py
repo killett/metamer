@@ -10,16 +10,17 @@ from dataclasses import replace
 import numpy as np
 import pytest
 
-from metamer.core.capability import Objective
-from metamer.core.engines.kalman import _RANK_RTOL, KalmanEngine
+from metamer.core.capability import EngineId, Objective
+from metamer.core.engines.kalman import KalmanEngine
+from metamer.core.engines.protocol import ScoredResult
 from metamer.core.objective import (
     CONDITION_LOG_LIMIT,
     OUTCOME_PRECEDENCE,
     RANK_DEFICIENT_LOG_LIMIT,
     ConcentratedObjective,
     gls_solution,
+    implausible_reduction_mask,
     merge_outcomes,
-    negative_reduction_mask,
 )
 from metamer.core.outcomes import Outcome, outcome_array
 from metamer.core.signal import (
@@ -241,10 +242,11 @@ def test_negative_residual_reduction_is_flagged_but_rounding_is_not():
     any Gram bad enough to round the form negative is classified
     ILL_CONDITIONED_X or RANK_DEFICIENT_X before it is ever factorized.
     """
-    quadratic = np.array([100.0, 100.0, 100.0, 100.0, 100.0])
-    reduction = np.array([0.0, -1e-9, 5.0, -1.0, np.nan])
-    got = negative_reduction_mask(reduction, quadratic)
-    np.testing.assert_array_equal(got, [False, False, False, True, False])
+    quadratic = np.array([100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0])
+    #             valid  rounding  valid  far below  NaN     at bound  far above
+    reduction = np.array([0.0, -1e-9, 5.0, -1.0, np.nan, 100.0, 101.0])
+    got = implausible_reduction_mask(reduction, quadratic)
+    np.testing.assert_array_equal(got, [False, False, False, True, False, False, True])
 
 
 def test_a_negative_definite_member_is_classified_not_left_to_cholesky():
@@ -367,9 +369,14 @@ def test_the_cholesky_backstop_isolates_one_member_when_lapack_fails(monkeypatch
 
     gls = gls_solution(accum)
 
+    # NONFINITE_OBJECTIVE, not RANK_DEFICIENT_X: this member passed eigvalsh
+    # and slogdet, so its STRUCTURE was found sound by this module. What failed
+    # afterwards was the factorization, which is a property of the arithmetic.
+    # Attributing it to the design would send a reader of the failure map to
+    # the design when they should be looking at the platform.
     np.testing.assert_array_equal(
         gls.outcome,
-        [Outcome.OK.code, Outcome.RANK_DEFICIENT_X.code, Outcome.OK.code],
+        [Outcome.OK.code, Outcome.NONFINITE_OBJECTIVE.code, Outcome.OK.code],
     )
     for index in (0, 2):
         np.testing.assert_allclose(
@@ -404,14 +411,14 @@ def test_the_cholesky_backstop_names_every_member_when_all_of_them_fail(monkeypa
     gls = gls_solution(accum)
 
     np.testing.assert_array_equal(
-        gls.outcome, np.full(2, Outcome.RANK_DEFICIENT_X.code)
+        gls.outcome, np.full(2, Outcome.NONFINITE_OBJECTIVE.code)
     )
     assert np.all(np.isnan(gls.beta))
     assert np.all(np.isnan(gls.logdet))
     assert np.all(np.isnan(gls.rss_reduction))
 
 
-def test_merge_outcomes_refuses_a_single_verdict(monkeypatch):
+def test_merge_outcomes_refuses_a_single_verdict():
     """Merging one verdict is refused: a merge site has lost an input.
 
     Bug this catches: a refactor that reduces
@@ -780,11 +787,13 @@ def test_the_conditioning_ladder_is_ordered_and_derived_from_float64():
     ill-conditioned limit past the rank limit, or lowers the rank cutoff below
     it, fails here regardless of what any fixture happens to measure.
     """
-    eps = float(np.finfo(np.float64).eps)
-    assert CONDITION_LOG_LIMIT == pytest.approx(-0.25 * np.log(eps), rel=1e-15)
-    assert RANK_DEFICIENT_LOG_LIMIT == pytest.approx(
-        -0.5 * np.log(_RANK_RTOL), rel=1e-15
-    )
+    # The limits are stated as CONDITION NUMBERS worked out by hand, not by
+    # restating the module's own expressions: eps^(-1/4) = (2^-52)^(-1/4) =
+    # 2^13 = 8192 exactly, and _RANK_RTOL^(-1/2) = (1e-10)^(-1/2) = 1e5.
+    # Repeating `-0.25 * np.log(eps)` here would assert only that the line was
+    # copied correctly, which is not a fact about anything.
+    assert np.exp(CONDITION_LOG_LIMIT) == pytest.approx(8192.0, rel=1e-9)
+    assert np.exp(RANK_DEFICIENT_LOG_LIMIT) == pytest.approx(1e5, rel=1e-9)
 
     # The ladder invariant itself, depending on no fixture whatsoever.
     assert CONDITION_LOG_LIMIT < RANK_DEFICIENT_LOG_LIMIT
@@ -792,8 +801,6 @@ def test_the_conditioning_ladder_is_ordered_and_derived_from_float64():
     # And the band is wide enough to be reachable in practice, not merely
     # ordered by a rounding error.
     assert RANK_DEFICIENT_LOG_LIMIT - CONDITION_LOG_LIMIT > 1.0
-    assert np.exp(CONDITION_LOG_LIMIT) == pytest.approx(8192.0, rel=1e-9)
-    assert np.exp(RANK_DEFICIENT_LOG_LIMIT) == pytest.approx(1e5, rel=1e-9)
 
 
 @pytest.mark.parametrize(
@@ -944,6 +951,78 @@ def test_an_all_masked_series_stays_insufficient_data_with_a_design():
     assert np.isnan(result.loglik[1])
     assert np.all(result.outcome[[0, 2]] == Outcome.OK.code)
     assert result.n_used[1] == 0
+
+
+class _BlindEngine:
+    """An engine that reports OK for every series, whatever the mask says.
+
+    Stands in for a FUTURE engine, or a future edit to `kalman.score`, that
+    does not happen to apply the `n_used == 0` rule. `Engine` is a declared
+    Protocol and an injected collaborator, so substituting one is using the
+    seam the design provides, not mocking the unit under test: the objective's
+    own merge logic runs for real and is the only thing being exercised.
+    """
+
+    engine_id = EngineId.KALMAN
+
+    def score(self, state_space, theta, y, mask, t, design, objective=Objective.ML):
+        batch = np.shape(y)[0]
+        n_cols = 1 if design is None else 1 + np.shape(design)[-1]
+        return ScoredResult(
+            loglik=np.zeros(batch),  # finite, and a lie for an all-masked series
+            engine=self.engine_id,
+            objective=objective,
+            n_used=np.count_nonzero(mask, axis=1).astype(np.int64),
+            rank_x=np.zeros(batch, dtype=np.int64),
+            normal_equations=np.zeros((batch, n_cols, n_cols)),
+            outcome=outcome_array(batch),  # all OK -- the divergence
+        )
+
+
+@pytest.mark.parametrize("empty_design", [False, True])
+def test_the_no_design_return_merges_rather_than_trusting_the_engine(empty_design):
+    """The design-free exit path applies the ladder too, not just the engine's word.
+
+    `evaluate` computes a data-level verdict from the mask before touching the
+    engine. Every exit path must merge it. The design-free return is the one
+    path where the objective has nothing else to contribute, and that is
+    exactly why it is tempting to hand back `result.outcome` verbatim.
+
+    Bug this catches: `return ObjectiveResult(..., result.outcome, ...)`
+    unmerged. It is BENIGN TODAY only because `kalman.score` independently
+    applies the same `n_used == 0` rule -- which is precisely the duplication
+    the short-circuit's own comment flags as a divergence risk. The moment the
+    two drift, an all-masked series comes back OK carrying a finite
+    log-likelihood for a series with no observations, violating the store's
+    bidirectional status invariant (OK implies finite, non-OK implies NaN) in
+    both directions at once. A blind engine makes that drift concrete instead
+    of waiting for it.
+
+    Both entries to that return are covered: `design=None`, and a design with
+    zero columns, which reaches it by a different condition.
+
+    Expected value from `OUTCOME_PRECEDENCE` -- data-level outranks everything
+    -- not from running either implementation.
+    """
+    spec, ss, theta, t, _, _, _ = _setup()
+    batch = 3
+    y = np.zeros((batch, t.size))
+    mask = np.ones((batch, t.size), dtype=bool)
+    mask[1] = False
+    design = SignalSpec([]).design_info(t, mask) if empty_design else None
+
+    obj = ConcentratedObjective(spec, ss, _BlindEngine(), Objective.ML)
+    result = obj.evaluate(np.repeat(theta, batch, axis=0), y, mask, t, design)
+
+    np.testing.assert_array_equal(
+        result.outcome,
+        [Outcome.OK.code, Outcome.INSUFFICIENT_DATA.code, Outcome.OK.code],
+    )
+    # The status invariant holds in BOTH directions, which is the reason the
+    # merge cannot stop at the outcome and leave the value the engine gave.
+    assert np.isnan(result.loglik[1])
+    assert np.all(np.isfinite(result.loglik[[0, 2]]))
+    np.testing.assert_array_equal(result.rank_x, [0, -1, 0])
 
 
 @pytest.mark.parametrize("with_design", [False, True])
@@ -1206,6 +1285,87 @@ def test_merge_outcomes_is_per_series_not_a_batch_verdict():
     )
 
 
+@pytest.mark.parametrize("objective", [Objective.ML, Objective.REML])
+def test_the_design_rank_and_the_whitened_rank_are_separate_fields(objective):
+    """Two ranks are carried, they answer different questions, and they can differ.
+
+    Parametrized over both objectives because ML and REML return from DIFFERENT
+    exits, and a field can be wired correctly at one and not the other.
+
+    `rank_x` is the rank of the WHITENED Gram: theta-dependent, a diagnostic of
+    the solve, and -1 for a failed series. `design_rank` is `rank(X_r)`:
+    theta-free, a property of the design, carrying NO sentinel because it is a
+    true fact whether or not the fit succeeded. Harville's constant in
+    `evaluate` is computed with `design_rank`, so Task 9's effective sample
+    size `n_obs - rank(X)` must use the same one.
+
+    Bug this catches: carrying only `rank_x` and letting Task 9 count with it.
+    Series 1 below is the case that separates them -- its gap removes all
+    support for the offset and the rate change, so `design_rank` is 2 (a true
+    statement about its design) while `rank_x` is the -1 "not computed"
+    sentinel. `n_obs - rank_x` there gives `n_obs + 1`: a sample size larger
+    than the number of observations, entirely plausible-looking, feeding
+    straight into BIC.
+
+    Expected values from `matrix_rank` on each restricted design, and from the
+    documented -1 convention -- not from running `evaluate`.
+    """
+    y = np.random.default_rng(11).standard_normal((3, _GAP_T.size))
+    mask = np.ones_like(y, dtype=bool)
+    mask[1] = _window(0)
+    spec, ss, theta, t, design, _ = _gapped_setup(mask)
+
+    obj = ConcentratedObjective(spec, ss, KalmanEngine(), objective)
+    result = obj.evaluate(np.repeat(theta, 3, axis=0), y, mask, t, design)
+
+    assert result.design_rank.shape == (3,)
+    assert result.design_rank.dtype == np.int64
+    for series in range(3):
+        rows = design.matrix[mask[series]]
+        assert result.design_rank[series] == int(np.linalg.matrix_rank(rows))
+    np.testing.assert_array_equal(result.design_rank, [4, 2, 4])
+
+    # They differ exactly where it matters, and design_rank carries no sentinel.
+    np.testing.assert_array_equal(result.rank_x, [4, -1, 4])
+    assert np.all(result.design_rank >= 0), "design_rank must carry no sentinel"
+    assert result.design_rank[1] != result.rank_x[1]
+
+    # The counting Task 9 must do, on the series that separates them.
+    assert result.n_used[1] - result.design_rank[1] == 40 - 2
+    assert result.n_used[1] - result.rank_x[1] == 40 + 1  # the off-by-one trap
+
+
+def test_design_rank_is_populated_on_every_exit_path():
+    """design_rank is theta-free, so it is known even where the fit is not.
+
+    Bug this catches: leaving it unset (or -1) on the precheck and design-free
+    exits, which would make "no sentinel" false exactly on the paths a consumer
+    is most likely to hit when tabulating a failure map.
+    """
+    spec, ss, theta, t, _, _, _ = _setup()
+    batch = 2
+    y = np.zeros((batch, t.size))
+    obj = ConcentratedObjective(spec, ss, KalmanEngine(), Objective.ML)
+
+    # Precheck exit: a duplicated column, rank 1 of 2, still a true fact.
+    mask = np.ones((batch, t.size), dtype=bool)
+    x_bad = np.column_stack([np.ones(t.size), np.ones(t.size)])
+    bad = DesignInfo(
+        x_bad,
+        np.ones(batch, dtype=np.int64),
+        np.full(batch, -np.inf),
+        np.full(batch, np.inf),
+        np.count_nonzero(mask, axis=1),
+    )
+    precheck_result = obj.evaluate(np.repeat(theta, batch, axis=0), y, mask, t, bad)
+    np.testing.assert_array_equal(precheck_result.design_rank, [1, 1])
+    np.testing.assert_array_equal(precheck_result.rank_x, [-1, -1])
+
+    # Design-free exit: no columns, so the true rank is 0, not a sentinel.
+    free_result = obj.evaluate(np.repeat(theta, batch, axis=0), y, mask, t, None)
+    np.testing.assert_array_equal(free_result.design_rank, [0, 0])
+
+
 def test_rank_x_is_carried_per_series_from_the_engine():
     """rank_x is the (B,) effective rank, not the batch design's scalar rank.
 
@@ -1412,28 +1572,71 @@ def test_sigma_squared_is_not_profiled_out():
     assert abs(scaled - base) > 1.0, "a profiled sigma^2 would absorb the rescaling"
 
 
-def test_module_documents_the_conventions_it_pins():
-    """The two conventions a future implementer must not guess are written down.
+@pytest.mark.parametrize(
+    "case",
+    [
+        "precheck_deficient",
+        "wholly_masked",
+        "per_series_rank",
+        "per_series_ill",
+        "no_design_masked",
+    ],
+)
+def test_a_failed_series_carries_nan_never_minus_inf(case):
+    """Criterion 25, asserted as BEHAVIOUR on every path that can fail.
 
-    Acceptance criteria 19 and the NaN-not-minus-inf rule are documentation
-    obligations; nothing else in the suite reads the prose.
+    The store's status invariant is bidirectional: OK implies a finite value,
+    and not-OK implies NaN. `-inf` satisfies neither -- it is a finite-LOOKING
+    sentinel that survives `is not None`, survives a `< threshold` comparison,
+    and poisons any downstream mean to -inf rather than to NaN. It is the
+    optimizer's internal barrier value only, and must never reach a result
+    object.
 
-    Bug this catches: the brief's `evaluate` docstring, which promised -inf for
-    a failed series while the code wrote NaN. Left in place it becomes the next
-    implementer's specification, and -inf is a finite-looking sentinel that
-    survives some consumers' checks.
+    Bug this catches: `np.where(ok, value, -np.inf)` at any of the five exits
+    below -- the brief's own `evaluate` docstring specified exactly that. An
+    earlier version of this test asserted the ABSENCE OF THE STRING "-inf"
+    from the docstring, which is documentation lint wearing a test's name: a
+    docstring correctly saying "never -inf" would have failed it, while the
+    code it describes went unchecked.
     """
-    from metamer.core import objective as module
-    from metamer.core.objective import ObjectiveResult
+    spec, ss, theta, t, _, _, _ = _setup()
+    batch = 3
+    y = np.random.default_rng(4).standard_normal((batch, t.size))
+    mask = np.ones((batch, t.size), dtype=bool)
+    design = None
 
-    module_doc = module.__doc__ or ""
-    assert "SIGMA-SQUARED IS NOT PROFILED OUT" in module_doc
-    assert "cross-term shared parameter" in module_doc.lower()
+    if case == "precheck_deficient":
+        x_bad = np.column_stack([np.ones(t.size), np.ones(t.size)])
+        design = DesignInfo(
+            x_bad,
+            np.ones(batch, dtype=np.int64),
+            np.full(batch, -np.inf),
+            np.full(batch, np.inf),
+            np.count_nonzero(mask, axis=1),
+        )
+    elif case == "wholly_masked":
+        mask = np.zeros((batch, t.size), dtype=bool)
+        design = SignalSpec([Constant(), Trend()]).design_info(t, mask)
+    elif case == "no_design_masked":
+        mask[1] = False
+    else:
+        # A shared design one series' gap makes singular (or barely
+        # identified), so OK and failed series sit in the same batch and the
+        # invariant is checked in both directions at once.
+        mask = np.ones((batch, _GAP_T.size), dtype=bool)
+        mask[1] = _window(0 if case == "per_series_rank" else 2)
+        y = np.random.default_rng(4).standard_normal((batch, _GAP_T.size))
+        spec, ss, theta, t, design, _ = _gapped_setup(mask)
 
-    evaluate_doc = ConcentratedObjective.evaluate.__doc__ or ""
-    assert "NaN" in evaluate_doc
-    assert "-inf" not in evaluate_doc
-    assert "NaN" in (ObjectiveResult.__doc__ or "")
+    obj = ConcentratedObjective(spec, ss, KalmanEngine(), Objective.ML)
+    result = obj.evaluate(np.repeat(theta, batch, axis=0), y, mask, t, design)
+
+    ok = result.outcome == Outcome.OK.code
+    assert not np.all(ok), f"{case} must actually fail a series, or this is vacuous"
+    failed = result.loglik[~ok]
+    assert np.all(np.isnan(failed)), f"{case}: failed series must carry NaN"
+    assert not np.any(np.isinf(failed)), f"{case}: -inf must never reach a result"
+    assert np.all(np.isfinite(result.loglik[ok])), f"{case}: OK implies finite"
 
 
 def test_outcome_codes_are_stable():
