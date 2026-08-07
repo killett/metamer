@@ -5484,6 +5484,44 @@ git commit -m "feat: add reference optimizer, init ladder, and explicit Hessian"
 
 **Verify:** `pixi run test tests/test_fit.py -v`
 
+> **The fences below were CORRECTED IN PLACE on 2026-08-06**, during the forward
+> audit run after Task 10 — before implementation, not after. They were written
+> against the pre-Task-9 scalar model and called six things that no longer exist
+> in that form. Re-run pre-flight (g) against them anyway; the correction is one
+> reading of the source, not a substitute for it.
+>
+> 1. **`signal.design_info(t, mask)`** — `mask` is required, and it is what makes
+>    `rank`, `gram_logdet`, `condition_number` and `n_rows` per series. A design
+>    built without it reports a batch-wide rank that a gap invalidates, which is
+>    the `design_rank` / `rank_x` distinction one level up.
+> 2. **`penalty_terms` is keyword-only and per series**: `n_obs=design.n_rows`,
+>    `design_rank=design.rank`, `outcome=outcome[:, c]`, `k_beta=k_beta`, all
+>    `(B,)`. The old call passed `int(mask[b].sum())` and `design.rank`
+>    positionally, one series at a time.
+> 3. **`CandidateScores` is one `(B, M)` block**, not a `CandidateScore` per
+>    `(series, candidate)` built in a double Python loop — that loop is
+>    per-point Python over 10⁷ grid points.
+> 4. **`n_eff` is `n_eff_bic(...)`, not `float(n)`.** Passing `n` makes
+>    `Criterion.BIC_NEFF` silently identical to `BIC`: no error, no warning, a
+>    plausible number. It is computed once at the optimum, per
+>    `(series, candidate)`, from the HYDRATED natural vector — never inside the
+>    fit loop, where its O(n_used²) sum would run every iteration.
+> 5. **`FitResult.outcome` is `(B, M)` uint8 codes**, not an object array of
+>    `Outcome` members. The codes are what the store writes, what
+>    `penalty_terms(outcome=)` gates on, and what `CandidateScores.outcome`
+>    takes. Note the test consequence: `out.outcome[0, 0] is Outcome.OK` is
+>    False against a uint8, so a test guarded on it would silently assert
+>    nothing — pre-flight (h) and (i).
+> 6. **`FitResult.ranking` is one `Ranking`**, not a list of B of them.
+>    `rank_candidates` is `(B, M)` in and `(B, M)` / `(B,)` out.
+>
+> **Still open for Task 14 to decide:** `n_eff_trend[y,x,m]` is a stored
+> primitive (design doc §12.2) and is **not** wired here, because it needs the
+> GLS trend variance and its white-noise equivalent, which means identifying
+> which design column is the trend — `DesignInfo` exposes no such mapping today.
+> Either widen `DesignInfo` or record the deferral explicitly; do not quietly
+> leave the slot unwritten.
+
 **Steps:**
 
 - [ ] **Step 1: Write the failing tests**
@@ -5591,9 +5629,12 @@ def test_uncertainties_are_reported_in_natural_units():
     """
     y, t = _data(batch=1, n=300)
     out = fit(y, t, SignalSpec([Constant()]), [ProcessSpec((_term("matern12"),))], criterion=Criterion.AIC)
-    if out.outcome[0, 0] is Outcome.OK:
-        assert np.all(out.theta_err[0, 0] > 0.0)
-        assert np.all(np.isfinite(out.theta_err[0, 0]))
+    # outcome holds CODES, not Outcome members -- `is Outcome.OK` against a
+    # uint8 is False for every series, so this guard would skip the assertions
+    # entirely and the test would pass without testing anything.
+    assert out.outcome[0, 0] == Outcome.OK.code
+    assert np.all(out.theta_err[0, 0] > 0.0)
+    assert np.all(np.isfinite(out.theta_err[0, 0]))
 
 
 def test_results_carry_all_three_provenance_tags():
@@ -5623,13 +5664,12 @@ import numpy as np
 from numpy.typing import NDArray
 
 from metamer.core.capability import EngineId, GradientMode, Objective
-from metamer.core.counting import penalty_terms
-from metamer.core.criteria import CandidateScore, Criterion, Ranking, rank_candidates
+from metamer.core.counting import n_eff_bic, penalty_terms
+from metamer.core.criteria import CandidateScores, Criterion, Ranking, rank_candidates
 from metamer.core.engines.kalman import KalmanEngine
 from metamer.core.engines.protocol import Engine
 from metamer.core.gradients import resolve_gradient_mode
 from metamer.core.objective import ConcentratedObjective
-from metamer.core.signal import DesignInfo
 from metamer.core.optimize import InitRung, optimize_series
 from metamer.core.outcomes import Outcome
 from metamer.core.signal import SignalSpec
@@ -5640,7 +5680,20 @@ from metamer.core.transforms import delta_method_cov
 
 @dataclass(frozen=True)
 class FitResult:
-    """Results for a batch of series across a candidate set."""
+    """Results for a batch of series across a candidate set.
+
+    Attributes:
+        outcome: Per-(series, candidate) outcome CODES, shape (B, M) uint8 --
+            not `Outcome` members in an object array. The codes are what the
+            store writes, what `penalty_terms(outcome=)` gates on, and what
+            `CandidateScores.outcome` takes; an object array of enum members
+            would have to be converted at each of those three boundaries, and a
+            conversion that exists three times is a conversion that will
+            disagree with itself once.
+        ranking: ONE `Ranking`, spanning the batch. `rank_candidates` is
+            `(B, M)` in and `(B, M)` / `(B,)` out, so a list of per-series
+            rankings would be B copies of the same object shape.
+    """
 
     candidates: tuple[ProcessSpec, ...]
     theta: NDArray[np.float64]
@@ -5649,10 +5702,10 @@ class FitResult:
     beta: NDArray[np.float64]
     beta_err: NDArray[np.float64]
     loglik: NDArray[np.float64]
-    outcome: NDArray[np.object_]
+    outcome: NDArray[np.uint8]
     init_rung: NDArray[np.object_]
     n_iter: NDArray[np.int64]
-    ranking: list[Ranking]
+    ranking: Ranking
     engine: EngineId
     objective: Objective
     gradient_mode: tuple[GradientMode, ...]
@@ -5696,7 +5749,12 @@ def fit(
     mask = np.ones_like(y, dtype=bool) if mask is None else np.asarray(mask, dtype=bool)
     engine = KalmanEngine() if engine is None else engine
 
-    design = signal.design_info(t)
+    # design_info takes the MASK, and that is not optional: rank, gram_logdet,
+    # condition_number and n_rows all describe X restricted to each series'
+    # unmasked rows, which is why they are (B,) and not scalars. A design built
+    # without the mask reports a batch-wide rank that a gap can invalidate --
+    # the same distinction as design_rank vs rank_x, one level up.
+    design = signal.design_info(t, mask)
     k_beta = design.n_beta
     batch = y.shape[0]
     n_cand = len(candidates)
@@ -5708,14 +5766,20 @@ def fit(
     beta = np.full((batch, n_cand, k_beta), np.nan)
     beta_err = np.full((batch, n_cand, k_beta), np.nan)
     loglik = np.full((batch, n_cand), np.nan)
-    outcome = np.empty((batch, n_cand), dtype=object)
+    outcome = np.full((batch, n_cand), Outcome.NOT_ATTEMPTED.code, dtype=np.uint8)
     rung = np.empty((batch, n_cand), dtype=object)
     n_iter = np.zeros((batch, n_cand), dtype=np.int64)
+    # theta_full carries the HYDRATED natural vector, including frozen
+    # parameters, because that is the layout StateSpace.param_slices expects
+    # and therefore what n_eff_bic must be given.
+    objectives_by_candidate: list[ConcentratedObjective] = []
+    theta_full: list[NDArray[np.float64]] = []
     modes: list[GradientMode] = []
 
     for c, spec in enumerate(candidates):
         state_space = StateSpace.from_spec(spec)
         obj = ConcentratedObjective(spec, state_space, engine, objective)
+        objectives_by_candidate.append(obj)
         modes.append(resolve_gradient_mode(spec, objective))
         p = len(free_param_index(spec))
 
@@ -5724,7 +5788,7 @@ def fit(
             res = optimize_series(
                 obj, y[b : b + 1], mask[b : b + 1], t, design, warm, max_iter
             )
-            outcome[b, c] = res.outcome
+            outcome[b, c] = res.outcome.code
             rung[b, c] = res.init_rung
             n_iter[b, c] = res.n_iter
             loglik[b, c] = res.loglik
@@ -5744,24 +5808,57 @@ def fit(
                     beta[b, c] = final.gls.beta[0]
                     beta_err[b, c] = np.sqrt(np.clip(np.diag(final.gls.beta_cov[0]), 0.0, np.inf))
 
-    rankings: list[Ranking] = []
-    for b in range(batch):
-        scores = []
-        for c, spec in enumerate(candidates):
-            k, n = penalty_terms(spec, objective, int(mask[b].sum()), design.rank, k_beta)
-            scores.append(
-                CandidateScore(
-                    label=str(c),
-                    loglik=float(loglik[b, c]),
-                    k=float(k),
-                    n=float(n),
-                    n_eff=float(n),
-                    engine=engine.engine_id,
-                    objective=objective,
-                    ok=bool(outcome[b, c] is Outcome.OK),
-                )
-            )
-        rankings.append(rank_candidates(scores, criterion))
+        # Hydrated once per candidate, after that candidate's whole batch is
+        # fitted, because n_eff_bic wants (B, p_total) natural parameters.
+        theta_full.append(obj.hydrate(theta[:, c, :p]))
+
+    # k, n and n_eff come back from counting.py already per series. Unpacking
+    # them one series at a time is precisely where the design_rank / rank_x
+    # substitution and the n_obs - (-1) off-by-one get reintroduced by hand.
+    k = np.full((batch, n_cand), np.nan)
+    n = np.full((batch, n_cand), np.nan)
+    n_eff = np.full((batch, n_cand), np.nan)
+    for c, spec in enumerate(candidates):
+        k[:, c], n[:, c] = penalty_terms(
+            spec,
+            objective,
+            # design.n_rows is count_nonzero(mask, axis=1) -- the per-series
+            # unmasked count, carrying no sentinel.
+            n_obs=design.n_rows,
+            # design_rank, NOT rank_x: rank_x is the whitened Gram's rank and
+            # is -1 on every failed series, so n_obs - rank_x silently gives
+            # n_obs + 1 there.
+            design_rank=design.rank,
+            outcome=outcome[:, c],
+            k_beta=k_beta,
+        )
+        # Computed ONCE, at the optimum, per (series, candidate) -- never
+        # inside the fit loop, where its O(n_used^2) realized-pairs sum would
+        # run every iteration. `n_eff = n` would make BIC_NEFF silently
+        # identical to BIC: no error, no warning, a plausible number.
+        n_eff[:, c] = n_eff_bic(
+            objectives_by_candidate[c].state_space,
+            theta_full[c],
+            t,
+            mask=mask,
+            outcome=outcome[:, c],
+        )
+
+    # ONE ranking over the whole (B, M) block. The comparability guards see the
+    # candidate set's engine and objective tags before anything is scored.
+    ranking = rank_candidates(
+        CandidateScores(
+            labels=tuple(spec.spec_hash()[:12] for spec in candidates),
+            engines=(engine.engine_id,) * n_cand,
+            objectives=(objective,) * n_cand,
+            loglik=loglik,
+            k=k,
+            n=n,
+            n_eff=n_eff,
+            outcome=outcome,
+        ),
+        criterion,
+    )
 
     return FitResult(
         candidates=tuple(candidates),
@@ -5774,7 +5871,7 @@ def fit(
         outcome=outcome,
         init_rung=rung,
         n_iter=n_iter,
-        ranking=rankings,
+        ranking=ranking,
         engine=engine.engine_id,
         objective=objective,
         gradient_mode=tuple(modes),

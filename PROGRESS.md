@@ -79,6 +79,26 @@ argument — a passing suite is not evidence the brief is right.
   than an error — `n_eff=float(n)` makes `BIC_NEFF` silently identical to `BIC`. The
   forward audit below is (g) run once across every remaining task.
 
+- **(h) Does the test exercise the thing it names, or a default?** Thread every parameter
+  the behaviour depends on through as a real caller would. A test that leaves a scale at 1
+  cannot detect a missing numerator. **Measured on this project:** Task 11's three-N step-rule
+  test passed against a deliberately broken step rule, because it called
+  `fd_gradient(fn, U0)` without `scale`; with `scale = 1.0` the numerator is 1, the
+  denominator is irrelevant, and deleting it changes no number.
+- **(i) Can the fixture fail at all?** Ask what property of the fixture makes the defect
+  visible; if the answer is "none", the fixture is wrong before the assertion is. Two
+  instances so far: Task 11's brief tested a step rule on a **quadratic**, whose third
+  derivative is zero, so central differences are exact at *any* step and no rule is
+  distinguishable from any other; and Task 10's brief tested a `max(n_eff, 2.0)` floor with
+  `n_eff = 12`, which sits above the floor and never reaches it.
+
+**(h) and (i) are refinements of (e), and mutation testing does not subsume them.** (e) asks
+whether the test bites when the guard is deleted; (h) and (i) ask whether the call site and
+the fixture are *capable of expressing* the defect at all. A mutation catches those two only
+when it happens to interact with the default or the fixture's blind spot, which is luck —
+Task 11's step-rule mutation was caught by a different test, and the three-N test that was
+supposed to catch it sailed through.
+
 Also run the brief's code if it supplies any: the two highest-yield audits did, and one
 found three collection errors and six failing tests out of twelve.
 
@@ -112,6 +132,17 @@ degradation.
 | **14** | `ranking: list[Ranking]`, one per series | `Ranking` already spans the batch; the list is `B` copies of the same object shape | **flagged** |
 | 15, 16, 18, 19 | — no calls into changed modules | — | OK |
 | 17 | `KalmanEngine` appears in acceptance prose only, no call | — | OK |
+
+**Task 14's fence was corrected in place on 2026-08-06**, before implementation rather than
+at implementation, while the audit and the signatures were in context. All six flagged rows
+are fixed in the plan; the corrections block above the fence states each one and its reason.
+**(g) was then re-run against the corrected fence**: all three Python fences parse, and every
+call site into `counting`, `criteria`, `objective`, `signal` and `statespace` binds against
+the live signature under `inspect.signature(...).bind(...)`. One item is deliberately left
+open for Task 14 rather than guessed at — `n_eff_trend[y,x,m]` is a stored primitive (§12.2)
+and is not wired, because it needs the GLS trend variance and therefore a mapping from design
+column to "the trend", which `DesignInfo` does not expose. Widen `DesignInfo` or record the
+deferral; do not leave the store slot quietly unwritten.
 
 **The `n_eff = n` degradation grep found exactly one live site**: Task 14, plan line 5717.
 Task 9's own fence (plan lines 4093–4290) still shows the superseded scalar
@@ -557,9 +588,12 @@ question; compute/bandwidth roofline pair for cross-machine prediction) are in d
 - **The suite is no longer fast: ~21 s, up from ~2 s.** `tests/test_gradients.py` runs the
   real `matern32` filter at N = 5000 (373 ms per likelihood evaluation), which exit
   criterion 9 requires. One Romberg tableau plus one central difference at each of three N;
-  it is not accidental repetition. If it becomes a problem the lever is `RICHARDSON_LEVELS`
-  at the largest N, measured to have 6.7e-12 headroom against a 1e-8 gate — not dropping
-  N = 5000, which is the whole point of the criterion.
+  it is not accidental repetition. **N = 5000 must stay** — it is the only point that
+  discriminates the two step rules, which is exactly why the brief's version survived
+  review. If the runtime becomes a problem the lever is a `slow` marker so the gradient
+  tests can be deselected during rapid iteration and always run in the full sweep; **not**
+  `RICHARDSON_LEVELS`, which would trade accuracy headroom for time in the one module whose
+  job is accuracy.
 - **A test helper can produce the failure it is meant to construct.** Task 10's `_scores`
   helper wrote `np.full(shape, np.nan) + k` where it meant `np.full(shape, k)`, so every
   `k` and `n` came out NaN and twelve tests failed against a correct implementation. It was
