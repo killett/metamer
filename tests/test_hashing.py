@@ -54,26 +54,25 @@ from tests.test_criteria import _scores
 # is the derivation; GOLDEN_FIT_HASH is its sha256 prefix, and both are
 # independent of anything in `hashing.py`.
 GOLDEN_FIT_PAYLOAD = (
-    '{"data_uri":"s3://bucket/ssh.zarr","engine":"kalman","objective":"ml",'
-    '"registry_version":"1","seed":0,"signal_terms":["constant","trend","annual"],'
-    '"metamer_version":"0.1.0","variable":"sla"}'
+    '{"data_uri":"s3://bucket/ssh.zarr","engine":"kalman",'
+    '"metamer_version":"0.1.0","objective":"ml","registry_version":"1","seed":0,'
+    '"signal_terms":["constant","trend","annual"],"variable":"sla"}'
 )
 GOLDEN_COMPAT_PAYLOAD = (
     '{"criteria":["aic"],"data_uri":"s3://bucket/ssh.zarr","engine":"kalman",'
-    '"objective":"ml","registry_version":"1","seed":0,'
-    '"signal_terms":["constant","trend","annual"],"metamer_version":"0.1.0",'
-    '"variable":"sla"}'
+    '"metamer_version":"0.1.0","objective":"ml","registry_version":"1","seed":0,'
+    '"signal_terms":["constant","trend","annual"],"variable":"sla"}'
 )
 GOLDEN_RUN_PAYLOAD = (
     '{"candidates":["white+matern12"],"criteria":["aic"],'
     '"data_uri":"s3://bucket/ssh.zarr","engine":"kalman","memory_budget_gb":4.0,'
-    '"objective":"ml","output":"out.zarr","registry_version":"1","seed":0,'
-    '"signal_terms":["constant","trend","annual"],"metamer_version":"0.1.0",'
-    '"threads":4,"variable":"sla"}'
+    '"metamer_version":"0.1.0","objective":"ml","output":"out.zarr",'
+    '"registry_version":"1","seed":0,'
+    '"signal_terms":["constant","trend","annual"],"threads":4,"variable":"sla"}'
 )
-GOLDEN_FIT_HASH = "29de378159709ecc"
-GOLDEN_COMPAT_HASH = "7c66ee0878f1bc8e"
-GOLDEN_RUN_HASH = "1b660e9fee1dc96b"
+GOLDEN_FIT_HASH = "2503613d711d79f7"
+GOLDEN_COMPAT_HASH = "e4bbab19392f45e3"
+GOLDEN_RUN_HASH = "6299047df1a486bf"
 
 
 def _config(**overrides):
