@@ -6007,17 +6007,52 @@ git commit -m "feat: add the (B, N) fit driver with natural-unit uncertainties"
 - Create: `src/metamer/core/lint.py`; create `tests/test_lint.py`
 
 **Acceptance Criteria:**
-- [ ] `white + matern12` with `ρ` below a stated fraction of the sampling interval flags "collapses to white + white"
-- [ ] Two free-`ν` Matérn terms with overlapping timescales flag "terms may collapse onto each other"
-- [ ] A clean composite returns an empty finding list
-- [ ] Findings are warnings, never exceptions — `lint()` returns, it does not raise
-- [ ] Each finding names the offending term labels, not just the composite
+- [x] `white + matern12` with `ρ` below a stated fraction of the sampling interval flags "collapses to white + white" — the fraction is **derived**, `1/(26·log 2) = 0.05549`, not the fence's calibrated `0.1`
+- [x] Two free-`ν` Matérn terms with overlapping timescales flag "terms may collapse onto each other" — Phase 1 fixes `ν` per family, so the reachable form is two terms of the **same kind**; with a free timescale they are exchangeable at any defaults, and the ratio rule applies only when both are pinned
+- [x] A clean composite returns an empty finding list — including the project's own d=3 spike composite `white + matern12 + matern32`
+- [x] Findings are warnings, never exceptions — `lint()` returns, it does not raise. An unregistered kind, a family with no `state_dim`, a stateful family with no `rho`, and a spec `free_param_index` refuses all return findings. An unusable `sampling_interval` **does** raise `ValueError`: that is a caller error, and returning `[]` would be a diagnostic reporting "clean" because it could not run
+- [x] Each finding names the offending term labels, not just the composite — labels come from `ProcessSpec.labels()` and appear in `Finding.terms` and in the message
 
 **Verify:** `pixi run test tests/test_lint.py -v`
 
+### Corrections applied on 2026-08-06 (pre-flight, before implementation)
+
+The forward audit marked this task **OK** because its fence makes no calls into the
+modules Tasks 8–14 changed, and that was true — every symbol it names binds against the
+live signature. **The fence was still wrong in five ways, all of them about the *model of
+the problem* rather than about a signature.** This is the Task 14 lesson repeated at a
+different layer: (g) certifies that the code will run, not that it is right.
+
+| # | fence as written | why it is wrong | fix |
+|---|---|---|---|
+| 1 | `SHORT_TIMESCALE_FRACTION = 0.1` | a calibrated constant, the thing PROGRESS.md forbids. The threshold has a derivation: a term differs from white by its correlation `exp(-dt/rho)`, and near an optimum a model difference below `sqrt(eps)` moves the log-likelihood by less than `eps·\|ℓ\|`, so no optimizer can resolve it | `WHITE_COLLAPSE_LOG_LIMIT = -½·log(eps) = 26·log 2 = 18.0218`, fraction `0.05549`, same construction and units as `CONDITION_LOG_LIMIT` |
+| 2 | every rule keyed on `"rho" in term.params` | **`white + white` — the exact composition acceptance criterion 1 names — returns `[]`**, because `White` has no `rho`. It is the purest non-identifiability in the taxonomy and the fence cannot see it | classify on `state_dim == 0`; two *free* nugget scales are constrained only as a sum |
+| 3 | `float(term.params["rho"].default)` read unconditionally | `default` is documented in `params.py` as *"Starting value"*. For a free parameter it says where the search begins, not what the model is; the fence reports the two as the same fact | findings state which they saw — `fixed at` vs `starts at` |
+| 4 | overlap decided by the ratio of two defaults | two same-kind terms with a **free** timescale are exchangeable at *any* defaults: the sum kernel is symmetric under swapping them and the surface `rho_a = rho_b` is inside the searched space. A pair 1000× apart lints clean while per-term maps come out salt-and-pepper across the grid | split: free timescale → always flag; both pinned → ratio against `OVERLAP_RATIO` |
+| 5 | `if "rho" not in term.params: continue` | merges two unlike cases into one silent skip — `white`, where skipping is right, and any future stateful family (SHO, whose timescale is `Q/omega0`), where it means the term was never checked and the gap is invisible | a stateful term with no `rho`, an unregistered kind, or a family with no `state_dim` each produce a `NOT_LINTABLE` finding |
+
+Three more, about the fence's tests rather than its code:
+
+- **All four tests pass `sampling_interval=1.0`**, where `SHORT_TIMESCALE_FRACTION *
+  sampling_interval` is the identity — deleting the multiplication changes no number in
+  any test. Pre-flight (a) at this task's comparison axis, and the same shape as Task 11's
+  `scale=1.0`. Fixed by a test that holds `rho` fixed and moves the cadence across the
+  limit (`dt = 10` clean, `dt = 100` flagged).
+- **`assert isinstance(lint(...), list)` is guaranteed by the return annotation** and
+  passes against `return []`. Replaced by a spec the rest of the tree *refuses*
+  (`shared_with`, which makes `free_param_index` raise) — so the test bites if the lint
+  reaches for that machinery.
+- **`"white" in f.message` / `"collapse" in f.message` are prose substrings.** `Finding`
+  carries a machine-readable `Rule`, and the tests assert rule identity and exact label
+  tuples; prose is asserted only where acceptance criterion 1 dictates the words.
+
+Also: `_with()` in the fence duplicates `_term(kind, *, fixed=(), **defaults)`, which
+already exists in `tests/test_statespace.py` and is imported by eight test modules. Use
+`_term` directly. **Implement from the module below, not from the fence.**
+
 **Steps:**
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 # tests/test_lint.py
@@ -6079,7 +6114,7 @@ def test_lint_warns_and_never_raises():
     assert isinstance(lint(spec, sampling_interval=1.0), list)
 ```
 
-- [ ] **Step 2: Implement lint.py**
+- [x] **Step 2: Implement lint.py**
 
 ```python
 # src/metamer/core/lint.py
@@ -6165,7 +6200,7 @@ def lint(spec: ProcessSpec, sampling_interval: float) -> list[Finding]:
     return findings
 ```
 
-- [ ] **Step 3: Run tests and commit**
+- [x] **Step 3: Run tests and commit**
 
 Run: `pixi run test tests/test_lint.py -v` → all PASS
 

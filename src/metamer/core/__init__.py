@@ -20,17 +20,21 @@ from metamer.core import families  # noqa: F401
 from metamer.core.capability import EngineId, GradientMode, Objective
 from metamer.core.criteria import Criterion
 from metamer.core.fit import FitResult, fit
+from metamer.core.lint import Finding, Rule, lint
 from metamer.core.optimize import InitRung
 from metamer.core.outcomes import Outcome
 
 __all__ = [
     "Criterion",
     "EngineId",
+    "Finding",
     "FitResult",
     "GradientMode",
     "InitRung",
     "Objective",
     "Outcome",
+    "Rule",
     "families",
     "fit",
+    "lint",
 ]

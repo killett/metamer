@@ -4,9 +4,10 @@
 
 - **Branch:** `phase-1`. **Last commit:** see `git log --oneline -1`; the handoff below was
   written at the commit that completed Task 14.
-- **Done:** Phase 1 **Tasks 0–14**, implemented, reviewed and committed.
-- **Next:** **Task 15** — static identifiability lint. Nothing of it has been started.
-- **Tests:** **489 pass.** Full sweep `pixi run test` (~255 s). `pixi run test-fast` (~9 s)
+- **Done:** Phase 1 **Tasks 0–15**, implemented, reviewed and committed.
+- **Next:** **Task 16** — three-hash machinery with the compat-relevance allowlist. Nothing
+  of it has been started.
+- **Tests:** **516 pass.** Full sweep `pixi run test` (~242 s). `pixi run test-fast` (~12 s)
   deselects the `slow` marker and is for iteration only — **a green fast run is not evidence
   a task is done.**
 - **Verify a fresh checkout with:** `pixi run test && pixi run typecheck && pixi run lint`
@@ -20,7 +21,7 @@
   guards are on the real path; the objective is differentiable with a validated step rule
   and an adopted gradient oracle; Matérn ν=1/2 ships verified analytic derivatives behind a
   protocol that refuses an unbacked claim.
-- **Pending:** Tasks 15–19. Task 19 is conditional and may be **deleted** rather than
+- **Pending:** Tasks 16–19. Task 19 is conditional and may be **deleted** rather than
   deferred (see the ≥3× rule below).
 - **A pre-flight audit of each task brief is a required step** before writing any code —
   see [Required pre-flight](#required-pre-flight-for-every-remaining-task) below. Every
@@ -181,6 +182,7 @@ degradation.
 | **14** | `FitResult.outcome: NDArray[np.object_]` holding `Outcome` members | `penalty_terms(outcome=)` and `CandidateScores.outcome` both need `(B, M)` **uint8 codes**; the store is uint8 too | **flagged** |
 | **14** | `ranking: list[Ranking]`, one per series | `Ranking` already spans the batch; the list is `B` copies of the same object shape | **flagged** |
 | 15, 16, 18, 19 | — no calls into changed modules | — | OK |
+| **15** | *(re-checked at implementation)* every symbol binds — `ProcessSpec.labels`, `spec.terms`, `TermSpec.params`, `ParamSpec.default` | all match | OK for **(g)**, and the fence was still wrong in **five** ways — see below |
 | 17 | `KalmanEngine` appears in acceptance prose only, no call | — | OK |
 
 **Task 14's fence was corrected in place on 2026-08-06**, before implementation rather than
@@ -221,19 +223,83 @@ rather than from the pre-audit shape. Two things beyond that:
 - **`SeriesFit` is scalar and that is correct** (see Task 13 below). `fit` is where the
   conversion to `(B, M)` uint8 codes happens, exactly once.
 
-### What Task 15 inherits
+### What Task 15 established (done — read before touching the lint)
 
-Task 15 is the static identifiability lint (design doc §4.8). Its fence made **no calls
-into the changed modules** in the forward audit, so its pre-flight is (a)–(f), (h), (i), (j).
-Two things it should know:
+- **THE FORWARD AUDIT'S "OK" MEANT (g) ONLY, AND THE FENCE WAS STILL WRONG FIVE WAYS.**
+  Task 15's fence makes no calls into the modules Tasks 8–14 changed, so the audit marked
+  it clean — correctly. Every symbol it names binds. It nonetheless mis-modelled the
+  problem in five places, listed in the corrections block above the Task 15 fence in the
+  plan. **Generalize this: (g) certifies a brief will run, never that it is right.**
+  Tasks 16–19 are all marked "no calls into changed modules"; none of them is thereby
+  pre-flighted.
+- **`ILL_CONDITIONED_X` is NOT the lint's runtime counterpart** — this file said it was.
+  It is a property of the *whitened design matrix*, and the lint never sees a design.
+  `optimize.HESSIAN_COND_LIMIT` → `DEGENERATE_HESSIAN` is the whole *a posteriori* half.
+  Corrected in `lint.py`'s module docstring, which is where a consumer will look.
+- **`ParamSpec.default` is a starting value, and the lint is the first consumer for which
+  that matters.** For a free parameter it says where the optimizer begins and nothing about
+  where it ends; under `fixed=True` it is the model. Reading it unconditionally — which the
+  fence did — reports a search *start* as a structural property. Every finding now states
+  which of the two it saw (`fixed at` vs `starts at`). Any later pass that reasons about a
+  spec before data inherits this distinction.
+- **A rule keyed on `rho` cannot see `white + white`**, which is the exact composition
+  design doc §4.8 names. Classify on `state_dim == 0` instead: a nugget has no timescale to
+  key on, and two *free* nugget scales are constrained only as a sum. One free nugget beside
+  any number of pinned ones is still identified — the rule is two free scales, not two terms.
+- **Same-kind terms with a FREE timescale are exchangeable at any defaults.** The sum kernel
+  is symmetric under swapping them and the surface `rho_a = rho_b` (where they merge into
+  one term with `σ² = σ_a² + σ_b²`) is inside the searched space; nothing reorders terms
+  mid-optimization, so the symmetry is real. A ratio-of-defaults rule calls a pair 1000×
+  apart clean while neighbouring grid points land in different mirror images and the
+  per-term σ and ρ maps come out salt-and-pepper. Ratio comparison is correct **only** when
+  both timescales are pinned.
+- **`WHITE_COLLAPSE_LOG_LIMIT = −½·log(eps) = 26·log 2 = 18.0218`**, derived, not calibrated
+  — correlation `2⁻²⁶ = √eps` at one sampling interval, timescale fraction `0.05549`. The
+  argument is that near an optimum the log-likelihood is quadratic in the parameter, so a
+  model difference below `√eps` moves it by less than `eps·|ℓ|` and no optimizer can locate
+  it. Same construction and same log units as `CONDITION_LOG_LIMIT`'s `−¼·log(eps)`, which
+  takes the quarter power because its solve squares the condition number. `OVERLAP_RATIO =
+  1.5` is **not** of this kind — it is declared policy, and its consequence is stated so it
+  cannot be quietly retuned: two Matérn ν=1/2 ACFs a factor `r` apart differ at most by
+  `r^(−1/(r−1)) − r^(−r/(r−1))`, which at `r = 3/2` is exactly **4/27**.
+- **A silent skip in a diagnostic is the worst available failure.** The fence's
+  `if "rho" not in term.params: continue` merged `white` (skipping is right) with any future
+  stateful family (skipping means never checked). An unregistered kind, a family with no
+  `state_dim`, and a stateful family with no `rho` each produce a `NOT_LINTABLE` finding —
+  the coverage gap is visible instead of reading as a clean bill of health. SHO, whose
+  timescale is `Q/omega0`, is the concrete future case and is named in §4.8.
+- **An unusable `sampling_interval` raises; a degenerate spec does not.** "Warn, do not
+  block" is about the *specification*. `dt = 0` makes the limit zero, `dt < 0` makes it
+  negative, NaN makes every comparison False — all three return `[]`, a diagnostic
+  reporting "clean" because it could not run.
+- **The lint's own claims are checked against the families' `acvf`, not against the lint.**
+  The lint decides by comparing timescales; `Matern12.acvf` decides by evaluating a kernel,
+  so the two share no construction — pre-flight (j). Three analytic endpoints, no tolerance
+  bands: `white(3) + white(4) == white(5)` bit-for-bit; two ν=1/2 terms at a shared `ρ`
+  equal one term with `σ = 5` to a few ulp (the identity is exact in ℝ, the two float64
+  routes round differently — `9e + 16e` against `25e`); and the correlation at the derived
+  limit is `2⁻²⁶`.
+- **18/18 mutations caught, nothing survived** — one per guard, including a deletion of
+  each of the five corrected behaviours, `SHORT_TIMESCALE_FRACTION` reverted to the fence's
+  `0.1`, the log limit switched to `−¼·log eps`, `OVERLAP_RATIO` doubled, and the
+  `* sampling_interval` factor dropped. The harness was a throwaway (snapshot, substitute,
+  run `tests/test_lint.py`, restore), not kept — same as Task 13's.
 
-- **The lint is static — it runs on a `ProcessSpec` before any data.** It is the *a priori*
-  half of a pair whose *a posteriori* half already exists: `DEGENERATE_HESSIAN` and
-  `ILL_CONDITIONED_X` are the same phenomenon observed after fitting. Where they overlap the
-  lint should agree with them, and a candidate the lint passes that then reports
-  `DEGENERATE_HESSIAN` everywhere is a lint gap worth recording.
-- **Near-degeneracy is a geography, not a per-fit accident** (§4.8). Two Matérn terms with
-  similar `rho`, or white beside a very short `rho`, are the canonical cases.
+### What Task 16 inherits
+
+Task 16 is the three-hash machinery, `fit_hash ⊂ compat_hash ⊂ run_hash`, with
+compat-relevance declared by **allowlist**: new fields default to provenance-only, and
+promoting one to compat-relevant is deliberate and covered by a test asserting the set.
+
+- Its fence is marked "no calls into changed modules" in the forward audit. Per Task 15's
+  first finding, **that is a (g) result and nothing more** — run (a)–(f), (h), (i), (j)
+  against the brief before writing any code.
+- `ProcessSpec.canonical()` / `spec_hash()` already exist and are the normalized-model
+  route the task is meant to build on. **`TermSpec.canonical()` does not include
+  `shared_with`**, so two specs differing only in a shared-parameter declaration hash
+  identically today. That is invisible because `n_free()` refuses such a spec before
+  anything hashes it — but Task 16 is precisely the task that decides what a hash covers,
+  so it is the place to decide whether that omission stays.
 
 ### Fixture facts that a fresh session will otherwise get wrong
 
@@ -891,7 +957,7 @@ question; compute/bandwidth roofline pair for cross-machine prediction) are in d
   before transcription, not after.
 - **The suite is ~255 s, and the `slow` marker is now in place.** `pixi run test` is the
   full sweep and is what every end-of-task verification must run; `pixi run test-fast`
-  (`-m "not slow"`, ~9 s, 463 of 489) is for iteration only. What is marked and why:
+  (`-m "not slow"`, ~12 s, 490 of 516) is for iteration only. What is marked and why:
   **all of `tests/test_fit.py`** (module-wide — every test drives the real filter through
   the whole driver on five-series batches, so there is no fast subset worth carving out),
   the N = 5000 gradient step-rule case, and four `tests/test_optimize.py` tests that run
@@ -908,6 +974,14 @@ question; compute/bandwidth roofline pair for cross-machine prediction) are in d
   Do not edit a file while a mutation run is rewriting it, and re-run `typecheck` **after**
   the run rather than during. The tell is a mypy error whose line does not match what the
   file now says.
+- **`pixi run test-cov <path>` measures the wrong thing and runs the whole suite.** pixi
+  appends task arguments, so `pixi run test-cov tests/test_lint.py` becomes
+  `pytest --cov tests/test_lint.py`; `--cov` takes an *optional* value, so the path is
+  consumed as `--cov=tests/test_lint.py`, no test path remains, and the full 516-test sweep
+  runs while coverage measures a module it never imports. It exits 0 and prints a plausible
+  report. Put a flag first — `pixi run test-cov -q --cov-report=term-missing <path>` — so
+  `--cov` is followed by something starting with `-`. (`pixi run test --cov=<module>` is not
+  a way out: it fails with `ImportError: cannot load module more than once per process`.)
 - **A test helper can produce the failure it is meant to construct.** Task 10's `_scores`
   helper wrote `np.full(shape, np.nan) + k` where it meant `np.full(shape, k)`, so every
   `k` and `n` came out NaN and twelve tests failed against a correct implementation. It was
