@@ -4,17 +4,35 @@
 
 - **Branch:** `phase-1`. **Last commit:** see `git log --oneline -1`; the handoff below was
   written at the commit that completed Task 14.
-- **Done:** Phase 1 **Tasks 0–17**, implemented, reviewed and committed. Task 17's
-  mini-PC sweep is in `bench/minipc.json`.
-- **Next:** **Task 18 — USER GATE.** Cross-machine stage-1 measurement on the 64-core
-  box and the MacBook, then the >=3x decision. **Stop and report; do not proceed past
-  it.** Run the same command as the mini PC, changing only `--threads` and `--out`.
+- **Done:** Phase 1 **Tasks 0–18**. Task 18 (the stage-1 gate) was closed on the mini PC
+  alone — see the verdict note for why one machine suffices and in which direction the
+  inference runs. **Task 19 deleted.**
+- **Next:** **Phase 1 is COMPLETE.** Tasks 0–18 done; **Task 19 deleted, not deferred**
+  (path B won by >=3x, so the batched trust-region has no purpose). The stage-1 verdict,
+  its scope, and what it does **not** establish are in
+  [`docs/superpowers/notes/spike-stage1-verdict.md`](docs/superpowers/notes/spike-stage1-verdict.md)
+  — read it before quoting the >=3x result.
+- **The benchmark harness is a one-command run and must stay that way.** To produce a
+  second machine's numbers without reconstructing anything:
+
+  ```
+  # any machine: change --threads and --out only
+  pixi run python -m metamer.bench.spike \
+      --threads 1 --threads 4 --batch 1000 --repeats 3 --out bench/minipc.json
+  ```
+
+  64-core box: add `--threads 64`, `--out bench/box64.json`.
+  MacBook: `--threads 1 --threads 8`, `--out bench/macbook.json`.
+  Batch sweep at path B's worst cell (d=3, 1 thread, no gaps) is
+  `bench/batch-sweep-d3-1thread-nogaps.json`.
 - **Tests:** **583 collected.** Full sweep `pixi run test` (~280 s). `pixi run test-fast` (~12 s)
   deselects the `slow` marker and is for iteration only — **a green fast run is not evidence
   a task is done.**
 - **Verify a fresh checkout with:** `pixi run test && pixi run typecheck && pixi run lint`
 - **Remote:** https://github.com/killett/metamer — public, `origin/phase-1` in sync.
-- **Stop at Task 18** — it is a user gate. Report and wait.
+- **Task 18 is closed.** It was a user gate; the user closed it on 2026-08-07 by
+  directing that the 64-core box and MacBook be skipped, with the reasoning
+  recorded in the verdict note.
 
 ---
 
@@ -23,8 +41,7 @@
   guards are on the real path; the objective is differentiable with a validated step rule
   and an adopted gradient oracle; Matérn ν=1/2 ships verified analytic derivatives behind a
   protocol that refuses an unbacked claim.
-- **Pending:** Tasks 18–19. Task 19 is conditional and may be **deleted** rather than
-  deferred (see the ≥3× rule below).
+- **Pending:** nothing in Phase 1. Task 19 was **deleted** under the ≥3× rule.
 - **A pre-flight audit of each task brief is a required step** before writing any code —
   see [Required pre-flight](#required-pre-flight-for-every-remaining-task) below. Every
   brief audited so far carried at least one defect that verbatim transcription would have
@@ -169,6 +186,29 @@ argument — a passing suite is not evidence the brief is right.
   test — *and to mutation testing*, which runs in that same process and therefore measures
   the same frozen seed. (a)–(j) all assume the defect is observable somewhere in one run.
   This one is not.
+
+  **(k) EXTENDS TO EVERY DELTA, RATE OR TREND.** The check as first written asks whether a
+  *value* depends on process-local state. The sharper form: **any assertion on a
+  difference, a rate or a trend must be checked for whether its BASELINE is set by history
+  outside the test.** Two Task 17 instances, both of which passed in isolation and failed
+  in the full suite:
+
+  | assertion | why the baseline is not the test's | the fix |
+  |---|---|---|
+  | "allocating 256 MiB moves peak RSS by 256 MiB" | peak RSS is a **high-water mark**, so the delta is `max(0, new − whatever the session already reached)`. Measured: watermark 385 MB, allocate 256 MiB, moves **67 MB** | pin the scale against an **absolute reading taken in the same test** (`current_rss_bytes`), which is not a watermark |
+  | "total STREAM throughput rises with thread count" | on a saturated controller the **sign** of the difference is the session's CPU load. Unloaded 10.59 → 12.03 GB/s; under full-suite contention **11.23 → 8.44**, i.e. it falls | assert a **ratio that survives either loading** — per-core bandwidth, ~3.5× measured against a 2× bound |
+
+  **BOTH MODULES ALREADY DOCUMENTED THE PROPERTY THAT BROKE THE TEST.** `machine.py`'s
+  docstring says in capitals that `ru_maxrss` never decreases; the test asserting a peak
+  delta was written anyway, by the same author, in the same sitting. **Documentation does
+  not constrain the next author — tests do.** If a property is load-bearing, the guard is a
+  test that fails when it is violated, not a paragraph saying it matters.
+
+  Also measured: **`ru_maxrss` is updated lazily and can TRAIL live RSS** — 470.8 MB against
+  a live 471.3 MB read an instant *earlier*. `peak >= current` is not guaranteed
+  instant-to-instant, so any comparison between the two instruments needs a few percent of
+  slack — nowhere near enough to absorb the 1024× unit error such a comparison exists to
+  catch.
 
   **The worked instance:** Task 16's fence serialized with
   `json.dumps(..., default=repr)`. Measured, `{"criteria": {"aic", "bic", "hqic"}}` renders
@@ -399,17 +439,46 @@ rather than from the pre-audit shape. Two things beyond that:
   `tile_side(1e9, 28650) == 187` would have failed against the implementation printed
   beneath it — `floor(186.83)` is 186, and the expected value was rounded where the code
   floors. Found by running the brief's arithmetic.
-- **THE ENGINE MATERIALIZES THE AUGMENTED `[y | X]` BLOCK, AND §9.4 DOES NOT ACCOUNT FOR
-  IT.** `KalmanEngine._augment` ends in `np.concatenate([y[:, :, None], x], axis=2)`,
-  producing `(B, N, 1+k_β)` float64 — **25 200 B/series at N=630, k_β=4**, nearly three
-  times §9.4's entire per-series total, and it does **not** vanish when the design is
-  shared, which is the case §9.4 calls free. §9.4 accounts for a *streaming* filter; this
-  one is not streaming in that respect. Resident is **33 882 B/series against the 8682 B
-  target**, so `tile_side` drops 339 → 171 and a tile sized by the design doc needs 3.9×
-  the RAM it was allotted. Kept as a separately named term (`resident_bytes_per_series`)
-  because it is a property of the engine, not of the design; the fix is to index rather
-  than concatenate. **The `np.broadcast_to` immediately above the concatenate is a view and
-  costs nothing, which is exactly why the copy reads as free.**
+- **THE LARGEST DEFECT OF PHASE 1: `_augment` MATERIALIZES THE `[y | X]` BLOCK.**
+  `KalmanEngine._augment` ends in `np.concatenate([y[:, :, None], x], axis=2)`, producing
+  `(B, N, 1+k_β)` float64 — **25 200 B/series at N=630, k_β=4**, against a §9.4 per-series
+  target of **8 682 B**. Nearly three times the entire documented cost, in one term the
+  document does not have.
+
+  **It does not vanish when the design is shared** — the case §9.4 explicitly treats as
+  free (`X_term = 0`, "one copy, negligible").
+
+  **The mechanism, because it is why the copy reads as free on a code read:** the
+  `np.broadcast_to(x, (batch, n_time, k))` on the line immediately above **is a view and
+  allocates nothing**. The eye stops there and concludes the shared design is not
+  replicated. The `np.concatenate` on the next line then copies that view into a real
+  `(B, N, 1+k_β)` array, replicating the shared design once per series.
+
+  **THIS IS NOT A TASK 17 BUG.** §9.4 accounts for a *streaming* filter and the engine is
+  not one. Three consequences:
+
+  1. **The formula and the implementation must be reconciled, and the ENGINE is the one
+     that is wrong.** The accumulator only ever needs one row at a time —
+     `cols[:, step, :]` is the sole consumer — so the augmented columns can be indexed out
+     of `y` and the shared `X` per timestep with no allocation at all. That is the better
+     answer and it makes §9.4's model true rather than replacing it. **Phase 2 work, not a
+     Task 17 patch:** it touches the hot loop of the reference engine, which every oracle
+     test and the path-B agreement test are pinned against.
+  2. **`tile_side` is 171, not 339, until it is fixed** (1 GB budget, shared X, d=3,
+     k_β=4, p=4, M=12). Both figures are carried deliberately and both are labelled:
+     `memory.bytes_per_series` is §9.4's **target** (8 682 B → 339) and
+     `memory.resident_bytes_per_series` is what the code actually holds (**33 882 B → 171**).
+     **Every Phase 2 tile-arithmetic number must be budgeted against the resident figure**
+     until the engine streams; using the target overcommits a hard 16 GB constraint by 3.9×,
+     and the run does not degrade, it dies.
+  3. **STANDING CHECK — DOES THE MEMORY FORMULA DESCRIBE THE CODE, OR A MODEL OF THE
+     CODE?** This is the **second** time §9.4 was wrong in a way that three places agreed
+     on (the first was the `+2` output-slot cascade, where the formula, the prose and the
+     worked table disagreed with each other and the fence copied the wrong one). A formula
+     validated against its own arithmetic validates nothing. **Verify against measured
+     resident bytes** — the slope of RSS against B, in a fresh process, sampled during the
+     workload — and treat any factor above ~1.5× as a term the formula is missing rather
+     than as measurement noise.
 - **`ru_maxrss` IS INHERITED ACROSS `fork()`/`exec()`.** Measured: the same child reports
   **119.95 MB** spawned from a small parent and **493.28 MB — byte-identical to the
   parent's own peak** — spawned from one holding 400 MiB. Running each batch in a fresh
@@ -1148,6 +1217,17 @@ question; compute/bandwidth roofline pair for cross-machine prediction) are in d
 
 ## Gotchas discovered
 
+- **`numba` PINS `numpy<2.5`, SO ADDING IT DOWNGRADED NUMPY 2.5.1 → 2.4.6** on all four
+  platforms (Task 17, 2026-08-07). **numpy 2.4's type stubs infer `floating[Any]` where
+  2.5's infer `float64`**, so `mypy` began reporting errors in `signal.py` and `fit.py` —
+  **files nobody had touched**, with no source change between the clean run and the failing
+  one. If a future session sees `Returning Any from function declared to return
+  ndarray[..., float64]` or an `arg-type` mismatch on a `floating[Any]`, this is why; it is
+  an environment fact, not a regression in the code. Fixed with explicit
+  `np.asarray(..., dtype=np.float64)` at the three affected sites (`Trend.columns`,
+  `Accel.columns`, `fit.py`'s `np.linalg.inv`). **General rule: a dependency add can break a
+  type check in files it never imports — re-run the whole suite AND the whole typecheck
+  after any solver change, not just the new files.**
 - **`celerite2` has no `osx-arm64` conda-forge build** (verified 2026-08-04). Coverage is
   split between conda-forge and PyPI with no single source covering every target platform.
   Full table in design doc §15.2.
@@ -1291,8 +1371,24 @@ Still open. **A new session must not assume these were settled.**
    cross-validation can attribute any discrepancy.
 4. **`requires-python = ">=3.12,<3.14"` carries an upper cap.** Caps poison downstream
    resolvers; drop before the PyPI stage ever runs.
-5. **64-core box RAM is unknown.** Establish it before the Task 18 run.
-6. **`optimize.HESSIAN_COND_LIMIT = 1e10` is picked, not derived**, while its static
+5. **64-core box RAM is unknown.** Kept open: the stage-1 gate was closed without that
+   machine (see the verdict note), but its RAM is still needed before any tile-sizing
+   run there.
+6. **Roofline validation across machines.** The compute/bandwidth pair is meant to predict
+   one machine's result from another's, and **one data point cannot validate a
+   two-parameter fit** — the mini PC supplies the model's first point and tests nothing.
+   **Blocks the `cloudify` cost projection (design doc §15.5):** projecting spend on an
+   unvalidated roofline is projecting a guess. Closed by a second machine's roofline pair
+   plus its measured canonical filter pass, checked against the prediction.
+7. **Path B at high thread occupancy.** Measured at 1 and 4 threads on a 4-core box only.
+   `prange` over series at 64 threads may hit false sharing on the per-series `accum`
+   block, or saturate the controller at a different point. Closed by
+   `bench/spike.py --threads 1 --threads 4 --threads 64` on the 64-core box.
+8. **`numba` and `celerite2` on arm64.** Untested. `celerite2` has **no `osx-arm64`
+   conda-forge build** and is pinned to `[target.linux-64.dependencies]`; `numba` on
+   `osx-arm64` / `linux-aarch64` has never been run here. Closed by the suite plus
+   `bench/spike.py` on the MacBook.
+9. **`optimize.HESSIAN_COND_LIMIT = 1e10` is picked, not derived**, while its static
    counterpart in `lint.py` is derived from float64 — so the two halves of §4.8 sit on
    different footings. The eps rule gives `1/√eps = 6.7e7` for a single inversion.
    **BLOCKING for the point where the identifiability machinery is actually used, which is

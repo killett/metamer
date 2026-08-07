@@ -6865,39 +6865,49 @@ git commit -m "feat: add memory formula, RSS shim, benchmark references, and spi
 
 ---
 
-## Task 18: Cross-machine stage-1 measurement and the ≥3× decision
+## Task 18: Cross-machine stage-1 measurement and the ≥3× decision — CLOSED 2026-08-07
 
 **USER-ORDERED GATE — NON-SKIPPABLE.** This task was requested by the user in the current conversation. It MUST NOT be closed by walking around it, by declaring it "verified inline", or by substituting a cheaper check. Close only after every item in `acceptanceCriteria` has been re-validated independently, with output captured.
 
-**Goal:** Run the Task 17 harness on all three machines, evaluate the ≥3×-at-d=3 rule on the 64-core box, and record the decision that determines whether Task 19 is built at all.
+### How this gate was actually closed
 
-**This session cannot close this task alone.** The mini PC is the only machine reachable from here; the 64-core box and the MacBook runs must be executed by the user. The budget comparison is **valid only on the 64-core box**.
+**The user closed it on 2026-08-07 by directing that the 64-core box and the MacBook be skipped**, and by specifying a replacement measurement. This is recorded here rather than in a commit message because the gate's own text forbids closing it by substitution — so the substitution has to be visible, attributed, and reasoned, not silent.
+
+**The user's reasoning, which is the load-bearing part:** the mini PC is the *conservative* machine for both questions the gate asks. Path A is memory-bound and scales with bandwidth **per core**, and the mini PC's measured 3.01 GB/s per core at full occupancy is high relative to a many-core box, where the same controller is divided among far more cores — so the machine measured is the one most favourable to path A, and path B won anyway. The 19 ms budget is core-milliseconds on **slow** cores, so faster cores only improve path B's 17.9–18.6 ms. **Both inferences are one-sided in the direction needed**, which is the same property that makes stage 1's optimistic bound sound.
+
+**What was run instead**, because it was the one genuinely open question and needed no second machine: a batch sweep at **path B's single worst cell** (d=3, one thread, no gaps) at `B ∈ {1000, 5000, 20000}`, to settle whether the ratio was still falling with batch size. It is not — see the verdict.
+
+**Two acceptance criteria are therefore NOT met, and are recorded as open questions rather than as met:** `bench/box64.json` and `bench/macbook.json` do not exist, and the roofline model's prediction error is **unstated because one machine cannot state it** — a two-parameter fit is not validated by its first data point.
+
+**Verdict, scope, and what it does not establish:** [`docs/superpowers/notes/spike-stage1-verdict.md`](../notes/spike-stage1-verdict.md).
+
+**Goal:** Run the Task 17 harness on all three machines, evaluate the ≥3×-at-d=3 rule on the 64-core box, and record the decision that determines whether Task 19 is built at all.
 
 **Files:**
 - Create: `bench/minipc.json`, `bench/box64.json`, `bench/macbook.json`
-- Create: `docs/superpowers/notes/2026-XX-XX-spike-stage1-verdict.md`
+- Create: `docs/superpowers/notes/spike-stage1-verdict.md`
 
 **Acceptance Criteria:**
-- [ ] `bench/minipc.json` exists, from `{1, 4}` threads — establishes feasibility and correctness
-- [ ] `bench/box64.json` exists, from `{1, 4, full}` threads — **the only valid budget comparison**; the 4-thread point bridges to the mini PC
-- [ ] `bench/macbook.json` exists, from `{1, full}` threads — the adversarial case; unified memory gives high bandwidth per core, so **if path A wins anywhere it wins here**
-- [ ] The roofline pair (compute reference, bandwidth reference at 1 and full threads) is recorded for all three machines, and the fitted model's **prediction error is stated**
-- [ ] ms/fit is reported raw **and in canonical-filter-pass units**
-- [ ] The A:B ratio is reported **per gap case**, not pooled
-- [ ] The verdict note states, explicitly, one of: **adopt B** (B ≥3× at d=3 on the 64-core box), **inconclusive → build Task 19**, or **A stays default** with the measured number recorded
-- [ ] Measured ms/fit on the 64-core box is compared against the **19 ms** budget
+- [x] `bench/minipc.json` exists, from `{1, 4}` threads — establishes feasibility and correctness. Plus `bench/batch-sweep-d3-1thread-nogaps.json`, the worst-cell batch sweep
+- [ ] **NOT MET — user-directed skip.** `bench/box64.json`, from `{1, 4, full}` threads. Open question 7 (path B at high thread occupancy)
+- [ ] **NOT MET — user-directed skip.** `bench/macbook.json`, from `{1, full}` threads. Open question 8 (arm64 toolchain)
+- [ ] **NOT MET — unstatable from one machine.** The roofline pair IS recorded for the mini PC; the prediction error cannot be stated because one data point does not validate a two-parameter fit. Open question 6
+- [x] ms/fit is reported raw **and in canonical-filter-pass units**
+- [x] The A:B ratio is reported **per gap case**, not pooled
+- [x] **MET WITH REDUCED SCOPE.** The verdict states **adopt B**, with the >=3x evaluated on the **mini PC** rather than the 64-core box, and the one-sided argument for why that machine suffices stated in full
+- [x] **MET WITH REDUCED SCOPE.** ms/fit is compared against the 19 ms budget on the **mini PC**: path A's bound 56.4-62.3 ms, path B 17.9-18.6 ms. Slow cores make this the conservative comparison for B
 
-**Verify:** `pixi run python -m metamer.bench.spike --report bench/minipc.json bench/box64.json bench/macbook.json` → prints the three-machine table, the roofline fit and its prediction error, and the verdict line
+**Verify:** `bench/minipc.json` and `bench/batch-sweep-d3-1thread-nogaps.json` are committed and self-describing. The three-machine `--report` mode was not built: with one machine there is no table to print and no roofline fit to state an error for. Build it when a second machine's JSON exists
 
 **Steps:**
 
-- [ ] **Step 1: Run the harness on the mini PC (this session can do this)**
+- [x] **Step 1: Run the harness on the mini PC (this session can do this)**
 
 ```bash
 pixi run python -m metamer.bench.spike --threads 1 --threads 4 --out bench/minipc.json
 ```
 
-- [ ] **Step 2: Ask the user to run the 64-core box and the MacBook**
+- [ ] **Step 2: SUPERSEDED 2026-08-07 — the user directed that both be skipped.** The commands below remain valid and the harness stays a one-command run, so a later session can produce `box64.json` or `macbook.json` without reconstructing anything
 
 Give the user these commands, one per line so terminal wrapping cannot corrupt a paste.
 First establish the 64-core box's RAM, then run `--explain` before the measurement.
@@ -6946,56 +6956,21 @@ git commit -m "test: record stage-1 spike results and the execution-strategy ver
 
 ---
 
-## Task 19: **CONDITIONAL** — batched trust-region optimizer
+## Task 19: DELETED 2026-08-07 — batched trust-region optimizer
 
-**Build this only if Task 18's verdict is "inconclusive".** If path B wins by ≥3× at d=3 on the 64-core box, **this task is deleted, not deferred**: path A's permanent form is the plain per-series scipy loop from Task 13, which is already a complete and tested correctness reference.
+**Deleted, not deferred, per the >=3x rule in design doc section 9.2.** Path B beat path
+A's optimistic bound by >=3x at d=3 in every measured cell, so path A can never win and
+the batched trust-region has no purpose. **Path A's permanent form is the plain per-series
+scipy loop from Task 13**, which is already complete, tested, and ideal as the correctness
+reference and the MVN-oracle harness — a correctness reference does not need to be fast.
 
-**Goal:** A batched trust-region optimizer with per-series radii, an active mask, and periodic compaction, so path A can be measured at its real performance rather than its optimistic bound.
+This is the large saving the staged spike (section 9.2) was designed to capture: most of
+Phase 1's remaining bulk sat in this one task, and it existed **only** for path A's
+performance.
 
-**Files:**
-- Create: `src/metamer/core/optimize_batched.py`
-- Create: `tests/test_optimize_batched.py`
-
-**Acceptance Criteria:**
-- [ ] Trust-region, **not** line-search L-BFGS: per-iteration work is fixed (one function and gradient per active series, then a masked accept/reject and a masked radius update). A data-dependent inner loop is the pathology that destroys batch utilization.
-- [ ] Per-series results are **identical** to the Task 13 reference to 1e-8 on the same inputs
-- [ ] The active mask freezes converged series; utilization is reported
-- [ ] Compaction repacks the active set and does **not** change results
-- [ ] Trust-radius collapse produces `Outcome.TRUST_RADIUS_COLLAPSED`
-- [ ] No reordering or rescaling of the parameter vector occurs mid-run without an explicit curvature-history reset
-
-**Verify:** `pixi run test tests/test_optimize_batched.py -v` and a rerun of the stage-2 spike
-
-**Steps:**
-
-- [ ] **Step 1: Confirm this task is still required**
-
-Read `docs/superpowers/notes/*-spike-stage1-verdict.md`. If the verdict is "adopt B",
-**stop and close this task as not-required**, recording the verdict's ratio in the closing
-note. Do not build the optimizer.
-
-- [ ] **Step 2: Write the equivalence test first**
-
-The single most important test is that the batched path reproduces the reference exactly:
-
-```python
-def test_batched_trust_region_matches_the_reference_optimizer():
-    """The batched path and the scipy reference reach the same optimum.
-
-    Bug this catches: a masked update that leaks across series, or a radius
-    update applied to frozen series. Both produce plausible fits that differ
-    from the reference in ways no single-series test would reveal.
-    """
-```
-
-- [ ] **Step 3: Implement, then rerun the stage-2 comparison and record it**
-
-```bash
-pixi run test tests/test_optimize_batched.py -v
-pixi run python -m metamer.bench.spike --stage 2 --out bench/box64-stage2.json
-git add src/metamer/core/optimize_batched.py tests/test_optimize_batched.py bench
-git commit -m "feat: add batched trust-region optimizer and stage-2 spike results"
-```
+The verdict, its scope and what it does NOT establish are in
+[`docs/superpowers/notes/spike-stage1-verdict.md`](../notes/spike-stage1-verdict.md).
+The deleted task's content is recoverable from git history if the verdict is ever revisited.
 
 ---
 

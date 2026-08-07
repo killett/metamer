@@ -320,7 +320,7 @@
       "id": 26,
       "planTask": 18,
       "subject": "Task 18: USER GATE cross-machine stage-1 decision",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         25
       ],
@@ -355,8 +355,8 @@
     {
       "id": 27,
       "planTask": 19,
-      "subject": "Task 19: CONDITIONAL batched trust-region",
-      "status": "pending",
+      "subject": "Task 19: DELETED (path B won by >=3x; see spike-stage1-verdict.md)",
+      "status": "completed",
       "blockedBy": [
         26
       ],
