@@ -5,19 +5,20 @@
 - **Branch:** `phase-1` (work here, not `main`). Both branches are pushed.
 - **Remote:** https://github.com/killett/metamer — public. Run `git log --oneline -5` for the latest commit.
 - **Done:** design document, Phase 1 implementation plan, two rounds of plan review applied.
-  Phase 1 **Tasks 0–10** are implemented, reviewed, and committed — the likelihood spine now
-  runs end to end from a `ProcessSpec` to a scored, per-series result, and a candidate set
-  can be ranked with the comparability guards in force.
-- **Pending:** Phase 1 Tasks 11–19. **Task 18 is a user gate — stop there and report.**
-- **State at handoff:** Task 10 completed at `5003e9b`; **406 tests pass**, `mypy --strict`
+  Phase 1 **Tasks 0–11** are implemented, reviewed, and committed — the likelihood spine now
+  runs end to end from a `ProcessSpec` to a scored, per-series result, a candidate set can be
+  ranked with the comparability guards in force, and the objective is differentiable with a
+  validated step rule and an adopted gradient oracle.
+- **Pending:** Phase 1 Tasks 12–19. **Task 18 is a user gate — stop there and report.**
+- **State at handoff:** Task 11 completed at `d4396a6`; **423 tests pass** in ~21 s, `mypy --strict`
   clean, `pre-commit run --all-files` clean, working tree clean, local and `origin/phase-1`
   in sync. Verify with `pixi run test && pixi run typecheck`.
 - **A pre-flight audit of each task brief is a required step** before dispatching an
   implementer — see [Required pre-flight](#required-pre-flight-for-every-remaining-task)
   below. Every brief audited so far carried at least one defect that verbatim transcription
   would have committed.
-- **Next action:** implement **Task 11** (finite-difference gradients, the step rule, and the
-  complex-step verdict) from
+- **Next action:** implement **Task 12** (analytic forward-mode for Matérn ν=1/2 and
+  gradient-capability resolution) from
   [`docs/superpowers/plans/2026-08-05-metamer-phase1.md`](docs/superpowers/plans/2026-08-05-metamer-phase1.md).
   The draft PR command is below and has not been run yet.
 - **Execution workspace:** `.superpowers/sdd/2026-08-05-metamer-phase1/` (git-ignored) holds
@@ -124,32 +125,65 @@ fence is now only a historical record.
 line 299, §5.2 lines 352–359, §17 line 1863, §19 line 1996), which is `design_rank`. No
 third stale-cascade instance found.
 
-### What Task 11 inherits
+### What Task 12 inherits
 
-Task 11 builds central-difference gradients in **unconstrained** coordinates, the step rule
-that survives `|ℓ|` growing with `N`, and the recorded complex-step verdict. Points a fresh
-session cannot reconstruct:
+Task 12 builds analytic forward-mode gradients for **Matérn ν=1/2 only** plus the
+gradient-capability resolution machinery (`resolve_gradient_mode`, defined in the plan's
+Task 12 fence, not Task 11's). Points a fresh session cannot reconstruct:
 
-- **Steps are taken in unconstrained coordinates**, which is what lets one relative step
-  serve every family — a step in natural units means something different for `σ²` than for
-  `ρ`. `ConcentratedObjective.hydrate` is the only correct route from a free-only vector to
-  the full `theta` slice layout (`StateSpace` slices over *all* of a term's parameters), so
-  a perturbation applied to the wrong vector shifts every later coordinate one slot left.
-- **The step rule must be validated at `N ∈ {100, 630, 5000}`** — exit criterion 9. The
-  point of three values is that `|ℓ|` scales with `N`, so a rule tuned at one `N` degrades
-  at another, and a single-`N` test cannot see it.
-- **The complex-step verdict is an exit criterion in its own right (8), recorded with
-  numbers.** If complex-step agrees to ~1e-12 it becomes the oracle; if only ~1e-7,
-  Richardson-extrapolated central FD is adopted instead and the note says so. The note is
-  the deliverable, not the decision.
-- **The filter's explicit float64 casts are the first thing complex-step hits.** Verified in
-  `engines/kalman.py`: `theta`, `y` and `t` are cast with `np.asarray(..., dtype=np.float64)`
-  on entry (lines 142–145) and the state, covariance and accumulator buffers are allocated
-  `dtype=np.float64` (lines 157–160). An imaginary perturbation is therefore discarded
-  *before any arithmetic happens*, silently — the answer comes back real and plausible.
-  Whatever else Task 11 finds, the verdict cannot be "complex-step works" until those casts
-  are made dtype-following. The `np.where` masking (lines 185–204) is holomorphic and is
-  not the problem; the casts are.
+- **`richardson_gradient` is the oracle Task 12 must check its analytic `dQ/dθ` against**,
+  because complex-step is dead — see the Task 11 findings below and
+  [`docs/superpowers/notes/complex-step-verdict.md`](docs/superpowers/notes/complex-step-verdict.md).
+  It resolves to ~6e-14 relative, and a wrong hand-derived derivative produces O(1)
+  relative error, so the oracle is far stronger than the job needs.
+- **Exit criterion 10 needs one family WITH an analytic gradient and one WITHOUT**, which is
+  why ν=1/2 gets analytic gradients and a **test-only stub family** exists purely to
+  exercise the resolution logic. Design doc §18's "Note on criterion 10". Shipping analytic
+  gradients per family is explicitly *not* a Phase 1 obligation.
+- **`capability.intersect_gradient_modes` already exists and is tested** — Task 12 wires it
+  up, it does not re-derive it. A composite is ANALYTIC only if every term is, per
+  objective, because the REML penalty is not covered by the envelope theorem.
+- **Compare in unconstrained coordinates or apply `dforward` explicitly.** The two differ by
+  exactly the bijector Jacobian; at `theta = [1, 5]` that is a factor of five on the second
+  component — smooth, silent, wrong. `test_fd_gradient_takes_its_steps_in_unconstrained_coordinates`
+  is the standing guard.
+
+### What Task 11 established (done — read before touching gradients or the filter dtype)
+
+- **Complex-step is not viable through this filter, and the failure is total.** Measured
+  `rel = 1.000e+00`; the gradient comes back exactly `[0, 0]`. **The cause is not a
+  non-analytic operation** — there is no `abs`, `min`/`max`, comparison branch or
+  conjugating norm in the path, which is what design doc §8.2 expected. It is an explicit
+  dtype cast, and the earliest one is `ConcentratedObjective._map`
+  (`objective.py:1010`): `arr = np.asarray(values, dtype=np.float64)`, which discards the
+  perturbation at `to_natural`, before the filter is ever reached. Two further layers repeat
+  it — every bijector in `transforms.py` (lines 41–118) and `KalmanEngine.score`'s entry
+  casts and buffer allocations (`engines/kalman.py:142–160`). Making complex-step live is
+  therefore a three-layer change that puts a complex dtype through the whole hot path, not a
+  one-line fix. `np.where` masking (kalman lines 185–204) is holomorphic and is *not* the
+  problem.
+- **The step rule's curvature denominator is load-bearing.** `h = (ε·|ℓ|/|ℓ''|)^(1/3)`, per
+  design doc §8.2 — **not** `(ε·|ℓ|)^(1/3)`. Both `|ℓ|` and its derivatives scale with N, so
+  the ratio is O(1) and the optimum barely moves: measured best `h ∈ [1e-6, 1e-5]` across
+  `|ℓ|` from 3.2e3 (N=100) to 2.2e5 (N=5000), with `ε^(1/3) = 6.055e-06` inside that window
+  at every N. The direct evidence is that the truncation branch of the sweep is
+  N-independent to three digits (1.501e-08, 1.498e-08, 1.497e-08 at `h = 1e-4`). Dropping
+  the denominator costs 280×–1100×: 1.19e-08 / 4.51e-08 / **1.98e-07** relative error at
+  N = 100 / 630 / 5000, against 4.28e-11 / 1.00e-10 / 1.76e-10.
+- **Richardson must start in the truncation-dominated region.** `RICHARDSON_H0 = 1e-2`, not
+  `fd_step(scale)`. It extrapolates the truncation series, so starting at the V-curve
+  minimum extrapolates rounding noise — measured 5.08e-11 from `h0 = 6.06e-6` against
+  5.80e-14 from `h0 = 1e-2`, and the former is *worse* than the plain central difference it
+  was meant to improve (4.43e-11). Four levels suffice: against six levels on the real
+  filter, 7.4e-13 / 1.1e-12 / 6.7e-12 at N = 100 / 630 / 5000.
+- **A quadratic cannot test a step rule.** Its third derivative is zero, so central
+  differences are exact at any step and every rule is indistinguishable from every other.
+  The reference function is `sin(3u₀) + u₁³ + 0.5·u₀u₁`.
+- **A test that does not pass `scale` cannot see the step rule.** With `scale` at its
+  default the numerator is 1 and the denominator is irrelevant. Caught by mutation: the
+  three-N test passed with the denominator deleted until `scale` was threaded through. The
+  general form — **a test can exercise a default instead of the thing it names** — is worth
+  checking whenever a rule lives behind an optional argument.
 
 ### What Task 10 established (done — read only if you touch selection)
 
@@ -520,6 +554,12 @@ question; compute/bandwidth roofline pair for cross-machine prediction) are in d
   later fences were written against the pre-Task-9 scalar model**, so every remaining fence
   that touches `counting` or `criteria` should be diffed against the committed signatures
   before transcription, not after.
+- **The suite is no longer fast: ~21 s, up from ~2 s.** `tests/test_gradients.py` runs the
+  real `matern32` filter at N = 5000 (373 ms per likelihood evaluation), which exit
+  criterion 9 requires. One Romberg tableau plus one central difference at each of three N;
+  it is not accidental repetition. If it becomes a problem the lever is `RICHARDSON_LEVELS`
+  at the largest N, measured to have 6.7e-12 headroom against a 1e-8 gate — not dropping
+  N = 5000, which is the whole point of the criterion.
 - **A test helper can produce the failure it is meant to construct.** Task 10's `_scores`
   helper wrote `np.full(shape, np.nan) + k` where it meant `np.full(shape, k)`, so every
   `k` and `n` came out NaN and twelve tests failed against a correct implementation. It was

@@ -197,7 +197,7 @@
       "id": 19,
       "planTask": 11,
       "subject": "Task 11: FD gradients, step rule, complex-step verdict",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         17
       ],

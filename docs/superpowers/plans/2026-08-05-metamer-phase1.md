@@ -4628,17 +4628,58 @@ git commit -m "feat: add information criteria with engine and objective guards"
 - Create: `tests/test_gradients.py`, `docs/superpowers/notes/complex-step-verdict.md`
 
 **Acceptance Criteria:**
-- [ ] `fd_gradient` matches an analytically differentiable reference to 1e-7 relative
-- [ ] The step rule holds at `N ∈ {100, 630, 5000}` — gradient error does not degrade as `|ℓ|` grows
-- [ ] Steps are taken in unconstrained coordinates, so one relative step serves every family
-- [ ] Complex-step is run against central FD on `matern32`; the agreement level is **recorded with numbers** in the verdict note
-- [ ] If complex-step agrees to ~1e-12 it becomes the oracle; if only ~1e-7, Richardson-extrapolated central FD is adopted instead and the note says so
+- [x] `fd_gradient` matches an analytically differentiable reference to 1e-7 relative
+- [x] The step rule holds at `N ∈ {100, 630, 5000}` — gradient error does not degrade as `|ℓ|` grows
+- [x] Steps are taken in unconstrained coordinates, so one relative step serves every family
+- [x] Complex-step is run against central FD on `matern32`; the agreement level is **recorded with numbers** in the verdict note
+- [x] If complex-step agrees to ~1e-12 it becomes the oracle; if only ~1e-7, Richardson-extrapolated central FD is adopted instead and the note says so
 
 **Verify:** `pixi run test tests/test_gradients.py -v` and the verdict note exists with numbers
 
+> **Corrections applied at implementation time (commit `d4396a6`). The code fences
+> below are the pre-audit draft, kept as the record of what was written;
+> `src/metamer/core/gradients.py` and
+> [`docs/superpowers/notes/complex-step-verdict.md`](../notes/complex-step-verdict.md)
+> are authoritative.**
+>
+> 1. **`fd_step` keeps the curvature denominator.** The fence proposed
+>    `(ε·|ℓ|)^(1/3)`; design doc §8.2 specifies `(ε·|ℓ|/|ℓ''|)^(1/3)`. Both `|ℓ|`
+>    and its derivatives scale with N, so the ratio is O(1) and the optimal step
+>    barely moves with N — measured optimum `h ∈ [1e-6, 1e-5]` across `|ℓ|` from
+>    3.2e3 to 2.2e5. Relative gradient error against the oracle: **1.19e-08 /
+>    4.51e-08 / 1.98e-07** for the fence's rule at N = 100 / 630 / 5000, against
+>    **4.28e-11 / 1.00e-10 / 1.76e-10** for the corrected one. At N = 5000 the
+>    fence's own "1e-7 relative" acceptance criterion is missed by its own rule.
+> 2. **`richardson_gradient` starts at `h0 = 1e-2`, not at `fd_step(scale)`.**
+>    Richardson extrapolates the *truncation* series, so starting at the FD
+>    optimum extrapolates rounding noise: measured 5.08e-11 from `h0 = 6.06e-6`
+>    against **5.80e-14** from `h0 = 1e-2` — and the former is *worse* than the
+>    plain central difference it was meant to improve (4.43e-11).
+> 3. **The complex-step verdict is negative, and `assert rel < 1e-4` cannot
+>    pass.** Measured `rel = 1.000e+00`; the gradient comes back exactly
+>    `[0, 0]`. The cause is **not** a non-analytic operation — it is
+>    `ConcentratedObjective._map`'s `np.asarray(values, dtype=np.float64)`,
+>    which discards the perturbation at `to_natural` before the filter is
+>    reached. The test now asserts exact zero, so a later dtype-following change
+>    breaks it and forces the note to be rewritten.
+> 4. **The fence's `from metamer.core.signal import DesignInfo` sits at column
+>    0 inside a test body** and would not have parsed. The name was unused.
+> 5. **The test function is `sin(3u₀) + u₁³ + 0.5·u₀u₁`, not the fence's
+>    quadratic.** A quadratic has zero third derivative, so central differences
+>    are exact at any step and no step rule is distinguishable from any other —
+>    the fence's step-rule test could not fail for the reason its docstring gave.
+> 6. **The three-N test passes `scale` explicitly**, as a real caller does. With
+>    `scale` left at its default the numerator is 1, the denominator is
+>    irrelevant, and deleting it changes no number — verified by mutation: the
+>    test passed against the defect until `scale` was threaded through.
+>
+> **Cost note:** `tests/test_gradients.py` runs the real filter at N = 5000, so
+> the suite is now ~21 s rather than ~2 s. That is one Romberg tableau plus one
+> central difference at each of three N; it is not accidental repetition.
+
 **Steps:**
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 # tests/test_gradients.py
@@ -4745,7 +4786,7 @@ from metamer.core.signal import DesignInfo
     assert rel < 1e-4
 ```
 
-- [ ] **Step 2: Implement gradients.py**
+- [x] **Step 2: Implement gradients.py**
 
 ```python
 # src/metamer/core/gradients.py
@@ -4862,7 +4903,7 @@ def complex_step_gradient(
     return out
 ```
 
-- [ ] **Step 3: Run the tests, capture the complex-step number, write the verdict note**
+- [x] **Step 3: Run the tests, capture the complex-step number, write the verdict note**
 
 Run: `pixi run test tests/test_gradients.py -v -s | rg COMPLEX_STEP_AGREEMENT`
 
@@ -4871,7 +4912,7 @@ agreement, the decision that follows (`rel < 1e-10` → complex-step is the orac
 otherwise Richardson-extrapolated central FD is), and the specific non-analytic operation
 found in the path if the verdict is negative.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/metamer/core/gradients.py tests/test_gradients.py docs/superpowers/notes/complex-step-verdict.md
