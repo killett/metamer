@@ -17,5 +17,20 @@
 # `metamer.core` itself, only its leaf submodules (capability, params,
 # registry, transforms), none of which import back into `families`.
 from metamer.core import families  # noqa: F401
+from metamer.core.capability import EngineId, GradientMode, Objective
+from metamer.core.criteria import Criterion
+from metamer.core.fit import FitResult, fit
+from metamer.core.optimize import InitRung
+from metamer.core.outcomes import Outcome
 
-__all__ = ["families"]
+__all__ = [
+    "Criterion",
+    "EngineId",
+    "FitResult",
+    "GradientMode",
+    "InitRung",
+    "Objective",
+    "Outcome",
+    "families",
+    "fit",
+]

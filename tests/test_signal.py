@@ -820,3 +820,39 @@ def test_unit_variance_beta_var_is_nan_for_a_rank_deficient_series():
     info = SignalSpec([Constant(), Trend()]).design_info(t, mask)
     assert bool(info.is_deficient[0])
     assert np.all(np.isnan(info.unit_variance_beta_var[0]))
+
+
+def test_design_info_slices_to_a_single_series():
+    """`series(b)` yields the one-series DesignInfo an inner loop needs.
+
+    Behaviour under test: the per-series view. `optimize_series` fits one
+    series at a time against a `(B,)`-wide design, so something has to narrow
+    it; doing that at the call site by hand is how the wrong row gets paired
+    with the wrong data.
+    Bug this catches: slicing the derived fields but not the mask, or the mask
+    but not the derived fields. Either pairs a series' rank with another
+    series' rows, and the mismatch is silent because both are the right shape
+    and the right dtype.
+    """
+    t = np.arange(40.0)
+    mask = np.ones((3, t.size), dtype=bool)
+    mask[1, 20:] = False
+    mask[2] = False
+    info = SignalSpec([Constant(), Trend()]).design_info(t, mask)
+
+    for b in range(3):
+        one = info.series(b)
+        assert one.batch == 1
+        assert one.rank[0] == info.rank[b]
+        assert one.n_rows[0] == info.n_rows[b]
+        assert one.gram_logdet[0] == info.gram_logdet[b]
+        assert one.condition_number[0] == info.condition_number[b]
+        assert one.column_terms == info.column_terms
+        assert one.mask is not None
+        np.testing.assert_array_equal(one.mask[0], mask[b])
+        np.testing.assert_allclose(
+            one.unit_variance_beta_var[0], info.unit_variance_beta_var[b]
+        )
+    # The rows really do differ, so the loop above could fail.
+    assert info.n_rows[0] != info.n_rows[1]
+    assert bool(info.is_deficient[2])

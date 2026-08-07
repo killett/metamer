@@ -382,6 +382,33 @@ class DesignInfo:
         """Number of series these derived quantities describe."""
         return int(self.rank.shape[0])
 
+    def series(self, index: int) -> DesignInfo:
+        """Return this design narrowed to one series, as a batch of one.
+
+        `optimize_series` fits one series at a time against a `(B,)`-wide
+        design, so something has to narrow it. Doing that at the call site by
+        hand is how a series' rank comes to be paired with another series'
+        rows -- silently, because both are the right shape and dtype.
+
+        Args:
+            index: Which series.
+
+        Returns:
+            A `DesignInfo` with `batch == 1`, carrying that series' mask and
+            derived fields. The matrix is the shared one unless `per_point`.
+        """
+        window = slice(index, index + 1)
+        return DesignInfo(
+            self.matrix[window] if self.per_point else self.matrix,
+            rank=self.rank[window],
+            gram_logdet=self.gram_logdet[window],
+            condition_number=self.condition_number[window],
+            n_rows=self.n_rows[window],
+            per_point=self.per_point,
+            column_terms=self.column_terms,
+            mask=None if self.mask is None else np.asarray(self.mask)[window],
+        )
+
     @property
     def trend_column(self) -> int | None:
         """Index of the `Trend` column, or None if the design has no trend.
