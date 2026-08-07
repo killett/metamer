@@ -65,11 +65,19 @@ a factor of five on the second component.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
 import numpy as np
 from numpy.typing import NDArray
+
+from metamer.core.capability import (
+    GradientMode,
+    Objective,
+    intersect_gradient_modes,
+)
+from metamer.core.families.base import supports_analytic_gradient
+from metamer.core.terms import ProcessSpec
 
 EPS: float = float(np.finfo(np.float64).eps)
 """Machine epsilon for float64, the `eps` of the step rule."""
@@ -252,6 +260,75 @@ def complex_step_gradient(
         value = fn(point.astype(np.complex128) + offset)
         out[i] = float(np.imag(np.asarray(value, dtype=np.complex128))) / step
     return out
+
+
+class AnalyticGradientError(ValueError):
+    """A family declares an analytic gradient it does not implement."""
+
+
+def resolve_gradient_mode(
+    spec: ProcessSpec,
+    objective: Objective,
+    families: Sequence[object] | None = None,
+) -> GradientMode:
+    """Resolve a composite's gradient mode, and verify the claim.
+
+    **The resolved mode is a reported field, never a silent decision.** A
+    composite that falls back to finite differences must say so — it is a
+    ~1.7× cost difference at p = 6, and an unreported fallback makes the
+    wall-time projection wrong in the direction that looks fine until the 19 ms
+    budget is measured.
+
+    **What ANALYTIC means here, precisely:** every term supplies analytic
+    `dF/dθ`, `dQ/dθ` and `dP∞/dθ` for this objective. It does **not** mean the
+    optimizer used an analytic gradient — Phase 1 ships no differentiated
+    Kalman filter, so `fd_gradient` still runs. The two are named apart on
+    purpose; when the differentiated filter lands, this docstring is what has
+    to change.
+
+    Args:
+        spec: The composite noise specification.
+        objective: The objective being evaluated. Capability is per
+            `(family, objective)`: a family may ship analytic ML gradients
+            before REML ones, because the envelope theorem covers the
+            concentrated ML objective and not the REML penalty.
+        families: Family instances to resolve over, for testing a kernel that
+            is not in the registry. Defaults to looking each term's `kind` up
+            in `kernel_registry`.
+
+    Returns:
+        ANALYTIC only if every term declares and implements it for this
+        objective; FINITE_DIFFERENCE otherwise.
+
+    Raises:
+        AnalyticGradientError: If a family declares ANALYTIC for this objective
+            without satisfying `DifferentiableFamily`. Refused rather than
+            quietly downgraded: a mode corrected behind the caller's back is
+            not a reported mode, and the declaration is a bug in the kernel
+            that should surface where it was made.
+    """
+    from metamer.core.registry import kernel_registry
+
+    resolved = (
+        list(families)
+        if families is not None
+        else [kernel_registry[term.kind]() for term in spec.terms]
+    )
+    modes: list[Mapping[Objective, GradientMode]] = []
+    for family in resolved:
+        declared = getattr(family, "gradient_modes", {})
+        claim = declared.get(objective, GradientMode.FINITE_DIFFERENCE)
+        if claim is GradientMode.ANALYTIC and not supports_analytic_gradient(family):
+            raise AnalyticGradientError(
+                f"family {getattr(family, 'kind', family)!r} declares "
+                f"{GradientMode.ANALYTIC.value} gradients for "
+                f"{objective.value} but does not implement dtransition, "
+                "dprocess_noise and dstationary_cov. A declared mode that no "
+                "method backs makes a composite report ANALYTIC while finite "
+                "differences silently run"
+            )
+        modes.append(declared)
+    return intersect_gradient_modes(modes, objective)
 
 
 def _as_point(u: NDArray[np.float64]) -> NDArray[np.float64]:

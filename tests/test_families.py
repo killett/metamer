@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 from metamer.core.capability import CostClass, EngineId, GradientMode, Objective
-from metamer.core.families.base import Family
+from metamer.core.families.base import Family, supports_analytic_gradient
 from metamer.core.families.matern12 import Matern12
 from metamer.core.families.matern32 import Matern32
 from metamer.core.families.white import White
@@ -85,7 +85,11 @@ EXPECTED_GRADIENT_MODES = {
         Objective.REML: GradientMode.FINITE_DIFFERENCE,
     },
     "matern12": {
-        Objective.ML: GradientMode.FINITE_DIFFERENCE,
+        # Task 12: ML only. The envelope theorem removes the d beta_hat/d theta
+        # term for the concentrated ML objective; REML's log|X' Sigma^-1 X|
+        # penalty is not covered by that argument, so no analytic REML gradient
+        # is claimed. The asymmetry is the point of the per-family table.
+        Objective.ML: GradientMode.ANALYTIC,
         Objective.REML: GradientMode.FINITE_DIFFERENCE,
     },
     "matern32": {
@@ -150,6 +154,12 @@ def test_every_builtin_family_satisfies_the_family_protocol(family):
     assert set(modes) == set(Objective), family.kind
     assert all(isinstance(o, Objective) for o in modes), family.kind
     assert all(isinstance(m, GradientMode) for m in modes.values()), family.kind
+    # The table's comment above names the failure it exists to prevent -- a
+    # family advertising ANALYTIC without shipping the derivatives. Asserting
+    # it here closes that loop for every family, present and future, rather
+    # than relying on whoever edits the table to notice.
+    if GradientMode.ANALYTIC in modes.values():
+        assert supports_analytic_gradient(family), family.kind
 
 
 def test_param_specs_declaration_order_matches_theta_column_order():

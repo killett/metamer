@@ -61,7 +61,12 @@ class Matern12:
         EngineId.CELERITE2: CostClass.LINEAR,
     }
     gradient_modes = {
-        Objective.ML: GradientMode.FINITE_DIFFERENCE,
+        # ANALYTIC under ML only. The envelope theorem removes the
+        # d beta_hat / d theta term exactly for the concentrated ML objective;
+        # REML's -0.5 log|X' Sigma^-1 X| penalty is not covered by that
+        # argument, so its analytic gradient is strictly more work and is not
+        # claimed here. Design doc sections 8.1 and 8.2.
+        Objective.ML: GradientMode.ANALYTIC,
         Objective.REML: GradientMode.FINITE_DIFFERENCE,
     }
 
@@ -132,6 +137,88 @@ class Matern12:
         # rho's diagnostic limit is 1e6 and the caller picks the time units.
         noise = sigma**2 * -np.expm1(-2.0 * float(dt) / rho)
         return np.asarray(noise[:, None, None], dtype=np.float64)
+
+    def dtransition(self, theta: NDArray[np.float64], dt: float) -> NDArray[np.float64]:
+        """Return dF/dtheta, shape (B, 2, 1, 1).
+
+        `F = exp(-dt/rho)`, so `dF/dsigma = 0` and
+
+            dF/drho = (dt / rho^2) exp(-dt / rho),
+
+        which is POSITIVE: a longer timescale means less decay per step. At
+        `dt = 0` it is exactly zero, matching this family's requirement that a
+        repeated timestamp contribute nothing -- there is no floor on `dt` and
+        no epsilon, because either would make this small-but-nonzero and hand
+        the optimizer a gradient component for a step carrying no information.
+
+        Args:
+            theta: Parameters, shape (B, 2), columns (sigma, rho).
+            dt: Step length.
+
+        Returns:
+            dF/dtheta, shape (B, 2, 1, 1). The `sigma` slice is exactly zero.
+        """
+        arr = np.asarray(theta, dtype=np.float64)
+        rho = arr[:, 1]
+        out = np.zeros((arr.shape[0], 2, 1, 1), dtype=np.float64)
+        out[:, 1, 0, 0] = float(dt) / rho**2 * np.exp(-float(dt) / rho)
+        return out
+
+    def dstationary_cov(self, theta: NDArray[np.float64]) -> NDArray[np.float64]:
+        """Return dP_inf/dtheta, shape (B, 2, 1, 1).
+
+        `P_inf = sigma^2` with `sigma` the marginal STANDARD DEVIATION, so
+        `dP_inf/dsigma = 2 sigma` and `dP_inf/drho = 0`. Reading `sigma` as a
+        variance gives `1` instead, and the two agree only at `sigma = 0.5`.
+
+        Args:
+            theta: Parameters, shape (B, 2), columns (sigma, rho).
+
+        Returns:
+            dP_inf/dtheta, shape (B, 2, 1, 1). The `rho` slice is exactly zero.
+        """
+        arr = np.asarray(theta, dtype=np.float64)
+        out = np.zeros((arr.shape[0], 2, 1, 1), dtype=np.float64)
+        out[:, 0, 0, 0] = 2.0 * arr[:, 0]
+        return out
+
+    def dprocess_noise(
+        self, theta: NDArray[np.float64], dt: float
+    ) -> NDArray[np.float64]:
+        """Return dQ/dtheta, shape (B, 2, 1, 1).
+
+        From `Q = sigma^2 (1 - exp(-2 dt / rho))`:
+
+            dQ/dsigma = 2 sigma (1 - exp(-2 dt / rho))
+            dQ/drho   = -sigma^2 exp(-2 dt / rho) (2 dt / rho^2)
+
+        `dQ/drho` is NEGATIVE -- a longer timescale injects less new variance
+        per step -- and dropping the inner minus sign from the chain rule
+        flips it while leaving the magnitude right.
+
+        **`dQ/dsigma` uses `-expm1`, exactly as `process_noise` does**, and for
+        exactly the same reason: `1 - exp(-x)` at small `x = 2 dt / rho` is
+        catastrophic cancellation. Measured relative error of the naive form
+        against `-expm1`: 1.09e-10 at `x = 2e-7`, 8.28e-08 at 2e-10, 7.99e-04
+        at 2e-14. A derivative written from the algebra rather than from
+        `process_noise`'s docstring reintroduces it, and at the ordinary
+        fixture ratio `x = 0.8` the two forms agree to 1.2e-16, so nothing
+        notices.
+
+        Args:
+            theta: Parameters, shape (B, 2), columns (sigma, rho).
+            dt: Step length. At `dt = 0` every entry is exactly zero.
+
+        Returns:
+            dQ/dtheta, shape (B, 2, 1, 1).
+        """
+        arr = np.asarray(theta, dtype=np.float64)
+        sigma, rho = arr[:, 0], arr[:, 1]
+        ratio = 2.0 * float(dt) / rho
+        out = np.zeros((arr.shape[0], 2, 1, 1), dtype=np.float64)
+        out[:, 0, 0, 0] = 2.0 * sigma * -np.expm1(-ratio)
+        out[:, 1, 0, 0] = -(sigma**2) * np.exp(-ratio) * (2.0 * float(dt) / rho**2)
+        return out
 
     def observation(self, theta: NDArray[np.float64]) -> NDArray[np.float64]:
         """Return H = [1], shape (B, 1).
