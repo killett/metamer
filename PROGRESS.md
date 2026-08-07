@@ -157,6 +157,26 @@ argument — a passing suite is not evidence the brief is right.
   uncertainties a Hessian rebuilt from the objective and the published
   `theta_unconstrained`, which shares no code with the driver's own path.
 
+- **(k) Does anything that must be stable ACROSS RUNS depend on process-local state?**
+  Set iteration order, `id()`, the `repr` of an unordered container, dict ordering from a
+  non-deterministic source, time, or the environment. **Test across processes, not within
+  one.**
+
+  **This is the only defect class so far that a perfect in-process suite cannot reach.**
+  Every test in one pytest run shares a single `PYTHONHASHSEED`, so a quantity that is
+  stable within a process and unstable between them is invisible to every same-process
+  test — *and to mutation testing*, which runs in that same process and therefore measures
+  the same frozen seed. (a)–(j) all assume the defect is observable somewhere in one run.
+  This one is not.
+
+  **The worked instance:** Task 16's fence serialized with
+  `json.dumps(..., default=repr)`. Measured, `{"criteria": {"aic", "bic", "hqic"}}` renders
+  as three *different* strings under `PYTHONHASHSEED` 1, 2 and 3, and an object without
+  `__repr__` renders its memory address. Every one of the fence's six tests passed. The
+  hash changed on every resume, refitting a finished 10⁷-point store with no exception, no
+  warning and no symptom but a bill. The guard is a subprocess test across several seeds,
+  compared against a hand-derived constant rather than against this process.
+
 **(h) and (i) are refinements of (e), and mutation testing does not subsume them.** (e) asks
 whether the test bites when the guard is deleted; (h) and (i) ask whether the call site and
 the fixture are *capable of expressing* the defect at all. A mutation catches those two only
@@ -1118,6 +1138,20 @@ question; compute/bandwidth roofline pair for cross-machine prediction) are in d
   Do **not** reach for `RICHARDSON_LEVELS` to buy time: that trades accuracy headroom in the
   one module whose job is accuracy. Task 17 adds a compiled backend and machine benchmarks,
   so mark those `slow` as they land rather than after.
+- **A SURVIVING MUTATION IS NOT ALWAYS A TEST GAP — IT CAN BE UNREACHABLE CODE.** Two
+  causes, and the response differs:
+  1. *No test protects the guard* — the ordinary case, and the one worth acting on. Task
+     13's per-series DEFAULT downgrade is the example.
+  2. *The mutated line cannot be reached* — defence in depth working as intended. Task 16's
+     `_subset` has an explicit `if missing: raise` above a `{key: config[key] ...}`
+     comprehension; mutating the comprehension to the fence's `if key in config` filter
+     changes nothing observable, because the guard fires first. **The honest reproduction
+     of the fence's bug had to mutate BOTH halves at once**, and then it was caught.
+
+  **Diagnose which before chasing it as a coverage gap.** The tell is whether removing the
+  guard *above* the mutation makes the mutation bite: if it does, the survivor is
+  unreachable code, not a weak test. Writing a compound mutation is the correct fix, and
+  the resulting count (23/23) means more than a 22/23 with a misdiagnosed survivor.
 - **A mutation-testing script that restores from a snapshot will silently revert edits made
   while it runs.** The Task 13 bite script captures the file at start and writes that text
   back after every mutation; two annotation fixes made during the ~17-minute run were undone
@@ -1159,9 +1193,17 @@ Still open. **A new session must not assume these were settled.**
 5. **64-core box RAM is unknown.** Establish it before the Task 18 run.
 6. **`optimize.HESSIAN_COND_LIMIT = 1e10` is picked, not derived**, while its static
    counterpart in `lint.py` is derived from float64 — so the two halves of §4.8 sit on
-   different footings. The eps rule gives `1/√eps = 6.7e7` for a single inversion. Changing
-   it moves a reported outcome (`DEGENERATE_HESSIAN`), so it needs its own tests, not a
-   drive-by edit. See the eps-derived-constant sweep above.
+   different footings. The eps rule gives `1/√eps = 6.7e7` for a single inversion.
+   **BLOCKING for the point where the identifiability machinery is actually used, which is
+   the start of Phase 2 — close it before, not at.** `1e10` against `6.7e7` is precisely the
+   band in which a near-degenerate fit reports as healthy, so the *a posteriori* half is
+   currently more permissive than the *a priori* half by ~150×, and a candidate the lint
+   flags can come back `OK`. Changing it moves a reported outcome (`DEGENERATE_HESSIAN`),
+   so it needs its own tests, not a drive-by edit. **When it is resolved, re-derive
+   `signal.X_RANK_RTOL = 1e-10` in the same pass rather than keeping it** —
+   `RANK_DEFICIENT_LOG_LIMIT` is derived *from* it, and a derived constant resting on a
+   picked one inherits the arbitrariness it was supposed to remove. See the
+   eps-derived-constant sweep above.
 
 ---
 
