@@ -353,11 +353,80 @@ class DesignInfo:
     condition_number: NDArray[np.float64]
     n_rows: NDArray[np.int64]
     per_point: bool = False
+    column_terms: tuple[str, ...] = ()
+    """Class name of the term that produced each column, length `n_beta`.
+
+    Built from each term's OWN column count, not from `len(terms)`: `Harmonic`
+    (hence `Annual` and `SemiAnnual`) contributes two columns, everything else
+    in Phase 1 contributes one, so a per-term mapping is off by one from the
+    first harmonic onward -- silently, because the labels remain plausible
+    strings in plausible positions.
+
+    It exists so `counting.n_eff_trend` can find the trend column. Without it
+    the caller assumes index 1, which holds only for the `[Constant, Trend,
+    ...]` ordering fixtures happen to use; with `[Annual(), Trend()]` the trend
+    is column 2 and the reported effective sample size is a seasonal
+    amplitude's, labelled as a trend's.
+    """
+    mask: NDArray[np.bool_] | None = None
+    """The presence mask this object was built with, shape (B, N).
+
+    Carried so `unit_variance_beta_var` can restrict the design to each series'
+    own rows. `DesignInfo`'s contract is already that every derived field
+    describes the RESTRICTED design; keeping the mask makes that computable
+    later instead of only asserted.
+    """
 
     @property
     def batch(self) -> int:
         """Number of series these derived quantities describe."""
         return int(self.rank.shape[0])
+
+    @property
+    def trend_column(self) -> int | None:
+        """Index of the `Trend` column, or None if the design has no trend.
+
+        Returns:
+            The column index, or None.
+        """
+        if "Trend" not in self.column_terms:
+            return None
+        return self.column_terms.index("Trend")
+
+    @property
+    def unit_variance_beta_var(self) -> NDArray[np.float64]:
+        """`diag((X_r' X_r)^-1)` per series, shape (B, n_beta).
+
+        The coefficient variances the record would give under **white noise of
+        unit variance**, so multiplying by a marginal variance gives the
+        white-noise reference `counting.n_eff_trend` divides into. Per series,
+        because the mask decides which rows enter `X_r` -- computing it from
+        the full design instead reports `1/n` where a half-masked series' truth
+        is `2/n`, an effective sample size wrong by exactly the mask fraction
+        and wrong in the flattering direction.
+
+        Returns:
+            The diagonal, shape (B, n_beta), **NaN for any series whose
+            restricted design is rank deficient** -- there is no inverse there,
+            and `np.linalg.inv` on a singular Gram either raises, taking down
+            the tile, or returns a huge finite number that becomes a
+            confident-looking effective sample size for a design the record
+            does not identify.
+        """
+        out = np.full((self.batch, self.n_beta), np.nan, dtype=np.float64)
+        if self.n_beta == 0 or self.mask is None:
+            return out
+        deficient = self.is_deficient
+        for series in range(self.batch):
+            if bool(deficient[series]):
+                continue
+            rows = np.asarray(self.mask)[series]
+            restricted = (
+                self.matrix[series][rows] if self.per_point else self.matrix[rows]
+            )
+            gram = restricted.T @ restricted
+            out[series] = np.diag(np.linalg.inv(gram))
+        return out
 
     @property
     def n_beta(self) -> int:
@@ -445,6 +514,8 @@ class SignalSpec:
                 gram_logdet=np.zeros(batch, dtype=np.float64),
                 condition_number=np.ones(batch, dtype=np.float64),
                 n_rows=n_rows,
+                column_terms=self._column_terms(t),
+                mask=mask,
             )
 
         values = self._restricted_singular_values(matrix, mask)
@@ -455,7 +526,27 @@ class SignalSpec:
             gram_logdet=gram_logdet,
             condition_number=condition_number,
             n_rows=n_rows,
+            column_terms=self._column_terms(t),
+            mask=mask,
         )
+
+    def _column_terms(self, t: NDArray[np.float64]) -> tuple[str, ...]:
+        """Return the term class name behind each design column.
+
+        Counted from each term's OWN `columns(t)` width rather than assuming
+        one column per term: `Harmonic` contributes two.
+
+        Args:
+            t: Time axis, shape (N,).
+
+        Returns:
+            One name per column, length `n_beta`.
+        """
+        names: list[str] = []
+        for term in self.terms:
+            width = int(np.shape(term.columns(t))[1])
+            names.extend([type(term).__name__] * width)
+        return tuple(names)
 
     @staticmethod
     def _restricted_singular_values(

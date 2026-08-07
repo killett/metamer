@@ -741,3 +741,82 @@ def test_gram_logdet_accurate_at_cond_1e9_slogdet_route_fails():
     # sign for a matrix that is genuinely positive semidefinite.
     sign, slogdet_value = np.linalg.slogdet(x.T @ x)
     assert not (sign > 0 and abs(slogdet_value - expected_gram_logdet) < 1.0)
+
+
+# --------------------------------------------------------------------------
+# Column-to-term mapping (Task 14: n_eff_trend needs to find the trend column)
+# --------------------------------------------------------------------------
+
+
+def test_design_info_names_the_term_behind_every_column():
+    """`column_terms` labels each column with the term that produced it.
+
+    Behaviour under test: the column-to-term mapping.
+    Bug this catches: a mapping built from `len(terms)` rather than from each
+    term's own column count. `Harmonic` contributes TWO columns (sine and
+    cosine) while `Constant` contributes one, so a per-term mapping is off by
+    one from `Annual` onward -- and silently, because the labels are still
+    plausible strings in plausible positions.
+    """
+    t = np.arange(24.0) / 12.0
+    spec = SignalSpec([Constant(), Trend(), Annual(), Accel()])
+    info = spec.design_info(t, np.ones((1, t.size), dtype=bool))
+    assert info.column_terms == ("Constant", "Trend", "Annual", "Annual", "Accel")
+    assert len(info.column_terms) == info.n_beta
+
+
+def test_design_info_locates_the_trend_column():
+    """`trend_column` is the index of the Trend column, or None.
+
+    Behaviour under test: the lookup `n_eff_trend` needs.
+    Bug this catches: assuming the trend is column 1. It is column 1 only for
+    the `[Constant, Trend, ...]` ordering a fixture happens to use; with
+    `[Annual(), Trend()]` it is column 2, and `n_eff_trend` computed from the
+    wrong column reports the effective sample size of a seasonal amplitude
+    while calling it a trend.
+    """
+    t = np.arange(24.0) / 12.0
+    mask = np.ones((1, t.size), dtype=bool)
+    assert SignalSpec([Constant(), Trend()]).design_info(t, mask).trend_column == 1
+    assert SignalSpec([Annual(), Trend()]).design_info(t, mask).trend_column == 2
+    assert SignalSpec([Constant()]).design_info(t, mask).trend_column is None
+    assert SignalSpec([]).design_info(t, mask).trend_column is None
+
+
+def test_design_info_reports_the_white_noise_trend_variance_per_series():
+    """`unit_variance_beta_var` is `(Xr' Xr)^-1` diagonal, per series.
+
+    Behaviour under test: the white-noise reference variance `n_eff_trend`
+    divides into. It is per series because the mask changes which rows enter.
+    Expected value derived independently: for `[Constant]` on `n` unmasked
+    rows, `X'X = n` so the diagonal is `1/n`.
+    Bug this catches: computing it from the full design rather than the masked
+    one, which for a half-masked series reports `1/n` where the truth is
+    `2/n` -- an effective sample size wrong by exactly the mask fraction, in
+    the flattering direction.
+    """
+    t = np.arange(40.0)
+    mask = np.ones((2, t.size), dtype=bool)
+    mask[1, 20:] = False
+    info = SignalSpec([Constant()]).design_info(t, mask)
+    got = info.unit_variance_beta_var
+    assert got.shape == (2, 1)
+    assert got[0, 0] == pytest.approx(1.0 / 40.0)
+    assert got[1, 0] == pytest.approx(1.0 / 20.0)
+
+
+def test_unit_variance_beta_var_is_nan_for_a_rank_deficient_series():
+    """A deficient restricted design has no white-noise reference variance.
+
+    Behaviour under test: the rank gate on the inverse.
+    Bug this catches: calling `np.linalg.inv` on a singular Gram, which either
+    raises and takes down the tile or returns a huge finite number that becomes
+    a confident-looking effective sample size for a design the record does not
+    identify.
+    """
+    t = np.arange(40.0)
+    mask = np.zeros((1, t.size), dtype=bool)
+    mask[0, :1] = True  # one row cannot support two columns
+    info = SignalSpec([Constant(), Trend()]).design_info(t, mask)
+    assert bool(info.is_deficient[0])
+    assert np.all(np.isnan(info.unit_variance_beta_var[0]))
