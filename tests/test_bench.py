@@ -165,8 +165,18 @@ def test_single_threaded_stream_overstates_per_core_bandwidth():
     """
     one = bandwidth_reference(threads=1, mib=64, repeats=2)
     full = bandwidth_reference(threads=4, mib=64, repeats=2)
-    assert one.detail["gb_per_s_per_core"] > full.detail["gb_per_s_per_core"]
-    assert full.detail["gb_per_s_total"] >= one.detail["gb_per_s_total"]
+    ratio = one.detail["gb_per_s_per_core"] / full.detail["gb_per_s_per_core"]
+    assert ratio > 2.0
+
+    # NOTHING IS ASSERTED ABOUT THE DIRECTION OF *TOTAL* THROUGHPUT, and that
+    # is deliberate. Two earlier versions asserted total rises with threads.
+    # Measured on the unloaded box it barely does (10.59 -> 12.03 GB/s); under
+    # full-suite CPU contention it FALLS (11.23 -> 8.44), because one core
+    # already saturates the controller and the extra threads buy nothing while
+    # costing synchronization. Both readings say the same thing about the
+    # machine, so an assertion on the sign of that difference measures the
+    # session's load, not the memory system. The per-core ratio above is the
+    # claim the reference exists to support and it survives either reading.
 
 
 def test_the_core_budget_is_the_one_from_the_design_doc():

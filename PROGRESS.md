@@ -455,6 +455,22 @@ rather than from the pre-audit shape. Two things beyond that:
   (2.4–2.6× over)**; path B is **8.3–15.5 ms, inside budget in every cell**. At d=1 both are
   inside. **These are mini-PC numbers: feasibility and correctness only. The budget
   comparison is valid only on the 64-core box — Task 18.**
+- **TWO OF MY OWN TASK-17 TESTS PASSED IN ISOLATION AND FAILED IN THE FULL SUITE.** Both
+  were order-dependent for reasons the module docstrings already stated, which is the point:
+  **writing the caveat down does not stop you writing the test that violates it.**
+  1. *"A 256 MiB allocation moves the peak by 256 MiB"* — false whenever the session's
+     watermark is already higher. Measured: watermark 385 MB, allocate 256 MiB, watermark
+     moves **67 MB**. Any peak-*delta* assertion is inherently order-dependent. Pin the shim's
+     unit scale against `current_rss_bytes` instead, which is not a watermark.
+  2. *"Total STREAM throughput rises with thread count"* — the direction is **noise** on a
+     saturated controller. Unloaded: 10.59 → 12.03 GB/s. Under full-suite CPU contention:
+     **11.23 → 8.44 GB/s**, i.e. it *falls*. Both readings say the same thing about the
+     machine; an assertion on the sign measures the session's load. Assert the **per-core
+     ratio** (>2×, measured ~3.5×), which survives either reading.
+- **`ru_maxrss` is updated LAZILY and can trail current residency.** Measured 470.8 MB
+  against a live 471.3 MB read an instant *earlier*, so `peak >= current` is not guaranteed
+  instant-to-instant. Any comparison between the two instruments needs a few percent of
+  slack — nowhere near enough to absorb the 1024× unit error the comparison is there to catch.
 - **Path A's utilization is 0.64 at d=3** (mean 68.7 iterations against a max of 107 on a
   heterogeneous sample), so path A's real cost is a further ~1.6× above its own bound. A
   homogeneous batch would have reported 1.0 by construction, which is the number the

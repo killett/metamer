@@ -78,16 +78,33 @@ def test_peak_rss_tracks_a_known_allocation():
     macOS reports bytes -- a factor of 1024 -- so a shim that returns the raw
     number would be right on one platform and wrong by three orders of
     magnitude on the other, while both still look like "a plausible number of
-    bytes". A 256 MiB allocation reads as 0.25 MiB under the error, which this
-    bound rejects. A test asserting only `value > 10 MB` cannot see it.
+    bytes". Under the error the peak reads 1024x too small, which the lower
+    bound rejects, or 1024x too large, which the upper bound rejects.
+
+    THE SCALE IS PINNED AGAINST `current_rss_bytes`, NOT AGAINST A DELTA IN THE
+    PEAK. An earlier version asserted that a 256 MiB allocation moves the peak
+    by 256 MiB, and it failed in the full suite: a watermark rises only by
+    however much the new peak EXCEEDS the old, so with the session's watermark
+    already at 385 MB the allocation moved it 67 MB. That is the same property
+    this module documents and it makes any peak-delta assertion inherently
+    order-dependent. Resident size is not a watermark, so it tracks the
+    allocation whatever ran first.
     """
-    before = peak_rss_bytes()
+    before = current_rss_bytes()
     block = np.ones(256 * 1024 * 1024 // 8, dtype=np.float64)
     block[::4096] = 2.0
-    after = peak_rss_bytes()
+    live = current_rss_bytes()
+    peak = peak_rss_bytes()
     del block
-    assert np.isfinite(before) and np.isfinite(after)
-    assert after - before >= 200 * 1024 * 1024
+    assert np.isfinite(peak) and np.isfinite(live)
+    assert live - before >= 200 * 1024 * 1024
+    # Same units. The lower bound carries a 10% slack because `ru_maxrss` is
+    # `mm->hiwater_rss`, which the kernel updates LAZILY -- measured, it read
+    # 470.8 MB against a live 471.3 MB taken an instant earlier, so the
+    # watermark can trail current residency by a fraction of a percent. The
+    # slack is nowhere near enough to absorb a 1024x unit error, which is
+    # what this is for.
+    assert 0.9 * live <= peak <= 100 * live
 
 
 def test_current_rss_falls_after_a_release_and_the_watermark_does_not():
