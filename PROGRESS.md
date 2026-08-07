@@ -5,21 +5,20 @@
 - **Branch:** `phase-1` (work here, not `main`). Both branches are pushed.
 - **Remote:** https://github.com/killett/metamer — public. Run `git log --oneline -5` for the latest commit.
 - **Done:** design document, Phase 1 implementation plan, two rounds of plan review applied.
-  Phase 1 **Tasks 0–13** are implemented, reviewed, and committed — the likelihood spine now
+  Phase 1 **Tasks 0–14** are implemented, reviewed, and committed — the likelihood spine now
   runs end to end from a `ProcessSpec` to a scored, per-series result, a candidate set can be
   ranked with the comparability guards in force, the objective is differentiable with a
   validated step rule and an adopted gradient oracle, and one family ships verified analytic
   derivatives behind a protocol that refuses an unbacked claim.
-- **Pending:** Phase 1 Tasks 14–19. **Task 18 is a user gate — stop there and report.**
-- **State at handoff:** Task 13 completed at `b653fb8`; **463 tests pass** in ~65 s, `mypy --strict`
+- **Pending:** Phase 1 Tasks 15–19. **Task 18 is a user gate — stop there and report.**
+- **State at handoff:** Task 14 completed at `e2e8703`; **489 tests pass** in ~255 s, `mypy --strict`
   clean, `pre-commit run --all-files` clean, working tree clean, local and `origin/phase-1`
   in sync. Verify with `pixi run test && pixi run typecheck`.
 - **A pre-flight audit of each task brief is a required step** before dispatching an
   implementer — see [Required pre-flight](#required-pre-flight-for-every-remaining-task)
   below. Every brief audited so far carried at least one defect that verbatim transcription
   would have committed.
-- **Next action:** implement **Task 14** (`fit()`, the (B, N) driver — its fence is already
-  corrected, see the forward audit) from
+- **Next action:** implement **Task 15** (static identifiability lint) from
   [`docs/superpowers/plans/2026-08-05-metamer-phase1.md`](docs/superpowers/plans/2026-08-05-metamer-phase1.md).
   The draft PR command is below and has not been run yet.
 - **Execution workspace:** `.superpowers/sdd/2026-08-05-metamer-phase1/` (git-ignored) holds
@@ -182,6 +181,58 @@ rather than from the pre-audit shape. Two things beyond that:
   prevent, and the mapping is cheap while the signal taxonomy is fresh.
 - **`SeriesFit` is scalar and that is correct** (see Task 13 below). `fit` is where the
   conversion to `(B, M)` uint8 codes happens, exactly once.
+
+### What Task 15 inherits
+
+Task 15 is the static identifiability lint (design doc §4.8). Its fence made **no calls
+into the changed modules** in the forward audit, so its pre-flight is (a)–(f), (h), (i), (j).
+Two things it should know:
+
+- **The lint is static — it runs on a `ProcessSpec` before any data.** It is the *a priori*
+  half of a pair whose *a posteriori* half already exists: `DEGENERATE_HESSIAN` and
+  `ILL_CONDITIONED_X` are the same phenomenon observed after fitting. Where they overlap the
+  lint should agree with them, and a candidate the lint passes that then reports
+  `DEGENERATE_HESSIAN` everywhere is a lint gap worth recording.
+- **Near-degeneracy is a geography, not a per-fit accident** (§4.8). Two Matérn terms with
+  similar `rho`, or white beside a very short `rho`, are the canonical cases.
+
+### What Task 14 established (done — read before touching the driver)
+
+- **`DesignInfo` must be narrowed per series before a one-series fit.** `rank`,
+  `gram_logdet`, `condition_number` and `n_rows` are all `(B,)` and describe X restricted to
+  each series' own rows, so handing the full-batch object to `optimize_series` raises on a
+  boolean index mismatch — or worse, would pair one series' data with the whole batch's
+  diagnostics. `DesignInfo.series(b)` does it in one place. **This is what running the fence
+  found and signature binding could not**: every call bound correctly and the code still did
+  not work.
+- **`fit` is the single conversion point** from `optimize.SeriesFit`'s scalar world to the
+  `(B, M)` uint8 arrays the store, `counting` and `criteria` speak. Not at each consumer:
+  three copies of a conversion is one that disagrees with itself once.
+- **`DIAGNOSTIC_LIMIT` in a designed fit is reached through sigma's lower limit, not rho's
+  upper one.** A slow cosine does not do it: the design's constant, trend, offset and rate
+  change absorb it and leave an ordinary residual — measured, that series comes back `OK`. A
+  record whose amplitude is ~1e-11 drives sigma below 1e-8 and does.
+- **`BIC_NEFF`'s looser penalty does not show up in `ic_best`.** The winner is usually the
+  white candidate, whose `n_eff` equals `n` exactly, so its criterion value is identical
+  under both and comparing `ic_best` tests nothing. The difference appears on the
+  *correlated* candidate's ΔIC — measured 7.823 → 7.677 at `n_eff = 194.25` against
+  `n = 200`.
+- **A `k` that is wrong by the same amount for every candidate is invisible to every
+  delta-IC test.** Feeding `penalty_terms` zeros in place of `design_rank` left the ranking,
+  the weights and `n_valid` all unchanged, because the shift cancels in the difference. It
+  is caught only by an ABSOLUTE check — recomputing the criterion value by hand from
+  `k = k_theta + rank(X_r)` and comparing against `ic_best + delta_ic`. This is pre-flight
+  (a) at the driver level, and it survived the first mutation pass.
+- **A white candidate cannot distinguish design columns.** Under white noise GLS is OLS, so
+  `var_gls = sigma^2 (X_r'X_r)^-1[j,j]` for every column `j` and `n_eff_trend` comes back as
+  `n` for all of them. Any test that means to pin *which* column the trend is must use a
+  CORRELATED candidate — verified, the white-candidate version passes against a hardcoded
+  index 1.
+- **`ILL_CONDITIONED_X` is theta-dependent.** It is the *whitened* Gram that is ill
+  conditioned, not `X_r`. Measured across five seeds at one mask,
+  `design.condition_number` is 2.68e4 every time while the outcome is `ill_conditioned_x`
+  for two of them and `ok` for three. Any fixture that wants that outcome must pin its seed,
+  and one asserting only `design.condition_number` is testing the wrong quantity.
 
 ### What Task 13 established (done — read before touching the optimizer)
 

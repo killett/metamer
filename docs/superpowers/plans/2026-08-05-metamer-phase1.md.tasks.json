@@ -247,7 +247,7 @@
       "id": 22,
       "planTask": 14,
       "subject": "Task 14: fit() the (B, N) driver",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         21,
         18

@@ -14,10 +14,13 @@ import pytest
 
 from metamer.core.capability import EngineId, GradientMode, Objective
 from metamer.core.criteria import Criterion, Ranking
+from metamer.core.engines.kalman import KalmanEngine
 from metamer.core.fit import fit
-from metamer.core.optimize import InitRung
+from metamer.core.objective import ConcentratedObjective
+from metamer.core.optimize import InitRung, hessian_at_optimum
 from metamer.core.outcomes import Outcome
 from metamer.core.signal import Annual, Constant, SignalSpec, Trend
+from metamer.core.statespace import StateSpace
 from metamer.core.terms import ProcessSpec
 from tests.test_objective import _GAP_N, _GAP_T, _gapped_signal, _window
 from tests.test_statespace import _term
@@ -455,3 +458,127 @@ def test_a_failed_candidate_carries_nan_not_a_stale_number():
         assert np.all(np.isnan(out.beta[b, c])), f"beta {b},{c}"
         assert np.isnan(out.loglik[b, c]), f"loglik {b},{c}"
         assert np.isnan(out.n_eff_bic[b, c]), f"n_eff_bic {b},{c}"
+
+
+def test_the_criterion_value_itself_is_right_not_only_its_differences():
+    """`ic_best` matches AIC recomputed by hand from the published primitives.
+
+    Behaviour under test: `k` and `n`, in ABSOLUTE terms.
+    Bug this catches: `penalty_terms` given the wrong `design_rank` -- zeros,
+    say, or `rank_x`. **Every delta-IC test in this file is blind to it**: `k`
+    shifts by the same amount for every candidate at a point, so the shift
+    cancels in the difference and the ranking, the weights and `n_valid` are
+    all unchanged. Found by mutation, which is the only reason this test
+    exists. Expected value derived independently: `k = k_theta + rank(X_r)`
+    under ML, so with `[Constant, Trend]` at full rank a white candidate has
+    `k = 1 + 2 = 3` and `AIC = 2k - 2l`.
+    """
+    y, t, signal, mask = _plain_batch(batch=2, n=150)
+    cands = _candidates()
+    out = fit(y, t, signal, cands, criterion=Criterion.AIC, mask=mask)
+    assert np.all(out.outcome == Outcome.OK.code)
+
+    design = signal.design_info(t, mask)
+    assert np.all(design.rank == 2), "the fixture must be full rank for this to bite"
+    for c, spec in enumerate(cands):
+        k = spec.n_theta() + 2  # k_theta + rank(X_r), the ML definition
+        expected = 2.0 * k - 2.0 * out.loglik[:, c]
+        got = out.ranking.delta_ic[:, c] + out.ranking.ic_best
+        np.testing.assert_allclose(got, expected, rtol=1e-12)
+
+
+def test_uncertainties_are_the_delta_method_push_through_not_the_raw_hessian():
+    """`theta_err` equals `theta * sigma_u`, recomputed independently.
+
+    Behaviour under test: `delta_method_cov` actually applied.
+    Bug this catches: reporting `sqrt(diag(inv(H)))` directly. Under a `Log`
+    transform the Jacobian is `theta` itself, so the two differ by exactly
+    that factor -- an error bar on a timescale of 8 reported as if it were 1.
+    The reference here is rebuilt from the objective and the published
+    `theta_unconstrained`, so it shares no code with the driver's own path.
+    """
+    y, t, signal, mask = _plain_batch(batch=2, n=250)
+    spec = ProcessSpec((_term("matern12"),))
+    out = fit(y, t, signal, [spec], criterion=Criterion.AIC, mask=mask)
+    ok = np.flatnonzero(out.outcome[:, 0] == Outcome.OK.code)
+    assert ok.size, "this fixture is meant to produce at least one OK fit"
+
+    state_space = StateSpace.from_spec(spec)
+    obj = ConcentratedObjective(spec, state_space, KalmanEngine(), Objective.ML)
+    for b in ok:
+        one = signal.design_info(t, mask).series(int(b))
+
+        def fn(u, b=b, one=one):
+            return float(
+                obj.unconstrained_loglik(
+                    np.asarray(u)[None, :], y[b : b + 1], mask[b : b + 1], t, one
+                )[0]
+            )
+
+        def negative(u, fn=fn):
+            return -fn(u)
+
+        u_hat = out.theta_unconstrained[b, 0]
+        hessian = hessian_at_optimum(negative, u_hat, scale=abs(fn(u_hat)))
+        sigma_u = np.sqrt(np.diag(np.linalg.inv(hessian)))
+        # Log transform: d(theta)/d(u) = theta, so the natural-unit error is
+        # theta * sigma_u and the raw unconstrained one is sigma_u.
+        np.testing.assert_allclose(
+            out.theta_err[b, 0], out.theta[b, 0] * sigma_u, rtol=1e-3
+        )
+        assert not np.allclose(out.theta_err[b, 0], sigma_u, rtol=1e-2)
+
+
+def test_the_reported_trend_effective_size_is_the_trend_column_s():
+    """`n_eff_trend` is recomputed from the published outputs, for column 2.
+
+    Behaviour under test: the trend column is used, by value not by shape.
+    Bug this catches: a hardcoded index 1. With `[Annual(), Trend()]` that is
+    the annual SINE column, whose effective sample size is finite, positive and
+    in `[1, n]` -- so any assertion that only checks those properties passes
+    against the defect. Found by mutation. Expected value derived from the
+    definition: `clip(n * var_white / var_gls, 1, n)` with
+    `var_gls = beta_err[trend]^2` and `var_white = sigma^2 * (Xr'Xr)^-1[trend]`,
+    all of which the result and the design already publish.
+    """
+    y, t, _, mask = _plain_batch(batch=2, n=240)
+    shifted = SignalSpec([Annual(), Trend()])
+    design = shifted.design_info(t, mask)
+    assert design.trend_column == 2
+    # A CORRELATED candidate is required. Under a white noise model GLS is
+    # OLS, so `var_gls` is `sigma^2 (Xr'Xr)^-1[j,j]` for EVERY column j and the
+    # ratio is 1 everywhere -- n_eff_trend comes back as n for all of them and
+    # no column can be distinguished from any other. Verified: with a white
+    # candidate this test passes against the hardcoded-index defect.
+    spec = ProcessSpec((_term("white"), _term("matern12")))
+    out = fit(y, t, shifted, [spec], criterion=Criterion.AIC, mask=mask)
+    ok = out.outcome[:, 0] == Outcome.OK.code
+    assert ok.all()
+
+    n_used = design.n_rows.astype(float)
+    state_space = StateSpace.from_spec(spec)
+    obj = ConcentratedObjective(spec, state_space, KalmanEngine(), Objective.ML)
+    p_free = spec.n_theta()
+    marginal = state_space.acvf(obj.hydrate(out.theta[:, 0, :p_free]), np.zeros(1))[
+        :, 0
+    ]
+    for column, should_match in ((2, True), (1, False)):
+        var_gls = out.beta_err[:, 0, column] ** 2
+        var_white = marginal * design.unit_variance_beta_var[:, column]
+        expected = np.clip(n_used * var_white / var_gls, 1.0, n_used)
+        close = np.allclose(out.n_eff_trend[:, 0], expected, rtol=1e-8)
+        assert close is should_match, f"column {column}"
+
+
+def test_a_mask_of_the_wrong_shape_is_refused():
+    """The mask must match `y` exactly.
+
+    Behaviour under test: the shape guard.
+    Bug this catches: a mask broadcasting against `y`. A `(1, N)` mask against
+    a `(B, N)` batch would silently apply one series' gaps to all of them, and
+    every derived per-series quantity -- rank, n_rows, n_eff -- would be that
+    one series' answer wearing the whole batch's shape.
+    """
+    y, t, signal, mask = _plain_batch(batch=3, n=120)
+    with pytest.raises(ValueError, match="mask shape"):
+        fit(y, t, signal, _candidates(), criterion=Criterion.AIC, mask=mask[:1])

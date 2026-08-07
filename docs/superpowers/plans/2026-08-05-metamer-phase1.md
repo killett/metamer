@@ -5566,14 +5566,14 @@ git commit -m "feat: add reference optimizer, init ladder, and explicit Hessian"
 - Create: `tests/test_fit.py`
 
 **Acceptance Criteria:**
-- [ ] `fit(y, t, signal, candidates)` accepts `y` of shape `(B, N)` and returns per-(series, candidate) results
-- [ ] `B=1` and `B=64` give identical per-series output for identical inputs
-- [ ] `x0` is accepted and, when supplied, `init_rung == WARM_START`
-- [ ] Parameter uncertainties are in **natural units**, via `delta_method_cov`
-- [ ] A `DIAGNOSTIC_LIMIT` outcome also marks that parameter's uncertainty unreliable
-- [ ] Every result carries `engine`, `objective`, and the resolved `gradient_mode`
-- [ ] Selection uses `rank_candidates`, so the comparability guards apply
-- [ ] **Standing invariant: batched results equal solo results series by series**, for both `loglik` and `outcome`
+- [x] `fit(y, t, signal, candidates)` accepts `y` of shape `(B, N)` and returns per-(series, candidate) results
+- [x] `B=1` and `B=64` give identical per-series output for identical inputs
+- [x] `x0` is accepted and, when supplied, `init_rung == WARM_START`
+- [x] Parameter uncertainties are in **natural units**, via `delta_method_cov`
+- [x] A `DIAGNOSTIC_LIMIT` outcome also marks that parameter's uncertainty unreliable
+- [x] Every result carries `engine`, `objective`, and the resolved `gradient_mode`
+- [x] Selection uses `rank_candidates`, so the comparability guards apply
+- [x] **Standing invariant: batched results equal solo results series by series**, for both `loglik` and `outcome`
 
 **Verify:** `pixi run test tests/test_fit.py -v`
 
@@ -5617,7 +5617,7 @@ git commit -m "feat: add reference optimizer, init ladder, and explicit Hessian"
 
 **Steps:**
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 # tests/test_fit.py
@@ -5743,7 +5743,7 @@ def test_results_carry_all_three_provenance_tags():
     assert len(out.gradient_mode) == 2
 ```
 
-- [ ] **Step 2: Implement fit.py**
+- [x] **Step 2: Implement fit.py**
 
 ```python
 # src/metamer/core/fit.py
@@ -5988,7 +5988,7 @@ __all__ = [
 ]
 ```
 
-- [ ] **Step 3: Run tests and commit**
+- [x] **Step 3: Run tests and commit**
 
 Run: `pixi run test tests/test_fit.py -v` → all PASS
 
