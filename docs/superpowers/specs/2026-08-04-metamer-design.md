@@ -263,6 +263,13 @@ and runs.
 mid-optimization.** Re-sorting terms between optimizer iterations permutes the parameter
 vector under L-BFGS's stored curvature history and corrupts it.
 
+**That ordering is a reporting convention, not an identifiability fix.** The optimizer
+searches an unconstrained space in which the swap symmetry is intact, so the exchangeability
+is real for the whole fit and the sort only decides which mirror image gets written down.
+Within one fit that is enough. **Across grid points it is not**, and the failure it leaves
+open is confounded with the warm-starting hysteresis audit — see §11.2. The static
+identifiability lint (§4.8) flags such a composite before any data is read.
+
 The general rule, of which ordering is one instance:
 
 > **No reparameterization, reordering, or preconditioner refresh may change the coordinate
@@ -1152,6 +1159,31 @@ special-cased) and the barrier costs a full sync at 10⁷ scale. At subsample ra
 pass 1 costs ~`1/k²` of a cold run, so the arithmetic is favourable for `k ≥ 4` *provided*
 warm starts save a meaningful fraction of iterations — which is the unmeasured quantity
 above.
+
+**Label switching and hysteresis are confounded, and this audit cannot separate them
+unaided.** Two terms of the same kind with a free timescale are exchangeable across the
+*whole searched space* (§4.5) — the likelihood is invariant under swapping their parameter
+tuples, so every optimum has a mirror image, and canonical ordering at result packing fixes
+the reporting **within one fit** and nothing between fits. Across neighbouring grid points
+that is a live mechanism for salt-and-pepper per-term σ and ρ maps, and it presents as
+exactly what this audit is built to detect: **warm and cold disagree on the parameters,
+disagreement concentrates where the likelihood is flat or multimodal, and the stratified
+subsample amplifies it.** Parameter disagreement in unconstrained coordinates would be
+large while selection, objective and signed-trend disagreement stayed near zero — a
+signature that reads as benign hysteresis and is in fact non-identifiability.
+
+Two consequences:
+
+- **The audit must report per-term parameter disagreement separately from the aggregate**,
+  or a pure label-switching signal is averaged into the parameter-disagreement metric and
+  attributed to warm starting.
+- **A composite with two free-timescale terms of the same kind is flagged by the static
+  identifiability lint** (§4.8) before any of this. Running the lint over the candidate set
+  is the cheap way to know whether the confound is even present at a given grid point; if
+  the lint is clean for every candidate, parameter disagreement is hysteresis. **Phase 2
+  work item:** decide whether the audit refuses lint-flagged candidate sets outright or
+  reports the two strata apart. Do not measure hysteresis on a candidate set the lint
+  flags and quote the number as hysteresis.
 
 Warm-starting is **disableable by config**, and whether it was used is recorded in
 provenance, because it changes the meaning of the output.

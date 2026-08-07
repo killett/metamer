@@ -107,6 +107,19 @@ argument — a passing suite is not evidence the brief is right.
   than an error — `n_eff=float(n)` makes `BIC_NEFF` silently identical to `BIC`. The
   forward audit below is (g) run once across every remaining task.
 
+  > **A CLEAN (g) MARK IS NOT A PRE-FLIGHT.** (g) asks one question — does every call bind
+  > against the current signature — and answers it for staleness only. It is necessary and
+  > nowhere near sufficient. **Task 15 bound cleanly and was wrong five ways**: a calibrated
+  > constant where a derivation existed, rules keyed on a parameter the target composition
+  > does not have, a starting value read as a structural property, a ratio test that missed
+  > the structural case entirely, and a silent skip where a finding was needed. Every one is
+  > an (a)–(f)/(h)/(i)/(j) question, and (g) cannot see any of them.
+  >
+  > **Tasks 16–19 are marked "no calls into changed modules". That clears them of
+  > STALENESS AND OF NOTHING ELSE.** Do not treat the audit mark as partial credit. Run the
+  > full pre-flight against each brief before writing code, exactly as if the row were
+  > blank.
+
 - **(h) Does the test exercise the thing it names, or a default?** Thread every parameter
   the behaviour depends on through as a real caller would. A test that leaves a scale at 1
   cannot detect a missing numerator. **Measured on this project:** Task 11's three-N step-rule
@@ -181,8 +194,8 @@ degradation.
 | **14** | `n_eff=float(n)` | makes `Criterion.BIC_NEFF` silently identical to `BIC` — no error, no warning, a plausible number | **flagged** |
 | **14** | `FitResult.outcome: NDArray[np.object_]` holding `Outcome` members | `penalty_terms(outcome=)` and `CandidateScores.outcome` both need `(B, M)` **uint8 codes**; the store is uint8 too | **flagged** |
 | **14** | `ranking: list[Ranking]`, one per series | `Ranking` already spans the batch; the list is `B` copies of the same object shape | **flagged** |
-| 15, 16, 18, 19 | — no calls into changed modules | — | OK |
-| **15** | *(re-checked at implementation)* every symbol binds — `ProcessSpec.labels`, `spec.terms`, `TermSpec.params`, `ParamSpec.default` | all match | OK for **(g)**, and the fence was still wrong in **five** ways — see below |
+| 15, 16, 18, 19 | — no calls into changed modules | — | **not stale.** NOT pre-flighted — see the warning under (g) |
+| **15** | *(re-checked at implementation)* every symbol binds — `ProcessSpec.labels`, `spec.terms`, `TermSpec.params`, `ParamSpec.default` | all match | (g) clean, **and the fence was wrong five ways** — the worked proof that this table clears staleness only |
 | 17 | `KalmanEngine` appears in acceptance prose only, no call | — | OK |
 
 **Task 14's fence was corrected in place on 2026-08-06**, before implementation rather than
@@ -328,6 +341,19 @@ will do.
   Pin the seed, and never assert `design.condition_number` as a proxy.
 - **A quadratic cannot test a step rule** (third derivative zero), and **a fixture sitting
   above a floor cannot test the floor** (`n_eff = 12` against a floor at 2.0).
+- **AN IDENTITY EXACT IN ℝ NEED NOT BE EXACT IN FLOAT64, AND THE EXACT CASE IS WHAT MAKES
+  THE OVER-GENERALIZATION LOOK SAFE.** Task 15 asserted `array_equal` for both halves of
+  the additive-variance identity. `white(3) + white(4) == white(5)` **is** bit-exact: at
+  lag 0 it is `9 + 16` against `25`, integers in binary, and at every other lag it is
+  `0 + 0` against `0`. That one passed. The Matérn version at a shared ρ is
+  `9·e + 16·e` against `25·e` — two different roundings of the same real number, so it
+  failed by an ulp. **Ask which arithmetic the identity survives before choosing the
+  assertion**: exact where the operands are representable and the operation is one
+  addition, a few ulp wherever a common factor is distributed. The tolerance is then a
+  statement about rounding, not a fitted agreement band — a genuine disagreement here would
+  be O(1), not O(1e-16). Same shape as the σ-rescaling invariance of `cond(X_w)`: the
+  useful move is knowing *which* identities the arithmetic preserves, not measuring each
+  one and hoping.
 
 ### What Task 14 established (done — read before touching the driver)
 
@@ -738,6 +764,48 @@ cannot reconstruct them.
   units, so this is reachable. Every later family with an exponential `Q` inherits the rule.
 - **Analytic `F`, `Q`, `P∞` per family.** The general `expm`/Lyapunov path is a test
   reference and a degeneracy fallback; frequent firing is a bug signal.
+- **THE eps-DERIVED CONSTANT, IN GENERAL FORM. THREE CONSTANTS, ONE CONSTRUCTION.**
+  A numerical threshold in this codebase is not chosen. It is derived from float64's
+  precision and **the number of times the quantity is squared or differenced on its way to
+  the objective**. Each squaring halves the exponent; each difference of order `m` divides
+  by `h^m` and moves the optimum to `eps^(1/(m+2))`.
+
+  | constant | path to the objective | rule | value |
+  |---|---|---|---|
+  | `lint.WHITE_COLLAPSE_LOG_LIMIT` | ℓ is quadratic in θ near the optimum, so a model difference is resolvable only above `√eps` — one squaring | `−½·log eps` | 18.0218 (cond 2⁻²⁶) |
+  | `objective.CONDITION_LOG_LIMIT` | the solve runs on the normal equations, so the Cholesky sees `cond(X_w)²` — one squaring | `−¼·log eps` | 9.0109 (cond 8.2e3) |
+  | `gradients.fd_step` / `hessian_step` | an `m`-th difference divides by `h^m` | `eps^(1/(m+2))` | 6.055e-06 / 1.221e-04 |
+
+  All three are stated in the **same units as the quantity they threshold** (log-cond for
+  the first two) so they are directly comparable, and none may be moved by loosening a test
+  until a fixture fires. **When a fourth threshold is needed, ask how many squarings and how
+  many differences sit between it and ℓ, then read the exponent off that — do not pick a
+  round number and do not copy a neighbouring constant.** Copying the neighbour is the
+  measured default mistake: it cost 147× at the Hessian step and 280×–1100× at the gradient.
+
+  **A constant that genuinely cannot be derived is POLICY and must be labelled as such,
+  with its consequence stated** — `lint.OVERLAP_RATIO = 1.5` is the worked example: it says
+  in its own docstring that two Matérn ν=1/2 ACFs a factor `r` apart differ at most by
+  `r^(−1/(r−1)) − r^(−r/(r−1))`, which at `r = 3/2` is exactly 4/27. Changing the number
+  means re-deriving that consequence.
+
+  **Tree-wide sweep run 2026-08-06** over every module-level numeric constant in
+  `src/metamer/`. Derived or measured, no action: `EIGEN_TARGET_ACCURACY` (and
+  `EIGEN_CONDITION_LIMIT`, which divides it by eps), `UNIQUE_DT_RTOL` (sized between two
+  stated scales), `_ACF_MAGNITUDE_TOL` (ulp slack, with a counterexample showing what it
+  does *not* absorb), `Q_SERIES_CROSSOVER` (measured against a 60-digit `Decimal` oracle on
+  a 6000-point grid), `_Q_SATURATION_U` (documented bit-identical wherever it fires),
+  `MAX_PAIR_BYTES` / `_FFT_BYTES_PER_EPOCH` (measured budget), `RICHARDSON_LEVELS`
+  (measured, 4 against 6), `_UNRANKED` (derived from the ladder length). **Four flagged as
+  picked:**
+
+  | constant | state |
+  |---|---|
+  | **`optimize.HESSIAN_COND_LIMIT = 1e10`** | **the clear instance.** A one-line docstring, no derivation, no measurement. The Hessian is inverted once for the delta-method covariance, so the same construction as row 1 above gives `1/√eps = 6.7e7` — the current value is ~150× looser. It also gates `DEGENERATE_HESSIAN`, which is the identifiability lint's runtime counterpart, so the two halves of §4.8 are calibrated on different footings. **Open — do not change it in passing; it moves a reported outcome and needs its own test work.** |
+  | `signal.X_RANK_RTOL = 1e-10` | documented by *contrast* with the engine's Gram threshold, which is the derivation of the relationship but not of the root value. numpy's own default is `max(M,N)·eps ≈ 1e-15`. `RANK_DEFICIENT_LOG_LIMIT` is derived from this, so the derived constant rests on a picked one. |
+  | `optimize.GRAD_TOL = 1e-5` | the docstring derives the *form* (relative, scaled by `max(\|ℓ\|, 1)`) and not the value. Legitimately policy — "how converged is converged" — but unlabelled as such. |
+  | `objective._NEGATIVE_REDUCTION_RTOL = 1e-6` | one line, no derivation. Policy-ish; small blast radius. |
+
 - **THE FINITE-DIFFERENCE STEP RULE, IN GENERAL FORM.** An `m`-th order difference divides
   by `h^m`, so its cancellation error is `O(ε|f|/h^m)`, its truncation error is `O(h²)`, and
   the optimal step scales as **`ε^(1/(m+2))`**:
@@ -1006,6 +1074,11 @@ Still open. **A new session must not assume these were settled.**
 4. **`requires-python = ">=3.12,<3.14"` carries an upper cap.** Caps poison downstream
    resolvers; drop before the PyPI stage ever runs.
 5. **64-core box RAM is unknown.** Establish it before the Task 18 run.
+6. **`optimize.HESSIAN_COND_LIMIT = 1e10` is picked, not derived**, while its static
+   counterpart in `lint.py` is derived from float64 — so the two halves of §4.8 sit on
+   different footings. The eps rule gives `1/√eps = 6.7e7` for a single inversion. Changing
+   it moves a reported outcome (`DEGENERATE_HESSIAN`), so it needs its own tests, not a
+   drive-by edit. See the eps-derived-constant sweep above.
 
 ---
 
