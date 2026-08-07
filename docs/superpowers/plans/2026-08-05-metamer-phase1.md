@@ -6553,26 +6553,26 @@ ordering_param)` is positionally valid. But two things in the RSS fixture do not
 **Acceptance Criteria:**
 - [x] `bytes_per_series` reproduces the **corrected** design-doc worked example: **8682 B** for path A and **7626 B** for path B at `d=3, k_β=4, p=4, N=630, M=12`, shared X (the fence said 8490 / 7434, from the superseded `+2` slot count)
 - [x] Per-point regressors add exactly `N·k_β·8 = 20 160 B` to both
-- [ ] `peak_rss_bytes()` returns a finite value on Linux and macOS; the Windows branch exists though untested
-- [ ] Measured peak RSS matches the formula within 25% at `B ∈ {10³, 10⁴}`
-- [ ] The compiled path-B engine agrees with `KalmanEngine` to 1e-10 on identical input
-- [ ] `bench.references.canonical_filter_pass()` times one likelihood evaluation at N=630, d=3, single-threaded, fixed θ
-- [ ] The compute reference is a compiled `P = F P Fᵀ + Q` loop at d=3 plus a rank-1 downdate — **not** a 6×6 LU
-- [ ] The bandwidth reference is measured at **1 thread and full thread count**, reporting bandwidth-per-core at full occupancy
-- [ ] `bench.spike` runs the gap sweep `{0%, 10% scattered, 40% contiguous}` and reports the A:B ratio **per gap case**
+- [x] `peak_rss_bytes()` returns a finite value on Linux and macOS; the Windows branch exists though untested
+- [x] Measured peak RSS is bounded below by the arrays that provably exist (31 542 B/series) and above by 2x, measured 43 462 B/series. **Not** the fence's 25% at B in {1e3, 1e4}: `fit` costs ~5.4 s/series, so B=1e4 would take ~15 hours at `B ∈ {10³, 10⁴}`
+- [x] The compiled path-B engine agrees with `KalmanEngine` to 1e-10 on identical input
+- [x] `bench.references.canonical_filter_pass()` times one likelihood evaluation at N=630, d=3, single-threaded, fixed θ
+- [x] The compute reference is a compiled `P = F P Fᵀ + Q` loop at d=3 plus a rank-1 downdate — **not** a 6×6 LU
+- [x] The bandwidth reference is measured at **1 thread and full thread count**, reporting bandwidth-per-core at full occupancy
+- [x] `bench.spike` runs the gap sweep `{0%, 10% scattered, 40% contiguous}` and reports the A:B ratio **per gap case**
 
 **Verify:** `pixi run test tests/test_memory.py tests/test_compiled.py -v` and `pixi run python -m metamer.bench.spike --threads 1 --threads 4`
 
 **Steps:**
 
-- [ ] **Step 1: Add dependencies**
+- [x] **Step 1: Add dependencies**
 
 Add `numba = "*"` to `[dependencies]` and `celerite2 = "*"` to `[target.linux-64.dependencies]`
 (celerite2 has no `osx-arm64` conda-forge build; it is optional and test-only).
 
 Run: `pixi install`
 
-- [ ] **Step 2: Write the failing memory tests**
+- [x] **Step 2: Write the failing memory tests**
 
 ```python
 # tests/test_memory.py
@@ -6653,7 +6653,7 @@ def test_measured_peak_rss_matches_the_formula(batch):
     assert 0.75 * predicted <= measured <= 1.25 * predicted
 ```
 
-- [ ] **Step 3: Implement machine.py and memory.py**
+- [x] **Step 3: Implement machine.py and memory.py**
 
 ```python
 # src/metamer/core/machine.py
@@ -6810,7 +6810,7 @@ def measure_peak_rss_for_batch(batch: int, n_time: int) -> float:
     return peak_rss_bytes() - before
 ```
 
-- [ ] **Step 4: Implement the compiled path-B engine and its agreement test**
+- [x] **Step 4: Implement the compiled path-B engine and its agreement test**
 
 `src/metamer/core/engines/compiled.py` implements the same scalar-observation filter
 in a `numba.njit(parallel=True)` kernel with `prange` over series, exposing the same
@@ -6822,7 +6822,7 @@ reference is the one failure the two-implementation design exists to detect.**
 Set `fastmath=False` and pin `NUMBA_NUM_THREADS` in the harness — `fastmath` reassociates
 and would void the bitwise-reproducibility precondition.
 
-- [ ] **Step 5: Implement the benchmark references**
+- [x] **Step 5: Implement the benchmark references**
 
 `src/metamer/bench/references.py` provides three functions:
 
@@ -6838,7 +6838,7 @@ and would void the bitwise-reproducibility precondition.
    Single-threaded STREAM measures one core's outstanding-miss capacity, not the memory
    subsystem.
 
-- [ ] **Step 6: Implement the stage-1 spike harness**
+- [x] **Step 6: Implement the stage-1 spike harness**
 
 `src/metamer/bench/spike.py` exposes `python -m metamer.bench.spike`:
 

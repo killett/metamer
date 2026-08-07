@@ -4,11 +4,19 @@
 
 - **Branch:** `phase-1`. **Last commit:** see `git log --oneline -1`; the handoff below was
   written at the commit that completed Task 14.
-- **Done:** Phase 1 **Tasks 0–16**, implemented, reviewed and committed.
-- **Next:** **Task 17** — memory formula, RSS shim, benchmark references, spike harness,
-  numba backend. **The largest remaining task; start it with a full context window.**
-  Nothing of it has been started.
-- **Tests:** **552 pass.** Full sweep `pixi run test` (~233 s). `pixi run test-fast` (~12 s)
+- **Done:** Phase 1 **Tasks 0–16**, and **Task 17 parts 1–4 of 5** (memory formula +
+  RSS shim; compiled path-B engine; the three benchmark references; the spike
+  harness), all implemented, reviewed and committed.
+- **Next:** **Task 17 part 5** — the full mini-PC sweep, then commit `bench/minipc.json`:
+
+  ```
+  pixi run python -m metamer.bench.spike \
+      --threads 1 --threads 4 --batch 1000 --repeats 3 --out bench/minipc.json
+  ```
+
+  The B=200, 1-thread probe is already recorded under "What Task 17 established"; the
+  full sweep adds T=4 and B=1000. **Then STOP: Task 18 is the user gate.**
+- **Tests:** **583 collected.** Full sweep `pixi run test` (~280 s). `pixi run test-fast` (~12 s)
   deselects the `slow` marker and is for iteration only — **a green fast run is not evidence
   a task is done.**
 - **Verify a fresh checkout with:** `pixi run test && pixi run typecheck && pixi run lint`
@@ -22,7 +30,7 @@
   guards are on the real path; the objective is differentiable with a validated step rule
   and an adopted gradient oracle; Matérn ν=1/2 ships verified analytic derivatives behind a
   protocol that refuses an unbacked claim.
-- **Pending:** Tasks 17–19. Task 19 is conditional and may be **deleted** rather than
+- **Pending:** Task 17 part 5, then Tasks 18–19. Task 19 is conditional and may be **deleted** rather than
   deferred (see the ≥3× rule below).
 - **A pre-flight audit of each task brief is a required step** before writing any code —
   see [Required pre-flight](#required-pre-flight-for-every-remaining-task) below. Every
@@ -386,6 +394,75 @@ rather than from the pre-audit shape. Two things beyond that:
   of the fence's bug had to mutate **both halves at once**. Check which of the two you have
   before adding a test. **23/23 caught** after the compound mutation was written correctly.
 - Coverage: `hashing.py` 100% of 66 statements, 36 tests.
+
+### What Task 17 established (done — read before touching memory, bench or the engines)
+
+- **THE `+2` OUTPUT-SLOT CASCADE WAS REAL AND THREE PLACES AGREED WITH EACH OTHER.**
+  Design doc §9.4 contradicted itself: its formula said `2p + 2k_β + 4` and named four
+  scalars, its prose two paragraphs later named three (`log_lik`, `k`, `n_eff`), and its
+  worked table used `M × 18 × 8`. The plan's fence transcribed the stale half and so did
+  §11.5. Corrected everywhere: **path A 8682 B/series, path B 7626 B, saving 12.2%,
+  `tile_side` at 1 GB = 339 shared / 186 per-point.** The fence's own
+  `tile_side(1e9, 28650) == 187` would have failed against the implementation printed
+  beneath it — `floor(186.83)` is 186, and the expected value was rounded where the code
+  floors. Found by running the brief's arithmetic.
+- **THE ENGINE MATERIALIZES THE AUGMENTED `[y | X]` BLOCK, AND §9.4 DOES NOT ACCOUNT FOR
+  IT.** `KalmanEngine._augment` ends in `np.concatenate([y[:, :, None], x], axis=2)`,
+  producing `(B, N, 1+k_β)` float64 — **25 200 B/series at N=630, k_β=4**, nearly three
+  times §9.4's entire per-series total, and it does **not** vanish when the design is
+  shared, which is the case §9.4 calls free. §9.4 accounts for a *streaming* filter; this
+  one is not streaming in that respect. Resident is **33 882 B/series against the 8682 B
+  target**, so `tile_side` drops 339 → 171 and a tile sized by the design doc needs 3.9×
+  the RAM it was allotted. Kept as a separately named term (`resident_bytes_per_series`)
+  because it is a property of the engine, not of the design; the fix is to index rather
+  than concatenate. **The `np.broadcast_to` immediately above the concatenate is a view and
+  costs nothing, which is exactly why the copy reads as free.**
+- **`ru_maxrss` IS INHERITED ACROSS `fork()`/`exec()`.** Measured: the same child reports
+  **119.95 MB** spawned from a small parent and **493.28 MB — byte-identical to the
+  parent's own peak** — spawned from one holding 400 MiB. Running each batch in a fresh
+  subprocess *to escape process-local state was not enough*, because the contaminating
+  state is **inherited**. The symptom was a fitted slope of ~1e-11 B/series: a perfectly
+  flat memory curve, not an error. Use `machine.current_rss_bytes` (resident, not a
+  watermark) sampled on a thread during the workload. **This is pre-flight (k) one layer
+  deeper than the check as written**, and it is the second (k) instance in one task.
+- **`fit` costs ~5.4 s per series** (measured at B = 5, 20, 50; linear in B) through the
+  per-series scipy loop. The fence's RSS fixture at B = 10 000 would take **~15 hours**.
+  Anything that wants tile-scale memory must use a batched *evaluation*, not a fit.
+- **ADDING NUMBA DOWNGRADED NUMPY 2.5.1 → 2.4.6** on all four platforms (numba pins
+  `numpy<2.5`), and 2.4's type stubs infer `floating[Any]` where 2.5's infer `float64`.
+  That broke `mypy` on two previously-clean files (`signal.py`, `fit.py`) with no source
+  change. Fixed with explicit `np.asarray(..., dtype=np.float64)` at the three sites. **A
+  dependency add can break a type check in files it never touches** — re-run the whole
+  suite and the whole typecheck after any solver change, not just the new files.
+- **SINGLE-THREADED STREAM OVERSTATES PER-CORE BANDWIDTH BY 3.8× HERE.** Measured on the
+  mini PC: **11.68 GB/s at 1 thread against 12.19 GB/s total at 4 threads** — the memory
+  controller is already nearly saturated by one core — so per-core at full occupancy is
+  **3.05 GB/s**. The design's insistence on reporting bandwidth-per-core at full occupancy
+  is now measured rather than asserted, and the error would flatter wide machines most,
+  which is backwards for predicting the 64-core box from this one.
+- **PATH B WINS AT d=3 EVEN AT ONE THREAD, AND THE MARGIN RISES WITH GAPPINESS.** At B=200,
+  1 thread (path B's worst case — no parallelism advantage at all): d=3 gives **3.76 / 4.08
+  / 4.34** for no gaps / 10% scattered / 40% contiguous; d=1 gives 4.54 / 5.48 / 6.16. The
+  monotone rise is the predicted mechanism — the compiled loop *branches past* a masked
+  update while the batched path evaluates it and multiplies by zero. **Measuring only at
+  10% would have understated B's advantage exactly where the data is gappiest.**
+  Path A's optimistic bound at d=3 is 52.6–56.4 ms/fit against the **19 ms** budget (2.8–3.0×
+  over); path B is 12.8–14.0 ms (inside it). **These are mini-PC numbers: feasibility and
+  correctness only. The budget comparison is valid only on the 64-core box — Task 18.**
+- **Path A's utilization is 0.64 at d=3** (mean 68.7 iterations against a max of 107 on a
+  heterogeneous sample), so path A's real cost is a further ~1.6× above its own bound. A
+  homogeneous batch would have reported 1.0 by construction, which is the number the
+  measurement exists to challenge.
+- **The compiled engine carries the SAME `EngineId` as the numpy path, deliberately.** Both
+  compute the same exact Gaussian likelihood by the same recursion, so they are
+  commensurable; tagging them apart would make the selection layer refuse to rank a resumed
+  run against the tile before it — the cross-machine workflow the determinism guarantee
+  exists to permit.
+- **The Gram must be compared against its own scale, not entry by entry.** Its entries span
+  ~1e-11 to ~5e1 within one matrix because off-diagonal cross-products between
+  near-orthogonal design columns cancel, so a per-entry `rtol` measures the cancellation.
+  Measured largest disagreement between the two engines: 4.1e-15 absolute against a matrix
+  maximum of ~5e1 — 8e-17 of scale, against a 1e-12 bound.
 
 ### What Task 17 inherits
 
@@ -1130,7 +1207,7 @@ question; compute/bandwidth roofline pair for cross-machine prediction) are in d
   before transcription, not after.
 - **The suite is ~255 s, and the `slow` marker is now in place.** `pixi run test` is the
   full sweep and is what every end-of-task verification must run; `pixi run test-fast`
-  (`-m "not slow"`, ~9 s, 526 of 552) is for iteration only. What is marked and why:
+  (`-m "not slow"`, 540 of 583) is for iteration only. What is marked and why:
   **all of `tests/test_fit.py`** (module-wide — every test drives the real filter through
   the whole driver on five-series batches, so there is no fast subset worth carving out),
   the N = 5000 gradient step-rule case, and four `tests/test_optimize.py` tests that run
