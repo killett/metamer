@@ -214,7 +214,7 @@
       "id": 20,
       "planTask": 12,
       "subject": "Task 12: Analytic forward-mode and gradient capability",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         19
       ],

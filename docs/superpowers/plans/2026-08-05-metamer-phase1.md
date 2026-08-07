@@ -4931,17 +4931,59 @@ git commit -m "feat: add FD gradients with a scale-aware step rule and complex-s
 - Create: `tests/test_gradient_capability.py`
 
 **Acceptance Criteria:**
-- [ ] `matern12` analytic derivatives match the complex-step (or Richardson) oracle to the level recorded in Task 11
-- [ ] A composite of `matern12 + matern32` resolves to `FINITE_DIFFERENCE`, because `matern32` has no analytic gradient
-- [ ] A composite of `matern12 + matern12` resolves to `ANALYTIC` under ML and `FINITE_DIFFERENCE` under REML
-- [ ] The resolved gradient mode is a **reported field**, not a silent fallback
-- [ ] A test-only stub family exercises the resolution logic without shipping a real family
+- [x] `matern12` analytic derivatives match the complex-step (or Richardson) oracle to the level recorded in Task 11
+- [x] A composite of `matern12 + matern32` resolves to `FINITE_DIFFERENCE`, because `matern32` has no analytic gradient
+- [x] A composite of `matern12 + matern12` resolves to `ANALYTIC` under ML and `FINITE_DIFFERENCE` under REML
+- [x] The resolved gradient mode is a **reported field**, not a silent fallback
+- [x] A test-only stub family exercises the resolution logic without shipping a real family
 
 **Verify:** `pixi run test tests/test_gradient_capability.py -v`
 
+> **Corrections applied at implementation time (commit `6c63451`). The fences
+> below are the pre-audit draft; `families/matern12.py`, `families/base.py` and
+> `gradients.py` are authoritative.**
+>
+> 1. **`dQ/dσ` uses `-expm1`, not `1 - exp(-x)`.** The fence proposed the naive
+>    form, contradicting the docstring in the same file it modifies. Measured
+>    relative error of the naive form: 1.09e-10 at `2Δt/ρ = 2e-7`, **8.28e-08 at
+>    2e-10**, 7.99e-04 at 2e-14. **The ordinary fixture cannot see it** — at
+>    `Δt = 2, ρ = 5` the ratio is 0.8 and the two forms agree to 1.2e-16, so the
+>    small-ratio case is a separate test (pre-flight (i)).
+> 2. **The fence tested only `dtransition`** while shipping `dprocess_noise` and
+>    `dstationary_cov` unverified. All three are now checked against the oracle
+>    and against their hand-differentiated forms.
+> 3. **The gradient hook is added to the kernel protocol.** Design doc §8.2
+>    calls it non-retrofittable and the fence omitted it entirely.
+>    `DifferentiableFamily` is a *separate* `Protocol` so that declining stays
+>    cheaper than complying, and `resolve_gradient_mode` **refuses** a family
+>    that declares ANALYTIC without implementing it — a composite reporting
+>    ANALYTIC while FD silently runs is the inverse of a silent fallback and
+>    just as invisible. `test_families` asserts this for every family.
+> 4. **The oracle is `richardson_gradient`, not complex-step**, per Task 11's
+>    verdict. Tolerance `1e-11`, derived: the oracle's worst disagreement with
+>    the paper forms is 6.67e-13 (15× headroom), it is four decades below the
+>    ~1e-7 a real derivation error gives, and it is tighter than the ~4e-11
+>    plain central differences reach — so a wrong derivative cannot pass by
+>    agreeing with a weak reference. Complex-step *is* exact on these closed
+>    forms (1e-16) and appears as a corroborating route, which localizes Task
+>    11's verdict to the objective's cast chain rather than to complex-step.
+> 5. **`resolve_gradient_mode` is fully annotated.** The fence's
+>    `def resolve_gradient_mode(spec, objective) -> "GradientMode"` fails
+>    `mypy --strict` under `disallow_untyped_defs`.
+> 6. **`EXPECTED_GRADIENT_MODES` in `tests/test_families.py` had to change** —
+>    it pins each family's declared modes, and flipping `matern12[ML]` breaks it
+>    by design. That table's own comment anticipated this task.
+>
+> **Scope boundary, stated because "analytic forward-mode" can be read two
+> ways:** this task ships the per-family derivative matrices and the capability
+> machinery. It does **not** ship a differentiated Kalman filter, so the
+> optimizer still calls `fd_gradient` even where resolution reports ANALYTIC.
+> `test_the_reported_mode_describes_the_family_not_the_optimizer_path` pins that
+> boundary and fails the moment a likelihood-level analytic gradient lands.
+
 **Steps:**
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 # tests/test_gradient_capability.py
@@ -5012,7 +5054,7 @@ def test_stub_family_exercises_resolution_without_shipping_a_family():
     assert resolved is GradientMode.FINITE_DIFFERENCE
 ```
 
-- [ ] **Step 2: Add analytic derivatives to Matern12**
+- [x] **Step 2: Add analytic derivatives to Matern12**
 
 ```python
     def dtransition(self, theta: NDArray[np.float64], dt: float) -> NDArray[np.float64]:
@@ -5050,7 +5092,7 @@ def test_stub_family_exercises_resolution_without_shipping_a_family():
 
 Flip `gradient_modes[Objective.ML]` to `GradientMode.ANALYTIC` in the same file.
 
-- [ ] **Step 3: Add the resolution helper to gradients.py**
+- [x] **Step 3: Add the resolution helper to gradients.py**
 
 ```python
 def resolve_gradient_mode(spec, objective) -> "GradientMode":
@@ -5066,7 +5108,7 @@ def resolve_gradient_mode(spec, objective) -> "GradientMode":
     return intersect_gradient_modes(modes, objective)
 ```
 
-- [ ] **Step 4: Run tests and commit**
+- [x] **Step 4: Run tests and commit**
 
 Run: `pixi run test tests/test_gradient_capability.py -v` → all PASS
 

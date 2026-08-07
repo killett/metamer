@@ -5,20 +5,21 @@
 - **Branch:** `phase-1` (work here, not `main`). Both branches are pushed.
 - **Remote:** https://github.com/killett/metamer — public. Run `git log --oneline -5` for the latest commit.
 - **Done:** design document, Phase 1 implementation plan, two rounds of plan review applied.
-  Phase 1 **Tasks 0–11** are implemented, reviewed, and committed — the likelihood spine now
+  Phase 1 **Tasks 0–12** are implemented, reviewed, and committed — the likelihood spine now
   runs end to end from a `ProcessSpec` to a scored, per-series result, a candidate set can be
-  ranked with the comparability guards in force, and the objective is differentiable with a
-  validated step rule and an adopted gradient oracle.
-- **Pending:** Phase 1 Tasks 12–19. **Task 18 is a user gate — stop there and report.**
-- **State at handoff:** Task 11 completed at `d4396a6`; **423 tests pass** in ~21 s, `mypy --strict`
+  ranked with the comparability guards in force, the objective is differentiable with a
+  validated step rule and an adopted gradient oracle, and one family ships verified analytic
+  derivatives behind a protocol that refuses an unbacked claim.
+- **Pending:** Phase 1 Tasks 13–19. **Task 18 is a user gate — stop there and report.**
+- **State at handoff:** Task 12 completed at `6c63451`; **442 tests pass** in ~20 s, `mypy --strict`
   clean, `pre-commit run --all-files` clean, working tree clean, local and `origin/phase-1`
   in sync. Verify with `pixi run test && pixi run typecheck`.
 - **A pre-flight audit of each task brief is a required step** before dispatching an
   implementer — see [Required pre-flight](#required-pre-flight-for-every-remaining-task)
   below. Every brief audited so far carried at least one defect that verbatim transcription
   would have committed.
-- **Next action:** implement **Task 12** (analytic forward-mode for Matérn ν=1/2 and
-  gradient-capability resolution) from
+- **Next action:** implement **Task 13** (optimizer driver — initialization ladder,
+  convergence, Hessian at optimum) from
   [`docs/superpowers/plans/2026-08-05-metamer-phase1.md`](docs/superpowers/plans/2026-08-05-metamer-phase1.md).
   The draft PR command is below and has not been run yet.
 - **Execution workspace:** `.superpowers/sdd/2026-08-05-metamer-phase1/` (git-ignored) holds
@@ -156,7 +157,68 @@ fence is now only a historical record.
 line 299, §5.2 lines 352–359, §17 line 1863, §19 line 1996), which is `design_rank`. No
 third stale-cascade instance found.
 
-### What Task 12 inherits
+### What Task 13 inherits
+
+Task 13 builds the optimizer driver: the initialization ladder, convergence in unconstrained
+coordinates, and the Hessian at the optimum. Its fence was **audited clean** in the forward
+sweep — every call matches — so the pre-flight there is about (a)–(f), (h) and (i), not (g).
+Points a fresh session cannot reconstruct:
+
+- **`optimize_series` being per series is deliberate, not a batch-granularity defect.** It
+  *is* path A's permanent form if the spike goes B's way (design doc §17), so its scalar
+  `SeriesFit.outcome: Outcome` and `loglik: float` are correct at that boundary. The
+  conversion to `(B, M)` uint8 codes happens in `fit`, once — see the corrected Task 14
+  fence.
+- **`-inf` as a barrier value is legal ONLY inside `optimize_series`'s `negative()`**, never
+  in anything destined for the store. Failed series carry NaN. `-inf` is a finite-looking
+  sentinel that survives some consumers' checks.
+- **Convergence is judged in unconstrained coordinates** — relative gradient norm plus
+  relative function change, with an iteration cap producing an explicit non-convergence
+  outcome. `ITER_CAP_SMALL_GRAD` still counts as a failure in the §8.6 taxonomy ("probably
+  fine, **flagged**"), so do not exclude it from the numerator.
+- **`fd_gradient` now takes `scale` and `curvature`.** Pass the actual `|ℓ|` — a call that
+  leaves `scale` at its default silently gets `ε^(1/3)` regardless of the objective's
+  magnitude, which is right for a log-likelihood but only by coincidence, and it makes any
+  test of the rule vacuous (pre-flight (h)).
+- **No reordering, reparameterization, or preconditioner refresh mid-optimization** without
+  an explicit curvature-history reset.
+
+### What Task 12 established (done — read before touching families or gradients)
+
+- **The kernel protocol carries a gradient hook: `DifferentiableFamily` in
+  `families/base.py`**, with `dtransition`, `dprocess_noise`, `dstationary_cov`, all
+  `(B, p, d, d)`. Separate from `Family` rather than optional methods on it, because
+  declining must stay cheaper than complying — Matérn ν=3/2 ships none. Design doc §8.2
+  calls the hook non-retrofittable.
+- **A declared ANALYTIC mode that no method backs is a hard error**, raised by
+  `gradients.resolve_gradient_mode` as `AnalyticGradientError`. Not a quiet downgrade: a
+  mode corrected behind the caller's back is not a reported mode, and the failure it
+  prevents — a composite reporting ANALYTIC while FD silently runs — is the *inverse* of a
+  silent fallback and just as invisible. `test_families` asserts it for every family.
+- **`resolve_gradient_mode` reports FAMILY capability, not what the optimizer ran.** Phase 1
+  ships no differentiated Kalman filter, so `fd_gradient` runs even where this returns
+  ANALYTIC. `test_the_reported_mode_describes_the_family_not_the_optimizer_path` pins the
+  boundary and fails the moment a likelihood-level analytic gradient lands.
+- **`-expm1` is required in the DERIVATIVE too, not only in `Q`.** `dQ/dσ` written as
+  `2σ(1 − exp(−x))` has measured relative error 1.09e-10 at `2Δt/ρ = 2e-7`, 8.28e-08 at
+  2e-10, 7.99e-04 at 2e-14. **The ordinary fixture is blind to it**: at `Δt = 2, ρ = 5` the
+  ratio is 0.8 and the two forms agree to 1.2e-16. Every later family with an exponential
+  `Q` inherits both the rule and the need for a small-ratio fixture.
+- **`σ` is the marginal standard deviation, so `dP∞/dσ = 2σ`.** Reading it as a variance
+  gives 1, and the two agree only at `σ = 0.5` — exactly the value a fixture picks.
+- **Sign conventions worth not re-deriving:** `dF/dρ = (Δt/ρ²)e^{−Δt/ρ}` is **positive**
+  (longer memory, less decay per step); `dQ/dρ = −σ²e^{−2Δt/ρ}(2Δt/ρ²)` is **negative**
+  (longer timescale, less new variance per step). Both have the right magnitude with the
+  wrong sign under the obvious slip.
+- **The two failed-fit bands reach NaN by different routes.** Measured on the gapped
+  fixture: 0 post-break samples gives `rank(X_r) = 2` of 4 and the design **precheck**
+  refuses it; 2 post-break samples gives full rank 4 with `cond(X_r) = 2.68e4`, passes the
+  precheck, and is classified `ILL_CONDITIONED_X` **inside the whitened solve**. A routine
+  that handled only the early-return path would look correct against the rank-deficient case
+  alone. This is the concrete form of "`check_design`'s batch-level rank is necessary but
+  not sufficient".
+
+### What Task 12 inherited
 
 Task 12 builds analytic forward-mode gradients for **Matérn ν=1/2 only** plus the
 gradient-capability resolution machinery (`resolve_gradient_mode`, defined in the plan's
