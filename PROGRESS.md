@@ -4,18 +4,11 @@
 
 - **Branch:** `phase-1`. **Last commit:** see `git log --oneline -1`; the handoff below was
   written at the commit that completed Task 14.
-- **Done:** Phase 1 **Tasks 0–16**, and **Task 17 parts 1–4 of 5** (memory formula +
-  RSS shim; compiled path-B engine; the three benchmark references; the spike
-  harness), all implemented, reviewed and committed.
-- **Next:** **Task 17 part 5** — the full mini-PC sweep, then commit `bench/minipc.json`:
-
-  ```
-  pixi run python -m metamer.bench.spike \
-      --threads 1 --threads 4 --batch 1000 --repeats 3 --out bench/minipc.json
-  ```
-
-  The B=200, 1-thread probe is already recorded under "What Task 17 established"; the
-  full sweep adds T=4 and B=1000. **Then STOP: Task 18 is the user gate.**
+- **Done:** Phase 1 **Tasks 0–17**, implemented, reviewed and committed. Task 17's
+  mini-PC sweep is in `bench/minipc.json`.
+- **Next:** **Task 18 — USER GATE.** Cross-machine stage-1 measurement on the 64-core
+  box and the MacBook, then the >=3x decision. **Stop and report; do not proceed past
+  it.** Run the same command as the mini PC, changing only `--threads` and `--out`.
 - **Tests:** **583 collected.** Full sweep `pixi run test` (~280 s). `pixi run test-fast` (~12 s)
   deselects the `slow` marker and is for iteration only — **a green fast run is not evidence
   a task is done.**
@@ -30,7 +23,7 @@
   guards are on the real path; the objective is differentiable with a validated step rule
   and an adopted gradient oracle; Matérn ν=1/2 ships verified analytic derivatives behind a
   protocol that refuses an unbacked claim.
-- **Pending:** Task 17 part 5, then Tasks 18–19. Task 19 is conditional and may be **deleted** rather than
+- **Pending:** Tasks 18–19. Task 19 is conditional and may be **deleted** rather than
   deferred (see the ≥3× rule below).
 - **A pre-flight audit of each task brief is a required step** before writing any code —
   see [Required pre-flight](#required-pre-flight-for-every-remaining-task) below. Every
@@ -434,21 +427,34 @@ rather than from the pre-audit shape. Two things beyond that:
   change. Fixed with explicit `np.asarray(..., dtype=np.float64)` at the three sites. **A
   dependency add can break a type check in files it never touches** — re-run the whole
   suite and the whole typecheck after any solver change, not just the new files.
-- **SINGLE-THREADED STREAM OVERSTATES PER-CORE BANDWIDTH BY 3.8× HERE.** Measured on the
-  mini PC: **11.68 GB/s at 1 thread against 12.19 GB/s total at 4 threads** — the memory
+- **SINGLE-THREADED STREAM OVERSTATES PER-CORE BANDWIDTH BY ~3.5× HERE.** Measured on the
+  mini PC: **10.59 GB/s at 1 thread against 12.03 GB/s total at 4 threads** — the memory
   controller is already nearly saturated by one core — so per-core at full occupancy is
-  **3.05 GB/s**. The design's insistence on reporting bandwidth-per-core at full occupancy
+  **3.01 GB/s**. The design's insistence on reporting bandwidth-per-core at full occupancy
   is now measured rather than asserted, and the error would flatter wide machines most,
   which is backwards for predicting the 64-core box from this one.
-- **PATH B WINS AT d=3 EVEN AT ONE THREAD, AND THE MARGIN RISES WITH GAPPINESS.** At B=200,
-  1 thread (path B's worst case — no parallelism advantage at all): d=3 gives **3.76 / 4.08
-  / 4.34** for no gaps / 10% scattered / 40% contiguous; d=1 gives 4.54 / 5.48 / 6.16. The
-  monotone rise is the predicted mechanism — the compiled loop *branches past* a masked
-  update while the batched path evaluates it and multiplies by zero. **Measuring only at
-  10% would have understated B's advantage exactly where the data is gappiest.**
-  Path A's optimistic bound at d=3 is 52.6–56.4 ms/fit against the **19 ms** budget (2.8–3.0×
-  over); path B is 12.8–14.0 ms (inside it). **These are mini-PC numbers: feasibility and
-  correctness only. The budget comparison is valid only on the 64-core box — Task 18.**
+- **PATH B WINS AT d=3 EVEN AT ONE THREAD, AND THE MARGIN RISES WITH GAPPINESS.** Full mini-PC
+  sweep, N=630, B=1000, `bench/minipc.json`:
+
+  | d | threads | none | 10% scattered | 40% contiguous |
+  |---|---|---|---|---|
+  | 3 | 1 | **3.04** | 3.19 | 3.41 |
+  | 3 | 4 | 4.72 | 5.15 | **5.92** |
+  | 1 | 1 | 2.83 | 3.66 | 4.51 |
+  | 1 | 4 | 4.24 | 4.80 | 4.98 |
+
+  **The monotone rise with gappiness holds in all four rows** — the predicted mechanism, the
+  compiled loop *branching past* a masked update while the batched path evaluates it and
+  multiplies by zero. Measuring only at 10% would have understated B exactly where the data
+  is gappiest.
+  **The single most conservative cell is d=3, T=1, no gaps: 3.04, only just clearing 3×.**
+  At B=200 the same cell measured 3.76, so **the ratio tightens as the batch grows** — path
+  A amortizes its per-timestep Python overhead better at larger B. Any restatement of the
+  margin must name its B and thread count.
+  Budget at d=3: path A's optimistic bound is **45.2–49.2 ms/fit against the 19 ms budget
+  (2.4–2.6× over)**; path B is **8.3–15.5 ms, inside budget in every cell**. At d=1 both are
+  inside. **These are mini-PC numbers: feasibility and correctness only. The budget
+  comparison is valid only on the 64-core box — Task 18.**
 - **Path A's utilization is 0.64 at d=3** (mean 68.7 iterations against a max of 107 on a
   heterogeneous sample), so path A's real cost is a further ~1.6× above its own bound. A
   homogeneous batch would have reported 1.0 by construction, which is the number the

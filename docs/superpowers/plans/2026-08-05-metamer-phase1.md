@@ -6854,7 +6854,7 @@ and would void the bitwise-reproducibility precondition.
   canonical-filter-pass units**, peak RSS, mean iterations, compile time, and the roofline
   pair for this machine
 
-- [ ] **Step 7: Run everything on the mini PC and commit**
+- [x] **Step 7: Run everything on the mini PC and commit**
 
 ```bash
 pixi run test tests/test_memory.py tests/test_compiled.py -v

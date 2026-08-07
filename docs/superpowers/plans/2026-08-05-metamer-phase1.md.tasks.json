@@ -297,7 +297,7 @@
       "id": 25,
       "planTask": 17,
       "subject": "Task 17: Memory formula, RSS shim, spike harness",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         22,
         24

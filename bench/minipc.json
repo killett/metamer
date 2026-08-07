@@ -1,0 +1,258 @@
+{
+  "canonical_filter_pass": {
+    "detail": {
+      "batch": 256.0,
+      "d": 3.0,
+      "n_time": 630.0
+    },
+    "name": "canonical_filter_pass",
+    "seconds": 0.000744715269533458,
+    "unit": "s per series per likelihood evaluation"
+  },
+  "cells": [
+    {
+      "a_over_b": 2.8307444784099403,
+      "batch": 1000,
+      "d": 1,
+      "gaps": "none",
+      "pass_in_canonical_units": 0.3666676099860855,
+      "path_a_bound_ms_per_fit": 10.649455751999085,
+      "path_a_over_budget": 0.5604976711578465,
+      "path_a_pass_s_per_series": 0.00027306296799997653,
+      "path_b_ms_per_fit": 3.7620688950282783,
+      "path_b_over_budget": 0.19800362605411992,
+      "path_b_pass_s_per_series": 9.646330500072509e-05,
+      "predicted_bytes_per_series_resident": 41697,
+      "predicted_bytes_per_series_target": 6417,
+      "threads": 1
+    },
+    {
+      "a_over_b": 4.235259488590161,
+      "batch": 1000,
+      "d": 1,
+      "gaps": "none",
+      "pass_in_canonical_units": 0.4486247867715299,
+      "path_a_bound_ms_per_fit": 13.029811430998052,
+      "path_a_over_budget": 0.6857795489998975,
+      "path_a_pass_s_per_series": 0.00033409772899995003,
+      "path_b_ms_per_fit": 3.076508409012604,
+      "path_b_over_budget": 0.16192149521118968,
+      "path_b_pass_s_per_series": 7.888483100032317e-05,
+      "predicted_bytes_per_series_resident": 41697,
+      "predicted_bytes_per_series_target": 6417,
+      "threads": 4
+    },
+    {
+      "a_over_b": 3.6647230113463607,
+      "batch": 1000,
+      "d": 1,
+      "gaps": "scattered_10",
+      "pass_in_canonical_units": 0.4844970470745636,
+      "path_a_bound_ms_per_fit": 14.071681611011627,
+      "path_a_over_budget": 0.740614821632191,
+      "path_a_pass_s_per_series": 0.00036081234900029813,
+      "path_b_ms_per_fit": 3.8397667620292855,
+      "path_b_over_budget": 0.20209298747522556,
+      "path_b_pass_s_per_series": 9.84555580007509e-05,
+      "predicted_bytes_per_series_resident": 41697,
+      "predicted_bytes_per_series_target": 6417,
+      "threads": 1
+    },
+    {
+      "a_over_b": 4.80293701131828,
+      "batch": 1000,
+      "d": 1,
+      "gaps": "scattered_10",
+      "pass_in_canonical_units": 0.48646829307932393,
+      "path_a_bound_ms_per_fit": 14.12893427400195,
+      "path_a_over_budget": 0.7436281196843131,
+      "path_a_pass_s_per_series": 0.00036228036600004996,
+      "path_b_ms_per_fit": 2.941727996995723,
+      "path_b_over_budget": 0.15482778931556437,
+      "path_b_pass_s_per_series": 7.542892299989034e-05,
+      "predicted_bytes_per_series_resident": 41697,
+      "predicted_bytes_per_series_target": 6417,
+      "threads": 4
+    },
+    {
+      "a_over_b": 4.514360691515439,
+      "batch": 1000,
+      "d": 1,
+      "gaps": "contiguous_40",
+      "pass_in_canonical_units": 0.4614766516281657,
+      "path_a_bound_ms_per_fit": 13.403079651026017,
+      "path_a_over_budget": 0.705425244790843,
+      "path_a_pass_s_per_series": 0.00034366870900066714,
+      "path_b_ms_per_fit": 2.9689873200022707,
+      "path_b_over_budget": 0.1562624905264353,
+      "path_b_pass_s_per_series": 7.612788000005821e-05,
+      "predicted_bytes_per_series_resident": 41697,
+      "predicted_bytes_per_series_target": 6417,
+      "threads": 1
+    },
+    {
+      "a_over_b": 4.983072529390494,
+      "batch": 1000,
+      "d": 1,
+      "gaps": "contiguous_40",
+      "pass_in_canonical_units": 0.4569716372447731,
+      "path_a_bound_ms_per_fit": 13.272236483995584,
+      "path_a_over_budget": 0.6985387623155571,
+      "path_a_pass_s_per_series": 0.0003403137559998868,
+      "path_b_ms_per_fit": 2.6634644400046454,
+      "path_b_over_budget": 0.14018233894761292,
+      "path_b_pass_s_per_series": 6.829396000011912e-05,
+      "predicted_bytes_per_series_resident": 41697,
+      "predicted_bytes_per_series_target": 6417,
+      "threads": 4
+    },
+    {
+      "a_over_b": 3.0419139999985183,
+      "batch": 1000,
+      "d": 3,
+      "gaps": "none",
+      "pass_in_canonical_units": 0.9239481237319097,
+      "path_a_bound_ms_per_fit": 47.24804161866268,
+      "path_a_over_budget": 2.4867390325611938,
+      "path_a_pass_s_per_series": 0.0006880782759999419,
+      "path_b_ms_per_fit": 15.532339710684028,
+      "path_b_over_budget": 0.8174915637202119,
+      "path_b_pass_s_per_series": 0.00022619912200025282,
+      "predicted_bytes_per_series_resident": 42545,
+      "predicted_bytes_per_series_target": 7265,
+      "threads": 1
+    },
+    {
+      "a_over_b": 4.715788410424739,
+      "batch": 1000,
+      "d": 3,
+      "gaps": "none",
+      "pass_in_canonical_units": 0.8840197803540807,
+      "path_a_bound_ms_per_fit": 45.20622132461843,
+      "path_a_over_budget": 2.3792748065588647,
+      "path_a_pass_s_per_series": 0.0006583430289992976,
+      "path_b_ms_per_fit": 9.586142844043934,
+      "path_b_over_budget": 0.5045338338970492,
+      "path_b_pass_s_per_series": 0.00013960402200063982,
+      "predicted_bytes_per_series_resident": 42545,
+      "predicted_bytes_per_series_target": 7265,
+      "threads": 4
+    },
+    {
+      "a_over_b": 3.1889504573114977,
+      "batch": 1000,
+      "d": 3,
+      "gaps": "scattered_10",
+      "pass_in_canonical_units": 0.9442884680491541,
+      "path_a_bound_ms_per_fit": 48.28818814870526,
+      "path_a_over_budget": 2.541483586773961,
+      "path_a_pass_s_per_series": 0.0007032260410005619,
+      "path_b_ms_per_fit": 15.142345042705834,
+      "path_b_over_budget": 0.7969655285634649,
+      "path_b_pass_s_per_series": 0.00022051958800057037,
+      "predicted_bytes_per_series_resident": 42545,
+      "predicted_bytes_per_series_target": 7265,
+      "threads": 1
+    },
+    {
+      "a_over_b": 5.148377364552247,
+      "batch": 1000,
+      "d": 3,
+      "gaps": "scattered_10",
+      "pass_in_canonical_units": 0.9438940797329276,
+      "path_a_bound_ms_per_fit": 48.26802026795485,
+      "path_a_over_budget": 2.540422119366045,
+      "path_a_pass_s_per_series": 0.0007029323339993425,
+      "path_b_ms_per_fit": 9.375385067981068,
+      "path_b_over_budget": 0.4934413193674246,
+      "path_b_pass_s_per_series": 0.00013653473399972426,
+      "predicted_bytes_per_series_resident": 42545,
+      "predicted_bytes_per_series_target": 7265,
+      "threads": 4
+    },
+    {
+      "a_over_b": 3.406373430551647,
+      "batch": 1000,
+      "d": 3,
+      "gaps": "contiguous_40",
+      "pass_in_canonical_units": 0.9557049964154853,
+      "path_a_bound_ms_per_fit": 48.87199647466878,
+      "path_a_over_budget": 2.572210340772041,
+      "path_a_pass_s_per_series": 0.0007117281040000307,
+      "path_b_ms_per_fit": 14.347222191301022,
+      "path_b_over_budget": 0.7551169574368959,
+      "path_b_pass_s_per_series": 0.00020894012899952942,
+      "predicted_bytes_per_series_resident": 42545,
+      "predicted_bytes_per_series_target": 7265,
+      "threads": 1
+    },
+    {
+      "a_over_b": 5.9221847681291555,
+      "batch": 1000,
+      "d": 3,
+      "gaps": "contiguous_40",
+      "pass_in_canonical_units": 0.9620135833241089,
+      "path_a_bound_ms_per_fit": 49.19459941000423,
+      "path_a_over_budget": 2.5891894426318016,
+      "path_a_pass_s_per_series": 0.0007164262050000616,
+      "path_b_ms_per_fit": 8.306832923341064,
+      "path_b_over_budget": 0.4372017328074244,
+      "path_b_pass_s_per_series": 0.00012097329500011256,
+      "predicted_bytes_per_series_resident": 42545,
+      "predicted_bytes_per_series_target": 7265,
+      "threads": 4
+    }
+  ],
+  "core_budget_ms": 19.0,
+  "iterations": {
+    "d1": {
+      "max_iterations": 66.0,
+      "mean_iterations": 39.0,
+      "utilization": 0.5909090909090909
+    },
+    "d3": {
+      "max_iterations": 107.0,
+      "mean_iterations": 68.66666666666667,
+      "utilization": 0.6417445482866044
+    }
+  },
+  "machine": {
+    "numba_threads_available": 4,
+    "platform": "Linux-6.8.0-137-generic-x86_64-with-glibc2.36",
+    "processor": "x86_64",
+    "python": "3.13.14"
+  },
+  "roofline": {
+    "bandwidth_1t": {
+      "detail": {
+        "gb_per_s_per_core": 10.592797877794682,
+        "gb_per_s_total": 10.592797877794682,
+        "mib_per_vector": 256.0,
+        "threads": 1.0
+      },
+      "name": "bandwidth_reference",
+      "seconds": 0.07602395300000353,
+      "unit": "s per STREAM triad pass"
+    },
+    "bandwidth_4t": {
+      "detail": {
+        "gb_per_s_per_core": 3.0086132257739475,
+        "gb_per_s_total": 12.03445290309579,
+        "mib_per_vector": 256.0,
+        "threads": 4.0
+      },
+      "name": "bandwidth_reference",
+      "seconds": 0.06691674100056844,
+      "unit": "s per STREAM triad pass"
+    },
+    "compute": {
+      "detail": {
+        "d": 3.0,
+        "gflops": 1.0035452625900396
+      },
+      "name": "compute_reference",
+      "seconds": 1.2555487499867012e-07,
+      "unit": "s per P = F P F' + Q step (plus rank-1 downdate)"
+    }
+  }
+}
