@@ -73,6 +73,20 @@ disallow_untyped_calls = false
 
 [tool.pytest.ini_options]
 addopts = "-v"
+# `slow` marks tests that drive the REAL Kalman filter at production sizes:
+# tests/test_fit.py (five-series batches through the whole driver) and the
+# N=5000 gradient step-rule case. They are the reason the suite runs in ~255 s
+# rather than ~2 s, and they are NOT optional -- exit criterion 9 requires the
+# three widely separated N, and the standing batched-equals-solo invariant is
+# meaningless on a batch of healthy series.
+#
+#   pixi run test          -- the FULL sweep. This is what CI and every
+#                             end-of-task verification must run.
+#   pixi run test-fast     -- deselects `slow` for rapid iteration only.
+#                             A green fast run is NOT evidence a task is done.
+markers = [
+    "slow: drives the real filter at production sizes; deselected only by test-fast",
+]
 pythonpath = ["src"]
 
 [tool.coverage.run]

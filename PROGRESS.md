@@ -2,25 +2,33 @@
 
 ## Start here (cold-start summary)
 
-- **Branch:** `phase-1` (work here, not `main`). Both branches are pushed.
-- **Remote:** https://github.com/killett/metamer — public. Run `git log --oneline -5` for the latest commit.
-- **Done:** design document, Phase 1 implementation plan, two rounds of plan review applied.
-  Phase 1 **Tasks 0–14** are implemented, reviewed, and committed — the likelihood spine now
-  runs end to end from a `ProcessSpec` to a scored, per-series result, a candidate set can be
-  ranked with the comparability guards in force, the objective is differentiable with a
-  validated step rule and an adopted gradient oracle, and one family ships verified analytic
-  derivatives behind a protocol that refuses an unbacked claim.
-- **Pending:** Phase 1 Tasks 15–19. **Task 18 is a user gate — stop there and report.**
-- **State at handoff:** Task 14 completed at `e2e8703`; **489 tests pass** in ~255 s, `mypy --strict`
-  clean, `pre-commit run --all-files` clean, working tree clean, local and `origin/phase-1`
-  in sync. Verify with `pixi run test && pixi run typecheck`.
-- **A pre-flight audit of each task brief is a required step** before dispatching an
-  implementer — see [Required pre-flight](#required-pre-flight-for-every-remaining-task)
-  below. Every brief audited so far carried at least one defect that verbatim transcription
-  would have committed.
-- **Next action:** implement **Task 15** (static identifiability lint) from
-  [`docs/superpowers/plans/2026-08-05-metamer-phase1.md`](docs/superpowers/plans/2026-08-05-metamer-phase1.md).
-  The draft PR command is below and has not been run yet.
+- **Branch:** `phase-1`. **Last commit:** see `git log --oneline -1`; the handoff below was
+  written at the commit that completed Task 14.
+- **Done:** Phase 1 **Tasks 0–14**, implemented, reviewed and committed.
+- **Next:** **Task 15** — static identifiability lint. Nothing of it has been started.
+- **Tests:** **489 pass.** Full sweep `pixi run test` (~255 s). `pixi run test-fast` (~9 s)
+  deselects the `slow` marker and is for iteration only — **a green fast run is not evidence
+  a task is done.**
+- **Verify a fresh checkout with:** `pixi run test && pixi run typecheck && pixi run lint`
+- **Remote:** https://github.com/killett/metamer — public, `origin/phase-1` in sync.
+- **Stop at Task 18** — it is a user gate. Report and wait.
+
+---
+
+- **Where the work is:** the likelihood spine runs end to end from a `ProcessSpec` to a
+  scored, ranked, per-series result. `fit()` is the `(B, N)` driver; the comparability
+  guards are on the real path; the objective is differentiable with a validated step rule
+  and an adopted gradient oracle; Matérn ν=1/2 ships verified analytic derivatives behind a
+  protocol that refuses an unbacked claim.
+- **Pending:** Tasks 15–19. Task 19 is conditional and may be **deleted** rather than
+  deferred (see the ≥3× rule below).
+- **A pre-flight audit of each task brief is a required step** before writing any code —
+  see [Required pre-flight](#required-pre-flight-for-every-remaining-task) below. Every
+  brief audited so far carried at least one defect that verbatim transcription would have
+  committed.
+- **Task 14's fence was corrected in place and (g)-verified by signature binding, and it
+  still did not run.** Binding is not execution. Expect the same of every remaining fence.
+- The draft PR command is below and has not been run yet.
 - **Execution workspace:** `.superpowers/sdd/2026-08-05-metamer-phase1/` (git-ignored) holds
   the subagent-driven-development ledger `progress.md`, per-task briefs, and reports. The
   ledger is the recovery map for a session that dies mid-task; it is deleted when the branch
@@ -56,9 +64,28 @@ whose seven tests all passed. **Brief-generated tests validate the brief's model
 problem, so they cannot detect that the model omitted something.** That is the whole
 argument — a passing suite is not evidence the brief is right.
 
-- **(a) Absolute vs differential.** Is any quantity entering an absolute log-likelihood
-  verified only by a difference? Constants in `θ` cancel in every ΔIC and are invisible to
-  every differential test.
+- **(a) Absolute vs differential — THE CANCELLATION RULE.** Stated generally, because
+  three separate instances have now landed:
+
+  > **Any quantity that is constant across the comparison axis is invisible to every test
+  > that compares along that axis.** Selection tests cannot validate `k`, `n`, or any
+  > additive constant in the log-likelihood. Each requires an absolute value computed by
+  > hand.
+
+  The three instances, all of which passed every differential and selection test that
+  existed at the time:
+
+  | instance | constant across | what caught it |
+  |---|---|---|
+  | REML's Harville constant `(n − rank(X))·log 2π` and `+½log\|XᵀX\|` | `θ` | review, not a test |
+  | `log\|XᵀX\|` under gaps | `θ` | the restricted-design contract |
+  | `design_rank` passed to `penalty_terms` as zeros | the **candidate axis** | a surviving mutation, then an absolute AIC recomputed by hand |
+
+  The third is the sharpest: `k` shifted by the same amount for every candidate at a point,
+  so it cancelled in every ΔIC and left the ranking, the weights and `n_valid` all
+  unchanged. **A whole category of test — every ΔIC, weight and selection assertion — is
+  structurally blind to it.** The only cure is an absolute check: recompute the criterion
+  value from `k = k_θ + rank(X_r)` and compare against `ic_best + delta_ic`.
 - **(b) Batch vs series.** Is any per-series fact computed at batch level, or any
   per-candidate fact stored per point?
 - **(c) Exit paths.** Enumerate every `return` and every `raise`; does each pass through the
@@ -102,6 +129,18 @@ argument — a passing suite is not evidence the brief is right.
   qualifies as independent; a wider step does not. The tell is that the oracle's accuracy is
   the same order as the subject's — if the reference is not at least ~100× better, it is
   probably the same algorithm.
+
+  **Two worked examples, both from this project:**
+
+  | subject | the bad "oracle" | why it is not one |
+  |---|---|---|
+  | `hessian_at_optimum` | `tests/oracles.fd_hessian` | the same second-difference stencil at a different step — it measured the step choice and nothing else |
+  | `theta_err` (delta method) | `theta_err / theta` | the same quantity rescaled by the very Jacobian under test; it cannot disagree |
+
+  The second is the more seductive because it *looks* like a derivation. Both were replaced
+  by references built a different way: nested Richardson for the Hessian, and for the
+  uncertainties a Hessian rebuilt from the objective and the published
+  `theta_unconstrained`, which shares no code with the driver's own path.
 
 **(h) and (i) are refinements of (e), and mutation testing does not subsume them.** (e) asks
 whether the test bites when the guard is deleted; (h) and (i) ask whether the call site and
@@ -196,15 +235,46 @@ Two things it should know:
 - **Near-degeneracy is a geography, not a per-fit accident** (§4.8). Two Matérn terms with
   similar `rho`, or white beside a very short `rho`, are the canonical cases.
 
+### Fixture facts that a fresh session will otherwise get wrong
+
+Every one of these was discovered by building a fixture that could not fail. They are
+gathered here rather than left in the task sections because the failure they prevent is
+**writing a new fixture with the same blind spot**, which is a thing every remaining task
+will do.
+
+- **`DIAGNOSTIC_LIMIT` in a DESIGNED fit is reached through `sigma`'s lower limit (1e-8),
+  not `rho`'s upper one (1e6).** The obvious construction — a smooth series driving `rho`
+  up — does not work: a design carrying a constant, trend, offset and rate change absorbs a
+  slow cosine and leaves an ordinary residual. Measured, that series comes back `OK`. What
+  works is a record whose amplitude is ~1e-11. (`rho`'s upper limit *is* reachable with **no
+  design**, which is how `test_optimize.py` gets there.)
+- **`BIC_NEFF`'s looser penalty does not show up in `ic_best`.** The winner is normally the
+  white candidate, whose `n_eff` equals `n` exactly, so its criterion value is identical
+  under both criteria. The difference lives on the *correlated* candidate's ΔIC — measured
+  7.823 → 7.677 at `n_eff = 194.25` against `n = 200`. A test comparing `ic_best` tests
+  nothing.
+- **Under white noise GLS is OLS, so `n_eff_trend` is `n` for every design column.** Any
+  test meaning to pin *which* column is the trend must use a **correlated** candidate.
+  Verified: the white-candidate version of that test passes against a hardcoded index 1.
+- **`ILL_CONDITIONED_X` is theta-dependent**, because it is the *whitened* Gram that is ill
+  conditioned, not `X_r`. Measured across five seeds at one mask: `design.condition_number`
+  is 2.68e4 every time while the outcome is `ill_conditioned_x` for two and `ok` for three.
+  Pin the seed, and never assert `design.condition_number` as a proxy.
+- **A quadratic cannot test a step rule** (third derivative zero), and **a fixture sitting
+  above a floor cannot test the floor** (`n_eff = 12` against a floor at 2.0).
+
 ### What Task 14 established (done — read before touching the driver)
 
-- **`DesignInfo` must be narrowed per series before a one-series fit.** `rank`,
-  `gram_logdet`, `condition_number` and `n_rows` are all `(B,)` and describe X restricted to
-  each series' own rows, so handing the full-batch object to `optimize_series` raises on a
-  boolean index mismatch — or worse, would pair one series' data with the whole batch's
-  diagnostics. `DesignInfo.series(b)` does it in one place. **This is what running the fence
-  found and signature binding could not**: every call bound correctly and the code still did
-  not work.
+- **THE `DesignInfo` NARROWING CONTRACT.** `rank`, `gram_logdet`, `condition_number`,
+  `n_rows` and `unit_variance_beta_var` are all `(B,)` and describe **X restricted to each
+  series' unmasked rows**. **Any consumer taking one series must call `DesignInfo.series(b)`
+  first.** Handing the full-batch object to a per-series routine pairs one series' data with
+  the whole batch's diagnostics: the arrays are the right dtype, sign and order of
+  magnitude, so an off-by-one series lands in the store looking exactly like a fit. It is a
+  plausible-number failure, not a crash. **This is what running the fence found and
+  signature binding could not** — every call bound correctly and the code still did not
+  work. The contract is stated in `signal.py`'s module docstring, which is where a consumer
+  will actually be looking; this entry is the pointer, not the source.
 - **`fit` is the single conversion point** from `optimize.SeriesFit`'s scalar world to the
   `(B, M)` uint8 arrays the store, `counting` and `criteria` speak. Not at each consumer:
   three copies of a conversion is one that disagrees with itself once.
@@ -767,6 +837,12 @@ question; compute/bandwidth roofline pair for cross-machine prediction) are in d
   ```
 
   A lock file is legitimately large; raising the limit is correct, excluding the file is not.
+
+  **VERIFIED CLEARED 2026-08-06, not merely flagged.** `.pre-commit-config.yaml` line 38–40
+  carries a local reimplementation with `max=2000000` bytes and the hook is named
+  `check-added-large-files (limit 2000 KB)`; `pixi.lock` is currently **630 KB**. Task 17
+  adds `numba` and `celerite2`, which will rewrite and stage it — that is expected and will
+  pass. Re-check the number, not the note, if the lock file grows past ~2 MB.
 - **The GitHub token has no `workflow` scope.** Any push adding `.github/workflows/` is
   rejected outright.
 - **A global pre-commit `PreToolUse` hook blocks `git commit` while any native task is
@@ -813,15 +889,18 @@ question; compute/bandwidth roofline pair for cross-machine prediction) are in d
   later fences were written against the pre-Task-9 scalar model**, so every remaining fence
   that touches `counting` or `criteria` should be diffed against the committed signatures
   before transcription, not after.
-- **The suite is no longer fast: ~21 s, up from ~2 s.** `tests/test_gradients.py` runs the
-  real `matern32` filter at N = 5000 (373 ms per likelihood evaluation), which exit
-  criterion 9 requires. One Romberg tableau plus one central difference at each of three N;
-  it is not accidental repetition. **N = 5000 must stay** — it is the only point that
-  discriminates the two step rules, which is exactly why the brief's version survived
-  review. If the runtime becomes a problem the lever is a `slow` marker so the gradient
-  tests can be deselected during rapid iteration and always run in the full sweep; **not**
-  `RICHARDSON_LEVELS`, which would trade accuracy headroom for time in the one module whose
-  job is accuracy.
+- **The suite is ~255 s, and the `slow` marker is now in place.** `pixi run test` is the
+  full sweep and is what every end-of-task verification must run; `pixi run test-fast`
+  (`-m "not slow"`, ~9 s, 463 of 489) is for iteration only. What is marked and why:
+  **all of `tests/test_fit.py`** (module-wide — every test drives the real filter through
+  the whole driver on five-series batches, so there is no fast subset worth carving out),
+  the N = 5000 gradient step-rule case, and four `tests/test_optimize.py` tests that run
+  real optimizations. **None of it is optional.** Exit criterion 9 requires the three widely
+  separated N, and the standing batched-equals-solo invariant is meaningless on a batch of
+  healthy series — the heterogeneous batch is *why* `test_fit.py` is slow.
+  Do **not** reach for `RICHARDSON_LEVELS` to buy time: that trades accuracy headroom in the
+  one module whose job is accuracy. Task 17 adds a compiled backend and machine benchmarks,
+  so mark those `slow` as they land rather than after.
 - **A mutation-testing script that restores from a snapshot will silently revert edits made
   while it runs.** The Task 13 bite script captures the file at start and writes that text
   back after every mutation; two annotation fixes made during the ~17-minute run were undone

@@ -129,6 +129,10 @@ PYTHONPATH = "src"
 [tasks]
 # On macOS, pixi-installed tools (pytest, ruff, mypy) can fail due to shebang path resolution issues. Using python -m <tool> bypasses this reliably.
 test = "python -m pytest"
+# The FULL sweep. Everything else is a subset; a green `test-fast` is not
+# evidence a task is done. See pyproject.toml's `markers` for what `slow`
+# covers and why it is not optional.
+test-fast = "python -m pytest -m 'not slow'"
 test-cov = "python -m pytest --cov"  # Later on, consider adding --cov-fail-under=80
 lint = "python -m ruff check ."
 format = "python -m ruff format ."

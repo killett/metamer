@@ -29,6 +29,18 @@ just never converted). `DesignInfo.condition_number` is what surfaces this
 class of mistake: `rank(X)` alone does not, since both cases above compute
 *some* finite rank.
 
+EVERY CONSUMER TAKING ONE SERIES MUST CALL `DesignInfo.series(b)` FIRST.
+`rank`, `gram_logdet`, `condition_number`, `n_rows` and `unit_variance_beta_var`
+are all `(B,)`-shaped and describe **X restricted to that series' unmasked
+rows**. Handing the full-batch object to a per-series routine pairs one series'
+data with the whole batch's diagnostics. That is a PLAUSIBLE-NUMBER failure,
+not a crash: the arrays are the right dtype, the right sign and the right
+order of magnitude, so an off-by-one series lands in the store looking exactly
+like a fit. `fit.py` narrows before every `optimize_series` and every
+`evaluate` call for this reason, and it is the one thing signature binding
+could not have caught during the Task 14 audit -- every call bound correctly
+and the code still did not work.
+
 COLUMNS ARE NOT AUTO-SCALED, deliberately. A per-column scale `s_j` could
 restore conditioning for a badly-scaled `X`, but `gram_logdet` (`log|X'X|`,
 computed from this same `X` in `design_info`) would then shift by

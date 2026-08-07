@@ -25,6 +25,11 @@ from metamer.core.terms import ProcessSpec
 from tests.test_objective import _GAP_N, _GAP_T, _gapped_signal, _window
 from tests.test_statespace import _term
 
+# EVERY test in this module runs the real filter through the whole driver --
+# five-series batches, two candidates, a full optimization each. There is no
+# fast subset of it worth carving out, so the marker is module-wide.
+pytestmark = pytest.mark.slow
+
 
 def _candidates():
     return [

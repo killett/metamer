@@ -263,6 +263,7 @@ def test_richardson_refuses_a_tableau_with_no_rows():
         richardson_gradient(_analytic, U0, levels=0)
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("n", [100, 630, 5000])
 def test_the_step_rule_holds_against_the_oracle_at_three_values_of_n(n):
     """Exit criterion 9: the step rule validated against the oracle at three N.

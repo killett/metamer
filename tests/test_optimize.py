@@ -277,6 +277,7 @@ def test_hessian_step_uses_the_fourth_root_of_eps_not_the_third():
     assert hessian_step(0.0) > 0.0
 
 
+@pytest.mark.slow
 def test_hessian_matches_a_nested_richardson_oracle():
     """The explicit Hessian matches an oracle built from a different algorithm.
 
@@ -379,6 +380,7 @@ def test_the_delta_method_is_exact_to_first_order_and_degrades_with_curvature():
 # --------------------------------------------------------------------------
 
 
+@pytest.mark.slow
 def test_the_optimizer_recovers_simulated_parameters():
     """A clean fit converges near the truth and reports OK.
 
@@ -417,6 +419,7 @@ def test_the_iteration_cap_splits_on_the_gradient_norm():
     assert capped.n_iter <= 1
 
 
+@pytest.mark.slow
 def test_a_runaway_parameter_reports_the_diagnostic_limit():
     """A series driven into the degenerate direction reports DIAGNOSTIC_LIMIT.
 
@@ -603,6 +606,7 @@ def test_a_wholly_masked_series_stays_insufficient_data():
     )
 
 
+@pytest.mark.slow
 def test_an_ill_conditioned_design_is_not_laundered_into_nonfinite():
     """A fit that fails numerically reports what `evaluate` says it failed of.
 
