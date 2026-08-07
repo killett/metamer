@@ -6983,7 +6983,7 @@ and the gap is stated), or **deferred** (with what would close it).
 | # | criterion | status | notes |
 |---|---|---|---|
 | 1 | Brute-force MVN agreement, every family **and a sum** | **met** | `tests/test_kalman.py`, `tests/oracles.py` |
-| 2 | `celerite2` agreement on the shared kernel subset | **deferred** | Explicitly optional, and §16.1's designated first cut. `celerite2` is now a declared `[target.linux-64]` dependency and importable, and `test_families.py` documents why Matérn ν=3/2 is eliminated from its basis. **Closed by** an agreement test over the ν=1/2 + white subset, skipped off Tier-1. MVN already validates the bespoke part (the state-space construction); celerite2 would validate the textbook part (the ACF) |
+| 2 | `celerite2` agreement on the shared kernel subset | **met** | Closed 2026-08-07, `tests/test_celerite2_agreement.py`. `white + matern12` on a regular axis, an irregular axis, and a 25%-masked series checked against the genuinely shorter record — agreement to 1e-10 relative on all three. celerite2 was itself checked against an explicit MVN at N=50 first, so it is a third construction rather than a restatement. Matérn ν=3/2 is excluded by an explicit assertion, since it is not in celerite2's exponential basis and would only be an approximation |
 | 3 | Masked-gap likelihood identical to genuinely-absent samples | **met** | `tests/test_kalman.py` |
 | 4 | Analytic `F`/`Q`/`P∞` vs `expm`/Lyapunov, per family | **met** | `tests/oracles.expm_transition`, `lyapunov_stationary_cov` |
 | 5 | Parameter counting vs hand counts, **both objectives** | **met** | `tests/test_counting.py`; ML `k = k_θ + rank(X_r)`, REML `k = k_θ`, `n = n_obs − design_rank` |
@@ -6999,11 +6999,15 @@ and the gap is stated), or **deferred** (with what would close it).
 | 15 | Gap-structure sweep, A:B **per gap case** | **met** | {0%, 10% scattered, 40% contiguous}; ratio rises monotonically with gappiness in all four rows |
 | 16 | `fit_hash` / `compat_hash` separation exercised end to end | **met with reduced scope** | The separation, the allowlist and the containment invariant are fully tested, and the recompute-without-refitting contract is tested against **in-memory primitives**: `rank_candidates` takes only stored primitives, never a spec or the data. **Not tested:** an actual resume, and "a `fit_hash` mismatch is refused" — both need the zarr store, which is Phase 2. Marked in `test_hashing.py` as the Phase 2 store contract |
 
-**Score: 12 met, 3 met with reduced scope, 1 deferred.**
+**Score: 13 met, 3 met with reduced scope, 0 deferred.**
 
-**The one deferred item is the one the design nominated in advance** as the first thing to
-cut if Phase 1 proved too large (§16.1), and it is the cheapest to close now that the
-dependency is installed.
+**Nothing is left deferred.** Criterion 2 -- the item §16.1 nominated in advance as the
+first thing to cut -- was closed on 2026-08-07 once the dependency was installed, and it
+earned its place: it is the only check that validates the **autocovariance function**
+rather than the state-space construction. MVN agreement says the filter reproduces the
+covariance matrix this package builds; celerite2 agreement says that covariance is the
+Matérn ν=1/2 everyone else means by the name. An internally consistent implementation of
+the wrong kernel passes every MVN test.
 
 **The three reduced-scope items share a cause:** each was written assuming infrastructure
 that Phase 1 deliberately does not build — a fast path A (13), three machines (14), and the

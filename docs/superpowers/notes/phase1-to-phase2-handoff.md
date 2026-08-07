@@ -1,0 +1,316 @@
+# Phase 1 → Phase 2 handoff
+
+**Written 2026-08-07 at the close of Phase 1.** This is the one document a fresh session
+starting Phase 2 should read. It is self-contained: nothing here requires reading
+`PROGRESS.md`'s history, the Phase 1 plan, or any commit message.
+
+`PROGRESS.md` remains the running notebook and the index of active work. **This document
+is the transferable part** — the method, the standing rules, and the facts that outlive
+Phase 1's code.
+
+---
+
+## 1. The pre-flight, (a)–(k)
+
+**Run this against any implementation brief before writing code.** It is the most valuable
+artifact Phase 1 produced, and it exists because of a measured pattern: **across Tasks 8–17,
+nearly every substantive defect passed the brief's own tests.** Brief-generated tests
+validate the brief's *model* of the problem, so they cannot detect that the model omitted
+something. A passing suite is not evidence the brief is right.
+
+Every entry below has at least one worked instance from this project.
+
+### (a) Absolute vs differential — THE CANCELLATION RULE
+
+> **Any quantity constant across the comparison axis is invisible to every test that
+> compares along that axis.**
+
+| instance | constant across | what caught it |
+|---|---|---|
+| REML's Harville constant `(n − rank(X))·log 2π` and `+½log\|XᵀX\|` | `θ` | review, not a test |
+| `design_rank` passed to `penalty_terms` as zeros | the **candidate** axis | a surviving mutation, then an absolute AIC recomputed by hand |
+| **The hash function itself** (Task 16) | both sides of every comparison | **nothing** — six fence tests passed against a serializer that was silently unstable. Separators, sort order, digest algorithm and truncation length all cancel |
+
+The cure is always an **absolute value, hand-derived**. Task 16 needed *three* golden
+hashes, not one, because each payload builder can drift independently: a `run_payload`
+filing a `None` fingerprint changed every `run_hash` while every comparison stayed green.
+
+### (b) Batch vs series
+
+Is any per-series fact computed at batch level, or any per-candidate fact stored per point?
+`moment_init`'s rung is per series; a batch-wide rung is right only when the whole batch
+falls the same way.
+
+### (c) Exit paths
+
+Enumerate every `return` and every `raise`; does each pass through the outcome ladder?
+**Enumerate, never assert a count** — an asserted count is how two bypassed exits survived
+Task 8, and how a report claimed "exactly one early return" where there were four.
+
+### (d) Grep for the vocabulary the task requires
+
+"mask", "n_used", "realized" appearing **zero** times in a 234-line brief was detectable in
+one command. Task 15's brief never mentioned `fixed`, `state_dim` or `white + white`.
+
+### (e) Do the tests bite?
+
+Delete the guard each one protects and confirm it fails. Two of Task 9's tests replaced
+assertions that could not fail at all.
+
+**A surviving mutation has two causes and they call for different responses:** no test
+protects the guard (act on it), or *the mutated line is unreachable because a guard above
+it fires first* (defence in depth working). The tell is whether removing that guard makes
+the mutation bite. Task 16's `_subset` is the worked case — reproducing the fence's bug
+required mutating **both halves at once**.
+
+### (f) Does the brief contradict a docstring already in the tree?
+
+`objective.py` named `design_rank` in two places and the brief still passed `rank_x`.
+`terms.py` documented the `Infinity`-token trap that Task 16's fence then reintroduced.
+
+### (g) Does every call match the module's CURRENT signature?
+
+Check the source, not the brief's assumption. The symptom is a plausible number rather than
+an error — `n_eff=float(n)` makes `BIC_NEFF` silently identical to `BIC`.
+
+> **A CLEAN (g) MARK IS NOT A PRE-FLIGHT.** (g) clears a brief of **staleness and nothing
+> else**. Task 15 bound cleanly and was wrong five ways; Task 16 bound cleanly and shipped a
+> serializer that hashed memory addresses. Both were (a)–(f)/(h)–(k) failures, and (g) cannot
+> see any of them.
+
+### (h) Does the test exercise the thing it names, or a default?
+
+Thread every parameter the behaviour depends on through as a real caller would. Task 11's
+three-N step-rule test passed against a deliberately broken step rule because it left
+`scale` at its default, making the numerator 1 and the denominator irrelevant.
+
+### (i) Can the fixture fail at all?
+
+Ask what property of the fixture makes the defect visible; if the answer is "none", the
+fixture is wrong before the assertion is. A **quadratic cannot test a step rule** (third
+derivative zero). A fixture at `n_eff = 12` **cannot test a floor at 2.0**.
+
+### (j) Does the oracle share a derivation path with the thing it checks?
+
+An independent oracle means a **different construction**, not different constants.
+
+| subject | the bad "oracle" | why it is not one |
+|---|---|---|
+| `hessian_at_optimum` | `tests/oracles.fd_hessian` | the same second-difference stencil at a different step — it measured the step choice and nothing else |
+| `theta_err` (delta method) | `theta_err / theta` | the same quantity rescaled by the very Jacobian under test |
+
+The tell: if the reference is not at least ~100× more accurate than the subject, it is
+probably the same algorithm. Nested Richardson qualifies; a wider step does not.
+
+### (k) Does anything that must be stable across runs depend on process-local state?
+
+Set iteration order, `id()`, the `repr` of an unordered container, time, environment.
+**Test across processes, not within one.**
+
+**This is the only category a perfect in-process suite cannot reach.** Every test in one
+pytest run shares a single `PYTHONHASHSEED`, so a quantity stable within a process and
+unstable between them is invisible to every same-process test **and to mutation testing**,
+which runs in that same process against the same frozen seed.
+
+Worked instance: `json.dumps(..., default=repr)` renders `{"aic","bic","hqic"}` as three
+*different* strings under seeds 1, 2 and 3, and an object without `__repr__` renders its
+memory address. Every fence test passed; every resume of a finished store would have refit
+it, with no symptom but a bill.
+
+**(k) extends to every delta, rate or trend.** Any assertion on a *difference* must be
+checked for whether its **baseline is set by history outside the test**:
+
+| assertion | why the baseline is not the test's | the fix |
+|---|---|---|
+| "allocating 256 MiB moves peak RSS by 256 MiB" | peak RSS is a **high-water mark**; measured, a watermark at 385 MB moved **67 MB** | pin against an absolute reading in the same test (`current_rss_bytes`) |
+| "total STREAM throughput rises with thread count" | on a saturated controller the **sign** is the session's CPU load: 10.59 → 12.03 GB/s unloaded, **11.23 → 8.44** under contention | assert a **ratio** that survives either loading |
+
+And the harder lesson: **both modules already documented, in capitals, the property that
+broke the test.** The violating tests were written anyway, by the same author, in the same
+sitting. **Documentation does not constrain the next author — tests do.**
+
+**(h), (i) and (k) are not subsumed by mutation testing.** (e) asks whether a test bites
+when the guard is deleted; (h) and (i) ask whether the call site and fixture can *express*
+the defect at all; (k) asks whether the defect is observable in one process.
+
+**Also: run the brief's code.** The two highest-yield audits did. Task 17's fence asserted
+`tile_side(1e9, 28650) == 187` against an implementation that floors — `floor(186.83)` is
+186, and the test would have failed against the code printed beneath it.
+
+---
+
+## 2. Standing rules
+
+### eps-derived constants — one construction, three instances
+
+A numerical threshold here is **derived, not chosen**: from float64's precision and **how
+many times the quantity is squared or differenced on its way to the objective.**
+
+| constant | path to the objective | rule | value |
+|---|---|---|---|
+| `lint.WHITE_COLLAPSE_LOG_LIMIT` | ℓ is quadratic in θ near the optimum, so a model difference is resolvable only above `√eps` — one squaring | `−½·log eps` | 18.0218 |
+| `objective.CONDITION_LOG_LIMIT` | the solve runs on the normal equations, so the Cholesky sees `cond(X_w)²` | `−¼·log eps` | 9.0109 |
+| `gradients.fd_step` / `hessian_step` | an `m`-th difference divides by `h^m` | `eps^(1/(m+2))` | 6.055e-06 / 1.221e-04 |
+
+State each in the **units of the quantity it thresholds** so they are comparable. **When a
+fourth is needed, count the squarings and differences and read the exponent off — do not
+pick a round number and do not copy a neighbouring constant.** Copying the neighbour is the
+measured default mistake: 147× at the Hessian step, 280×–1100× at the gradient.
+
+**A constant that genuinely cannot be derived is POLICY and must be labelled as such, with
+its consequence stated.** `lint.OVERLAP_RATIO = 1.5` says in its own docstring that two
+Matérn ν=1/2 ACFs a factor `r` apart differ at most by `r^(−1/(r−1)) − r^(−r/(r−1))`, which
+at `r = 3/2` is exactly **4/27**.
+
+**Still picked, flagged:** `optimize.HESSIAN_COND_LIMIT = 1e10` (open question 9) and
+`signal.X_RANK_RTOL = 1e-10`, on which `RANK_DEFICIENT_LOG_LIMIT` is derived — a derived
+constant resting on a picked one inherits the arbitrariness.
+
+### The other standing rules
+
+- **Oracles must not share a derivation path** — see (j).
+- **Heterogeneous batches by default.** A homogeneous batch cannot expose a
+  batch-granularity defect. Task 13's only real finding came from the one mutation that
+  survived because every fixture had `B = 1`. Task 17's utilization measurement uses a
+  heterogeneous sample because a homogeneous one reports 1.0 by construction — the number
+  the measurement exists to challenge.
+- **Enumerate exits, never count them** — see (c).
+- **A CLAMP, FLOOR OR EPSILON GUARD ABOVE THE DIAGNOSTIC LIMIT OF WHAT IT GUARDS IS A
+  FABRICATION MACHINE.** It converts a reportable fact into a plausible number *and* makes
+  the rung that would have reported it unreachable, so no test can see the loss.
+  `sqrt(maximum(var, 1e-12))` gives `sigma = 1e-6` against sigma's own `1e-8` limit, so the
+  diagnostic clip never fires and `InitRung.CLIPPED` becomes dead code. A tree-wide sweep
+  (2026-08-06) found no further instances.
+- **Prefer analytic endpoints to tolerance bands.** And know which identities survive
+  float64: `white(3) + white(4) == white(5)` is bit-exact (integers at lag 0, zeros
+  elsewhere); the Matérn version at a shared ρ is `9e + 16e` against `25e` and misses by an
+  ulp. Exact in ℝ ≠ exact in float64, and **the exact case is what makes the
+  over-generalization look safe.**
+- **`(B, N)` is the only code path.** `B = 1` is a shape, never a separate implementation.
+- **Failed series carry NaN, never −inf**, in anything destined for the store. `−inf` is a
+  finite-looking sentinel that survives some consumers' checks; it is the optimizer's
+  internal barrier value only.
+
+---
+
+## 3. The number every Phase 2 tile calculation inherits
+
+**`tile_side` is 171, not 339.**
+
+| figure | what it is | use it for |
+|---|---|---|
+| **339** (8 682 B/series) | design doc §9.4's **target** — the streaming filter the document describes. `memory.bytes_per_series` | the goal to engineer toward |
+| **171** (33 882 B/series) | what the code **actually holds**. `memory.resident_bytes_per_series` | **every Phase 2 tile calculation, until the engine streams** |
+
+At a 1 GB budget, shared X, d=3, k_β=4, p=4, M=12.
+
+**The cause:** `KalmanEngine._augment` ends in
+`np.concatenate([y[:, :, None], x], axis=2)`, materializing a `(B, N, 1+k_β)` float64 array
+— **25 200 B/series at N=630**, nearly three times §9.4's entire per-series total, and it
+**does not vanish when the design is shared**, the case §9.4 treats as free. The
+`np.broadcast_to` on the line above **is a view and allocates nothing**, which is exactly
+why the copy reads as free on a code read.
+
+**The engine is what is wrong, not §9.4.** The accumulator only ever needs one row —
+`cols[:, step, :]` is the sole consumer — so the columns can be indexed out of `y` and the
+shared `X` per timestep with no allocation. That makes §9.4's model true rather than
+replacing it. It touches the reference engine's hot loop, so fixing it means re-pinning the
+path-B agreement test and the MVN oracles.
+
+**Using 339 overcommits a hard 16 GB constraint by 3.9×, and the run does not degrade, it
+dies.**
+
+**And a standing check:** *does the memory formula describe the code, or a model of the
+code?* §9.4 was wrong twice in ways three places agreed on. **Verify against measured
+resident bytes** — the slope of RSS against B, in a fresh process, sampled during the
+workload — and treat any factor above ~1.5× as a missing term rather than measurement noise.
+
+---
+
+## 4. Open questions 5–8
+
+| # | question | what would close it |
+|---|---|---|
+| **5** | **64-core box RAM is unknown.** The stage-1 gate was closed without that machine, but its RAM is needed before any tile-sizing run there | run `free -g` on it and record the figure |
+| **6** | **Roofline validation across machines.** One data point cannot validate a two-parameter fit; the mini PC supplies the model's first point and tests nothing. **Blocks the `cloudify` cost projection (§15.5)** — projecting spend on an unvalidated roofline is projecting a guess | a second machine's roofline pair plus its measured canonical filter pass, checked against the prediction |
+| **7** | **Path B at high thread occupancy.** Measured at 1 and 4 threads on a 4-core box. `prange` over series at 64 threads may hit false sharing on the per-series `accum` block, or saturate the controller elsewhere | `bench/spike.py --threads 1 --threads 4 --threads 64` on the 64-core box |
+| **8** | **`numba` and `celerite2` on arm64.** `celerite2` has no `osx-arm64` conda-forge build and is pinned to `[target.linux-64.dependencies]`; `numba` on arm64 has never been run here | the suite plus `bench/spike.py` on the MacBook |
+
+Questions 1–4 and 9 are in `PROGRESS.md`; 9 (`HESSIAN_COND_LIMIT`) is **blocking for the
+start of Phase 2**, because `1e10` against the derived `6.7e7` is the band in which a
+near-degenerate fit reports as healthy — so §4.8's *a posteriori* half is ~150× more
+permissive than its *a priori* half, and a candidate the lint flags can come back `OK`.
+
+---
+
+## 5. Fixture facts a fresh session will otherwise get wrong
+
+Every one of these was discovered by building a fixture that could not fail.
+
+- **`DIAGNOSTIC_LIMIT` in a DESIGNED fit is reached through `sigma`'s lower limit (1e-8),
+  not `rho`'s upper one (1e6).** A slow cosine does not do it — a design carrying constant,
+  trend, offset and rate change absorbs it and leaves an ordinary residual; measured, that
+  series comes back `OK`. What works is a record whose amplitude is ~1e-11.
+- **`BIC_NEFF`'s looser penalty does not show up in `ic_best`.** The winner is normally the
+  white candidate, whose `n_eff` equals `n` exactly. The difference lives on the
+  *correlated* candidate's ΔIC — measured 7.823 → 7.677 at `n_eff = 194.25` against `n = 200`.
+- **Under white noise GLS is OLS, so `n_eff_trend` is `n` for every design column.** Any
+  test meaning to pin *which* column is the trend must use a **correlated** candidate.
+- **`ILL_CONDITIONED_X` is theta-dependent** — it is the *whitened* Gram that is ill
+  conditioned, not `X_r`. Across five seeds at one mask, `design.condition_number` is
+  2.68e4 every time while the outcome is `ill_conditioned_x` for two and `ok` for three.
+  Pin the seed; never assert `design.condition_number` as a proxy.
+- **`cond(X_w)` is invariant under a uniform rescale of Σ**, so you cannot make a design
+  ill-conditioned by shrinking σ. Analytic, not empirical. What does move it is giving the
+  design more post-breakpoint degrees of freedom than the post-breakpoint samples carry.
+- **The time axis is decimal years.** In seconds since 1970 the same 20-year monthly design
+  goes from `cond(X) = 3.4e1` to `3.3e32` and rank 7/7 to 2/7.
+- **A quadratic cannot test a step rule**, and **a fixture above a floor cannot test the
+  floor.**
+- **`fit` costs ~5.4 s per series** through the per-series scipy loop, linear in B. Anything
+  wanting tile-scale behaviour must use a batched *evaluation*, not a fit.
+- **`ru_maxrss` is inherited across `fork()`/`exec()` and updated lazily.** A child spawned
+  from a 400 MiB parent reports the parent's peak byte-for-byte; and the watermark can
+  *trail* live RSS (470.8 MB against a live 471.3 MB read an instant earlier).
+- **`numba` pins `numpy<2.5`**, so installing it downgraded numpy 2.5.1 → 2.4.6, and 2.4's
+  type stubs infer `floating[Any]` where 2.5's infer `float64`. `mypy` then reports errors
+  in files nobody touched. An environment fact, not a regression.
+
+---
+
+## 6. What Phase 2 inherits structurally
+
+- **The three-hash separation, awaiting a store.** `fit_hash ⊂ compat_hash ⊂ run_hash` is
+  built, tested, and pinned by golden constants. **The contract Phase 2 must honour:**
+  §12.8 treats a `compat_hash` match with a `fit_hash` match as licence to **recompute the
+  derived arrays from stored primitives without refitting**. That is implementable because
+  `rank_candidates` takes *only* the stored primitives — never a spec, a design matrix or
+  the data — and `test_hashing.py` pins exactly that. **If any future change makes
+  `rank_candidates` need the data, §12.8 becomes unimplementable and the three-hash split
+  buys nothing.** Not yet tested: an actual resume, and "a `fit_hash` mismatch is refused",
+  both of which need the store.
+- **The batched-equals-solo invariant.** `test_batched_results_equal_solo_results_series_by_series`
+  is the standing guard for the entire "(B, N) is the only code path" class. Every new
+  batched routine must keep it green. `np.linalg.cholesky` raises for the *whole stack* if
+  one member fails, so validity is classified with the non-raising batched `slogdet` first
+  and only the valid subset is factorized.
+- **The label-switching / hysteresis confound (§11.2).** Two same-kind terms with a free
+  timescale are exchangeable across the whole searched space; canonical ordering at result
+  packing fixes the reporting **within one fit and nothing between fits**. Across grid points
+  that produces large parameter disagreement with near-zero selection, objective and
+  signed-trend disagreement — **a signature the warm-start hysteresis audit would read as
+  benign hysteresis when it is non-identifiability.** Two consequences are recorded in
+  §11.2: report per-term parameter disagreement separately from the aggregate, and decide
+  whether the audit refuses lint-flagged candidate sets outright or reports the two strata
+  apart. **Do not measure hysteresis on a lint-flagged candidate set and quote the number as
+  hysteresis.**
+- **The identifiability lint is the cheap pre-check for that confound.** `core.lint` runs on
+  a `ProcessSpec` before any data and flags exactly those compositions.
+- **Path A is the permanent correctness reference.** `engines/kalman.py` plus
+  `optimize.optimize_series`. It is not deprecated and must not be deleted; every MVN
+  oracle and the path-B agreement test are pinned against it. **The stage-1 verdict carries
+  one condition: re-measure after `_augment` is fixed**, because that fix removes ~25 KB/series
+  of memory traffic and path A is memory-bound — see
+  [`spike-stage1-verdict.md`](spike-stage1-verdict.md).
+- **The benchmark harness is a one-command run and must stay that way**, so a later session
+  can produce `box64.json` or `macbook.json` without reconstructing anything.

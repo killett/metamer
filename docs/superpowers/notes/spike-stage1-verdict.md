@@ -111,6 +111,39 @@ better than the worst cell that occurs.
 
 ---
 
+## The one condition attached to this answer
+
+**Re-measure the spike after `_augment` is fixed.** This is not a reopening of the gate —
+the decision holds on current measurements — it is a condition naming the single code
+change that would warrant re-running it.
+
+The reasoning: the fix removes the materialized `(B, N, 1+k_β)` block, i.e. **~25 KB/series
+of memory traffic**, from the filter's inner loop. **Path A is memory-bound** and scales
+with bandwidth per core, so that traffic is exactly what its cost is made of — the fix
+improves **path A's bound specifically**, and by more than it improves path B, whose
+compiled loop already reads `y` and `X` with far better locality.
+
+Against a **3.15–3.35** margin at production-scale B with **±0.15** run-to-run scatter,
+that is enough to matter. It is not enough, on any estimate available now, to overturn a
+3× result — but the margin is thin enough that the question should be re-asked rather than
+assumed.
+
+**What to re-run, and what would change the verdict:**
+
+```bash
+pixi run python -m metamer.bench.spike \
+    --threads 1 --threads 4 --batch 1000 --repeats 3 --out bench/minipc-streamed.json
+```
+
+plus the worst-cell batch sweep at `B ∈ {1000, 5000, 20000}`. **If the d=3, one-thread,
+no-gaps ratio falls below 3× at production-scale B, the ≥3× rule is no longer satisfied and
+the stage-2 decision (build the batched trust-region) is back on the table.** Task 19's
+deleted content is recoverable from git history for exactly this case.
+
+Nothing else in this note is contingent on that measurement: path A's retention as the
+correctness reference, the gap-structure result, and the utilization figure are all
+independent of it.
+
 ## Carried into Phase 2
 
 **`KalmanEngine._augment` materializes the augmented `[y | X]` block** — a

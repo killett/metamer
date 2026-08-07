@@ -7,9 +7,15 @@
 - **Done:** Phase 1 **Tasks 0–18**. Task 18 (the stage-1 gate) was closed on the mini PC
   alone — see the verdict note for why one machine suffices and in which direction the
   inference runs. **Task 19 deleted.**
-- **Exit criteria:** **12 met, 3 met with reduced scope, 1 deferred** — the full table
-  with reasons is at the end of the Phase 1 plan. The deferred one (`celerite2`
-  agreement) is the item §16.1 nominated in advance as the first cut.
+- **STARTING PHASE 2? READ**
+  [`docs/superpowers/notes/phase1-to-phase2-handoff.md`](docs/superpowers/notes/phase1-to-phase2-handoff.md)
+  **FIRST.** It is self-contained and carries the transferable part of Phase 1: the
+  eleven pre-flight categories (a)–(k) with their worked instances, the standing rules,
+  the corrected `tile_side` of 171, open questions 5–8, the fixture facts, and what
+  Phase 2 inherits structurally. This file stays the running notebook; that one is the
+  method.
+- **Exit criteria:** **13 met, 3 met with reduced scope, nothing deferred** — the full
+  table with reasons is at the end of the Phase 1 plan.
 - **Next:** **Phase 1 is COMPLETE.** Tasks 0–18 done; **Task 19 deleted, not deferred**
   (path B won by >=3x, so the batched trust-region has no purpose). The stage-1 verdict,
   its scope, and what it does **not** establish are in
