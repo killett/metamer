@@ -231,7 +231,7 @@
       "id": 21,
       "planTask": 13,
       "subject": "Task 13: Optimizer driver, init ladder, Hessian",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         19
       ],

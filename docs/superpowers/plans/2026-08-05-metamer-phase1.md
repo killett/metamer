@@ -5130,20 +5130,71 @@ git commit -m "feat: add analytic forward-mode for Matern 1/2 and gradient resol
 - Create: `tests/test_optimize.py`
 
 **Acceptance Criteria:**
-- [ ] Moment initialization recovers `ρ` within a factor of 3 on a simulated OU series
-- [ ] The ladder falls back `moment → clipped → family default` and **reports the rung reached**
-- [ ] A degenerate series (zero variance) reaches the `default` rung rather than raising
-- [ ] Convergence is judged in unconstrained coordinates on relative gradient norm and relative function change
-- [ ] Hitting the iteration cap with a small gradient gives `ITER_CAP_SMALL_GRAD`; with a large gradient, `ITER_CAP_LARGE_GRAD`
-- [ ] A parameter reaching a diagnostic limit gives `DIAGNOSTIC_LIMIT`
-- [ ] Hessian at the optimum matches `fd_hessian` from `tests/oracles.py` to 1e-4 relative
-- [ ] A Hessian with condition number above threshold gives `DEGENERATE_HESSIAN`
+- [x] Moment initialization recovers `ρ` within a factor of 3 on a simulated OU series
+- [x] The ladder falls back `moment → clipped → family default` and **reports the rung reached**
+- [x] A degenerate series (zero variance) reaches the `default` rung rather than raising
+- [x] Convergence is judged in unconstrained coordinates on relative gradient norm and relative function change
+- [x] Hitting the iteration cap with a small gradient gives `ITER_CAP_SMALL_GRAD`; with a large gradient, `ITER_CAP_LARGE_GRAD`
+- [x] A parameter reaching a diagnostic limit gives `DIAGNOSTIC_LIMIT`
+- [x] Hessian at the optimum matches `fd_hessian` from `tests/oracles.py` to 1e-4 relative
+- [x] A Hessian with condition number above threshold gives `DEGENERATE_HESSIAN`
 
 **Verify:** `pixi run test tests/test_optimize.py -v`
 
+> **Corrections applied at implementation time. The fences below are the
+> pre-audit draft; `src/metamer/core/optimize.py` is authoritative.**
+>
+> 1. **The Hessian step is `eps^(1/4)`, not `max(fd_step(scale), 1e-5)`.** A
+>    second central difference divides by `h²`, so its cancellation error is
+>    `4ε|f|/h²` and its optimum is `(ε|f|/|f''''|)^(1/4)` — 1.221e-04, not
+>    6.055e-06. Measured against a nested Richardson oracle on the real filter
+>    at N = 200: **4.39e-05** for the fence's step, **2.86e-05** for
+>    `eps^(1/3)`, **2.98e-07** for `eps^(1/4)`. A factor of 147, and a sweep
+>    over ten decades puts the empirical optimum at 1e-04. Reusing `fd_step`
+>    here is the easiest mistake in the file, so `hessian_step` is a separate
+>    function.
+> 2. **The oracle is a nested Richardson construction, not `oracles.fd_hessian`.**
+>    That helper and `hessian_at_optimum` are the *same stencil* at different
+>    steps, so checking one against the other measures the step choice and
+>    nothing else — pre-flight (i). The oracle now differentiates a
+>    Richardson-extrapolated gradient by Richardson; its own asymmetry is
+>    **8.8e-13**. Gate `1e-5`: ~34× headroom over the achieved 2.98e-07, and
+>    the fence's step fails it.
+> 3. **The outcome precedence is reordered.** The fence checked the Hessian
+>    *before* the iteration cap, so a fit that had simply not converged would
+>    report `DEGENERATE_HESSIAN`. Curvature at a non-optimum means nothing, so
+>    the cap and the diagnostic limit are now classified first, and the Hessian
+>    is not computed at all for a non-OK fit — which also saves `2p²`
+>    evaluations on exactly the fits that were slow enough to hit the cap.
+> 4. **`TRUST_RADIUS_COLLAPSED` is now reachable.** The fence produced five of
+>    the taxonomy's optimizer outcomes and never this one, which would leave
+>    design doc §18 criterion 12 unsatisfiable once Task 19 is deleted.
+>    scipy's `status == 2` is ABNORMAL_TERMINATION_IN_LNSRCH — the line search
+>    could not find a decreasing step, the line-search analogue of a collapsed
+>    trust region. `outcome_for_status` maps it, and an unrecognized status maps
+>    to a failure rather than to `OK`.
+> 5. **Two hidden clamps removed from `moment_init`, both of which fabricated a
+>    plausible number.** `np.clip(r1, 1e-6, 1 - 1e-6)` turns "the data are
+>    anticorrelated at lag 1, which this family cannot represent" into
+>    `rho = 0.0724` at `dt = 1`, reported as MOMENT; `np.sqrt(np.maximum(var,
+>    1e-12))` reports `sigma = 1e-6` for any series below 1e-12 variance —
+>    **above sigma's own 1e-8 diagnostic limit, so the clip never fires and the
+>    CLIPPED rung is unreachable for the vanishing-amplitude case.** A floor
+>    that pre-empts a diagnostic limit converts a reportable fact into a
+>    fabricated one. Both now fall through the ladder and report the rung.
+> 6. **The reported covariance's first-order caveat is quantified, not
+>    assumed.** `J Σ_u Jᵀ` under a `Log` transform understates the true
+>    (lognormal) variance by `(e^s − 1)e^s/s` with `s = σ_u²`: **1.5% at
+>    σ_u = 0.1, 46% at 0.5, 367% at 1.0**. Large `σ_u` is the regime near a
+>    diagnostic limit, so the caveat travels with the headline number.
+> 7. **`SeriesFit`'s scalar shape is documented as deliberate** in the module
+>    docstring, with the reason: this module *is* path A's per-series reference
+>    form (§17). It is the one place in `core` where scalar is correct, and a
+>    later (b) sweep would otherwise flag it and someone would "fix" it.
+
 **Steps:**
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 # tests/test_optimize.py
@@ -5258,7 +5309,7 @@ def test_hessian_matches_the_brute_force_oracle():
     )
 ```
 
-- [ ] **Step 2: Implement optimize.py**
+- [x] **Step 2: Implement optimize.py**
 
 ```python
 # src/metamer/core/optimize.py
@@ -5495,7 +5546,7 @@ def optimize_series(
     return SeriesFit(theta, loglik, Outcome.OK, res.nit, rung, hess)
 ```
 
-- [ ] **Step 3: Run tests and commit**
+- [x] **Step 3: Run tests and commit**
 
 Run: `pixi run test tests/test_optimize.py -v` → all PASS
 

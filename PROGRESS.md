@@ -5,21 +5,21 @@
 - **Branch:** `phase-1` (work here, not `main`). Both branches are pushed.
 - **Remote:** https://github.com/killett/metamer — public. Run `git log --oneline -5` for the latest commit.
 - **Done:** design document, Phase 1 implementation plan, two rounds of plan review applied.
-  Phase 1 **Tasks 0–12** are implemented, reviewed, and committed — the likelihood spine now
+  Phase 1 **Tasks 0–13** are implemented, reviewed, and committed — the likelihood spine now
   runs end to end from a `ProcessSpec` to a scored, per-series result, a candidate set can be
   ranked with the comparability guards in force, the objective is differentiable with a
   validated step rule and an adopted gradient oracle, and one family ships verified analytic
   derivatives behind a protocol that refuses an unbacked claim.
-- **Pending:** Phase 1 Tasks 13–19. **Task 18 is a user gate — stop there and report.**
-- **State at handoff:** Task 12 completed at `6c63451`; **442 tests pass** in ~20 s, `mypy --strict`
+- **Pending:** Phase 1 Tasks 14–19. **Task 18 is a user gate — stop there and report.**
+- **State at handoff:** Task 13 completed; **462 tests pass** in ~80 s, `mypy --strict`
   clean, `pre-commit run --all-files` clean, working tree clean, local and `origin/phase-1`
   in sync. Verify with `pixi run test && pixi run typecheck`.
 - **A pre-flight audit of each task brief is a required step** before dispatching an
   implementer — see [Required pre-flight](#required-pre-flight-for-every-remaining-task)
   below. Every brief audited so far carried at least one defect that verbatim transcription
   would have committed.
-- **Next action:** implement **Task 13** (optimizer driver — initialization ladder,
-  convergence, Hessian at optimum) from
+- **Next action:** implement **Task 14** (`fit()`, the (B, N) driver — its fence is already
+  corrected, see the forward audit) from
   [`docs/superpowers/plans/2026-08-05-metamer-phase1.md`](docs/superpowers/plans/2026-08-05-metamer-phase1.md).
   The draft PR command is below and has not been run yet.
 - **Execution workspace:** `.superpowers/sdd/2026-08-05-metamer-phase1/` (git-ignored) holds
@@ -157,7 +157,67 @@ fence is now only a historical record.
 line 299, §5.2 lines 352–359, §17 line 1863, §19 line 1996), which is `design_rank`. No
 third stale-cascade instance found.
 
-### What Task 13 inherits
+### What Task 14 inherits
+
+Task 14 is `fit()`, the `(B, N)` driver. **Its fence was corrected in place on 2026-08-06**
+(see the forward audit above) and (g) re-run against it, so start from the fence as written
+rather than from the pre-audit shape. Two things beyond that:
+
+- **Widen `DesignInfo` with a column-to-term mapping so `n_eff_trend[y,x,m]` can be
+  written.** It is a stored primitive (§12.2) and needs the GLS trend variance and its
+  white-noise equivalent, which means knowing which design column is the trend.
+  `counting.n_eff_trend` already exists and takes those variances; nothing supplies them.
+  A stored primitive that silently goes unwritten is the failure the store schema exists to
+  prevent, and the mapping is cheap while the signal taxonomy is fresh.
+- **`SeriesFit` is scalar and that is correct** (see Task 13 below). `fit` is where the
+  conversion to `(B, M)` uint8 codes happens, exactly once.
+
+### What Task 13 established (done — read before touching the optimizer)
+
+- **A second difference wants `eps^(1/4)`; `fd_step` is for a FIRST difference.** Its
+  cancellation error is `4ε|f|/h²`, not `ε|f|/h`. Measured on the real filter at N = 200
+  against a nested Richardson oracle: `h = 1e-5` (the plan's rule) → **4.39e-05**,
+  `eps^(1/3)` → 2.86e-05, `eps^(1/4) = 1.221e-04` → **2.98e-07**. A factor of 147, and the
+  empirical optimum from a ten-decade sweep is 1e-04. `hessian_step` is a separate function
+  from `fd_step` for exactly this reason.
+- **An oracle that shares a stencil with its subject measures only the step.**
+  `tests/oracles.fd_hessian` and `hessian_at_optimum` are the same second difference at
+  different steps. The Hessian oracle is instead a **nested Richardson** construction —
+  the Richardson derivative of a Richardson gradient — whose asymmetry (8.8e-13) is a free
+  self-consistency check, against a 6.3e-08 disagreement with a Romberg second-difference
+  reference. That gap is Romberg's error, not the nested route's.
+- **Never substitute L-BFGS-B's `hess_inv`.** A converged quasi-Newton matrix is the right
+  shape and roughly the right magnitude, so nothing downstream notices it is too crude —
+  and it feeds reported uncertainties, TIC, the sandwich estimator and the §4.8
+  near-degeneracy condition number.
+- **Curvature at a non-optimum means nothing, so the Hessian is computed LAST.** The plan's
+  fence checked it before the iteration cap and would report `DEGENERATE_HESSIAN` for a fit
+  that had simply not converged. Non-OK fits return `hessian=None`; `DEGENERATE_HESSIAN` is
+  the one exception, because there the matrix is the finding.
+- **`TRUST_RADIUS_COLLAPSED` is reachable only through scipy `status == 2`**
+  (ABNORMAL_TERMINATION_IN_LNSRCH), the line-search analogue of a collapsed trust region.
+  Without that mapping the member is unreachable once Task 19 is deleted, and §18
+  criterion 12 — every taxonomy branch reachable by a constructed test — becomes
+  unsatisfiable. Tested at `outcome_for_status`'s boundary, same precedent as
+  `counting.penalty_terms`' contract test.
+- **Two hidden clamps in the initializer each fabricated a plausible number.**
+  `np.clip(r1, 1e-6, 1 - 1e-6)` turns "anticorrelated at lag 1, which this family cannot
+  represent" into `rho = 0.0724` at `dt = 1`, reported as MOMENT. `np.sqrt(np.maximum(var,
+  1e-12))` reports `sigma = 1e-6` for any series below 1e-12 variance — **above sigma's own
+  1e-8 diagnostic limit, so the clip never fires and the CLIPPED rung is unreachable for
+  the vanishing-amplitude case.** The general rule: **a floor that sits above a diagnostic
+  limit converts a reportable fact into a fabricated one**, and it makes the rung that
+  would have reported it dead code.
+- **The delta method's error is quantified, not assumed.** `J Σ_u Jᵀ` under a `Log`
+  transform understates the true lognormal variance by `(e^s − 1)e^s/s`, `s = σ_u²`:
+  **1.5% at σ_u = 0.1, 46% at 0.5, 367% at 1.0**. Large `σ_u` is the regime near a
+  diagnostic limit, i.e. exactly where `DIAGNOSTIC_LIMIT` fires — so the caveat belongs
+  with the headline number rather than in a footnote.
+- **`SeriesFit`'s scalar shape is the one correct exception to "(B, N) is the only code
+  path"**, and it is documented as such in the module docstring so a later (b) sweep does
+  not "fix" it.
+
+### What Task 13 inherited
 
 Task 13 builds the optimizer driver: the initialization ladder, convergence in unconstrained
 coordinates, and the Hessian at the optimum. Its fence was **audited clean** in the forward

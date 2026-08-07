@@ -1,0 +1,485 @@
+"""Reference per-series optimizer, initialization ladder, and Hessian.
+
+SCALAR HERE IS DELIBERATE. THIS IS THE ONE PLACE IN `core` WHERE IT IS.
+-----------------------------------------------------------------------
+`SeriesFit` carries a scalar `Outcome`, a `float` log-likelihood and a `(1, N)`
+view of one series, and none of that is a batch-granularity defect. This module
+IS path A's permanent reference form: design doc §17 makes a plain scipy loop
+over series path A's final shape if the stage-1 spike goes path B's way, and a
+correctness reference does not need to be fast. The conversion to the `(B, M)`
+uint8 codes the store and `counting`/`criteria` speak happens exactly once, in
+`fit`. A later "every per-series concept must be per series" sweep will find
+this module and should leave it alone — the note is here so that sweep has an
+answer rather than an intuition.
+
+THE HESSIAN IS AN OUTPUT, NOT A DIAGNOSTIC, AND IT IS COMPUTED EXPLICITLY.
+--------------------------------------------------------------------------
+It feeds reported parameter uncertainties, TIC, the sandwich estimator, and the
+near-degeneracy condition number of design doc §4.8. **Never substitute
+L-BFGS-B's `hess_inv`.** A converged quasi-Newton matrix is the right shape and
+roughly the right magnitude, so nothing downstream would notice it is too
+crude — which is precisely why it must not be used. The explicit cost is `2p²`
+objective evaluations, about +12% on a 50-iteration fit at p = 6, paid once.
+
+A SECOND DIFFERENCE WANTS `eps^(1/4)`, NOT `eps^(1/3)`.
+-------------------------------------------------------
+`fd_step` is for a FIRST difference, whose cancellation error is `eps|f|/h`.
+A second central difference divides by `h²`, so its cancellation error is
+`4 eps |f| / h²` and its optimum is `(eps |f| / |f''''|)^(1/4)`. Measured on
+the real `matern12` filter at N = 200, relative error against a nested
+Richardson oracle:
+
+    h = 1.00e-05   4.39e-05     <- max(fd_step(scale), 1e-5), the plan's rule
+    h = 6.06e-06   2.86e-05     <- eps^(1/3)
+    h = 1.22e-04   2.98e-07     <- eps^(1/4), this module's rule
+
+A factor of 147, and a sweep over ten decades puts the empirical optimum at
+1e-04, which `eps^(1/4)` sits on. Reusing `fd_step` here is the single easiest
+mistake in this file.
+
+REPORTED UNCERTAINTY IS FIRST-ORDER, AND THAT IS NOT A FOOTNOTE.
+----------------------------------------------------------------
+The Hessian is in unconstrained coordinates; `transforms.delta_method_cov`
+pushes it to natural units as `J Σ_u Jᵀ`. That is exact only to first order.
+Under a `Log` transform the natural parameter is lognormal, so the true
+variance exceeds the delta-method value by `(e^s − 1)e^s / s` with
+`s = σ_u²`: **1.015 at σ_u = 0.1, 1.459 at 0.5, 4.671 at 1.0** — 1.5%, 46% and
+367% understatement. Large `σ_u` is exactly the regime near a diagnostic limit,
+so the caveat travels with the number that gets published.
+
+THE OUTCOME PRECEDENCE, AND WHY IT IS IN THIS ORDER.
+----------------------------------------------------
+Each check is a different scientific fact and the order decides which one gets
+reported when two apply:
+
+  1. **Design precheck** — its own verdict, unrelabelled. A `RANK_DEFICIENT_X`
+     series reported as `NONFINITE_OBJECTIVE` moves "this design is not
+     identified here" into "the numerics failed": different map entry,
+     different follow-up.
+  2. **Non-finite objective** — nothing below can be interpreted.
+  3. **Diagnostic limit** — outranks non-convergence, because "the fit ran away
+     to the boundary" explains the non-convergence rather than competing with
+     it.
+  4. **Line-search collapse** (scipy `status == 2`) — the optimizer could not
+     find a decreasing step, distinct from simply running out of iterations.
+  5. **Iteration cap**, split on the gradient norm.
+  6. **Degenerate Hessian** — checked LAST among the numerical outcomes,
+     because curvature at a point that is not an optimum means nothing. This is
+     the reverse of the plan's fence, which checked it before the cap and would
+     report `DEGENERATE_HESSIAN` for a fit that had simply not converged.
+
+Consequently the Hessian is computed only once every prior check has passed:
+non-OK fits return `hessian=None`, which also saves `2p²` evaluations on
+exactly the fits that were slow enough to hit the cap. `DEGENERATE_HESSIAN` is
+the one non-OK outcome that keeps its matrix, because there the matrix is the
+finding.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+from dataclasses import dataclass
+from enum import StrEnum
+
+import numpy as np
+from numpy.typing import NDArray
+from scipy.optimize import minimize
+
+from metamer.core.gradients import EPS, fd_gradient
+from metamer.core.objective import ConcentratedObjective
+from metamer.core.outcomes import Outcome
+from metamer.core.signal import DesignInfo
+from metamer.core.terms import ProcessSpec, free_param_index
+
+GRAD_TOL: float = 1e-5
+"""Relative gradient-norm tolerance, judged in unconstrained coordinates.
+
+The comparison is `||g|| < GRAD_TOL * max(|loglik|, 1)`, because `|loglik|`
+scales with N and an absolute gradient tolerance would tighten with record
+length for no reason.
+"""
+
+HESSIAN_COND_LIMIT: float = 1e10
+"""Above this condition number the fit is reported as near-degenerate."""
+
+_RATIO_FLOOR: float = 1.0
+"""Smallest admissible `|f| / |f''''|`, so a degenerate scale cannot give h = 0."""
+
+_STATUS_OUTCOMES: dict[int, Outcome] = {
+    0: Outcome.OK,
+    1: Outcome.ITER_CAP_LARGE_GRAD,
+    2: Outcome.TRUST_RADIUS_COLLAPSED,
+}
+"""scipy L-BFGS-B termination status to outcome.
+
+`2` is ABNORMAL_TERMINATION_IN_LNSRCH: the line search could not find a step
+that decreases the objective. That is the line-search analogue of a collapsed
+trust region, and mapping it here is the only route by which
+`Outcome.TRUST_RADIUS_COLLAPSED` is producible in Phase 1 at all — the batched
+trust-region that would produce it directly is Task 19, which may be deleted
+rather than built. `1` is the iteration cap and is refined by the gradient norm
+before it is reported.
+"""
+
+
+class InitRung(StrEnum):
+    """Which rung of the initialization ladder produced the starting point.
+
+    Recorded on every result because the initialization source affects
+    reproducibility semantics, and it is what you want when diagnosing
+    traversal-order dependence in the Phase 2 warm-start hysteresis audit.
+    """
+
+    WARM_START = "warm_start"
+    MOMENT = "moment"
+    CLIPPED = "clipped"
+    DEFAULT = "default"
+
+
+@dataclass(frozen=True)
+class SeriesFit:
+    """One series' fit result. Scalar by design — see the module docstring.
+
+    Attributes:
+        theta: Natural-units free parameters, shape (1, p). NaN throughout when
+            the design precheck refused the series.
+        loglik: Maximized log-likelihood. **NaN, never -inf**, when the fit
+            failed: the barrier value is legal only inside `negative()`.
+        outcome: The taxonomy verdict; see the module docstring for precedence.
+        n_iter: Iterations the optimizer reported.
+        init_rung: Which rung of the ladder supplied the starting point.
+        hessian: The explicit Hessian of the NEGATIVE log-likelihood in
+            unconstrained coordinates, or None. Present for `OK` and for
+            `DEGENERATE_HESSIAN`; None for every other outcome, because
+            curvature away from an optimum is not a number worth reporting.
+    """
+
+    theta: NDArray[np.float64]
+    loglik: float
+    outcome: Outcome
+    n_iter: int
+    init_rung: InitRung
+    hessian: NDArray[np.float64] | None
+
+
+def outcome_for_status(status: int) -> Outcome:
+    """Map a scipy termination status to a taxonomy outcome.
+
+    Args:
+        status: `OptimizeResult.status`.
+
+    Returns:
+        The mapped outcome. An unrecognized status maps to
+        `NONFINITE_OBJECTIVE` rather than to `OK`, so a scipy version that
+        grows a new code degrades to "something went wrong" instead of to
+        silent success.
+    """
+    return _STATUS_OUTCOMES.get(int(status), Outcome.NONFINITE_OBJECTIVE)
+
+
+def hessian_step(objective_scale: float, curvature_scale: float | None = None) -> float:
+    """Return the second-difference step, `(eps |f| / |f''''|)^(1/4)`.
+
+    **Not `fd_step`.** See the module docstring for the measurements; the
+    fourth root rather than the cube root is the whole content of this
+    function.
+
+    Args:
+        objective_scale: Rough magnitude of the objective, e.g. `|loglik|`.
+        curvature_scale: Rough magnitude of its fourth derivative. Defaults to
+            `objective_scale`, giving `eps^(1/4)` = 1.221e-04, which a sweep
+            over ten decades found sitting on the empirical optimum.
+
+    Returns:
+        A step size in unconstrained coordinates, always strictly positive.
+    """
+    numerator = abs(float(objective_scale))
+    denominator = numerator if curvature_scale is None else abs(float(curvature_scale))
+    ratio = numerator / denominator if denominator > 0.0 else 0.0
+    return float((EPS * max(ratio, _RATIO_FLOOR)) ** 0.25)
+
+
+def hessian_at_optimum(
+    fn: Callable[[NDArray[np.float64]], float],
+    u: NDArray[np.float64],
+    scale: float = 1.0,
+    curvature: float | None = None,
+    step: float | None = None,
+) -> NDArray[np.float64]:
+    """Explicit Hessian by second central differences on the objective.
+
+    Symmetric by construction: each mixed partial is computed once and
+    mirrored, which halves the off-diagonal cost and makes the result exactly
+    symmetric rather than symmetric to rounding.
+
+    Args:
+        fn: Scalar objective of an unconstrained parameter vector.
+        u: Point at which to differentiate, shape (p,).
+        scale: Rough magnitude of `fn`, used to size the step.
+        curvature: Rough magnitude of `fn`'s fourth derivative; see
+            `hessian_step`.
+        step: Explicit step, overriding the rule.
+
+    Returns:
+        The Hessian, shape (p, p).
+
+    Raises:
+        ValueError: If `u` is not one-dimensional.
+    """
+    point = np.asarray(u, dtype=np.float64)
+    if point.ndim != 1:
+        raise ValueError(
+            "the differentiation point must be one-dimensional, shape (p,); got "
+            f"shape {point.shape}"
+        )
+    h = hessian_step(scale, curvature) if step is None else abs(float(step))
+    size = point.size
+    out = np.zeros((size, size), dtype=np.float64)
+    for i in range(size):
+        for j in range(i, size):
+            ei = np.zeros(size)
+            ej = np.zeros(size)
+            ei[i] = h
+            ej[j] = h
+            value = (
+                fn(point + ei + ej)
+                - fn(point + ei - ej)
+                - fn(point - ei + ej)
+                + fn(point - ei - ej)
+            ) / (4.0 * h * h)
+            out[i, j] = out[j, i] = value
+    return out
+
+
+def moment_init(
+    spec: ProcessSpec,
+    y: NDArray[np.float64],
+    mask: NDArray[np.bool_],
+    t: NDArray[np.float64],
+) -> tuple[NDArray[np.float64], tuple[InitRung, ...]]:
+    """Deterministic moment-based starting point, with a fallback ladder.
+
+    Deterministic rather than random multi-start: reproducible, seed-free, and
+    the precursor of the Whittle screening pass. Random multi-start is a
+    straight multiplier on a budget with little headroom.
+
+    Ladder, worst rung reached is the one reported:
+    `moment` → `clipped` (a usable estimate the model cannot hold) → `default`
+    (no usable estimate at all).
+
+    **`r1` outside `(0, 1)` falls to the default rather than being clamped.**
+    An OU process has `r1 = exp(-dt/rho)`, strictly inside that interval; a
+    non-positive `r1` says the data are anticorrelated at lag 1, which this
+    family cannot represent. Clamping to `1e-6` instead yields
+    `rho = -dt/log(1e-6) = 0.0724` at `dt = 1` — a specific, plausible,
+    entirely fabricated number reported as data-derived.
+
+    **THE RUNG IS PER SERIES.** It is reported per `(series, candidate)` on the
+    way to the store, and the conditions that trigger a fallback are per series
+    -- one gap-riddled pixel in a tile is the ordinary case, not the exception.
+    A single batch-wide rung would be right only when every series in the batch
+    falls the same way, which is exactly the situation a test fixture creates
+    and real data does not.
+
+    Args:
+        spec: The noise specification. Note this takes the SPEC, not the state
+            space: parameter defaults and the free-parameter layout both come
+            from the spec, and reading them from `family.param_specs()` instead
+            is a second, independent ordering source that nothing keeps in sync
+            with `free_param_index`.
+        y: Observations, shape (B, N).
+        mask: Presence mask, shape (B, N).
+        t: Shared time axis, shape (N,).
+
+    Returns:
+        The starting theta, shape (B, p_free) in natural units, and one rung
+        per series, length B. The rung reported is the WORST reached for that
+        series: `DEFAULT` if any parameter had no usable data-derived estimate,
+        `CLIPPED` if one was produced but had to be constrained to a diagnostic
+        limit, `MOMENT` otherwise.
+    """
+    free = free_param_index(spec)
+    by_label = dict(zip(spec.labels(), spec.terms, strict=True))
+    defaults = np.array(
+        [by_label[label].params[name].default for label, name in free], dtype=np.float64
+    )
+    batch = y.shape[0]
+    start = np.repeat(defaults[None, :], batch, axis=0)
+
+    rungs = [InitRung.MOMENT] * batch
+
+    present = np.asarray(mask, dtype=np.bool_)
+    kept = present.sum(axis=1)
+    finite = np.where(present, np.asarray(y, dtype=np.float64), np.nan)
+    # Restricted to rows with at least two kept samples rather than computed
+    # everywhere and masked afterwards: `np.nanvar` of an all-NaN row emits
+    # "Degrees of freedom <= 0 for slice", and a wholly-masked series is the
+    # ordinary land/ice case, not an anomaly worth a warning on every tile.
+    enough = kept > 1
+    var = np.zeros(batch, dtype=np.float64)
+    if bool(np.any(enough)):
+        var[enough] = np.nanvar(finite[enough], axis=1)
+    usable_var = enough & np.isfinite(var) & (var > 0.0)
+
+    # Same restriction as the variance, for the same reason: `np.nanmean` of a
+    # wholly-masked row warns "Mean of empty slice", and a wholly-masked series
+    # is land or permanent ice, which every tile has.
+    means = np.zeros((batch, 1), dtype=np.float64)
+    observed = kept > 0
+    if bool(np.any(observed)):
+        means[observed, 0] = np.nanmean(finite[observed], axis=1)
+    centred = np.where(present, finite - means, 0.0)
+    numerator = np.sum(centred[:, 1:] * centred[:, :-1], axis=1)
+    denominator = np.sum(centred**2, axis=1)
+    r1 = np.divide(
+        numerator, denominator, out=np.zeros_like(numerator), where=denominator > 0
+    )
+    # An OU process has r1 = exp(-dt/rho), strictly inside (0, 1). Outside it
+    # there is no moment estimate to be had, and clamping into [1e-6, 1-1e-6]
+    # instead fabricates rho = 0.0724 at dt = 1 and reports it as data-derived.
+    usable_rho = usable_var & (r1 > 0.0) & (r1 < 1.0)
+
+    dt = float(np.median(np.diff(t))) if t.size > 1 else 1.0
+    with np.errstate(divide="ignore", invalid="ignore"):
+        rho = np.where(usable_rho, -dt / np.log(np.where(usable_rho, r1, 0.5)), np.nan)
+
+    for index, (label, name) in enumerate(free):
+        param = by_label[label].params[name]
+        derived = np.zeros(batch, dtype=np.bool_)
+        if name == "sigma":
+            # No hidden floor here. `np.sqrt(np.maximum(var, 1e-12))` would
+            # report sigma = 1e-6 for ANY series below 1e-12 variance -- above
+            # sigma's own 1e-8 lower diagnostic limit, so the clip never fires
+            # and the CLIPPED rung becomes unreachable for the
+            # vanishing-amplitude case. A floor that pre-empts a diagnostic
+            # limit converts a reportable fact into a fabricated number.
+            start[usable_var, index] = np.sqrt(var[usable_var])
+            derived = usable_var
+        elif name == "rho":
+            start[usable_rho, index] = rho[usable_rho]
+            derived = usable_rho
+        clipped = np.clip(start[:, index], *param.diagnostic_limits)
+        changed = clipped != start[:, index]
+        start[:, index] = clipped
+        for series in range(batch):
+            if not derived[series]:
+                rungs[series] = InitRung.DEFAULT
+            elif changed[series] and rungs[series] is InitRung.MOMENT:
+                rungs[series] = InitRung.CLIPPED
+
+    unusable = ~np.all(np.isfinite(start), axis=1)
+    if bool(np.any(unusable)):
+        start[unusable] = defaults
+        for row in np.flatnonzero(unusable).tolist():
+            rungs[row] = InitRung.DEFAULT
+    return start, tuple(rungs)
+
+
+def optimize_series(
+    objective: ConcentratedObjective,
+    y: NDArray[np.float64],
+    mask: NDArray[np.bool_],
+    t: NDArray[np.float64],
+    design: DesignInfo | None,
+    x0: NDArray[np.float64] | None = None,
+    max_iter: int = 200,
+    hessian_cond_limit: float = HESSIAN_COND_LIMIT,
+) -> SeriesFit:
+    """Fit one series. The batch driver in `fit.py` loops over this.
+
+    Args:
+        objective: The concentrated objective.
+        y: Observations, shape (1, N).
+        mask: Presence mask, shape (1, N).
+        t: Shared time axis, shape (N,).
+        design: The built design matrix and its theta-free quantities, or None.
+        x0: Optional warm start in unconstrained coordinates, shape (1, p).
+            When supplied it IS the starting point, not merely a reported rung.
+        max_iter: Iteration cap.
+        hessian_cond_limit: Condition number above which the fit is reported
+            `DEGENERATE_HESSIAN`. Exposed so the branch can be exercised
+            without a fixture whose degeneracy is itself in question.
+
+    Returns:
+        A `SeriesFit` carrying theta in natural units and a taxonomy outcome.
+        See the module docstring for the precedence between outcomes.
+    """
+    # p is the FREE parameter count, from the single source of truth. Using
+    # len(term.params) here would size the vector to include frozen parameters
+    # and silently shift every later coordinate.
+    free = free_param_index(objective.spec)
+    p = len(free)
+
+    if design is not None and design.matrix.size:
+        codes = objective.check_design(design, 1)
+        if int(codes[0]) != Outcome.OK.code:
+            return SeriesFit(
+                np.full((1, p), np.nan),
+                float("nan"),
+                Outcome.from_code(int(codes[0])),
+                0,
+                InitRung.DEFAULT,
+                None,
+            )
+
+    if x0 is None:
+        start_natural, rungs = moment_init(objective.spec, y, mask, t)
+        rung = rungs[0]
+        u0 = objective.to_unconstrained(start_natural)[0]
+    else:
+        u0, rung = np.asarray(x0, dtype=np.float64)[0], InitRung.WARM_START
+
+    scale = float(max(int(np.count_nonzero(mask)), 1))
+
+    def negative(u: NDArray[np.float64]) -> float:
+        # NaN (a failed evaluation) and -inf both become +inf here. This is the
+        # ONLY place -inf-as-barrier is used: results destined for the store
+        # carry NaN, because -inf is a finite-looking sentinel that survives
+        # some consumers' checks and poisons a downstream mean.
+        value = objective.unconstrained_loglik(u[None, :], y, mask, t, design)[0]
+        return float(np.inf) if not np.isfinite(value) else float(-value)
+
+    def jac(u: NDArray[np.float64]) -> NDArray[np.float64]:
+        return fd_gradient(negative, u, scale=scale)
+
+    result = minimize(
+        negative, u0, jac=jac, method="L-BFGS-B", options={"maxiter": max_iter}
+    )
+    theta = objective.to_natural(np.atleast_2d(result.x))
+    loglik = -float(result.fun)
+    n_iter = int(result.nit)
+
+    if not np.isfinite(loglik):
+        return SeriesFit(
+            theta, float("nan"), Outcome.NONFINITE_OBJECTIVE, n_iter, rung, None
+        )
+
+    by_label = dict(zip(objective.spec.labels(), objective.spec.terms, strict=True))
+    if any(
+        by_label[label].params[name].at_diagnostic_limit(float(theta[0, index]))
+        for index, (label, name) in enumerate(free)
+    ):
+        return SeriesFit(theta, loglik, Outcome.DIAGNOSTIC_LIMIT, n_iter, rung, None)
+
+    status = outcome_for_status(result.status)
+    if status is Outcome.TRUST_RADIUS_COLLAPSED:
+        return SeriesFit(theta, loglik, status, n_iter, rung, None)
+
+    if status is Outcome.ITER_CAP_LARGE_GRAD or n_iter >= max_iter:
+        magnitude = float(np.linalg.norm(jac(result.x)))
+        capped = (
+            Outcome.ITER_CAP_SMALL_GRAD
+            if magnitude < GRAD_TOL * max(abs(loglik), 1.0)
+            else Outcome.ITER_CAP_LARGE_GRAD
+        )
+        return SeriesFit(theta, loglik, capped, n_iter, rung, None)
+
+    if status is not Outcome.OK:
+        return SeriesFit(theta, loglik, status, n_iter, rung, None)
+
+    hessian = hessian_at_optimum(negative, result.x, scale=abs(loglik))
+    if float(np.linalg.cond(hessian)) > float(hessian_cond_limit):
+        return SeriesFit(
+            theta, loglik, Outcome.DEGENERATE_HESSIAN, n_iter, rung, hessian
+        )
+    return SeriesFit(theta, loglik, Outcome.OK, n_iter, rung, hessian)
