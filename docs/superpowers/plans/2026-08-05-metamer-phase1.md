@@ -6976,30 +6976,39 @@ The deleted task's content is recoverable from git history if the verdict is eve
 
 ## Phase 1 exit criteria checklist
 
-Mapped from design doc §18. Tick these before declaring Phase 1 complete.
+Mapped from design doc §18. **Assessed 2026-08-07 at the close of Phase 1.** Each item is
+**met**, **met with reduced scope** (the criterion is satisfied but not in the form written,
+and the gap is stated), or **deferred** (with what would close it).
 
-- [ ] 1. Brute-force MVN agreement at small N, every family **and a sum** — Task 6
-- [ ] 2. `celerite2` agreement (optional, Tier-1) — **first cut if Phase 1 is too large**
-- [ ] 3. Masked-gap likelihood identical to genuinely-absent — Task 6
-- [ ] 4. Analytic `F`/`Q`/`P∞` vs `expm`/Lyapunov, per family — Tasks 4, 5
-- [ ] 5. Parameter counting vs hand counts, **both objectives** — Task 9
-- [ ] 6. Rank-deficient `X` gives the documented failure, not NaN — Tasks 7, 8
-- [ ] 7. REML penalty vs brute-force `log|XᵀΣ⁻¹X|` — Task 8
-- [ ] 8. Complex-step viability verdict **recorded with numbers** — Task 11
-- [ ] 9. FD step rule validated at N ∈ {100, 630, 5000} — Task 11
-- [ ] 10. Gradient-capability resolution on a mixed composite — Task 12
-- [ ] 11. Hessian vs brute-force FD Hessian — Task 13
-- [ ] 12. **Every** failure-taxonomy branch reachable by a constructed test — Tasks 3, 13
-- [ ] 13. Measured peak RSS matches the analytic formula at two values of B — Task 17
-- [ ] 14. Stage-1 comparison at B ≈ 10⁴, N ≈ 630, split by machine — Task 18
-- [ ] 15. Gap-structure sweep, A:B ratio **per gap case** — Tasks 17, 18
-- [ ] 16. `fit_hash`/`compat_hash` separation exercised end to end — Task 16
+| # | criterion | status | notes |
+|---|---|---|---|
+| 1 | Brute-force MVN agreement, every family **and a sum** | **met** | `tests/test_kalman.py`, `tests/oracles.py` |
+| 2 | `celerite2` agreement on the shared kernel subset | **deferred** | Explicitly optional, and §16.1's designated first cut. `celerite2` is now a declared `[target.linux-64]` dependency and importable, and `test_families.py` documents why Matérn ν=3/2 is eliminated from its basis. **Closed by** an agreement test over the ν=1/2 + white subset, skipped off Tier-1. MVN already validates the bespoke part (the state-space construction); celerite2 would validate the textbook part (the ACF) |
+| 3 | Masked-gap likelihood identical to genuinely-absent samples | **met** | `tests/test_kalman.py` |
+| 4 | Analytic `F`/`Q`/`P∞` vs `expm`/Lyapunov, per family | **met** | `tests/oracles.expm_transition`, `lyapunov_stationary_cov` |
+| 5 | Parameter counting vs hand counts, **both objectives** | **met** | `tests/test_counting.py`; ML `k = k_θ + rank(X_r)`, REML `k = k_θ`, `n = n_obs − design_rank` |
+| 6 | Rank-deficient `X` gives the documented failure, not NaN | **met** | `RANK_DEFICIENT_X` and `ILL_CONDITIONED_X` are distinct and both reachable |
+| 7 | REML penalty vs brute-force `log\|XᵀΣ⁻¹X\|` at small N | **met** | `tests/test_kalman.py`, explicit Σ |
+| 8 | Complex-step viability verdict **recorded with numbers** | **met** | [`notes/complex-step-verdict.md`](../notes/complex-step-verdict.md) — dead by three dtype casts, `rel = 1.000e+00`; Richardson from `h0 = 1e-2` adopted |
+| 9 | FD step rule validated at **three N** (100, 630, 5000) | **met** | Task 11; dropping the curvature denominator costs 280×–1100× |
+| 10 | Gradient-capability resolution on a mixed composite | **met** | Matérn ν=1/2 analytic, ν=3/2 none, plus a test-only stub family |
+| 11 | Hessian at optimum vs brute-force FD Hessian | **met** | Nested-Richardson oracle, not a wider-step second difference |
+| 12 | **Every** failure-taxonomy branch reachable by a constructed test | **met** | All 12 `Outcome` members appear in constructed tests, including `TRUST_RADIUS_COLLAPSED` via scipy `status == 2` |
+| 13 | Measured peak RSS matching the analytic formula at 2–3 values of B | **met with reduced scope** | Three values of B, slope-fitted in fresh subprocesses. **Two departures:** the workload is a batched likelihood *evaluation*, not a full `fit` — `fit` costs ~5.4 s/series, so the written form at B = 10⁴ would take ~15 h; and the comparison is against an **arithmetic floor over arrays that provably exist** rather than a ±25% band. It did its job: it found the formula was missing the `_augment` term entirely |
+| 14 | Completed run at B ≈ 10⁴, N ≈ 630, stage-1 comparison written up | **met with reduced scope** | B = 20 000 measured at path B's worst cell; full sweep at B = 1000. **Mini PC only** — the 64-core box and MacBook were skipped by user direction, with the one-sided argument recorded. Reported in canonical-filter-pass units and raw ms. **The roofline model's prediction error is NOT stated and cannot be from one machine** |
+| 15 | Gap-structure sweep, A:B **per gap case** | **met** | {0%, 10% scattered, 40% contiguous}; ratio rises monotonically with gappiness in all four rows |
+| 16 | `fit_hash` / `compat_hash` separation exercised end to end | **met with reduced scope** | The separation, the allowlist and the containment invariant are fully tested, and the recompute-without-refitting contract is tested against **in-memory primitives**: `rank_candidates` takes only stored primitives, never a spec or the data. **Not tested:** an actual resume, and "a `fit_hash` mismatch is refused" — both need the zarr store, which is Phase 2. Marked in `test_hashing.py` as the Phase 2 store contract |
 
-Criterion 16's full end-to-end form (a resume that adds a criterion without refitting)
-needs the zarr store and therefore lands in Phase 2; Task 16 proves the hash boundary that
-makes it possible.
+**Score: 12 met, 3 met with reduced scope, 1 deferred.**
 
----
+**The one deferred item is the one the design nominated in advance** as the first thing to
+cut if Phase 1 proved too large (§16.1), and it is the cheapest to close now that the
+dependency is installed.
+
+**The three reduced-scope items share a cause:** each was written assuming infrastructure
+that Phase 1 deliberately does not build — a fast path A (13), three machines (14), and the
+zarr store (16). None is a gap in what was built; each is a gap between the criterion's
+wording and Phase 1's own scope.
 
 ## Deferred to Phase 2 and beyond
 
