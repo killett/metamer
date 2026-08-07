@@ -5,17 +5,19 @@
 - **Branch:** `phase-1` (work here, not `main`). Both branches are pushed.
 - **Remote:** https://github.com/killett/metamer — public. Run `git log --oneline -5` for the latest commit.
 - **Done:** design document, Phase 1 implementation plan, two rounds of plan review applied.
-  Phase 1 **Tasks 0–9** are implemented, reviewed, and committed — the likelihood spine now
-  runs end to end from a `ProcessSpec` to a scored, per-series result.
-- **Pending:** Phase 1 Tasks 10–19. **Task 18 is a user gate — stop there and report.**
-- **State at handoff:** Task 9 completed at `b40e412`; **376 tests pass**, `mypy --strict`
+  Phase 1 **Tasks 0–10** are implemented, reviewed, and committed — the likelihood spine now
+  runs end to end from a `ProcessSpec` to a scored, per-series result, and a candidate set
+  can be ranked with the comparability guards in force.
+- **Pending:** Phase 1 Tasks 11–19. **Task 18 is a user gate — stop there and report.**
+- **State at handoff:** Task 10 completed at `5003e9b`; **406 tests pass**, `mypy --strict`
   clean, `pre-commit run --all-files` clean, working tree clean, local and `origin/phase-1`
   in sync. Verify with `pixi run test && pixi run typecheck`.
 - **A pre-flight audit of each task brief is a required step** before dispatching an
   implementer — see [Required pre-flight](#required-pre-flight-for-every-remaining-task)
   below. Every brief audited so far carried at least one defect that verbatim transcription
   would have committed.
-- **Next action:** implement **Task 10** (criteria and the comparability guards) from
+- **Next action:** implement **Task 11** (finite-difference gradients, the step rule, and the
+  complex-step verdict) from
   [`docs/superpowers/plans/2026-08-05-metamer-phase1.md`](docs/superpowers/plans/2026-08-05-metamer-phase1.md).
   The draft PR command is below and has not been run yet.
 - **Execution workspace:** `.superpowers/sdd/2026-08-05-metamer-phase1/` (git-ignored) holds
@@ -72,11 +74,34 @@ argument — a passing suite is not evidence the brief is right.
 Also run the brief's code if it supplies any: the two highest-yield audits did, and one
 found three collection errors and six failing tests out of twelve.
 
-### What Task 10 inherits
+### What Task 11 inherits
 
-Task 10 builds the criteria (AIC, AICc, BIC, HQIC, and the effective-sample-size BIC
-variant) and the **comparability guards**. A session starting there has no memory of why
-the guards exist, so:
+Task 11 builds central-difference gradients in **unconstrained** coordinates, the step rule
+that survives `|ℓ|` growing with `N`, and the recorded complex-step verdict. Points a fresh
+session cannot reconstruct:
+
+- **Steps are taken in unconstrained coordinates**, which is what lets one relative step
+  serve every family — a step in natural units means something different for `σ²` than for
+  `ρ`. `ConcentratedObjective.hydrate` is the only correct route from a free-only vector to
+  the full `theta` slice layout (`StateSpace` slices over *all* of a term's parameters), so
+  a perturbation applied to the wrong vector shifts every later coordinate one slot left.
+- **The step rule must be validated at `N ∈ {100, 630, 5000}`** — exit criterion 9. The
+  point of three values is that `|ℓ|` scales with `N`, so a rule tuned at one `N` degrades
+  at another, and a single-`N` test cannot see it.
+- **The complex-step verdict is an exit criterion in its own right (8), recorded with
+  numbers.** If complex-step agrees to ~1e-12 it becomes the oracle; if only ~1e-7,
+  Richardson-extrapolated central FD is adopted instead and the note says so. The note is
+  the deliverable, not the decision.
+- **The filter's explicit float64 casts are the first thing complex-step hits.** Verified in
+  `engines/kalman.py`: `theta`, `y` and `t` are cast with `np.asarray(..., dtype=np.float64)`
+  on entry (lines 142–145) and the state, covariance and accumulator buffers are allocated
+  `dtype=np.float64` (lines 157–160). An imaginary perturbation is therefore discarded
+  *before any arithmetic happens*, silently — the answer comes back real and plausible.
+  Whatever else Task 11 finds, the verdict cannot be "complex-step works" until those casts
+  are made dtype-following. The `np.where` masking (lines 185–204) is holomorphic and is
+  not the problem; the casts are.
+
+### What Task 10 established (done — read only if you touch selection)
 
 - **`k` and `n` are objective-dependent, as definitions rather than adjustments.**
   ML: `k = k_θ + k_β`, `n = n_used`. REML: `k = k_θ`, `n = n_used − design_rank`. `k_β` is
@@ -92,8 +117,8 @@ the guards exist, so:
   At 10⁷ series nobody inspects an individual fit, so a plausible-and-wrong ΔIC becomes a
   plausible-and-wrong *map*. The guard is the only thing standing between those two
   outcomes, which is why it refuses rather than warns.
-- `penalty_terms` in `counting.py` is a pure function Task 10 calls directly; it already
-  carries the ML `k_β = rank` contract test that the pipeline cannot currently reach.
+- `penalty_terms` in `counting.py` is a pure function `criteria.py` composes with directly;
+  it carries the ML `k_β = rank` contract test that the pipeline cannot currently reach.
 
 **The Phase 1 branch point:** Task 18 is a user gate needing runs on the 64-core box and
 the MacBook. **Task 19 is built only if Task 18's verdict is "inconclusive"** — if path B
@@ -273,6 +298,46 @@ cannot reconstruct them.
 - **Analytic `F`, `Q`, `P∞` per family.** The general `expm`/Lyapunov path is a test
   reference and a degeneracy fallback; frequent firing is a bug signal.
 - **Scores carry an engine tag AND an objective tag**; ranking across either is a hard error.
+  The tags are **per candidate**, not per run: engine capability is resolved per composite
+  spec (design doc §4.2), so a candidate set genuinely can mix engines — which is the
+  situation the guard exists for. The guards run on the whole candidate set *before*
+  anything is scored, because deriving the tag sets from the surviving subset would make the
+  same misconfigured run raise on one tile and write a wrong map on the next.
+- **The criteria layer is `(B, M)` like everything else.** `CandidateScores` holds `loglik`,
+  `k`, `n`, `n_eff` and `outcome` as `(B, M)`; `rank_candidates` returns `delta_ic` and
+  `weights` as `(B, M)` and `ic_best`, `best_index`, `n_valid` as `(B,)`, which is the
+  `/selection/` layout of §12.2. `best_index = -1` is the no-winner sentinel. The plan's
+  Task 10 fence proposed a scalar `CandidateScore` per candidate per point; that is a
+  per-point Python loop over 10⁷ grid points, and it makes the caller unpack
+  `penalty_terms`' arrays by hand, which is precisely where the `rank_x` / `design_rank`
+  substitution gets reintroduced.
+- **Selection survival is `outcome == OK`, never `isfinite(loglik)` and never
+  `not Outcome.is_failure`.** An iteration-capped or diagnostic-limited candidate still
+  carries the last finite log-likelihood it evaluated, so a finiteness gate resurrects a fit
+  the failure ladder rejected — and it can win. `is_failure` is False for
+  `INSUFFICIENT_DATA` and `NOT_ATTEMPTED` **by design** (they are excluded from the failure
+  *numerator*, not from the outcome ladder), so gating on it admits land and permanent ice
+  into the ranking and a wholly-masked tile reports a confident selection.
+- **A criterion whose penalty is ≤ 0 is not a criterion.** Measured: at `n = 1` BIC's penalty
+  is exactly `0.0` and HQIC's is `−inf`; at `n = 2` HQIC's is `−2.93`, i.e. it *rewards*
+  parameters. All three hand the win to the most complex candidate whatever the data say,
+  and `n = 1` is reachable because `penalty_terms` guarantees only
+  `n_obs − design_rank ≥ 1`. So `BIC` is defined for `n > 1`, `HQIC` for `n > e`,
+  `BIC_NEFF` for `n_eff > 1`, and outside those `ic_value` returns **NaN**, which flows into
+  the same "not rankable" path as a failed fit. **Do not clamp the argument instead** — a
+  floor at 2.0 silently answers a different question, and at `n = 2`, `n_eff = 1.5` it makes
+  `bic_neff` exactly *equal* to `bic`, contradicting the requirement that it be strictly
+  smaller whenever `n_eff < n`.
+- **`n_valid` counts fits, not finite criterion values.** The store holds one `n_valid[y,x]`
+  shared by every criterion (§12.2 gives it no `c` axis), so it must not depend on which
+  criterion was asked for. An AICc of `+inf` at `n ≤ k + 1` is ranked last with weight `0`
+  and `ΔIC = +inf` and still counts as valid; defining validity as `isfinite(ic)` would make
+  the same fits report different `n_valid` under AIC and under AICc.
+- **AICc diverges rather than turning its correction negative.** At `n < k + 1` the
+  denominator `n − k − 1` is negative and `2k(k+1)/(n−k−1)` is negative, so AICc would score
+  an over-parameterized candidate *below* plain AIC — the opposite of what AICc is for. NaN
+  must be preserved as NaN there rather than collapsing to `+inf`, or a missing primitive
+  reads as a real, infinitely bad score.
 - **Counting is per objective**: ML `k = k_θ + k_β`, `n = n_obs`; REML `k = k_θ`,
   `n = n_obs − rank(X)`. Two definitions on two model classes, not one with an adjustment.
 - **`k_β` is `rank(X_r)`, not `ncol(X)`, under *both* objectives.** A criterion's `k` is the
@@ -307,7 +372,10 @@ cannot reconstruct them.
 - **The memory formula's output-slot count is `M × (2p + 2k_β + 4) × 8 + M × 3`.** The `4`
   is `log_lik`, `k`, `n_eff_trend`, `n_eff_bic` as float64 — it was `2` while both `n_eff`
   variants were believed per-point. **Task 17 consumes this**; the tile-size arithmetic in
-  design doc §9.4 changes with it.
+  design doc §9.4 changes with it. Design doc **§12.5's primitive list still said
+  `n_eff_trend[y,x]` / `n_eff_bic[y,x]`** after §10.1 was corrected on 2026-08-06 — i.e. the
+  document contradicted itself, and §12.5 is exactly the sentence Task 17 would have read.
+  Corrected to `[y,x,m]` on 2026-08-06 to match §12.2's layout block.
 - **float64 throughout `core`**; float32 only at the batch/IO boundary, converted per dask
   chunk so both representations never coexist.
 - **Parallelism is within a tile, never across tiles** — that is what keeps peak RAM
@@ -392,6 +460,21 @@ question; compute/bandwidth roofline pair for cross-machine prediction) are in d
   and its 72 tests subsume A's 62 with no assertion lost. Constraints against a recurrence
   are now in the user's global `CLAUDE.md`: one writer per working tree, and never rewind a
   branch whose commits have been pushed.
+- **Task 14's code fence is stale against Tasks 9 and 10 and must be corrected before it is
+  implemented.** Three ways: it calls `penalty_terms(spec, objective, int(mask[b].sum()),
+  design.rank, k_beta)`, a scalar positional signature that Task 9 replaced with keyword-only
+  per-series arrays (`n_obs=`, `design_rank=`, `outcome=`, `k_beta=`); it builds one
+  `CandidateScore` per `(series, candidate)` inside a double Python loop, which `criteria.py`
+  no longer accepts; and it passes `n_eff=float(n)`, so `n_eff_bic` is never called and
+  `Criterion.BIC_NEFF` would silently degrade to `BIC`. The pattern is general — **the plan's
+  later fences were written against the pre-Task-9 scalar model**, so every remaining fence
+  that touches `counting` or `criteria` should be diffed against the committed signatures
+  before transcription, not after.
+- **A test helper can produce the failure it is meant to construct.** Task 10's `_scores`
+  helper wrote `np.full(shape, np.nan) + k` where it meant `np.full(shape, k)`, so every
+  `k` and `n` came out NaN and twelve tests failed against a correct implementation. It was
+  the implementation's own `OK`-beside-NaN guard that reported it, by name and by index —
+  which is the argument for making that guard raise rather than silently drop the cell.
 - Per user global instructions: never do investigative `git checkout <sha>` inside the
   working tree. Use `git show <sha>:<path>`, `git worktree add`, or `git diff <sha>`.
 

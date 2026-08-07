@@ -4305,18 +4305,67 @@ git commit -m "feat: add per-objective parameter counting and effective sample s
 - Create: `tests/test_criteria.py`
 
 **Acceptance Criteria:**
-- [ ] `aic == 2k − 2ℓ`; `bic == k ln n − 2ℓ`; `aicc == aic + 2k(k+1)/(n−k−1)`; `hqic == 2k ln ln n − 2ℓ`
-- [ ] `bic_neff` substitutes `n_eff_bic` for `n` and is strictly smaller than `bic` when `n_eff < n`
-- [ ] Ranking two scores with different `engine` tags raises `ComparabilityError`
-- [ ] Ranking two scores with different `objective` tags raises `ComparabilityError`
-- [ ] `ΔIC` is relative to the best surviving candidate; failed candidates get `NaN` and are excluded from weight normalization
-- [ ] `n_valid` counts surviving candidates and is returned alongside the weights
+- [x] `aic == 2k − 2ℓ`; `bic == k ln n − 2ℓ`; `aicc == aic + 2k(k+1)/(n−k−1)`; `hqic == 2k ln ln n − 2ℓ`
+- [x] `bic_neff` substitutes `n_eff_bic` for `n` and is strictly smaller than `bic` when `n_eff < n`
+- [x] Ranking two scores with different `engine` tags raises `ComparabilityError`
+- [x] Ranking two scores with different `objective` tags raises `ComparabilityError`
+- [x] `ΔIC` is relative to the best surviving candidate; failed candidates get `NaN` and are excluded from weight normalization
+- [x] `n_valid` counts surviving candidates and is returned alongside the weights
 
 **Verify:** `pixi run test tests/test_criteria.py -v`
 
+> **Corrections applied at implementation time (commit `5003e9b`). The code
+> fences below are the pre-audit draft and are kept only as the record of what
+> was written; `src/metamer/core/criteria.py` is authoritative.**
+>
+> 1. **The API is batched `(B, M)`, not one `CandidateScore` per candidate per
+>    point.** `CandidateScores` holds `loglik`, `k`, `n`, `n_eff` and `outcome`
+>    as `(B, M)` arrays with per-candidate `labels` / `engines` / `objectives`
+>    tuples; `rank_candidates` returns `delta_ic` and `weights` as `(B, M)` and
+>    `ic_best`, `best_index`, `n_valid` as `(B,)`. Everything the module
+>    consumes is already per series — `penalty_terms` returns `(k, n)` as `(B,)`
+>    arrays, `n_eff_bic` returns `(B,)`, `ObjectiveResult.loglik` and
+>    `.outcome` are `(B,)` — so the scalar form both forced a per-point Python
+>    loop over 10⁷ grid points and made the caller unpack those arrays by hand,
+>    which is exactly where the `rank_x` / `design_rank` substitution gets
+>    reintroduced. The shapes now match the `/selection/` layout of design doc
+>    §12.2.
+> 2. **`ok: bool` is replaced by the `(B, M)` `outcome` array.** Survival is
+>    `outcome == OK`. Gating on `isfinite(loglik)` would resurrect an
+>    iteration-capped or diagnostic-limited candidate, which carries the last
+>    finite value it evaluated; gating on `Outcome.is_failure` would *admit*
+>    `INSUFFICIENT_DATA` and `NOT_ATTEMPTED`, so a wholly-masked tile would come
+>    back with a confident-looking selection. An `OK` outcome beside a NaN
+>    primitive now raises rather than being silently dropped.
+> 3. **The log-based penalties have domains; outside them the value is NaN.**
+>    Measured: at `n = 1` BIC's penalty is exactly `0.0` and HQIC's is `−inf`;
+>    at `n = 2` HQIC's is `−2.93`, i.e. it rewards parameters. `n = 1` is
+>    reachable — `penalty_terms` guarantees only `n_obs − design_rank ≥ 1`. So
+>    `BIC` needs `n > 1`, `HQIC` needs `n > e`, `BIC_NEFF` needs `n_eff > 1`.
+> 4. **The draft's `max(n_eff, 2.0)` floor is dropped.** It silently answers a
+>    different question, and at `n = 2`, `n_eff = 1.5` it makes `bic_neff`
+>    exactly *equal* to `bic` — contradicting this task's own second acceptance
+>    criterion, which the draft's own `loose < strict` test could not see.
+> 5. **`n_valid` counts fits, not finite criterion values.** The store holds one
+>    `n_valid[y,x]` shared by every criterion (§12.2 gives it no `c` axis), so
+>    it cannot depend on which criterion was asked for. An AICc of `+inf` at
+>    `n ≤ k + 1` is ranked last with weight `0` and `ΔIC = +inf`, and still
+>    counts as valid.
+> 6. **`Ranking` also carries `criterion` and `ic_best`.** §12.6 stores
+>    `ic_best[y,x,c]` in float64 beside float32 `ΔIC`; without it the store
+>    cannot be written from a `Ranking`.
+>
+> **Task 14's fence is stale in the same way** and must be corrected before it
+> is implemented: it calls `penalty_terms(spec, objective, int(mask[b].sum()),
+> design.rank, k_beta)`, a scalar positional signature that Task 9 replaced with
+> keyword-only per-series arrays (`n_obs=`, `design_rank=`, `outcome=`,
+> `k_beta=`); it builds one `CandidateScore` per `(series, candidate)` in a
+> double Python loop; and it passes `n_eff=float(n)`, so `n_eff_bic` is never
+> called.
+
 **Steps:**
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 # tests/test_criteria.py
@@ -4419,7 +4468,7 @@ def test_delta_ic_is_zero_for_the_best_candidate():
     assert result.best_index == 1
 ```
 
-- [ ] **Step 2: Run to verify failure, then implement**
+- [x] **Step 2: Run to verify failure, then implement**
 
 Run: `pixi run test tests/test_criteria.py -v` → FAIL (module missing)
 
@@ -4559,7 +4608,7 @@ def rank_candidates(scores: list[CandidateScore], criterion: Criterion) -> Ranki
     return Ranking(delta, weights, best, int(valid.sum()))
 ```
 
-- [ ] **Step 3: Run tests and commit**
+- [x] **Step 3: Run tests and commit**
 
 Run: `pixi run test tests/test_criteria.py -v` → all PASS
 

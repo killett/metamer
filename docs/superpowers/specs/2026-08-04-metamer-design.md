@@ -1308,7 +1308,7 @@ succeeds — that is the near-degeneracy geography of §4.8 — and its spatial 
 itself a diagnostic.
 
 **Store the primitives, not just the verdict.** `log_lik[y,x,m]`, `k[y,x,m]`,
-`n_eff_trend[y,x]`, `n_eff_bic[y,x]` make the store scientifically auditable rather than a
+`n_eff_trend[y,x,m]`, `n_eff_bic[y,x,m]` make the store scientifically auditable rather than a
 black box that emits a winner, and let a user recompute a criterion that was not anticipated
 **without refitting 10⁷ series**. `k` is unambiguous because the objective is fixed per run
 and recorded in attrs (§4.7). The engine and objective tags live as attrs on `log_lik`, so
