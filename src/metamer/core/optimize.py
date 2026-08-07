@@ -86,8 +86,8 @@ from numpy.typing import NDArray
 from scipy.optimize import minimize
 
 from metamer.core.gradients import EPS, fd_gradient
-from metamer.core.objective import ConcentratedObjective
-from metamer.core.outcomes import Outcome
+from metamer.core.objective import ConcentratedObjective, merge_outcomes
+from metamer.core.outcomes import Outcome, outcome_array
 from metamer.core.signal import DesignInfo
 from metamer.core.terms import ProcessSpec, free_param_index
 
@@ -410,17 +410,32 @@ def optimize_series(
     free = free_param_index(objective.spec)
     p = len(free)
 
-    if design is not None and design.matrix.size:
-        codes = objective.check_design(design, 1)
-        if int(codes[0]) != Outcome.OK.code:
-            return SeriesFit(
-                np.full((1, p), np.nan),
-                float("nan"),
-                Outcome.from_code(int(codes[0])),
-                0,
-                InitRung.DEFAULT,
-                None,
-            )
+    # The DATA-LEVEL fact is established first and merged with the design
+    # precheck through the module's own declared precedence, never decided by
+    # which check happens to run first. A wholly-masked series has an all-zero
+    # restricted design, so `check_design` calls it RANK_DEFICIENT_X and is not
+    # wrong on its own terms -- but land and permanent ice are EXPECTED, and
+    # `Outcome.INSUFFICIENT_DATA` keeps them out of both the numerator and the
+    # denominator of the section 8.6 failure rate. Short-circuiting on the
+    # precheck alone put every land pixel into both.
+    data_level = outcome_array(1, Outcome.OK)
+    if int(np.count_nonzero(mask)) == 0:
+        data_level[0] = Outcome.INSUFFICIENT_DATA.code
+    precheck = (
+        objective.check_design(design, 1)
+        if design is not None and design.matrix.size
+        else outcome_array(1, Outcome.OK)
+    )
+    merged = merge_outcomes(data_level, precheck)
+    if int(merged[0]) != Outcome.OK.code:
+        return SeriesFit(
+            np.full((1, p), np.nan),
+            float("nan"),
+            Outcome.from_code(int(merged[0])),
+            0,
+            InitRung.DEFAULT,
+            None,
+        )
 
     if x0 is None:
         start_natural, rungs = moment_init(objective.spec, y, mask, t)
@@ -450,9 +465,23 @@ def optimize_series(
     n_iter = int(result.nit)
 
     if not np.isfinite(loglik):
-        return SeriesFit(
-            theta, float("nan"), Outcome.NONFINITE_OBJECTIVE, n_iter, rung, None
+        # ASK THE OBJECTIVE WHAT IT FAILED OF; do not assert NONFINITE_OBJECTIVE.
+        # `evaluate` runs the full ladder -- data level, design precheck, the
+        # engine's verdict and the GLS solve, merged by declared precedence --
+        # and it is the only thing that can tell ILL_CONDITIONED_X ("barely
+        # identified by a handful of post-break samples") from a genuine
+        # numerical failure. Measured: the 2-post-break design passes the
+        # precheck at full rank 4 with cond(X_r) = 2.68e4 and is classified
+        # inside the whitened solve, so the optimizer sees only +inf and would
+        # report NONFINITE_OBJECTIVE -- erasing the distinction that outcome was
+        # split out to preserve. One extra filter pass, on the failing path only.
+        verdict = objective.evaluate(theta, y, mask, t, design).outcome
+        failed = (
+            Outcome.from_code(int(verdict[0]))
+            if int(verdict[0]) != Outcome.OK.code
+            else Outcome.NONFINITE_OBJECTIVE
         )
+        return SeriesFit(theta, float("nan"), failed, n_iter, rung, None)
 
     by_label = dict(zip(objective.spec.labels(), objective.spec.terms, strict=True))
     if any(

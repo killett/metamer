@@ -570,3 +570,66 @@ def test_series_fit_is_deliberately_scalar():
     assert isinstance(got.n_iter, int)
     assert isinstance(got.init_rung, InitRung)
     assert got.theta.shape == (1, 2)
+
+
+def test_a_wholly_masked_series_stays_insufficient_data():
+    """Land and permanent ice never enter the failure numerator.
+
+    Behaviour under test: the data-level fact outranks the design precheck.
+    Bug this catches: reporting `RANK_DEFICIENT_X`. An all-masked series has an
+    all-zero restricted design, so `check_design` calls it rank deficient and
+    is not wrong on its own terms -- but `objective.evaluate` already has the
+    ladder that settles which fact is REPORTED, and the answer is the
+    data-level one. Measured before the fix: a wholly-masked series came back
+    `RANK_DEFICIENT_X`, `is_failure=True`, `is_eligible=True`, putting every
+    land pixel into both the numerator and the denominator of the design doc
+    section 8.6 failure rate. `optimize_series` short-circuited on
+    `check_design` alone and never let `evaluate`'s merge run.
+    """
+    mask = np.ones((1, _gapped_setup()[3].size), dtype=bool)
+    mask[0] = False
+    spec, state_space, _, t, design, _ = _gapped_setup(mask)
+    obj = _objective(spec, state_space)
+    got = optimize_series(obj, np.zeros((1, t.size)), mask, t, design)
+    assert got.outcome is Outcome.INSUFFICIENT_DATA
+    assert not got.outcome.is_failure
+    assert not got.outcome.is_eligible
+    # Also with no design at all, where there is no precheck to short-circuit.
+    plain = ProcessSpec((_term("matern12"),))
+    bare = _objective(plain, StateSpace.from_spec(plain))
+    assert (
+        optimize_series(bare, np.zeros((1, t.size)), mask, t, None).outcome
+        is Outcome.INSUFFICIENT_DATA
+    )
+
+
+def test_an_ill_conditioned_design_is_not_laundered_into_nonfinite():
+    """A fit that fails numerically reports what `evaluate` says it failed of.
+
+    Behaviour under test: the non-finite exit consults the objective's own
+    merged verdict instead of asserting its own.
+    Bug this catches: blanket `NONFINITE_OBJECTIVE`. The 2-post-break design
+    passes the precheck at full rank 4 with `cond(X_r) = 2.68e4` and is
+    classified `ILL_CONDITIONED_X` inside the whitened solve, so every
+    evaluation returns NaN and the optimizer sees only `+inf`. Measured before
+    the fix: `nonfinite_objective`, which moves "barely identified by a handful
+    of post-break samples" into "the numerics failed" -- different map entry,
+    different follow-up, and it erases the distinction `ILL_CONDITIONED_X` was
+    split out to preserve.
+    """
+    mask = np.ones((1, _gapped_setup()[3].size), dtype=bool)
+    mask[0] = _window(2)
+    spec, state_space, _, t, design, _ = _gapped_setup(mask)
+    obj = _objective(spec, state_space)
+    # The seed is pinned because the classification is THETA-dependent: it is
+    # the whitened Gram X_r' Sigma^-1 X_r that is ill conditioned, not X_r.
+    # Measured across five seeds at this mask, design.condition_number is
+    # 2.68e4 every time while the outcome is ill_conditioned_x for seeds 0 and
+    # 1 and ok for 2, 3 and 4. A fixture that varied the seed would be flaky
+    # and a fixture asserting only design.condition_number would test the
+    # wrong quantity.
+    y = np.random.default_rng(0).standard_normal((1, t.size))
+    got = optimize_series(obj, y, mask, t, design)
+    assert got.outcome is Outcome.ILL_CONDITIONED_X
+    assert np.isnan(got.loglik)
+    assert got.hessian is None
