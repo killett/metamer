@@ -265,7 +265,7 @@
       "id": 23,
       "planTask": 15,
       "subject": "Task 15: Static identifiability lint",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         13
       ],
@@ -371,5 +371,5 @@
       "nativeId": 20
     }
   ],
-  "lastUpdated": "2026-08-05"
+  "lastUpdated": "2026-08-06"
 }
