@@ -1293,12 +1293,12 @@ question; compute/bandwidth roofline pair for cross-machine prediction) are in d
   adds `numba` and `celerite2`, which will genuinely rewrite it.
 - **Two implementation agents were run against this one working tree at once, and one reset
   the branch over the other's pushed commits.** Task 8 was built twice: A committed
-  `36fca08` (fixture-calibrated threshold), B built on A's tree and committed `ed0b15f`
-  (derived thresholds, per-series `DesignInfo`), then B reset to `5b6c5ab` and re-committed
-  the identical tree as `d7d69c1` to get a clean single-commit history — taking two
+  `bd51413` (fixture-calibrated threshold), B built on A's tree and committed `c2c669e`
+  (derived thresholds, per-series `DesignInfo`), then B reset to `43617a7` and re-committed
+  the identical tree as `e6f829b` to get a clean single-commit history — taking two
   already-pushed commits off the branch. Reconciled with `git merge -s ours origin/phase-1`
-  (`0134154`): tree unchanged, both commits ancestors again, nothing force-pushed.
-  **A behaviour-level diff of `36fca08` against HEAD found exactly one thing B had lost** —
+  (`27bf419`): tree unchanged, both commits ancestors again, nothing force-pushed.
+  **A behaviour-level diff of `bd51413` against HEAD found exactly one thing B had lost** —
   see the fully-masked-tile entry above. B's version otherwise dominates: it merges strictly
   more outcomes, its `DesignInfo` widening removes θ-free work A repeated every iteration,
   its `eigvalsh` route classifies a negative-definite Gram that A's `svdvals` route could not

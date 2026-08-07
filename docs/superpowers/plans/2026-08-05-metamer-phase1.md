@@ -4314,7 +4314,7 @@ git commit -m "feat: add per-objective parameter counting and effective sample s
 
 **Verify:** `pixi run test tests/test_criteria.py -v`
 
-> **Corrections applied at implementation time (commit `5003e9b`). The code
+> **Corrections applied at implementation time (commit `d27f480`). The code
 > fences below are the pre-audit draft and are kept only as the record of what
 > was written; `src/metamer/core/criteria.py` is authoritative.**
 >
@@ -4636,7 +4636,7 @@ git commit -m "feat: add information criteria with engine and objective guards"
 
 **Verify:** `pixi run test tests/test_gradients.py -v` and the verdict note exists with numbers
 
-> **Corrections applied at implementation time (commit `d4396a6`). The code fences
+> **Corrections applied at implementation time (commit `0cb1efe`). The code fences
 > below are the pre-audit draft, kept as the record of what was written;
 > `src/metamer/core/gradients.py` and
 > [`docs/superpowers/notes/complex-step-verdict.md`](../notes/complex-step-verdict.md)
@@ -4939,7 +4939,7 @@ git commit -m "feat: add FD gradients with a scale-aware step rule and complex-s
 
 **Verify:** `pixi run test tests/test_gradient_capability.py -v`
 
-> **Corrections applied at implementation time (commit `6c63451`). The fences
+> **Corrections applied at implementation time (commit `7e2d51a`). The fences
 > below are the pre-audit draft; `families/matern12.py`, `families/base.py` and
 > `gradients.py` are authoritative.**
 >
