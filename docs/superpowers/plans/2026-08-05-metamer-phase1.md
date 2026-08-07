@@ -6219,18 +6219,72 @@ git commit -m "feat: add static identifiability lint"
 - Create: `src/metamer/core/hashing.py`; create `tests/test_hashing.py`
 
 **Acceptance Criteria:**
-- [ ] `fit_hash` covers data selection, signal spec, objective, engine, registry version, seeds, metamer version — and **excludes** the criterion set and the candidate set
-- [ ] Adding a criterion changes `compat_hash` but leaves `fit_hash` unchanged
-- [ ] Changing the memory budget or thread count changes only `run_hash`
-- [ ] Compat relevance is an **allowlist**: a newly added field defaults to provenance-only
-- [ ] A golden test enumerates the compat-relevant field set, so changing it requires updating the test
-- [ ] Hashing is insensitive to dict ordering and float formatting
+- [x] `fit_hash` covers data selection, signal spec, objective, engine, registry version, seeds, metamer version — and **excludes** the criterion set and the candidate set
+- [x] Adding a criterion changes `compat_hash` but leaves `fit_hash` unchanged
+- [x] Changing the memory budget or thread count changes only `run_hash`
+- [x] Compat relevance is an **allowlist**: a newly added field defaults to provenance-only
+- [x] A golden test enumerates the compat-relevant field set, so changing it requires updating the test
+- [x] Hashing is insensitive to dict ordering and float formatting — and to comments and whitespace, the other two axes §13.3 names, each tested separately
 
 **Verify:** `pixi run test tests/test_hashing.py -v`
 
+### Corrections applied on 2026-08-07 (pre-flight, before implementation)
+
+The forward audit marks this task "no calls into changed modules". Per the Task 15
+finding, that clears it of staleness and of nothing else. The full pre-flight found the
+fence's **serializer to be unstable across processes**, which is the one failure a hashing
+module cannot have.
+
+| # | fence as written | why it is wrong | fix |
+|---|---|---|---|
+| 1 | `json.dumps(..., default=repr)` | **THE KILLER.** Measured: `{"criteria": {"aic","bic","hqic"}}` renders as three *different* strings under `PYTHONHASHSEED` 1, 2 and 3, and an object without `__repr__` renders its memory address. Either gives a different hash every run, so every resume of a finished 10⁷-point store reports a mismatch and refits it — no symptom but a bill | refuse. `_check` walks the payload and raises `TypeError` naming the field |
+| 2 | non-finite floats | `json.dumps` emits the bare tokens `Infinity` / `NaN`, which no conforming reader accepts, so provenance written to zarr attributes cannot be read back. **`terms.py::_transform_args_canonical` already documents this exact trap** and solves it the other way | refuse with `ValueError`. The divergence from `terms.py` is deliberate and stated: an infinite `Logit` bound is legitimate, an infinite memory budget is a user error |
+| 3 | non-string mapping keys | `json.dumps` silently coerces: `{1: "a"}` and `{"1": "a"}` both render `{"1":"a"}`. Two configs, one hash | refuse |
+| 4 | `{key: config[key] for key in fields if key in config}` | a missing allowlisted field is dropped. Combined with an allowlist, **one typo — `data_url` for `data_uri` — demotes the data source to provenance-only**, and two runs over different data then share a `fit_hash` and reuse each other's fits | raise `KeyError` naming **every** missing field at once |
+| 5 | no `run_hash` reserved-key guard | a config carrying `_machine` collides with the fingerprint slot and the provenance record names the wrong box | refuse |
+| 6 | no normalization of explicit-vs-default | §13.3 names four axes — comments, key order, whitespace, explicit-vs-default. The fence addresses one | `CONFIG_DEFAULTS`, applied by `normalize` before any hash |
+
+Test defects, several of them instances of the same rule:
+
+- **NOT ONE TEST PINS A HASH VALUE.** Every test compares two hashes, so a change to the
+  separators, the sort order, the digest algorithm or the truncation length moves both
+  sides identically and is invisible to all of them — **the cancellation rule at the level
+  of the hash function.** Three golden constants now, hand-derived from canonical JSON
+  written out by hand and hashed with `hashlib` directly. Not one: a `run_payload` that
+  filed a `None` fingerprint under the machine key changed every `run_hash` while leaving
+  every comparison green, and only the absolute value caught it.
+- **`test_hash_is_insensitive_to_key_order_and_float_formatting` names two properties and
+  tests one**, and its docstring claim — "writing 4.0 as 4" — is false: JSON renders those
+  differently and always will. Int/float coercion is the validator's job, not the hasher's.
+  Split into key order and a float test that pins shortest-round-trip *and* that 0.3 and
+  0.30000000000000004 stay distinct.
+- **No candidate-set test**, though acceptance criterion 1 names it beside the criterion
+  set. Including it would discard every warm start the moment a user appends a candidate.
+- **`machine_fingerprint` ships with no test at all**, including both of its docstring
+  claims.
+- **Nothing tests the containment invariant.** §12.8 treats a `compat_hash` match as licence
+  to skip refitting, which is sound only if a fit mismatch *always* forces a compat
+  mismatch. Computing `compat_hash` over a disjoint set types and reads identically and
+  makes "compat matches, fit differs" reachable — a resume would then recompute selection
+  arrays over primitives from a different model. Now parametrized over every fit-relevant
+  field.
+- **Nothing tests the workflow the split exists for.** Added, against in-memory primitives
+  and marked as the Phase 2 store contract: `rank_candidates` takes *only* the stored
+  primitives — never a spec, a design or the data — so §12.8's "recompute and continue" is
+  implementable from what §12.5 already stores.
+
+**One decision this task owns rather than inherits:** `TermSpec.canonical()` omitted
+`shared_with`, so two specs differing only in a shared-parameter declaration hashed
+identically. The argument for omitting is that `n_free` refuses such specs before anything
+hashes them — but that is an argument about **reachability, not identity**, and
+reachability changes when sharing lands. Included, with a test that passes today via the
+refusal path and keeps passing when sharing is implemented.
+
+**Implement from the module below, not from the fence.**
+
 **Steps:**
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 # tests/test_hashing.py
@@ -6342,7 +6396,7 @@ def test_an_unknown_field_is_provenance_only():
     assert run_hash(base) != run_hash(extended)
 ```
 
-- [ ] **Step 2: Implement hashing.py**
+- [x] **Step 2: Implement hashing.py**
 
 ```python
 # src/metamer/core/hashing.py
@@ -6434,7 +6488,7 @@ def machine_fingerprint(cpu_model: str, cores: int, total_ram_bytes: int) -> str
     return _digest({"cpu": cpu_model, "cores": int(cores), "ram": int(total_ram_bytes)})
 ```
 
-- [ ] **Step 3: Run tests and commit**
+- [x] **Step 3: Run tests and commit**
 
 Run: `pixi run test tests/test_hashing.py -v` → all PASS
 

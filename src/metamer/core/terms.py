@@ -128,7 +128,21 @@ class TermSpec:
         return sum(1 for p in self.params.values() if not p.fixed)
 
     def canonical(self) -> dict[str, Any]:
-        """Render to a JSON-safe canonical dict with sorted parameter keys."""
+        """Render to a JSON-safe canonical dict with sorted parameter keys.
+
+        `shared_with` is included because `canonical()` defines spec identity
+        and a shared-parameter declaration changes what the model is -- design
+        doc section 4.7 counts a shared parameter once rather than twice, so
+        two terms differing only in this field have different `k`. It is
+        unreachable today, because `n_free` refuses such a spec before
+        anything hashes it, but that is an argument about REACHABILITY and not
+        about identity, and reachability changes the moment sharing is
+        implemented. At that point two genuinely different models would share
+        a `spec_hash` and one would silently reuse the other's cached `expm`,
+        warm start and fits. Keys are sorted for the same reason every other
+        mapping here is: the hash must not depend on the order a user wrote
+        the pairs in.
+        """
         return {
             "kind": self.kind,
             "ordering_param": self.ordering_param,
@@ -136,6 +150,11 @@ class TermSpec:
                 name: _param_canonical(self.params[name])
                 for name in sorted(self.params)
             },
+            "shared_with": (
+                None
+                if self.shared_with is None
+                else {name: self.shared_with[name] for name in sorted(self.shared_with)}
+            ),
         }
 
     def engine_costs(self) -> dict[EngineId, CostClass]:

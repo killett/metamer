@@ -281,7 +281,7 @@
       "id": 24,
       "planTask": 16,
       "subject": "Task 16: Three-hash machinery with allowlist",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         10
       ],
@@ -371,5 +371,5 @@
       "nativeId": 20
     }
   ],
-  "lastUpdated": "2026-08-06"
+  "lastUpdated": "2026-08-07"
 }

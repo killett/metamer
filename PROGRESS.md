@@ -4,10 +4,11 @@
 
 - **Branch:** `phase-1`. **Last commit:** see `git log --oneline -1`; the handoff below was
   written at the commit that completed Task 14.
-- **Done:** Phase 1 **Tasks 0–15**, implemented, reviewed and committed.
-- **Next:** **Task 16** — three-hash machinery with the compat-relevance allowlist. Nothing
-  of it has been started.
-- **Tests:** **516 pass.** Full sweep `pixi run test` (~242 s). `pixi run test-fast` (~12 s)
+- **Done:** Phase 1 **Tasks 0–16**, implemented, reviewed and committed.
+- **Next:** **Task 17** — memory formula, RSS shim, benchmark references, spike harness,
+  numba backend. **The largest remaining task; start it with a full context window.**
+  Nothing of it has been started.
+- **Tests:** **552 pass.** Full sweep `pixi run test` (~233 s). `pixi run test-fast` (~12 s)
   deselects the `slow` marker and is for iteration only — **a green fast run is not evidence
   a task is done.**
 - **Verify a fresh checkout with:** `pixi run test && pixi run typecheck && pixi run lint`
@@ -21,7 +22,7 @@
   guards are on the real path; the objective is differentiable with a validated step rule
   and an adopted gradient oracle; Matérn ν=1/2 ships verified analytic derivatives behind a
   protocol that refuses an unbacked claim.
-- **Pending:** Tasks 16–19. Task 19 is conditional and may be **deleted** rather than
+- **Pending:** Tasks 17–19. Task 19 is conditional and may be **deleted** rather than
   deferred (see the ≥3× rule below).
 - **A pre-flight audit of each task brief is a required step** before writing any code —
   see [Required pre-flight](#required-pre-flight-for-every-remaining-task) below. Every
@@ -195,6 +196,7 @@ degradation.
 | **14** | `FitResult.outcome: NDArray[np.object_]` holding `Outcome` members | `penalty_terms(outcome=)` and `CandidateScores.outcome` both need `(B, M)` **uint8 codes**; the store is uint8 too | **flagged** |
 | **14** | `ranking: list[Ranking]`, one per series | `Ranking` already spans the batch; the list is `B` copies of the same object shape | **flagged** |
 | 15, 16, 18, 19 | — no calls into changed modules | — | **not stale.** NOT pre-flighted — see the warning under (g) |
+| **16** | *(re-checked at implementation)* no calls into changed modules; `json.dumps` used directly | true | (g) clean, **and the fence shipped a serializer that hashes memory addresses and `PYTHONHASHSEED`-dependent set orderings** — the second worked proof |
 | **15** | *(re-checked at implementation)* every symbol binds — `ProcessSpec.labels`, `spec.terms`, `TermSpec.params`, `ParamSpec.default` | all match | (g) clean, **and the fence was wrong five ways** — the worked proof that this table clears staleness only |
 | 17 | `KalmanEngine` appears in acceptance prose only, no call | — | OK |
 
@@ -298,21 +300,102 @@ rather than from the pre-audit shape. Two things beyond that:
   `* sampling_interval` factor dropped. The harness was a throwaway (snapshot, substitute,
   run `tests/test_lint.py`, restore), not kept — same as Task 13's.
 
-### What Task 16 inherits
+### What Task 16 established (done — read before touching hashing or spec identity)
 
-Task 16 is the three-hash machinery, `fit_hash ⊂ compat_hash ⊂ run_hash`, with
-compat-relevance declared by **allowlist**: new fields default to provenance-only, and
-promoting one to compat-relevant is deliberate and covered by a test asserting the set.
+- **A HASH MODULE'S TESTS ARE ALL COMPARISONS, AND A COMPARISON CANNOT SEE THE HASH
+  FUNCTION.** Separators, sort order, digest algorithm, truncation length: change any and
+  both sides move together. The fence pinned **no** absolute value, so all six of its tests
+  passed against a serializer that was silently unstable. This is the cancellation rule
+  (pre-flight (a)) applied to a module made entirely of differences. **Three golden
+  constants now, not one** — each payload builder drifts independently, and a `run_payload`
+  that filed a `None` fingerprint under the machine key changed every `run_hash` while
+  leaving every comparison green. Each golden is hand-derived: the canonical JSON written
+  out by hand in the test file, hashed with `hashlib` directly, so it shares no
+  construction with `canonical_json`.
+- **`json.dumps(..., default=repr)` IS A DRIFTING HASH, AND IT LOOKS FINE.** Measured:
+  `{"criteria": {"aic", "bic", "hqic"}}` renders as three *different* strings under
+  `PYTHONHASHSEED` 1, 2 and 3, because a `set`'s iteration order follows `str` hashing; and
+  an object without `__repr__` renders its **memory address**. Either gives a different
+  hash every process, so every resume of a finished 10⁷-point store reports a mismatch and
+  refits — no exception, no warning, no symptom but a bill. `criteria` is exactly the field
+  a user would pass as a set. **The rule: a canonical serializer must refuse what it cannot
+  represent exactly, never stringify it.** The cross-process test (three seeds, compared
+  against the hand-derived constant) is the standing guard.
+- **`terms.py` and `hashing.py` answer the infinity question differently, on purpose.**
+  `json.dumps` emits the bare tokens `Infinity` / `NaN`, which no conforming reader
+  accepts. `terms.py::_transform_args_canonical` keeps them by stringifying every float,
+  because a `Logit` built with an infinite bound is legitimate. `hashing.canonical_json`
+  refuses, because an infinite memory budget is a user error. Same trap, opposite correct
+  answer — stated in both docstrings so a later sweep does not "fix" one into the other.
+- **A SILENT SKIP IN AN ALLOWLIST IS A DEMOTION.** The fence's
+  `{k: config[k] for k in fields if k in config}` drops a missing field. Combined with an
+  allowlist — where membership is the whole mechanism — **one typo, `data_url` for
+  `data_uri`, moves the data source to provenance-only**, and two runs over different data
+  share a `fit_hash` and reuse each other's fits. Nothing else in the system is positioned
+  to notice, because the typo is in the config. Raise, and name *every* missing field at
+  once: a bare `config[key]` lookup also raises `KeyError`, so the message is the only
+  thing distinguishing a deliberate refusal from an incidental one.
+- **`fit_hash ⊂ compat_hash` is load-bearing, not tidy.** §12.8 treats a `compat_hash`
+  match as licence to recompute derived arrays *without refitting*, which is sound only if
+  a fit mismatch always forces a compat mismatch. Computing `compat_hash` over a disjoint
+  set types identically, reads plausibly, and makes "compat matches, fit differs"
+  reachable — a resume would then recompute selection over primitives from a different
+  model and write a complete, confident, wrong map. Pinned by a test parametrized over
+  every fit-relevant field, because one field is not evidence about a set.
+- **The resume workflow is testable today even though the store is not.** `rank_candidates`
+  takes *only* the stored primitives — never a spec, a design matrix or the data — so
+  §12.8's "recompute and continue" is implementable from what §12.5 already stores. The
+  test asserts that and that re-ranking does not mutate the primitives. **This is the
+  Phase 2 store contract**; if `rank_candidates` ever needs the data, §12.8's sentence
+  becomes unimplementable and the three-hash split buys nothing.
+- **`shared_with` is now part of spec identity** (`TermSpec.canonical()`). It was omitted,
+  and the defence — `n_free` refuses such specs before anything hashes them — is an
+  argument about **reachability, not identity**. Reachability changes when sharing lands,
+  and at that moment two genuinely different models would share a `spec_hash` and one would
+  reuse the other's cached `expm`, warm start and fits. **Generalize: "unreachable today"
+  is never a reason to leave an identity function incomplete** — identity is the one thing
+  that must be right before the feature that needs it exists.
+- **`sort_keys=True` sorts NESTED mappings too, which masks an unsorted nested field.**
+  `spec_hash` serializes with it, so a test asserting two orderings hash the same cannot
+  see whether `canonical()` sorted `shared_with` itself. Caught by a surviving mutation.
+  The test that bites serializes `canonical()` *without* `sort_keys` — `canonical()`
+  promises a canonical dict, so it must hold independently of how a consumer serializes it.
+- **A mutation can survive because it is unreachable, not because a test is weak.** With an
+  explicit missing-field guard in place, mutating the comprehension below it changes
+  nothing observable. That is defence in depth working, not a gap — the honest reproduction
+  of the fence's bug had to mutate **both halves at once**. Check which of the two you have
+  before adding a test. **23/23 caught** after the compound mutation was written correctly.
+- Coverage: `hashing.py` 100% of 66 statements, 36 tests.
 
-- Its fence is marked "no calls into changed modules" in the forward audit. Per Task 15's
-  first finding, **that is a (g) result and nothing more** — run (a)–(f), (h), (i), (j)
-  against the brief before writing any code.
-- `ProcessSpec.canonical()` / `spec_hash()` already exist and are the normalized-model
-  route the task is meant to build on. **`TermSpec.canonical()` does not include
-  `shared_with`**, so two specs differing only in a shared-parameter declaration hash
-  identically today. That is invisible because `n_free()` refuses such a spec before
-  anything hashes it — but Task 16 is precisely the task that decides what a hash covers,
-  so it is the place to decide whether that omission stays.
+### What Task 17 inherits
+
+Task 17 is the memory formula, the RSS shim, the three benchmark references, the spike
+harness and the numba backend. **It is the largest remaining task — start it with a full
+context window.** Its fence is marked "no calls into changed modules"; per Task 15's first
+finding that clears it of staleness and of nothing else.
+
+- **It adds `numba` and `celerite2` to `pixi.toml`, which rewrites `pixi.lock` and stages
+  it.** Verified cleared: `.pre-commit-config.yaml` carries a local `check-added-large-files`
+  at 2000 KB and the lock file is currently 630 KB. Re-check the number, not the note.
+  `celerite2` has no `osx-arm64` conda-forge build and belongs under
+  `[target.linux-64.dependencies]`.
+- **The memory formula is per backend, not one formula with different constants.** Path A's
+  solver state is per series; path B's is per thread. Output slots are
+  `2p + 2k_beta + 4` float64 per candidate and **do not shrink under path B**.
+- **Parallelism is within a tile, over series — never across tiles.** That is what makes
+  peak RAM independent of core count.
+- **Three benchmark references, each answering a different question.** The canonical filter
+  pass (one likelihood evaluation, N=630, d=3, single-threaded, fixed θ) normalizes the
+  budget comparison and carries zero proxy risk because it *is* the workload. The compute
+  reference is a fixed-iteration loop of `P = F P Fᵀ + Q` at d=3, **not a 6×6 LU** — the
+  filter has no matrix factorization, because the scalar observation makes the innovation
+  variance scalar. The bandwidth reference is a STREAM triad past L3, measured at 1 thread
+  **and** at full thread count, reporting bandwidth **per core at full occupancy**:
+  single-threaded STREAM measures one core's outstanding-miss capacity, not the memory
+  system.
+- **The mini PC sweeps {1, 4} threads, not {8, full}** — 4 cores, so 8 measures the
+  scheduler.
+- Mark the new benchmarks `slow` **as they land**, not afterwards.
 
 ### Fixture facts that a fresh session will otherwise get wrong
 
@@ -1025,7 +1108,7 @@ question; compute/bandwidth roofline pair for cross-machine prediction) are in d
   before transcription, not after.
 - **The suite is ~255 s, and the `slow` marker is now in place.** `pixi run test` is the
   full sweep and is what every end-of-task verification must run; `pixi run test-fast`
-  (`-m "not slow"`, ~12 s, 490 of 516) is for iteration only. What is marked and why:
+  (`-m "not slow"`, ~9 s, 526 of 552) is for iteration only. What is marked and why:
   **all of `tests/test_fit.py`** (module-wide — every test drives the real filter through
   the whole driver on five-series batches, so there is no fast subset worth carving out),
   the N = 5000 gradient step-rule case, and four `tests/test_optimize.py` tests that run

@@ -20,6 +20,12 @@ from metamer.core import families  # noqa: F401
 from metamer.core.capability import EngineId, GradientMode, Objective
 from metamer.core.criteria import Criterion
 from metamer.core.fit import FitResult, fit
+from metamer.core.hashing import (
+    compat_hash,
+    fit_hash,
+    machine_fingerprint,
+    run_hash,
+)
 from metamer.core.lint import Finding, Rule, lint
 from metamer.core.optimize import InitRung
 from metamer.core.outcomes import Outcome
@@ -34,7 +40,11 @@ __all__ = [
     "Objective",
     "Outcome",
     "Rule",
+    "compat_hash",
     "families",
     "fit",
+    "fit_hash",
     "lint",
+    "machine_fingerprint",
+    "run_hash",
 ]
