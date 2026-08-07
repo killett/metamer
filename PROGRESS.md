@@ -11,7 +11,7 @@
   validated step rule and an adopted gradient oracle, and one family ships verified analytic
   derivatives behind a protocol that refuses an unbacked claim.
 - **Pending:** Phase 1 Tasks 14–19. **Task 18 is a user gate — stop there and report.**
-- **State at handoff:** Task 13 completed; **462 tests pass** in ~80 s, `mypy --strict`
+- **State at handoff:** Task 13 completed at `b653fb8`; **463 tests pass** in ~65 s, `mypy --strict`
   clean, `pre-commit run --all-files` clean, working tree clean, local and `origin/phase-1`
   in sync. Verify with `pixi run test && pixi run typecheck`.
 - **A pre-flight audit of each task brief is a required step** before dispatching an
@@ -215,7 +215,13 @@ rather than from the pre-audit shape. Two things beyond that:
   with the headline number rather than in a footnote.
 - **`SeriesFit`'s scalar shape is the one correct exception to "(B, N) is the only code
   path"**, and it is documented as such in the module docstring so a later (b) sweep does
-  not "fix" it.
+  not "fix" it. `moment_init`, by contrast, IS batched and its **rung is per series** — one
+  gap-riddled or flat pixel in a tile is the ordinary case, so a single batch-wide rung is
+  right only when the whole batch falls the same way. Found by a surviving mutation: the
+  per-series DEFAULT downgrade could be deleted with no test noticing, because every fixture
+  had B = 1 and took an earlier batch-wide exit instead. **A mutation that survives is worth
+  more than one that is caught** — this one was the only evidence that the ladder had a
+  batch-granularity defect at all.
 
 ### What Task 13 inherited
 
@@ -716,6 +722,13 @@ question; compute/bandwidth roofline pair for cross-machine prediction) are in d
   tests can be deselected during rapid iteration and always run in the full sweep; **not**
   `RICHARDSON_LEVELS`, which would trade accuracy headroom for time in the one module whose
   job is accuracy.
+- **A mutation-testing script that restores from a snapshot will silently revert edits made
+  while it runs.** The Task 13 bite script captures the file at start and writes that text
+  back after every mutation; two annotation fixes made during the ~17-minute run were undone
+  by it, and `mypy` then reported errors against a file that looked correct in the editor.
+  Do not edit a file while a mutation run is rewriting it, and re-run `typecheck` **after**
+  the run rather than during. The tell is a mypy error whose line does not match what the
+  file now says.
 - **A test helper can produce the failure it is meant to construct.** Task 10's `_scores`
   helper wrote `np.full(shape, np.nan) + k` where it meant `np.full(shape, k)`, so every
   `k` and `n` came out NaN and twelve tests failed against a correct implementation. It was
