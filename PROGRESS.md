@@ -70,9 +70,59 @@ argument — a passing suite is not evidence the brief is right.
   Task 9's tests replaced assertions that could not fail at all.
 - **(f) Does the brief contradict a docstring already in the tree?** `objective.py` named
   `design_rank` in two places and the brief still passed `rank_x`.
+- **(g) Does every call the brief makes into an existing module match that module's
+  CURRENT signature and shapes?** Check the source, not the brief's assumption. (a)–(f)
+  catch a brief whose *model of the problem* is wrong; this one catches a brief that was
+  correct when written and has since gone stale, because the dependency it calls did not
+  exist yet and is therefore encoded as imagined. The symptom is a plausible number rather
+  than an error — `n_eff=float(n)` makes `BIC_NEFF` silently identical to `BIC`. The
+  forward audit below is (g) run once across every remaining task.
 
 Also run the brief's code if it supplies any: the two highest-yield audits did, and one
 found three collection errors and six failing tests out of twelve.
+
+### Forward audit of Tasks 11–19 (run 2026-08-06, after Task 10)
+
+The plan's later code fences were authored before Tasks 8–10 existed, so they encode those
+dependencies as imagined. This is the whole-plan sweep, done once so no later task
+rediscovers it mid-implementation. **Method:** every call in Tasks 11–19 into `counting`,
+`criteria`, `objective`, `signal`, `statespace`, `terms`, `engines.kalman` and `outcomes`,
+checked against the committed signature for scalar-vs-`(B,)` shape, positional-vs-keyword,
+and `rank_x`-where-`design_rank`-is-required; plus a targeted grep for the `n_eff = n`
+degradation.
+
+| task | what the fence assumes | current reality | state |
+|---|---|---|---|
+| 11 | `from metamer.core.signal import DesignInfo` written at column 0 *inside* a test body | `IndentationError` on verbatim transcription; the name is never used | fixed |
+| 11 | `fd_step = (ε·\|ℓ\|)^(1/3)` | design doc §8.2 specifies `(ε·\|ℓ\|/\|ℓ''\|)^(1/3)`; the fence dropped the denominator | fixed, measured |
+| 11 | `assert rel < 1e-4` for complex-step vs FD | measured `rel = 1.000e+00` — the gradient is exactly `[0, 0]` | fixed |
+| 11 | `richardson_gradient` starting at `fd_step(scale)` | that step *is* the cancellation floor; extrapolating there amplifies rounding | fixed |
+| 11 | `obj.unconstrained_loglik(u[None,:], y, mask, t, None)`; `ConcentratedObjective(spec, ss, KalmanEngine(), Objective.ML)`; `StateSpace.from_spec(spec)` | all match | OK |
+| 12 | — no calls into changed modules | — | OK |
+| 13 | `objective.check_design(design, 1)` | matches `check_design(self, design, batch)` | OK |
+| 13 | `free_param_index(spec)`, `ParamSpec.default`, `ParamSpec.diagnostic_limits` | all present | OK |
+| 13 | `objective.unconstrained_loglik(u[None,:], y, mask, t, design)` | matches | OK |
+| 13 | `optimize_series(objective, y, mask, t, design, x0, max_iter)` and `SeriesFit` with scalar `outcome: Outcome`, `loglik: float` | per-series is deliberate here — `optimize_series` *is* path A's per-series form (§17) | OK, but see the Task 14 seam below |
+| **14** | `penalty_terms(spec, objective, int(mask[b].sum()), design.rank, k_beta)` | keyword-only `n_obs=`, `design_rank=`, `outcome=`, `k_beta=`, the first three `(B,)` arrays | **flagged** |
+| **14** | `signal.design_info(t)` | `design_info(self, t, mask)` — `mask` is **required**, and it is what makes `rank` per series | **flagged** |
+| **14** | one `CandidateScore` per `(series, candidate)` built in a double Python loop | `CandidateScores` is a single `(B, M)` block; `rank_candidates` returns one batched `Ranking` | **flagged** |
+| **14** | `n_eff=float(n)` | makes `Criterion.BIC_NEFF` silently identical to `BIC` — no error, no warning, a plausible number | **flagged** |
+| **14** | `FitResult.outcome: NDArray[np.object_]` holding `Outcome` members | `penalty_terms(outcome=)` and `CandidateScores.outcome` both need `(B, M)` **uint8 codes**; the store is uint8 too | **flagged** |
+| **14** | `ranking: list[Ranking]`, one per series | `Ranking` already spans the batch; the list is `B` copies of the same object shape | **flagged** |
+| 15, 16, 18, 19 | — no calls into changed modules | — | OK |
+| 17 | `KalmanEngine` appears in acceptance prose only, no call | — | OK |
+
+**The `n_eff = n` degradation grep found exactly one live site**: Task 14, plan line 5717.
+Task 9's own fence (plan lines 4093–4290) still shows the superseded scalar
+`penalty_terms(..., rank_x=..., k_beta=...)` signature, but that task is committed and the
+fence is now only a historical record.
+
+**Design-doc consistency sweep (same date).** Every occurrence of `n_eff_bic` /
+`n_eff_trend` now agrees on `[y,x,m]` — §9.4's slot count (line 882), §10.1 (1008–1009),
+§12.2's layout (1252) and §12.5's primitive list (1311, the one corrected after Task 10).
+`rank_x` does not appear in the design doc at all; it says `rank(X)` throughout (§6 table
+line 299, §5.2 lines 352–359, §17 line 1863, §19 line 1996), which is `design_rank`. No
+third stale-cascade instance found.
 
 ### What Task 11 inherits
 
