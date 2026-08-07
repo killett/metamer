@@ -6510,9 +6510,49 @@ git commit -m "feat: add three-hash machinery with a compat-relevance allowlist"
 - Create: `tests/test_memory.py`, `tests/test_compiled.py`
 - Modify: `pixi.toml` (add `numba`; add `celerite2` under `[target.linux-64.dependencies]`)
 
+### Corrections applied on 2026-08-07 (pre-flight, before implementation)
+
+**THE FENCE'S HEADLINE NUMBERS ARE STALE, AND THREE PLACES AGREE WITH EACH OTHER WHILE
+BEING WRONG.** PROGRESS.md predicted exactly this — *"the memory formula's output-slot
+count is `M × (2p + 2k_β + 4) × 8 + M × 3` … **Task 17 consumes this**; the tile-size
+arithmetic in design doc §9.4 changes with it."* The `4` is `log_lik`, `k`, `n_eff_trend`,
+`n_eff_bic`; it was `2` while both `n_eff` variants were believed per-point.
+
+**§9.4 contradicted itself.** Line 886's formula said `2p + 2k_β + 4` and named four
+scalars, line 927's prose named three (`log_lik`, `k`, `n_eff`), and line 934's worked
+table used `M × 18 × 8` — i.e. `+2`. The fence transcribed the stale half, and so did
+§11.5's consequence paragraph. All corrected 2026-08-07.
+
+| quantity | fence / stale | corrected |
+|---|---|---|
+| output slots at `M=12, p=4, k_β=4` | `M × 18 × 8 + M×3` = 1764 B | `M × 20 × 8 + M×3` = **1956 B** |
+| path A bytes/series | 8490 B | **8682 B** |
+| path B bytes/series | 7434 B | **7626 B** |
+| path B saving | 12.4% | **12.2%** (1056 of 8682) |
+| data+output share of A | 87% | **88%** |
+| per-point X, path A | 28 650 B | **28 842 B** |
+| `tile_side(1 GB)` shared X | 343 | **339** |
+| `tile_side(1 GB)` per-point X | 187 | **186** |
+
+**`tile_side(10**9, 28650) == 187` fails against the fence's own implementation.**
+`np.floor(sqrt(1e9/28650))` = `floor(186.83)` = **186**, not 187 — the fence's expected
+value was rounded where its code floors. Found by running the brief's arithmetic, which is
+the step the pre-flight preamble requires and which pays out again here.
+
+Everything else in the fence checks out on (g): `fit(y, t, signal, candidates, criterion=,
+objective=, max_iter=)` binds against the live signature, and `TermSpec(kind, params,
+ordering_param)` is positionally valid. But two things in the RSS fixture do not:
+
+| # | fence | why it is wrong |
+|---|---|---|
+| 1 | `t = np.arange(float(n_time))` with `Annual(period=52.0)`, `SemiAnnual(period=26.0)` | **the time axis is decimal years** (a standing cross-cutting decision — in seconds the same design goes from `cond(X) = 3.4e1` to `3.3e32` and rank 7/7 to 2/7). `Annual` already defaults to `period=1.0` and `SemiAnnual` to `0.5`. As written this is a **630-year** record carrying a 52-year "annual" harmonic: a weekly-sampling-in-weeks mental model leaking into a years axis. No crash — a plausible-number failure, and PROGRESS.md measures `cond(X_w)` growing to 840.7 at a 100-year span alone. Use `t = arange(N)/12` (630 monthly samples = 52.5 yr) and the defaults. |
+| 2 | peak RSS measured in-process as `peak_rss_bytes() - before` | `ru_maxrss` is a **high-water mark that never decreases**, so within one pytest process the reading is contaminated by every allocation any earlier test made, and a later smaller batch reads as a delta of zero. Measure in a **fresh subprocess** against a baseline subprocess that imports the same modules and allocates nothing. This is pre-flight **(k)** — process-local state — arriving one task after the check was written down. |
+
+**Implement from the module below, not from the fence.**
+
 **Acceptance Criteria:**
-- [ ] `bytes_per_series` reproduces the design-doc worked example: **8490 B** for path A and **7434 B** for path B at `d=3, k_β=4, p=4, N=630, M=12`, shared X
-- [ ] Per-point regressors add exactly `N·k_β·8 = 20 160 B` to both
+- [x] `bytes_per_series` reproduces the **corrected** design-doc worked example: **8682 B** for path A and **7626 B** for path B at `d=3, k_β=4, p=4, N=630, M=12`, shared X (the fence said 8490 / 7434, from the superseded `+2` slot count)
+- [x] Per-point regressors add exactly `N·k_β·8 = 20 160 B` to both
 - [ ] `peak_rss_bytes()` returns a finite value on Linux and macOS; the Windows branch exists though untested
 - [ ] Measured peak RSS matches the formula within 25% at `B ∈ {10³, 10⁴}`
 - [ ] The compiled path-B engine agrees with `KalmanEngine` to 1e-10 on identical input

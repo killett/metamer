@@ -105,6 +105,7 @@ h5netcdf = "*"
 h5py = "*"
 cftime = "*"
 cfchecker = "*"
+numba = ">=0.66.0,<0.67"
 
 [pypi-dependencies]
 
@@ -120,6 +121,7 @@ cfchecker = "*"
 #   - pytorch-cuda (CUDA runtime, linux-only)
 # Empty section is valid TOML and pixi accepts it as "no extras".
 [target.linux-64.dependencies]
+celerite2 = ">=0.3.2,<0.4"
 
 
 # Make `python -m <package>` work inside `pixi run` and `pixi shell` without an editable install. Avoids dragging uv + a build backend into the loop, which is fragile if any parent directory has a pyproject.toml that isn't PEP 621-valid.

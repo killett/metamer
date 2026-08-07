@@ -236,7 +236,9 @@ def fit(
                 continue
             u_hat = obj.to_unconstrained(result.theta)[0]
             theta_u[b, c, :p] = u_hat
-            cov_u = np.linalg.inv(result.hessian)
+            # Explicit dtype: numpy 2.4's stubs give `inv` a `floating[Any]`
+            # dtype where 2.5's give `float64`, and numba pins numpy<2.5.
+            cov_u = np.asarray(np.linalg.inv(result.hessian), dtype=np.float64)
             cov_nat = delta_method_cov(obj.dforward(u_hat[None, :])[0], cov_u)
             theta_err[b, c, :p] = np.sqrt(np.clip(np.diag(cov_nat), 0.0, np.inf))
             # One evaluation at the optimum yields beta and beta_cov. An

@@ -1057,8 +1057,10 @@ question; compute/bandwidth roofline pair for cross-machine prediction) are in d
   swallows the non-zero exit, so an empty result looks identical to a failed query.
 - **`gitleaks` is not on conda-forge.** Install the binary release from GitHub instead.
 - **The prompt's `tile_side = sqrt(block_bytes / (n_time · itemsize))` counts only the
-  float64 data.** Full accounting gives 343 instead of 445 at a 1 GB budget with a shared
-  design matrix, and 187 with per-point regressor fields. Design doc §9.4.
+  float64 data.** Full accounting gives **339** instead of 445 at a 1 GB budget with a
+  shared design matrix, and **186** with per-point regressor fields. Design doc §9.4.
+  (Was 343 / 187 while the output-slot scalar count was 2; corrected with the rest of the
+  `+4` cascade on 2026-08-07 — see the Task 17 findings.)
 - **Per-point regressor fields (e.g. GIA) cost `N × k_β × 8` per series** — 20.2 kB at
   N=630, k_β=4, ~2.4× everything else combined. `signal.DesignInfo` exists so that widening
   is a shape change rather than a signature rewrite.

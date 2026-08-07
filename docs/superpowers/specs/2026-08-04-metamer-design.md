@@ -924,28 +924,30 @@ history. L-BFGS appears only on path B, where it is per-thread.
 
 **Output slots are per series and do not shrink under path B.** Results for all `M`
 candidates are held until the tile is written: `θ̂`, `θ̂_err` (`p` each), `β`, `β_err`
-(`k_β` each), `log_lik`, `k`, `n_eff`, plus `iterations` (uint16) and `status` (uint8).
+(`k_β` each), `log_lik`, `k`, `n_eff_trend`, `n_eff_bic`, plus `iterations` (uint16) and
+`status` (uint8). **Both `n_eff` variants are per candidate**, each being a function of the
+fitted model (§10.1) — which is why the scalar count is 4 and not 2.
 
 Worked example at **d=3, k_β=4, p=4, N=630, M=12**, shared X:
 
 | term | path A | path B |
 |---|---|---|
 | data `N×9` | 5670 B | 5670 B |
-| output slots `M × 18 × 8 + M × 3` | 1764 B | 1764 B |
+| output slots `M × (2p+2k_β+4) × 8 + M × 3` = `M × 20 × 8 + M × 3` | 1956 B | 1956 B |
 | `d²` terms (`P`, `F`, `Q`, `P∞`, 2 workspace) = `6d²×8` | 432 B | per thread |
 | augmented `x` = `d(1+k_β)×8` | 120 B | per thread |
 | normal-equation accumulators | 120 B | per thread |
 | optimizer (A: `(p²+4p)×8`; B: `22p×8`) | 256 B | per thread |
 | Hessian at optimum | 128 B | per thread |
-| **per series** | **8490 B ≈ 8.49 kB** | **7434 B ≈ 7.43 kB** |
+| **per series** | **8682 B ≈ 8.68 kB** | **7626 B ≈ 7.63 kB** |
 | per thread (path B only) | — | ≈ 1.50 kB |
 
-**Data plus output slots account for 87% of path A's total.** The largest *solver* term is
+**Data plus output slots account for 88% of path A's total.** The largest *solver* term is
 the `d²` Kalman state at 432 B, not the optimizer at 256 B — the reverse of what an L-BFGS
 history would give, which is why §8.3's trust-region choice matters here as well as for
 utilization.
 
-**Path B saves 12.4%** (1056 B of 8490 B). With per-point regressors both totals gain
+**Path B saves 12.2%** (1056 B of 8682 B). With per-point regressors both totals gain
 20 160 B, and the saving falls to **3.7%**. Per-thread solver state totals ~6 kB at T=4 and
 ~96 kB at T=64 — negligible either way. See §11.5 for the consequence.
 
@@ -955,8 +957,8 @@ counts only the float64 data and therefore **overestimates**:
 | accounting | bytes/series | `tile_side` at a 1 GB budget |
 |---|---|---|
 | prompt formula (data only) | 5040 B | 445 |
-| this section, shared X | 8490 B | 343 |
-| this section, per-point X | 28 650 B | 187 |
+| this section, shared X | 8682 B | 339 |
+| this section, per-point X | 28 842 B | 186 |
 
 ---
 
@@ -1251,8 +1253,8 @@ Both are recorded now so they are not surprises:
   rather than degrade silently.
 - **The memory formula changes shape** (§9.4): path B's solver state is per-thread rather
   than per-series. But the *magnitude* of that win must not be overstated. By §9.4's
-  corrected figures, path A is 8.49 kB/series and path B 7.43 kB/series — a **12.4%
-  saving**, because data and output slots already account for 87% of the total. With
+  corrected figures, path A is 8.68 kB/series and path B 7.63 kB/series — a **12.2%
+  saving**, because data and output slots already account for 88% of the total. With
   per-point regressor fields the saving falls to **3.7%**.
 
   **The 16 GB constraint is governed by the data tile and the output slots, essentially

@@ -117,7 +117,9 @@ class Trend:
 
     def columns(self, t: NDArray[np.float64]) -> NDArray[np.float64]:
         """Return (t - mean(t))."""
-        return (t - t.mean())[:, None]
+        # Explicit dtype: numpy 2.4's stubs infer `floating[Any]` for this
+        # expression where 2.5's infer `float64`, and numba pins numpy<2.5.
+        return np.asarray((t - t.mean())[:, None], dtype=np.float64)
 
 
 @dataclass(frozen=True)
@@ -128,7 +130,7 @@ class Accel:
 
     def columns(self, t: NDArray[np.float64]) -> NDArray[np.float64]:
         """Return (t - mean(t))^2 / 2."""
-        return (0.5 * (t - t.mean()) ** 2)[:, None]
+        return np.asarray((0.5 * (t - t.mean()) ** 2)[:, None], dtype=np.float64)
 
 
 @dataclass(frozen=True)
