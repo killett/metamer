@@ -93,6 +93,17 @@ argument — a passing suite is not evidence the brief is right.
   distinguishable from any other; and Task 10's brief tested a `max(n_eff, 2.0)` floor with
   `n_eff = 12`, which sits above the floor and never reaches it.
 
+- **(j) Does the oracle share a derivation path with the thing it checks?** An independent
+  oracle means a **different construction**, not different constants. `tests/oracles.fd_hessian`
+  and `hessian_at_optimum` are the same second-difference stencil at different steps, so
+  checking one against the other measured the step choice and nothing else — the routine
+  could have been wrong in any way that a wider step also is, and the test would have passed.
+  This is distinct from (i): there the fixture cannot express the defect; here the fixture is
+  fine and the *reference* is a reparameterized copy of the subject. Nested Richardson
+  qualifies as independent; a wider step does not. The tell is that the oracle's accuracy is
+  the same order as the subject's — if the reference is not at least ~100× better, it is
+  probably the same algorithm.
+
 **(h) and (i) are refinements of (e), and mutation testing does not subsume them.** (e) asks
 whether the test bites when the guard is deleted; (h) and (i) ask whether the call site and
 the fixture are *capable of expressing* the defect at all. A mutation catches those two only
@@ -540,6 +551,44 @@ cannot reconstruct them.
   units, so this is reachable. Every later family with an exponential `Q` inherits the rule.
 - **Analytic `F`, `Q`, `P∞` per family.** The general `expm`/Lyapunov path is a test
   reference and a degeneracy fallback; frequent firing is a bug signal.
+- **THE FINITE-DIFFERENCE STEP RULE, IN GENERAL FORM.** An `m`-th order difference divides
+  by `h^m`, so its cancellation error is `O(ε|f|/h^m)`, its truncation error is `O(h²)`, and
+  the optimal step scales as **`ε^(1/(m+2))`**:
+
+  | derivative | optimal step | value |
+  |---|---|---|
+  | first (`fd_step`) | `(ε·\|f\|/\|f''\|)^(1/3)` | 6.055e-06 at ratio 1 |
+  | second (`hessian_step`) | `(ε·\|f\|/\|f''''\|)^(1/4)` | 1.221e-04 at ratio 1 |
+
+  **Two independent measurements agree with it.** Task 11: using `(ε|ℓ|)^(1/3)` — the cube
+  root with no curvature denominator — cost 280×–1100× relative gradient accuracy on the real
+  filter at N = 100/630/5000. Task 13: reusing the *first*-difference step for a second
+  difference cost **147×** (4.39e-05 against 2.98e-07 at N = 200). Both were the plan fence's
+  proposal, and in both cases the empirical optimum from a ten-decade sweep landed on the
+  formula. **A third instance should be recognized, not rediscovered** — if a routine takes an
+  `m`-th difference, its step is `ε^(1/(m+2))`, and reusing a neighbouring rule is the default
+  mistake. Keep each order's rule in its own named function so reuse is not the path of least
+  resistance.
+- **A CLAMP, FLOOR OR EPSILON GUARD SITTING ABOVE THE DIAGNOSTIC LIMIT OF THE QUANTITY IT
+  GUARDS IS A FABRICATION MACHINE.** It does two things at once: converts a reportable fact
+  into a plausible number, and makes the outcome or rung that would have reported it
+  **unreachable**, so no test can see the loss. The clean case: `sqrt(maximum(var, 1e-12))`
+  gives `sigma = 1e-6` against sigma's own `1e-8` lower diagnostic limit, so the diagnostic
+  clip never fires and `InitRung.CLIPPED` becomes dead code for the vanishing-amplitude case.
+  The second instance in the same function: `clip(r1, 1e-6, 1-1e-6)` turns "anticorrelated at
+  lag 1, which this family cannot represent" into `rho = 0.0724` at `dt = 1`, reported as
+  `MOMENT`. **Rule:** every guard must be checked against the diagnostic limit of what it
+  guards; if it sits above, it is deleting a diagnosis.
+  **Tree-wide sweep run 2026-08-06** over `np.clip`, `np.maximum`, `np.minimum` and bare
+  epsilon constants in `src/metamer/core/`: **no further instances.** Every other guard is
+  either the diagnostic clip itself (`optimize.py:361`), part of a stated definition
+  (`counting.n_eff_trend`'s `clip(ratio, 1, n)`), a scale for a *relative* tolerance
+  (`objective.py:521`, `statespace.py:239`), an index bound (`kalman.py:301`), a
+  mathematically-correct basis function (`signal.py:188`, `RateChange`'s ramp), or a
+  provably-inactive saturation (`matern32._Q_SATURATION_U = 60.0`, documented bit-identical
+  wherever it fires). Also checked: every family's parameter `default` lies inside its own
+  `diagnostic_limits`, and every `diagnostic_limits` inside its `bounds` — a default outside
+  its limits would report `CLIPPED` on every cold start.
 - **Scores carry an engine tag AND an objective tag**; ranking across either is a hard error.
   The tags are **per candidate**, not per run: engine capability is resolved per composite
   spec (design doc §4.2), so a candidate set genuinely can mix engines — which is the
