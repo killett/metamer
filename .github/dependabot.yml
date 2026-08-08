@@ -1,0 +1,8 @@
+version: 2
+updates:
+  # The third-party publish action is pinned by commit SHA, which is safe but frozen.
+  # This is what keeps the pin moving without anyone having to remember it.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly

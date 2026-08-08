@@ -1,0 +1,64 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - name: Install ruff
+        run: pip install ruff
+      - run: ruff check .
+      - run: ruff format --check .
+
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Every supported minor on Linux; the ceiling only on the other two, which
+        # exist to catch platform-dependent behaviour rather than version-dependent
+        # behaviour. The floor is 3.12 because core/registry.py uses PEP 695 generics.
+        os: [ubuntu-latest]
+        python-version: ["3.12", "3.13", "3.14"]
+        include:
+          - os: macos-latest
+            python-version: "3.14"
+          - os: windows-latest
+            python-version: "3.14"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install the package and its test extra
+        run: pip install ".[test]"
+      # pytest is configured with pythonpath = ["src"], so the suite below runs
+      # against the working tree rather than the installed distribution. This step
+      # is what actually exercises the installed package: it runs from outside the
+      # repository, where src/ is not importable.
+      - name: Smoke-test the installed package
+        working-directory: ${{ runner.temp }}
+        run: |
+          python -c "import metamer; print(metamer.__version__)"
+          python -m metamer
+      # The FULL sweep, `slow` markers included. Those tests drive the real Kalman
+      # filter at production sizes and are the only thing that exercises the batched
+      # driver on anything but healthy series; deselecting them would make a green
+      # run meaningless. Expect roughly five minutes per job.
+      - name: Run the test suite
+        run: pytest

@@ -1,0 +1,64 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # hatch-vcs derives the version from the git tag, so the tag and the full
+          # history behind it must be present. The default shallow fetch would leave
+          # it guessing and produce a dev version instead of the release version.
+          fetch-depth: 0
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - name: Install the build tooling
+        run: pip install build twine
+      - name: Build the sdist and wheel
+        run: python -m build
+      - name: Check the distribution metadata
+        run: twine check dist/*
+      # This package is pure Python. A platform-tagged wheel would mean a compiled
+      # extension crept in, and it must not reach PyPI silently.
+      - name: Assert the wheel is pure Python
+        run: |
+          ls dist/*-py3-none-any.whl
+      # The tag is the sole source of the version. If they ever disagree, the wrong
+      # version is about to be published to an index that never lets it be reused.
+      - name: Assert the artifact version matches the tag
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          for f in dist/*; do
+            case "$(basename "$f")" in
+              metamer-"$tag"-*|metamer-"$tag".tar.gz) ;;
+              *) echo "artifact $(basename "$f") does not match tag $tag"; exit 1 ;;
+            esac
+          done
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      # Trusted Publishing: the job mints a short-lived OIDC token instead of using
+      # a stored API token, so this repository holds no PyPI credential at all.
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist/
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33  # v1.14.2
