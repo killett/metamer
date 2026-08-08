@@ -76,6 +76,10 @@ exclude = [
     "/.superpowers",
     "/.claude",
     "/pixi.lock",
+    "/CLAUDE.md",
+    "/PROGRESS.md",
+    "/.scaffold.lock",
+    "/.sandbox_settings.json",
 ]
 
 [tool.ruff]
