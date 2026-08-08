@@ -34,7 +34,7 @@
   MacBook: `--threads 1 --threads 8`, `--out bench/macbook.json`.
   Batch sweep at path B's worst cell (d=3, 1 thread, no gaps) is
   `bench/batch-sweep-d3-1thread-nogaps.json`.
-- **Tests:** **583 collected.** Full sweep `pixi run test` (~280 s). `pixi run test-fast` (~12 s)
+- **Tests:** **587 collected.** Full sweep `pixi run test` (~280 s). `pixi run test-fast` (~12 s)
   deselects the `slow` marker and is for iteration only — **a green fast run is not evidence
   a task is done.**
 - **Verify a fresh checkout with:** `pixi run test && pixi run typecheck && pixi run lint`
@@ -372,6 +372,18 @@ rather than from the pre-audit shape. Two things beyond that:
 
 ### What Task 16 established (done — read before touching hashing or spec identity)
 
+- **THE GOLDEN CONSTANTS WERE REGENERATED ON 2026-08-07, AND EVERY HASH IDENTITY MOVED
+  WITH THEM.** The payload carries a version field whose key was renamed. Canonical JSON
+  sorts keys, so the field changed position, which changed the serialized bytes, which
+  changed every digest derived from them: `fit_hash`, `compat_hash` and `run_hash` are all
+  different from what the same inputs produced before that date. The three
+  `GOLDEN_*_HASH` constants in `tests/test_hashing.py` were re-derived by hand from the
+  declared inputs — not copied from failing output — and the derivation was checked by
+  renaming the key back, which reproduces the previous constants exactly and so proves the
+  field set, the values, the separators, the sort rule, the digest and the truncation are
+  all unchanged. **Consequence for anyone resuming old work: a store written before
+  2026-08-07 carries hashes that no longer match, so it will report a mismatch and refit.**
+  No store existed when the change was made, so nothing was invalidated in practice.
 - **A HASH MODULE'S TESTS ARE ALL COMPARISONS, AND A COMPARISON CANNOT SEE THE HASH
   FUNCTION.** Separators, sort order, digest algorithm, truncation length: change any and
   both sides move together. The fence pinned **no** absolute value, so all six of its tests
@@ -1318,7 +1330,7 @@ question; compute/bandwidth roofline pair for cross-machine prediction) are in d
   before transcription, not after.
 - **The suite is ~255 s, and the `slow` marker is now in place.** `pixi run test` is the
   full sweep and is what every end-of-task verification must run; `pixi run test-fast`
-  (`-m "not slow"`, 540 of 583) is for iteration only. What is marked and why:
+  (`-m "not slow"`, 552 of 587) is for iteration only. What is marked and why:
   **all of `tests/test_fit.py`** (module-wide — every test drives the real filter through
   the whole driver on five-series batches, so there is no fast subset worth carving out),
   the N = 5000 gradient step-rule case, and four `tests/test_optimize.py` tests that run
