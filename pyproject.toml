@@ -28,7 +28,9 @@ classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",
     "License :: OSI Approved :: Apache Software License",
-    "Operating System :: OS Independent",
+    # No Operating System classifier. The package is pure Python and has no
+    # platform-specific code, but CI tests Linux only, and a classifier is a
+    # claim about what is supported rather than about what is likely to work.
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
@@ -69,7 +71,12 @@ packages = ["src/metamer"]
 # result JSONs, and the environment directories are repository material, not
 # distribution material.
 exclude = [
-    "/docs",
+    # docs/superpowers/notes is deliberately NOT excluded: tests/test_gradients.py
+    # reads complex-step-verdict.md, so dropping it would ship a test suite whose
+    # fixtures are missing and which therefore cannot pass from an unpacked sdist.
+    # The plans and specs have no such tie and are the bulk of the directory.
+    "/docs/superpowers/plans",
+    "/docs/superpowers/specs",
     "/bench",
     "/metamer-build-prompt.md",
     "/.pixi",
@@ -172,6 +179,16 @@ addopts = "-v"
 #                             A green fast run is NOT evidence a task is done.
 markers = [
     "slow: drives the real filter at production sizes; deselected only by test-fast",
+    # `machine` marks tests whose assertions are about the HOST, not about metamer:
+    # memory bandwidth, RSS watermarks, wall-clock rates, available core counts.
+    # They are real tests and they must keep running on a known machine -- they are
+    # what pins the units of the RSS shim and the per-core bandwidth claim the whole
+    # memory budget rests on. What they cannot do is run on an arbitrary CI runner:
+    # observed on GitHub Actions, the bandwidth ratio came out 1.97 against a > 2.0
+    # bound on one runner while two identically-specified runners passed, and the
+    # macOS runner has 3 cores against the hard-coded threads=4. A green CI run
+    # therefore does NOT cover these; `pixi run test` locally does.
+    "machine: asserts on host memory bandwidth, RSS or timing; not portable to CI runners",
 ]
 pythonpath = ["src"]
 

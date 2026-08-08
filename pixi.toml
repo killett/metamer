@@ -136,6 +136,11 @@ test = "python -m pytest"
 # covers and why it is not optional.
 test-fast = "python -m pytest -m 'not slow'"
 test-cov = "python -m pytest --cov"  # Later on, consider adding --cov-fail-under=80
+# Exactly what .github/workflows/test.yml runs, so a CI failure can be reproduced
+# locally without reading the workflow. NOT a substitute for `test`: it drops the
+# `machine` tests, which are the ones pinning the RSS shim's units and the per-core
+# bandwidth claim, and those only mean anything on a known machine.
+test-ci = "python -m pytest -m 'not machine'"
 lint = "python -m ruff check ."
 format = "python -m ruff format ."
 typecheck = "python -m mypy ."

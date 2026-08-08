@@ -381,7 +381,9 @@ def test_the_complex_step_verdict_note_exists_and_records_its_numbers():
     tell a measured verdict from an assumed one.
     """
     assert VERDICT_NOTE.exists(), f"{VERDICT_NOTE} is required by exit criterion 8"
-    text = VERDICT_NOTE.read_text()
+    # encoding is explicit because the default is locale-dependent: on Windows it
+    # is cp1252, which cannot decode this file (it died on byte 0x81 in CI).
+    text = VERDICT_NOTE.read_text(encoding="utf-8")
     assert "1.000e+00" in text or "1.0" in text
     assert "Richardson" in text
     assert "_map" in text or "float64" in text

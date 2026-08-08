@@ -125,6 +125,7 @@ def test_the_gap_mask_is_reproducible_across_processes():
 
 
 @pytest.mark.slow
+@pytest.mark.machine
 def test_the_compute_reference_runs_the_filters_arithmetic_not_a_factorization():
     """The compute reference is P = F P F' + Q at d=3, and it is not free.
 
@@ -147,6 +148,7 @@ def test_the_compute_reference_runs_the_filters_arithmetic_not_a_factorization()
 
 
 @pytest.mark.slow
+@pytest.mark.machine
 def test_single_threaded_stream_overstates_per_core_bandwidth():
     """One core cannot saturate the memory controller, and the sweep shows it.
 

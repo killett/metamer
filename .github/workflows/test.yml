@@ -30,16 +30,18 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Every supported minor on Linux; the ceiling only on the other two, which
-        # exist to catch platform-dependent behaviour rather than version-dependent
-        # behaviour. The floor is 3.12 because core/registry.py uses PEP 695 generics.
+        # Linux only, every supported minor. The floor is 3.12 because
+        # core/registry.py uses PEP 695 generics.
+        #
+        # macOS and Windows were tried and removed. What failed there was not the
+        # library: it was tests/test_memory.py's RSS assertions, which are
+        # OS-specific by nature, and a hard-coded threads=4 against a 3-core macOS
+        # runner. Supporting those platforms means deciding what RSS accounting
+        # should mean on each of them, which is a real piece of work and not a CI
+        # setting. Until then the classifiers claim no operating system, so nothing
+        # here overstates what is supported.
         os: [ubuntu-latest]
         python-version: ["3.12", "3.13", "3.14"]
-        include:
-          - os: macos-latest
-            python-version: "3.14"
-          - os: windows-latest
-            python-version: "3.14"
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -56,9 +58,16 @@ jobs:
         run: |
           python -c "import metamer; print(metamer.__version__)"
           python -m metamer
-      # The FULL sweep, `slow` markers included. Those tests drive the real Kalman
-      # filter at production sizes and are the only thing that exercises the batched
-      # driver on anything but healthy series; deselecting them would make a green
-      # run meaningless. Expect roughly five minutes per job.
+      # `slow` stays IN: those tests drive the real Kalman filter at production
+      # sizes and are the only thing that exercises the batched driver on anything
+      # but healthy series, so deselecting them would make a green run meaningless.
+      #
+      # `machine` is deselected, and that is a real gap rather than a tidy-up. Those
+      # tests assert on host memory bandwidth, RSS watermarks and wall-clock rates;
+      # on shared CI runners the bandwidth ratio came out 1.97 against a > 2.0 bound
+      # while two identically-specified runners passed the same assertion. Keeping
+      # them here would buy a flaky signal, not a stronger one. They are covered by
+      # `pixi run test` on a known machine, and a green run of this workflow does
+      # not certify them.
       - name: Run the test suite
-        run: pytest
+        run: pytest -m "not machine"

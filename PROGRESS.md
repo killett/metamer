@@ -36,9 +36,18 @@
   `bench/batch-sweep-d3-1thread-nogaps.json`.
 - **Tests:** **587 collected.** Full sweep `pixi run test` (~280 s). `pixi run test-fast` (~12 s)
   deselects the `slow` marker and is for iteration only — **a green fast run is not evidence
-  a task is done.**
+  a task is done.** `pixi run test-ci` reproduces what CI runs (`-m 'not machine'`); it is
+  also not evidence on its own, because the `machine` marker covers exactly the tests that
+  pin the RSS shim's units and the per-core bandwidth claim, and those need a known machine.
 - **Verify a fresh checkout with:** `pixi run test && pixi run typecheck && pixi run lint`
-- **Remote:** https://github.com/killett/metamer — public, `origin/phase-1` in sync.
+- **Remote:** https://github.com/killett/metamer — public. **`main` is now the working
+  branch**: `phase-1` was fast-forwarded into it on 2026-08-07 for the publishing run.
+- **The package is now installable and CI runs.** `pyproject.toml` has a `hatchling` +
+  `hatch-vcs` build backend, so **the version comes from the git tag and there is no version
+  string to edit anywhere.** `.github/workflows/release.yml` publishes to PyPI on a `v*` tag
+  via Trusted Publishing. See [`RELEASING.md`](RELEASING.md). Pushes that touch
+  `.github/workflows/` need `env -u GH_TOKEN` so the stored `gh` login (which has the
+  `workflow` scope) is used instead of the injected `GH_TOKEN` (which does not).
 - **Task 18 is closed.** It was a user gate; the user closed it on 2026-08-07 by
   directing that the 64-core box and MacBook be skipped, with the reasoning
   recorded in the verdict note.
@@ -1383,15 +1392,23 @@ question; compute/bandwidth roofline pair for cross-machine prediction) are in d
 
 Still open. **A new session must not assume these were settled.**
 
-1. **CI.** Not specified anywhere. Determines whether Tier-2 platforms and the optional
-   celerite2 agreement test are exercised, and whether Windows could ever be claimed.
-   Blocked in practice by the missing `workflow` token scope.
+1. **CI.** ~~Not specified anywhere.~~ **CLOSED 2026-08-07** by the publishing run.
+   `.github/workflows/test.yml` runs lint plus **ubuntu-latest × 3.12/3.13/3.14**, the full
+   sweep with `slow` included and `machine` deselected. The celerite2 agreement test **is**
+   exercised — celerite2 is in the `test` extra. The `workflow` token scope was obtained via
+   a device-flow `gh auth login`; `GH_TOKEN` in the environment cannot be refreshed and must
+   be bypassed with `env -u GH_TOKEN` for pushes that touch `.github/workflows/`.
+   **Windows and macOS are NOT claimed**, and the trove classifiers now assert no operating
+   system at all. Both were tried and removed — see open question 10.
 2. **Index-space vs area-weighted adjacency** for the failure clustering statistic (design
    doc §14.2). Index-space is recommended; not final.
 3. **Which REML convention Hector uses** (see decisions above). Needed before the external
    cross-validation can attribute any discrepancy.
-4. **`requires-python = ">=3.12,<3.14"` carries an upper cap.** Caps poison downstream
-   resolvers; drop before the PyPI stage ever runs.
+4. ~~**`requires-python = ">=3.12,<3.14"` carries an upper cap.**~~ **CLOSED 2026-08-07.**
+   Published metadata is `requires-python = ">=3.12"` with no cap. The supported ceiling
+   lives in the CI matrix and the classifiers instead. `pixi.toml` still pins
+   `python = ">=3.12,<3.14"` for the development environment, which is a separate thing:
+   CI tests 3.14 through `actions/setup-python`, so 3.14 is exercised but never locally.
 5. **64-core box RAM is unknown.** Kept open: the stage-1 gate was closed without that
    machine (see the verdict note), but its RAM is still needed before any tile-sizing
    run there.
@@ -1408,7 +1425,43 @@ Still open. **A new session must not assume these were settled.**
 8. **`numba` and `celerite2` on arm64.** Untested. `celerite2` has **no `osx-arm64`
    conda-forge build** and is pinned to `[target.linux-64.dependencies]`; `numba` on
    `osx-arm64` / `linux-aarch64` has never been run here. Closed by the suite plus
-   `bench/spike.py` on the MacBook.
+   `bench/spike.py` on the MacBook. **Partial evidence 2026-08-07:** on **PyPI** (not
+   conda-forge) celerite2 0.3.3 does ship `macosx_11_0_arm64` wheels, and a macOS CI job
+   installed and imported it fine. That says nothing about conda-forge or about
+   `linux-aarch64`.
+
+9. **`test_the_mixed_batch_really_holds_every_outcome_it_claims` failed once in CI and has
+   never been reproduced.** Seen 2026-08-07 on **ubuntu-latest / Python 3.13 only**, in
+   run 31239373295; 3.12 and 3.14 passed the same test on identically-specified runners,
+   and it has never failed locally. The assertion:
+
+   ```
+   AssertionError: assert <Outcome.OK: 'ok'> in {DEGENERATE_HESSIAN, DIAGNOSTIC_LIMIT,
+       ILL_CONDITIONED_X, INSUFFICIENT_DATA, RANK_DEFICIENT_X}
+   ```
+
+   The fixture is supposed to produce a batch containing **every** outcome including a
+   healthy one, and on that run **no series came back OK**. Two readings, and nothing so
+   far distinguishes them:
+   - the fixture's "healthy" series is marginal, so ordinary numerical variation between
+     BLAS builds or CPU models can tip it into a failure outcome — a test-design defect; or
+   - the driver can classify a genuinely healthy series as failed under some condition — a
+     **real defect in `fit()`**, and the one that matters, because the whole point of the
+     outcome taxonomy is that a caller can trust it.
+
+   **Deliberately not patched during the publishing run.** It wants a real debugging
+   session: re-run the fixture across BLAS builds and seeds, and check how much margin the
+   healthy series actually has. Do not "fix" it by loosening the assertion until which of
+   the two readings is true is known.
+
+10. **macOS and Windows support.** Both were added to CI on 2026-08-07 and removed the same
+    day. What failed was **not** the library: `tests/test_memory.py`'s RSS assertions
+    (`assert 121667584.0 == 692469760.0 ± 3.5e+07` on both) and `test_bench.py`'s hard-coded
+    `threads=4` against a 3-core macOS runner. `core/machine.py`'s win32 branch is still
+    marked `# pragma: no cover - written, untested` and is now known to be *insufficient*
+    rather than merely untested. Supporting either platform means first deciding what the
+    RSS accounting should mean there — peak vs current, and what `ru_maxrss` has no
+    equivalent for on Windows. Closed by that decision plus a green run on both.
 9. **`optimize.HESSIAN_COND_LIMIT = 1e10` is picked, not derived**, while its static
    counterpart in `lint.py` is derived from float64 — so the two halves of §4.8 sit on
    different footings. The eps rule gives `1/√eps = 6.7e7` for a single inversion.

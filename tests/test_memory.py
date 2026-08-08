@@ -65,6 +65,7 @@ CASE: _Case = {"d": 3, "k_beta": 4, "p": 4, "n_time": 630, "n_models": 12}
 # --------------------------------------------------------------------------
 
 
+@pytest.mark.machine
 def test_peak_rss_tracks_a_known_allocation():
     """The shim reports bytes, and reports them on the right scale.
 
@@ -107,6 +108,7 @@ def test_peak_rss_tracks_a_known_allocation():
     assert 0.9 * live <= peak <= 100 * live
 
 
+@pytest.mark.machine
 def test_current_rss_falls_after_a_release_and_the_watermark_does_not():
     """The two shims answer different questions, and only one is a watermark.
 
@@ -133,6 +135,7 @@ def test_current_rss_falls_after_a_release_and_the_watermark_does_not():
 
 
 @pytest.mark.slow
+@pytest.mark.machine
 def test_a_child_measurement_is_not_contaminated_by_a_large_parent():
     """A fresh subprocess does NOT isolate a peak-RSS measurement.
 
@@ -397,6 +400,7 @@ def test_the_augmented_block_is_the_dominant_resident_term():
 
 
 @pytest.mark.slow
+@pytest.mark.machine
 def test_measured_peak_rss_is_at_least_the_arrays_that_provably_exist():
     """Measured peak RSS grows with B at the rate the accounting predicts.
 
