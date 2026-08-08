@@ -10,13 +10,35 @@ that.
 
 ## Status
 
-**Pre-implementation.** This repository currently contains a design document and a Phase 1
-implementation plan. There is no package code yet — no `src/`, no build backend, nothing
-installable. The `pixi` environment and tooling configuration are in place so that
-implementation can start immediately.
+**Alpha — Phase 1 complete.** What ships today is `metamer.core`: the likelihood spine,
+end to end. A `ProcessSpec` goes in; a scored, ranked, per-series result comes out. That
+covers the state-space representation, the Kalman and compiled likelihood engines, the
+Matérn ν=1/2 and ν=3/2 and white-noise families, the differentiable objective with an
+adopted gradient oracle, the information criteria, and the comparability guards that
+refuse to rank scores which are not on the same footing. 587 tests, `mypy --strict`.
 
-If you are looking for working software, this is not yet that. If you are looking for what
-is going to be built and why, start with the design document.
+`metamer.bench` also ships: the benchmark harness used to pick the evaluation path.
+
+**Not yet built:** `metamer.batch` and `metamer.cli`, described under
+[Planned structure](#planned-structure) below. There are no `[batch]` or `[cli]` extras
+to install yet.
+
+The API is alpha and may change without a deprecation cycle before 1.0.
+
+## Installation
+
+```
+pip install metamer
+```
+
+Python 3.12 or newer. Runtime dependencies are numpy, scipy, numba, and psutil.
+
+To run the test suite you also need the `test` extra, which adds pytest and celerite2 —
+the latter is an independent oracle the Matérn ν=1/2 likelihood is checked against:
+
+```
+pip install "metamer[test]"
+```
 
 ## Where to look
 
@@ -44,13 +66,15 @@ the approach in detail.
 
 ## Planned structure
 
-Three layers, gated by optional dependency extras:
+Three layers, gated by optional dependency extras. **Only the first exists today**; the
+other two are design commitments, not shipped code, and their extras do not exist yet.
 
-- **`metamer.core`** — numpy/scipy only. Arrays in, results out. No file I/O, no xarray,
-  no dask. This is what other projects import, and it must be importable without the rest.
-- **`metamer.batch`** (extra `[batch]`) — xarray/dask orchestration, zarr output,
+- **`metamer.core`** — *implemented.* numpy/scipy/numba. Arrays in, results out. No file
+  I/O, no xarray, no dask. This is what other projects import, and it must be importable
+  without the rest.
+- **`metamer.batch`** (planned, extra `[batch]`) — xarray/dask orchestration, zarr output,
   checkpointing, resumability.
-- **`metamer.cli`** (extra `[cli]`) — a config-file-driven runner.
+- **`metamer.cli`** (planned, extra `[cli]`) — a config-file-driven runner.
 
 `metamer` is consumed by [synesthesia](https://github.com/killett/synesthesia), which
 renders the frequency content of gridded time series as colour. The dependency runs one
@@ -77,10 +101,12 @@ pixi run typecheck
 ```
 
 ```
-pixi run pre-commit-all
+pixi run pre-commit run --all-files
 ```
 
 Python 3.12 or newer.
+
+Releases are tag-driven — see [`RELEASING.md`](RELEASING.md).
 
 ## Licence
 
