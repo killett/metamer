@@ -17,11 +17,17 @@ from metamer.core.criteria import Criterion, Ranking
 from metamer.core.engines.kalman import KalmanEngine
 from metamer.core.fit import fit
 from metamer.core.objective import ConcentratedObjective
-from metamer.core.optimize import InitRung, hessian_at_optimum
+from metamer.core.optimize import (
+    HESSIAN_COND_LIMIT,
+    InitRung,
+    hessian_at_optimum,
+    optimize_series,
+)
 from metamer.core.outcomes import Outcome
 from metamer.core.signal import Annual, Constant, SignalSpec, Trend
 from metamer.core.statespace import StateSpace
 from metamer.core.terms import ProcessSpec
+from tests.test_kalman import _covariance
 from tests.test_objective import _GAP_N, _GAP_T, _gapped_signal, _window
 from tests.test_statespace import _term
 
@@ -42,7 +48,23 @@ def _mixed_batch():
     """A batch holding one series of each reachable outcome.
 
     Rows, and what makes each one what it is:
-      0  OK                  full post-break window, ordinary noise
+      0  OK                  full post-break window, and a REALIZATION OF THE
+                             CANDIDATE PROCESS rather than white noise. It was
+                             `standard_normal` until 2026-08-08, which made it
+                             healthy only by luck: candidate 1 is
+                             white + Matern 1/2, so with no Matern structure in
+                             the data that component's amplitude collapsed
+                             (measured sigma = 1.5e-4) and its rho was left
+                             unidentified on a flat ridge. `cond(H) = 3.5e8`
+                             against the 1e10 limit -- 28x, and a
+                             finite-difference Hessian's condition number moves
+                             further than that across BLAS builds, so two CI
+                             runners reported DEGENERATE_HESSIAN for it while
+                             this machine reported OK. Drawing from the
+                             composite's own covariance identifies all three
+                             parameters and puts the fit decades clear of the
+                             limit; `test_the_healthy_row_has_real_margin_to_
+                             the_degeneracy_limit` is what holds it there.
       1  ILL_CONDITIONED_X   two post-break samples; seed pinned because the
                              classification is theta-dependent (it is the
                              WHITENED Gram that is ill conditioned, and at this
@@ -65,7 +87,7 @@ def _mixed_batch():
     rng = np.random.default_rng(31)
     y = np.vstack(
         [
-            rng.standard_normal(_GAP_N),
+            _healthy_row(),
             np.random.default_rng(0).standard_normal(_GAP_N),
             rng.standard_normal(_GAP_N),
             rng.standard_normal(_GAP_N),
@@ -73,6 +95,27 @@ def _mixed_batch():
         ]
     )
     return y, _GAP_T, _gapped_signal(_GAP_T), masks
+
+
+def _healthy_row():
+    """A realization of candidate 1's own process: white + Matern 1/2.
+
+    `rho` is set to ten sampling intervals. The scale matters in both
+    directions and neither bound is arbitrary: below a couple of intervals the
+    Matern component is indistinguishable from the white one and its amplitude
+    collapses again, while much above the record length it is indistinguishable
+    from a constant, which the design's own intercept absorbs. Ten intervals
+    puts roughly four correlation lengths inside the 42-sample window, so the
+    amplitude ratio and the length scale are both identified by the data.
+
+    Drawn from the composite covariance directly rather than by iterating an
+    AR(1) recursion, so the fixture shares no construction with the state-space
+    machinery it is used to exercise.
+    """
+    spec = ProcessSpec((_term("white"), _term("matern12")))
+    theta = np.array([[0.5, 1.0, 10.0 * float(_GAP_T[1] - _GAP_T[0])]])
+    cov = _covariance(StateSpace.from_spec(spec), theta, _GAP_T)
+    return np.random.default_rng(17).multivariate_normal(np.zeros(_GAP_N), cov)
 
 
 def _plain_batch(batch=3, n=120, seed=5):
@@ -107,6 +150,60 @@ def test_the_mixed_batch_really_holds_every_outcome_it_claims():
     assert Outcome.RANK_DEFICIENT_X in seen
     assert Outcome.INSUFFICIENT_DATA in seen
     assert Outcome.DIAGNOSTIC_LIMIT in seen
+
+
+def test_the_healthy_row_has_real_margin_to_the_degeneracy_limit():
+    """Row 0 is OK by construction, not by luck.
+
+    Behaviour under test: the fixture again, and specifically HOW FAR row 0 sits
+    from the degeneracy verdict rather than merely which side of it it lands on.
+
+    Bug this catches: a "healthy" row that is only marginally healthy. The
+    original fixture drew row 0 from `standard_normal` -- PURE WHITE NOISE --
+    while candidate 1 is white + Matern 1/2. With no Matern structure present
+    the component's amplitude sits at ~0 and its length scale rho is
+    unidentifiable, leaving a flat ridge: measured `cond(H) = 3.5e8` on a 2x2,
+    only 28x under the 1e10 limit. It passed here and reported
+    DEGENERATE_HESSIAN on two GitHub Actions runners (ubuntu 3.13, then
+    ubuntu 3.12), because a FINITE-DIFFERENCE Hessian's condition number moves
+    by more than 1.45 decades across BLAS builds. That silently guts
+    `test_batched_results_equal_solo_results_series_by_series` below, which
+    shares this fixture and is meaningless without a healthy series in it.
+
+    Expected value determined independently: the threshold is the module
+    constant `HESSIAN_COND_LIMIT`, not a number recomputed from the fit. The
+    margin demanded is 1e4 -- four decades -- chosen because the variation
+    actually observed in CI exceeded the 1.45 decades that were there. The
+    mechanism is `optimize_series`'s own `hessian_cond_limit` argument, which
+    exists (per its docstring) "so the branch can be exercised without a
+    fixture whose degeneracy is itself in question"; asking for OK under a
+    limit tightened by 1e4 IS the margin assertion, and it duplicates no
+    conditioning arithmetic from the implementation.
+
+    This is deliberately a separate test from the one above. That one asks
+    whether the fixture still spans the taxonomy; this one asks whether its
+    healthy member is robustly healthy. A single test conflating them would
+    not say which property broke.
+    """
+    y, t, signal, mask = _mixed_batch()
+    spec = _candidates()[1]
+    objective = ConcentratedObjective(
+        spec, StateSpace.from_spec(spec), KalmanEngine(), Objective.ML
+    )
+    design = signal.design_info(t, mask[:1])
+
+    strict = optimize_series(
+        objective,
+        y[:1],
+        mask[:1],
+        t,
+        design,
+        hessian_cond_limit=HESSIAN_COND_LIMIT / 1e4,
+    )
+    assert strict.outcome is Outcome.OK, (
+        f"row 0 is within 1e4 of the degeneracy limit (got {strict.outcome.name}); "
+        "it is healthy only by luck and will flip on other hardware"
+    )
 
 
 @pytest.mark.parametrize("max_iter", [200, 1])

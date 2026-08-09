@@ -15,7 +15,7 @@ end to end. A `ProcessSpec` goes in; a scored, ranked, per-series result comes o
 covers the state-space representation, the Kalman and compiled likelihood engines, the
 Matérn ν=1/2 and ν=3/2 and white-noise families, the differentiable objective with an
 adopted gradient oracle, the information criteria, and the comparability guards that
-refuse to rank scores which are not on the same footing. 587 tests, `mypy --strict`.
+refuse to rank scores which are not on the same footing. 588 tests, `mypy --strict`.
 
 `metamer.bench` also ships: the benchmark harness used to pick the evaluation path.
 

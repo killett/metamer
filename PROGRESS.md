@@ -34,7 +34,7 @@
   MacBook: `--threads 1 --threads 8`, `--out bench/macbook.json`.
   Batch sweep at path B's worst cell (d=3, 1 thread, no gaps) is
   `bench/batch-sweep-d3-1thread-nogaps.json`.
-- **Tests:** **587 collected.** Full sweep `pixi run test` (~280 s). `pixi run test-fast` (~12 s)
+- **Tests:** **588 collected.** Full sweep `pixi run test` (~280 s). `pixi run test-fast` (~12 s)
   deselects the `slow` marker and is for iteration only — **a green fast run is not evidence
   a task is done.** `pixi run test-ci` reproduces what CI runs (`-m 'not machine'`); it is
   also not evidence on its own, because the `machine` marker covers exactly the tests that
@@ -1339,7 +1339,7 @@ question; compute/bandwidth roofline pair for cross-machine prediction) are in d
   before transcription, not after.
 - **The suite is ~255 s, and the `slow` marker is now in place.** `pixi run test` is the
   full sweep and is what every end-of-task verification must run; `pixi run test-fast`
-  (`-m "not slow"`, 552 of 587) is for iteration only. What is marked and why:
+  (`-m "not slow"`, 552 of 588) is for iteration only. What is marked and why:
   **all of `tests/test_fit.py`** (module-wide — every test drives the real filter through
   the whole driver on five-series batches, so there is no fast subset worth carving out),
   the N = 5000 gradient step-rule case, and four `tests/test_optimize.py` tests that run
@@ -1430,29 +1430,42 @@ Still open. **A new session must not assume these were settled.**
    installed and imported it fine. That says nothing about conda-forge or about
    `linux-aarch64`.
 
-9. **`test_the_mixed_batch_really_holds_every_outcome_it_claims` failed once in CI and has
-   never been reproduced.** Seen 2026-08-07 on **ubuntu-latest / Python 3.13 only**, in
-   run 31239373295; 3.12 and 3.14 passed the same test on identically-specified runners,
-   and it has never failed locally. The assertion:
+9. ~~**`test_the_mixed_batch_really_holds_every_outcome_it_claims` fails intermittently in
+   CI.**~~ **CLOSED 2026-08-08. It was the fixture, not the driver** — the first of the two
+   readings below. Kept in full because the measurement is worth not repeating.
+
+   Seen twice in four ubuntu jobs across two runs: 31239373295 (3.13) and 31240252583
+   (3.12), each time with the sibling minors passing. Never seen locally.
 
    ```
    AssertionError: assert <Outcome.OK: 'ok'> in {DEGENERATE_HESSIAN, DIAGNOSTIC_LIMIT,
        ILL_CONDITIONED_X, INSUFFICIENT_DATA, RANK_DEFICIENT_X}
    ```
 
-   The fixture is supposed to produce a batch containing **every** outcome including a
-   healthy one, and on that run **no series came back OK**. Two readings, and nothing so
-   far distinguishes them:
-   - the fixture's "healthy" series is marginal, so ordinary numerical variation between
-     BLAS builds or CPU models can tip it into a failure outcome — a test-design defect; or
-   - the driver can classify a genuinely healthy series as failed under some condition — a
-     **real defect in `fit()`**, and the one that matters, because the whole point of the
-     outcome taxonomy is that a caller can trust it.
+   Five outcomes for five rows with `OK` replaced by `DEGENERATE_HESSIAN`, so row 0 — the
+   healthy one — was being failed on the curvature check. **Measured margin: `cond(H) =
+   3.525382e+08` against `HESSIAN_COND_LIMIT = 1e10`. 28x. 1.45 decades.** A
+   finite-difference Hessian's condition number moves further than that between BLAS
+   builds, which is the whole mechanism.
 
-   **Deliberately not patched during the publishing run.** It wants a real debugging
-   session: re-run the fixture across BLAS builds and seeds, and check how much margin the
-   healthy series actually has. Do not "fix" it by loosening the assertion until which of
-   the two readings is true is known.
+   Root cause: row 0 was `rng.standard_normal(_GAP_N)` — **pure white noise** — while
+   candidate 1 is white + Matérn 1/2. With no Matérn structure in the data its amplitude
+   collapsed (fitted `sigma = 1.46e-4`) and `rho` sat on a flat ridge, unidentified. The
+   verdict `DEGENERATE_HESSIAN` was arguably *correct*; the fixture was calling a
+   near-degenerate series healthy and getting away with it only because 1e10 is generous.
+
+   Fix: row 0 is now drawn from the composite's own covariance with `rho` at ten sampling
+   intervals (`_healthy_row()`), which identifies all three parameters. **`cond(H)` went
+   3.525382e+08 → 7.617468e+02, i.e. 1.45 decades of headroom → 7.12.** The threshold was
+   not raised and no assertion was loosened.
+   `test_the_healthy_row_has_real_margin_to_the_degeneracy_limit` now fails if row 0 ever
+   comes within 1e4 of the limit again; it reproduced the CI failure locally before the fix,
+   which is how the diagnosis was confirmed rather than inferred.
+
+   **The lesson worth keeping: a fixture that is "healthy" by 28x is not healthy.** Any
+   fixture asserting a clean outcome should be checked for its margin, not just its side of
+   the threshold — and the two are separate tests, because conflating them does not say
+   which property broke.
 
 10. **macOS and Windows support.** Both were added to CI on 2026-08-07 and removed the same
     day. What failed was **not** the library: `tests/test_memory.py`'s RSS assertions
