@@ -1938,6 +1938,38 @@ Tiling; two-pass hierarchical warm start; hysteresis audit; calibration tile; za
 with region writes, sharding, completion bitmap, resumption; run-level reporting; float32 IO
 boundary.
 
+**Amended 2026-08-11.** This list said nothing about config or an entry point, and Phase 5
+below owns "the CLI". That reads as though Phase 2 needs neither, which is wrong: **a
+resume gate is a comparison of hashes, and there is nothing to hash until a config has been
+loaded, validated and normalized.** The split is not "the CLI moves to Phase 2" — it is
+between *starting a run* and *operating a tool*:
+
+| | Phase 2 | Phase 5 |
+|---|---|---|
+| config | **TOML → pydantic → normalize → canonical JSON → the three hashes, the real path end to end** | profiles (§13.5) |
+| entry point | **`python -m metamer <config.toml> <store>`, argparse, one screen, no framework** | the command tree via `console_scripts` |
+| validation | **the 1/2/3/4 staging as structure**, with only the checks Phase 2 can trigger | the rest of §13.2's layer-3 checks as they accrete |
+| exit codes | **all five, as an enum and a return value** (§14.3) | — |
+| commands | — | `validate --explain` with its projection provenance (§13.4), `report` (§14.2) |
+| display | plain lines | the `rich` progress display (§14.1) |
+
+**No production path constructs a `Config` inline.** `metamer.config.load(path)` is the only
+constructor a run uses, so §12.8's resume comparison is exercised through the same
+normalizer a user's file goes through. A test may build one directly for unit purposes;
+every integration test and every exit criterion loads from a real file. A `compat_hash`-only
+difference proves nothing unless it survived the actual normalizer.
+
+**`python -m` deliberately, not `metamer run <config>`.** Naming a subcommand presupposes
+the tree it belongs to, and designs the argument structure now rather than in Phase 5 when
+`validate` and `report` are real. `python -m` presupposes nothing and reads as provisional.
+
+**Exit codes land in Phase 2 because retrofitting them means revisiting every early
+return** — the same argument that made the failure taxonomy a Phase 1 deliverable rather
+than a later addition. Codes 3 and 4 cannot be distinguished without *some* validation
+staging, which is why the staging is Phase 2 structure even where the layers are nearly
+empty. Sub-phase 1 will only be able to produce a subset; each of the rest gets a
+constructed test or an explicit note that it is unreachable until its producer exists.
+
 ### Phase 3 — model families
 
 Matérn ν free; CARMA(p,q) general with root parameterization; SHO; sum-of-OU power law with
@@ -1955,6 +1987,10 @@ confirmation threshold.
 
 `metamer.cli` with config validation and `--explain`; multitaper (Thomson) spectral
 estimator as public API; `metamer report`.
+
+**Amended 2026-08-11:** this is the *command tree*, not the first entry point. Config
+loading, `python -m metamer`, the validation staging and the exit codes are Phase 2 — see
+the table under Phase 2 for the split and its reasoning.
 
 ### Phase 6 — validation suites
 

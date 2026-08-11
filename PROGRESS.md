@@ -485,6 +485,24 @@ argument — a passing suite is not evidence the brief is right.
   slack — nowhere near enough to absorb the 1024× unit error such a comparison exists to
   catch.
 
+  **(k) EXTENDS TO REPEATED MEASUREMENT, AND THAT IS A DISTINCT SHAPE.**
+
+  > **A repeated measurement must vary everything the measured quantity depends on.**
+  > Repeats inside a fixed allocation, a fixed input, or a fixed process measure
+  > **precision, not accuracy** — the component held fixed outside the repeat loop is
+  > invisible to them by construction, and a best-of-N over one allocation, published as
+  > though it were fresh, reports a confidence the method cannot support.
+
+  **Measured (P4):** at the spike's worst cell the A:B spread is **0.13** across eight
+  repeats inside one allocation and **0.82** across eight fresh processes. The dominant
+  term was the one the repeats could not see, and `_time_pass`'s `repeats` argument
+  tightens only the small one. The published ±0.15 scatter came from that loop.
+
+  The check to run: **list what the number depends on, then list what the repeat loop
+  re-creates.** Anything in the first list and not the second is a systematic the
+  measurement cannot report — allocation, process, input realization, machine state, and
+  in this project's history all four at once.
+
   **The worked instance:** Task 16's fence serialized with
   `json.dumps(..., default=repr)`. Measured, `{"criteria": {"aic", "bic", "hqic"}}` renders
   as three *different* strings under `PYTHONHASHSEED` 1, 2 and 3, and an object without
@@ -902,15 +920,18 @@ will do.
   Pin the seed, and never assert `design.condition_number` as a proxy.
 - **A quadratic cannot test a step rule** (third derivative zero), and **a fixture sitting
   above a floor cannot test the floor** (`n_eff = 12` against a floor at 2.0).
-- **AMPLITUDE SPREAD IS NOT HETEROGENEITY FOR A GAUSSIAN LIKELIHOOD.** Scaling a series by
-  `c` scales every σ by `c` and leaves the shape of the surface alone, so the optimizer
-  takes the same path. Measured on the spike's iteration sample, one realization at four
-  amplitudes: `n_iter = [28, 28, 28, 28]`, utilization **exactly 1.0**. Three separate
-  fixtures used `* logspace(-1, 1, k)` and described it as what made the batch
-  heterogeneous. Real heterogeneity has to come from the **generating parameters** —
-  timescale, nugget ratio, mask — or from the realization. **A fixture's stated mechanism
-  of heterogeneity is a claim to measure**: hold everything but that mechanism fixed and
-  see whether the statistic moves.
+- **HETEROGENEITY MUST COME FROM A PARAMETER THE LIKELIHOOD IS NOT EQUIVARIANT IN.**
+  Timescale, mixing ratio, mask pattern, series length. **Varying an equivariant parameter
+  produces a fixture that looks diverse and is identical.** The worked case is amplitude:
+  a Gaussian log-likelihood is equivariant in it — scaling a series by `c` scales every σ
+  by `c` and leaves the shape of the surface alone — so `* logspace(-1, 1, k)` contributes
+  exactly nothing. Measured on the spike's iteration sample, one realization at four
+  amplitudes: `n_iter = [28, 28, 28, 28]`, utilization **exactly 1.0**, which is the number
+  that fixture's own docstring said the spread existed to challenge. Three separate
+  fixtures used the construction and described it as what made the batch heterogeneous.
+  **A fixture's stated mechanism of heterogeneity is a claim to measure**: hold everything
+  but that mechanism fixed and see whether the statistic moves. Before writing the
+  fixture, ask which of its varying quantities the objective is *invariant* under.
 - **AN IDENTITY EXACT IN ℝ NEED NOT BE EXACT IN FLOAT64, AND THE EXACT CASE IS WHAT MAKES
   THE OVER-GENERALIZATION LOOK SAFE.** Task 15 asserted `array_equal` for both halves of
   the additive-variance identity. `white(3) + white(4) == white(5)` **is** bit-exact: at
@@ -1661,16 +1682,7 @@ question; compute/bandwidth roofline pair for cross-machine prediction) are in d
   `bandwidth_mib` and the tests pass 64. **This is the delta-with-an-external-baseline
   hazard the module's own docstring describes, arriving from a different file** — the
   baseline is the whole session, so any test anywhere can set it.
-- **OPEN, and measured while chasing the above: the inherited watermark tracks the
-  parent's CURRENT RSS at spawn time, not the parent's watermark.** Running the
-  contamination probe in its own subprocess gave `before = 454.8 MB` (inherited from
-  pytest) while that probe's own child reported `84.6 MB` — the probe's *current* RSS, not
-  the 454.8 MB it had inherited. The existing test passes because pytest's inherited
-  watermark and its current RSS happen to be close at that point, which is not a property
-  anything guarantees. **The test was left as it was**: restating it needs the inheritance
-  semantics pinned first, and doing that inside P4 would have been a change to the RSS
-  shim's contract made in passing. `machine.py`'s docstring says `ru_maxrss` is inherited;
-  it does not say *what value* is inherited, and the two are different claims.
+- **The RSS shim's inheritance contract is under-specified — see open question 12.**
 - Per user global instructions: never do investigative `git checkout <sha>` inside the
   working tree. Use `git show <sha>:<path>`, `git worktree add`, or `git diff <sha>`.
 
@@ -1809,6 +1821,31 @@ Still open. **A new session must not assume these were settled.**
     entry quoting 0.64 was measured on three series and the note quoting 0.84 on two.
     *(The recommendation's second half — "keeping the amplitude spread" — was wrong, and
     measuring it is what closed this. See above.)*
+
+12. **WHAT VALUE DOES A CHILD INHERIT AS ITS WATERMARK — THE PARENT'S WATERMARK, OR THE
+    PARENT'S CURRENT RSS AT SPAWN?** `machine.py` and `test_memory.py` both say
+    `ru_maxrss` is *inherited* across `fork()`/`exec()`. Neither says **which value**, and
+    the two are different claims. Measured 2026-08-10 while chasing an unrelated failure:
+    a probe spawned from pytest read `before = 454.8 MB`, and that probe's own child —
+    spawned while the probe held only ~85 MB resident — reported **84.6 MB**, i.e. the
+    probe's *current* RSS and not the 454.8 MB it had itself inherited. If that is the
+    rule, then `test_a_child_measurement_is_not_contaminated_by_a_large_parent` passes
+    because pytest's inherited watermark and its current RSS happen to be close at the
+    moment it runs, which nothing guarantees, and its `after >= 1.2 * before` assertion
+    has a baseline set by the whole session (see the gotcha above, where a 400 MiB ballast
+    moved that watermark by exactly zero).
+
+    **Deliberately left open rather than fixed inside P4.** Restating the test means
+    pinning the shim's inheritance contract, and pinning a contract in passing, inside a
+    task about something else, is the change this project keeps paying for.
+
+    **What would close it:** a standalone cross-process probe that varies the parent's
+    current RSS and the parent's watermark *independently* — allocate, free, then spawn —
+    and reports which one the child's `ru_maxrss` follows, on Linux and on macOS. Then
+    state the answer in `machine.py`'s docstring, and restate the test against whichever
+    quantity is actually inherited. **Both instruments are load-bearing for Phase 2's
+    calibration tile**, which measures bytes-per-series in a child process, so this closes
+    before the calibration work rather than before the store work.
 
 9. ~~**`optimize.HESSIAN_COND_LIMIT = 1e10` is picked, not derived.**~~ **CLOSED 2026-08-10
    (P1), before Phase 2 planning as it required.** `HESSIAN_COND_LIMIT` is now

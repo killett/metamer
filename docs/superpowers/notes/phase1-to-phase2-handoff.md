@@ -117,6 +117,22 @@ Worked instance: `json.dumps(..., default=repr)` renders `{"aic","bic","hqic"}` 
 memory address. Every fence test passed; every resume of a finished store would have refit
 it, with no symptom but a bill.
 
+**(k) extends to repeated measurement, and that is a distinct shape.**
+
+> **A repeated measurement must vary everything the measured quantity depends on.**
+> Repeats inside a fixed allocation, a fixed input, or a fixed process measure
+> **precision, not accuracy** — the component held fixed outside the repeat loop is
+> invisible to them by construction, and a best-of-N over one allocation, published as
+> though it were fresh, reports a confidence the method cannot support.
+
+Measured (P4): the spike's A:B spread at its worst cell is **0.13** across eight repeats
+inside one allocation and **0.82** across eight fresh processes; path A also runs ~16%
+slower on freshly allocated inputs (path B ~4%). The published ±0.15 scatter came from the
+inner loop. The check: **list what the number depends on, then list what the repeat loop
+re-creates** — anything in the first list and not the second is a systematic the
+measurement cannot report. If the production condition allocates, and a tile is
+materialized, fitted and dropped, the repeat must allocate inside it.
+
 **(k) extends to every delta, rate or trend.** Any assertion on a *difference* must be
 checked for whether its **baseline is set by history outside the test**:
 
@@ -304,18 +320,14 @@ Every one of these was discovered by building a fixture that could not fail.
   goes from `cond(X) = 3.4e1` to `3.3e32` and rank 7/7 to 2/7.
 - **A quadratic cannot test a step rule**, and **a fixture above a floor cannot test the
   floor.**
-- **AMPLITUDE SPREAD IS NOT HETEROGENEITY FOR A GAUSSIAN LIKELIHOOD.** It is
-  scale-equivariant, so `* logspace(-1, 1, k)` cannot move an iteration count. Measured on
-  the spike's iteration sample: one realization at four amplitudes gives
-  `n_iter = [28, 28, 28, 28]` and utilization **exactly 1.0** — the number the fixture's own
-  docstring said the spread existed to challenge. Heterogeneity has to come from the
-  generating parameters, the mask, or the realization. **A fixture's stated mechanism of
-  heterogeneity is a claim to measure.**
-- **A BENCHMARK REPEAT THAT REUSES ITS FIXTURE MEASURES THAT FIXTURE'S PLACEMENT ONCE.**
-  Best-of-N over one allocation gave an A:B spread of 0.13 at the spike's worst cell;
-  re-allocating each round gave 0.45, and fresh processes 0.82. Path A also runs ~16%
-  slower on freshly allocated inputs (path B ~4%). If the production condition allocates —
-  and a tile is materialized, fitted and dropped — the repeat must allocate inside it.
+- **HETEROGENEITY MUST COME FROM A PARAMETER THE LIKELIHOOD IS NOT EQUIVARIANT IN** —
+  timescale, mixing ratio, mask pattern, series length. **Varying an equivariant parameter
+  produces a fixture that looks diverse and is identical.** Amplitude is the worked case:
+  a Gaussian log-likelihood is equivariant in it, so `* logspace(-1, 1, k)` contributes
+  nothing. Measured on the spike's iteration sample, one realization at four amplitudes:
+  `n_iter = [28, 28, 28, 28]`, utilization **exactly 1.0** — the number that fixture's own
+  docstring said the spread existed to challenge. Ask which of a fixture's varying
+  quantities the objective is *invariant* under, before writing it.
 - **`fit` costs ~5.4 s per series** through the per-series scipy loop, linear in B. Anything
   wanting tile-scale behaviour must use a batched *evaluation*, not a fit.
 - **`ru_maxrss` is inherited across `fork()`/`exec()` and updated lazily.** A child spawned

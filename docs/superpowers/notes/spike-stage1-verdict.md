@@ -350,14 +350,23 @@ prediction built on "path A is memory-bound, so path A gains from any traffic re
 would have been wrong in the same way, and a verdict that only records outcomes gives a
 later reader no way to know it.
 
-**What the reasoning is worth after P4.** One clause of it is now supported by an
-independent measurement: path A really is about **four times more sensitive to memory
-placement** than path B (16% against 4% on reallocation). So "path A is the
-memory-sensitive path" stands; "therefore removing this particular block helps path A
-most" did not, and did not follow. **This matters beyond the postmortem**: the "why one
-machine is enough" argument above rests on path A scaling with bandwidth per core, and
-that argument is left standing by P4 rather than undermined by it — but it is standing on
-the reallocation measurement now, not on the `_augment` prediction that failed.
+**What the reasoning is worth after P4, and WHICH CLAUSE IS LOAD-BEARING.**
+
+> **The load-bearing clause is "path A is the memory-sensitive path", and it is now a
+> MEASUREMENT rather than a prediction:** path A runs ~16% slower on freshly allocated
+> inputs against path B's ~4%, so it is about **four times more sensitive to memory
+> placement**. Nothing downstream should be built on the clause that failed —
+> "therefore removing this particular block helps path A most" — which did not follow
+> from it and was not observed.
+
+**This matters beyond the postmortem.** The "why one machine is enough" argument in this
+note rests entirely on path A scaling with bandwidth per core: the mini PC gives 3.01 GB/s
+per core at full occupancy, which is generous relative to a many-core box, so the machine
+measured is the one most favourable to path A. **P4 leaves that argument standing and
+improves its footing** — it now rests on an observed placement sensitivity rather than on
+the `_augment` prediction, which was the only support it previously had and which failed.
+A later reader deciding whether the 64-core measurement is still optional should read the
+reallocation numbers, not the prediction.
 
 ## Carried into Phase 2 — RESOLVED 2026-08-10
 
