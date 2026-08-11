@@ -25,9 +25,21 @@ have 2FA enabled. There is no API for registering a trusted publisher — it is 
 ## Cutting a release
 
 1. Make sure `main` is green on CI and your working tree is clean.
-2. Decide the version. Versions come **from the git tag** via `hatch-vcs`; there is no
+2. **Decide whether `hashing.ALGORITHM_VERSION` needs bumping, and bump it in its own
+   commit if so.** It is the one hand-maintained constant in the tree, and it is
+   deliberately *not* the package version: the package version comes from the tag and so
+   changes on every commit, which would make every resume of a finished store refit. Bump
+   `ALGORITHM_VERSION` when — and only when — something in this release changes the value
+   of `theta_hat` or `log_lik` for an input that previously fit: the objective, the filter
+   recursion, the GLS solve, the optimizer's step rules or initialization ladder, the
+   parameter transforms, or a diagnostic threshold whose crossing changes a reported fit.
+   Not for the CLI, the store writer, docs or packaging. Bumping it invalidates every
+   in-progress store, which is the point; the three `GOLDEN_*` constants in
+   `tests/test_hashing.py` move with it and must be **re-derived by hand**, never pasted
+   from the failure.
+3. Decide the version. Versions come **from the git tag** via `hatch-vcs`; there is no
    version string to edit in any file. SemVer, prefixed with `v`.
-3. Tag and verify *before* pushing:
+4. Tag and verify *before* pushing:
 
    ```
    git tag -a v0.1.0 -m "Release v0.1.0"
@@ -41,7 +53,7 @@ have 2FA enabled. There is no API for registering a trusted publisher — it is 
    `py3-none-any` — this package is pure Python and a platform tag would mean
    something is wrong. A local tag is cheap to delete and redo; a PyPI upload is not.
 
-4. Push the single tag:
+5. Push the single tag:
 
    ```
    git push origin v0.1.0
@@ -50,7 +62,7 @@ have 2FA enabled. There is no API for registering a trusted publisher — it is 
    Do not use `git push --tags`. It publishes every local tag, including ones you
    were not ready to release.
 
-5. Watch the run, then confirm the package is really installable:
+6. Watch the run, then confirm the package is really installable:
 
    ```
    gh run watch
@@ -60,7 +72,7 @@ have 2FA enabled. There is no API for registering a trusted publisher — it is 
    pip install metamer==0.1.0
    ```
 
-6. Publish the GitHub Release:
+7. Publish the GitHub Release:
 
    ```
    gh release create v0.1.0 --verify-tag --generate-notes

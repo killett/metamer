@@ -26,6 +26,15 @@ because defaults are included, any version bump touching a compat-relevant
 default invalidates every in-progress store. The allowlist is what keeps that
 surface small enough to review.
 
+**Algorithm identity is declared, not inferred from the package version.** The
+allowlist carries `ALGORITHM_VERSION`, a hand-bumped constant, and NOT
+`metamer.__version__`, which `hatch-vcs` derives from the git tag and which
+therefore changes on every commit and again between an installed package and
+the uninstalled `PYTHONPATH=src` tree that `pixi run` uses. See
+`ALGORITHM_VERSION` for the full argument; the short form is that "does this
+change invalidate stored fits?" must be a decision someone makes rather than a
+side effect of committing.
+
 **What this module refuses, and why refusing is the point.** A hash that
 changes between runs on identical input silently invalidates a 10^7-point
 store -- every resume reads as a mismatch and refits. So `canonical_json`
@@ -58,6 +67,56 @@ import json
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+ALGORITHM_VERSION = "1"
+"""Identity of the code that computes theta-hat and log_lik. HAND-BUMPED.
+
+**Bump this, in its own commit, when and only when a change alters the value
+of `theta_hat` or `log_lik` for some input that previously fit.** That covers
+the objective (including its REML constant), the filter recursion, the
+concentration and GLS solve, the optimizer's step rules, the initialization
+ladder, the parameter transforms, and any diagnostic threshold whose crossing
+changes a reported fit. It does not cover the CLI, the store writer, the
+reporting layer, documentation, packaging, or a criterion added to
+`criteria` -- none of those moves an optimum.
+
+WHY THIS IS NOT THE PACKAGE VERSION, which is the obvious thing to put here
+and was in fact what this field held until 2026-08-10. Under `hatch-vcs` the
+package version is derived from the git tag, so an untagged commit reports
+something like `0.1.1.dev3+g6a0fb3b` -- **a new string on every commit** -- and
+the same tree reports `0.0.0.dev0` when run uninstalled off `PYTHONPATH=src`,
+which is how `pixi run` executes it. Either variation reaching this payload
+means a finished 10^7-point store stops resuming and silently refits: no
+exception, no warning, and the same symptom profile as the `PYTHONHASHSEED`
+serializer defect this module was written to close -- correct-looking
+behaviour and a compute bill.
+
+The alternatives were weighed and are recorded in
+`docs/superpowers/notes/phase2-preliminaries-preflight.md`. In short: a
+release version with the dev and local segments stripped is wrong in both
+directions (a packaging-only patch release invalidates every store, while an
+algorithm change on an untagged commit does not move it, so a stale fit is
+reused against changed code); `registry_version` identifies the family
+registry and not the objective, the optimizer or the engine; and hashing the
+source of the fit-determining modules moves on comments and on whether the
+code is a wheel, an sdist or a working tree.
+
+**A hand-bumped constant is the only option under which "does this change
+invalidate stored fits?" is a decision someone makes rather than a side effect
+of tagging or of committing.** Its one real cost is that it can be forgotten,
+which is the cost of every declared-identity mechanism here, `FIT_RELEVANT_FIELDS`
+included, and is answered the same way: the rule is stated where the constant
+lives and repeated on the release checklist in `RELEASING.md`.
+"""
+
+ALGORITHM_VERSION_KEY = "algorithm_version"
+"""Payload key under which `normalize` stamps `ALGORITHM_VERSION`.
+
+Reserved: a config supplying it is refused, not overridden. Silently
+overriding would leave a user who believed they had pinned the algorithm
+identity with a payload that says otherwise, which is the "silent skip in an
+allowlist is a demotion" failure pointed the other way.
+"""
+
 FIT_RELEVANT_FIELDS = frozenset(
     {
         "data_uri",
@@ -66,7 +125,7 @@ FIT_RELEVANT_FIELDS = frozenset(
         "objective",
         "engine",
         "registry_version",
-        "metamer_version",
+        ALGORITHM_VERSION_KEY,
         "seed",
     }
 )
@@ -76,6 +135,14 @@ Excludes the criterion set (AIC versus BIC does not move the optimum) and the
 candidate set (candidate-set extension is a legitimate incremental operation,
 and section 11.1 keys warm starts on `(fit_hash, candidate spec_hash)` -- the
 candidate is the other half of that pair).
+
+Also excludes `metamer_version`, which it held until 2026-08-10. The package
+version is now VCS-derived and therefore changes on every commit; it remains
+in the config as **provenance**, where `run_hash` -- which is provenance and
+never a gate -- still records it. Algorithm identity is carried by
+`ALGORITHM_VERSION` instead. Design doc section 13.3's table says "metamer
+version"; this is the narrower reading of that entry, and it is the one that
+survives a version string derived from the git tag.
 """
 
 COMPAT_RELEVANT_FIELDS = FIT_RELEVANT_FIELDS | {"criteria"}
@@ -176,15 +243,31 @@ def _digest(payload: Mapping[str, Any]) -> str:
 
 
 def normalize(config: Mapping[str, Any]) -> dict[str, Any]:
-    """Fill declared defaults so an explicit value equals an omitted one.
+    """Fill declared defaults and stamp the algorithm version.
+
+    `ALGORITHM_VERSION` is stamped rather than defaulted: it is a property of
+    the installed code, not of the config, and a caller must not be able to
+    supply it. Every hash goes through here, so the stamp reaches all three.
 
     Args:
         config: The config as supplied.
 
     Returns:
-        A new mapping with every `CONFIG_DEFAULTS` key present.
+        A new mapping with every `CONFIG_DEFAULTS` key present and
+        `ALGORITHM_VERSION_KEY` set from `ALGORITHM_VERSION`.
+
+    Raises:
+        ValueError: If the config carries `ALGORITHM_VERSION_KEY` itself.
+            Refused rather than overridden -- see that constant's docstring.
     """
-    return {**CONFIG_DEFAULTS, **dict(config)}
+    if ALGORITHM_VERSION_KEY in config:
+        raise ValueError(
+            f"{ALGORITHM_VERSION_KEY!r} is stamped from the installed code and "
+            "must not appear in a config; it is refused rather than overridden "
+            "so a config that tries to pin it fails loudly instead of being "
+            "quietly ignored"
+        )
+    return {**CONFIG_DEFAULTS, **dict(config), ALGORITHM_VERSION_KEY: ALGORITHM_VERSION}
 
 
 def _subset(config: Mapping[str, Any], fields: frozenset[str]) -> dict[str, Any]:

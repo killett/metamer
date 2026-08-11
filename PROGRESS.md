@@ -100,6 +100,55 @@ Phase list is design doc §17. Phase 1 exit criteria are §18. Do not duplicate 
 
 ---
 
+## Phase 2 preliminaries (P0–P2, 2026-08-10)
+
+Three pieces of work that had to land **before** Phase 2 planning. The (a)–(k) pre-flight
+on all three briefs is in
+[`docs/superpowers/notes/phase2-preliminaries-preflight.md`](docs/superpowers/notes/phase2-preliminaries-preflight.md);
+only the durable conclusions are here.
+
+### P0 — branches, and the version inside `fit_hash`
+
+- **`main` and `phase-1` never diverged.** See the cold-start summary above. The lesson
+  generalizes: **"the branches have diverged" is a claim to measure, not to act on.**
+  `git merge-base --is-ancestor` and an empty `main..branch` log answer it in two commands,
+  and the wrong answer here would have been a rebase of five published commits.
+- **THE PACKAGE VERSION IS NO LONGER PART OF FIT IDENTITY.** `hashing.FIT_RELEVANT_FIELDS`
+  carried `metamer_version`. Under `hatch-vcs` that value is derived from the git tag, so an
+  untagged commit gives `0.1.1.dev3+g6a0fb3b` — **a new string on every commit** — and the
+  uninstalled `PYTHONPATH=src` tree that `pixi run` uses gives the `0.0.0.dev0` sentinel.
+  Either would make a finished 10⁷-point store stop resuming and silently refit.
+  **The defect was latent, not live**: nothing in `src/` populated the field, so the trigger
+  was one obvious line in Phase 2's config builder (`metamer_version=metamer.__version__`),
+  which is the reading the field's own name invites.
+- **Fit identity is now `hashing.ALGORITHM_VERSION`, a hand-bumped constant**, stamped by
+  `normalize` and refused if a config supplies it. The bump rule — "this change moves
+  `theta_hat` or `log_lik` for an input that previously fit" — is in its docstring and is
+  step 2 of `RELEASING.md`'s checklist. `metamer_version` stays in the config as
+  **provenance**, reaching `run_hash` alone. Design doc §13.3 said "metamer version" and has
+  been amended; it was right when the version was a literal in `pyproject.toml`.
+- **The three `GOLDEN_*` constants moved and were re-derived by hand**, and the derivation
+  was verified by reversing it: putting `metamer_version` back and taking
+  `algorithm_version` out reproduces `2503613d711d79f7` / `e4bbab19392f45e3` /
+  `6299047df1a486bf` exactly, which proves the separators, the sort rule, the digest and the
+  truncation are all unchanged and only the field set moved. **Bumping `ALGORITHM_VERSION`
+  moves all three again, and that is correct** — regenerate them by hand, never from the
+  failure.
+- **No other VCS-derived value entered any hashed payload.** The publish flow's entire
+  footprint under `src/` is `__init__.py` (the `hatch-vcs` import) and an empty `py.typed`;
+  everything else it added is consumed by the build, never by `hashing.normalize`.
+  `registry.REGISTRY_VERSION` is a second hand-maintained identity constant and must stay
+  one.
+- **A hash field the tests supply themselves is invisible to those tests** — pre-flight (a)
+  at its purest. Every `test_hashing.py` fixture passed `metamer_version="0.1.0"`, so no
+  test could express a defect whose whole mechanism is that the real value is not
+  `"0.1.0"`. The new guard therefore varies the version *across processes*, setting
+  `metamer.__version__` before `hashing` is imported so the wiring is caught whether it is
+  read at import time or at call time, and asserts `run_hash` **does** move so the fixture
+  can fail at all. 4/4 mutations caught.
+
+---
+
 ## Required pre-flight for every remaining task
 
 Run this against the task brief **before dispatching an implementer**, and fold what it

@@ -137,6 +137,35 @@ as provenance, where `run_hash` — which is provenance and never a gate — sti
 That is the correct home for a value that should be *recorded* on every store and must
 *gate* nothing.
 
+### P0(c) — did the publish flow put anything else VCS-derived into a hashed payload?
+
+**No, and the check is decisive rather than a survey.** The publishing work is exactly the
+five commits `99f690e..2372bbb`, and its entire footprint under `src/` is:
+
+```
+git diff --stat 99f690e..2372bbb -- src/
+ src/metamer/__init__.py | 11 ++++++++++-
+ src/metamer/py.typed    |  0
+```
+
+`py.typed` is empty by definition and `__init__.py`'s change is the `hatch-vcs` import with
+its `ImportError` fallback — that is, `__version__` itself and nothing else. No other
+module changed, so no other module can have acquired a VCS-derived value to contribute.
+
+The rest of the diff is `pyproject.toml`, the two workflows, `dependabot.yml`,
+`.gitignore`, `RELEASING.md`, `README.md`, `PROGRESS.md` and four test files. Checked
+against the allowlist one by one, none of them is a payload input: the build backend, the
+`dynamic = ["version"]` declaration, `[tool.hatch.build.hooks.vcs]`, the wheel and sdist
+targets, the classifiers, the dependency floors and the CI matrix are all consumed by the
+*build*, never by `hashing.normalize`. `run_payload`'s only non-config input is
+`machine_fingerprint(cpu_model, cores, total_ram_bytes)`, whose three arguments come from
+`core/machine.py`, which the publish flow did not touch.
+
+The one field worth naming as *deliberately* out of scope: `registry_version` is a literal
+in `core/registry.py`, hand-maintained, and stays that way. It is a second declared
+identity of exactly the kind `ALGORITHM_VERSION` now is, and it should not be wired to the
+package version either.
+
 ---
 
 ## P1 — `HESSIAN_COND_LIMIT`, and the constants around it

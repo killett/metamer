@@ -1278,7 +1278,7 @@ noise parameters, which are secondary diagnostics.
 
 ```
 /                 attrs: schema_version, fit_hash, compat_hash, run_hash, objective, engine,
-                         registry_version, metamer_version, profile_name,
+                         registry_version, algorithm_version, metamer_version, profile_name,
                          candidate spec hashes, warm_start_used, calibration provenance
 /signal/          dense   beta[y,x,m,b], beta_err[y,x,m,b]      (selected + model-averaged)
 /selection/       dense   delta_ic[y,x,m,c], weight[y,x,m,c], ic_best[y,x,c],
@@ -1491,7 +1491,7 @@ user adds HQIC, and blocks a legitimate resume workflow.
 
 | hash | covers | used for |
 |---|---|---|
-| **`fit_hash`** | everything determining `θ̂` and `log_lik`: data source and selection, signal spec, objective, engine, registry version, seeds, metamer version. **Not** the criterion set. **Not** the candidate set. | warm-start key component; the gate for **reusing fits** |
+| **`fit_hash`** | everything determining `θ̂` and `log_lik`: data source and selection, signal spec, objective, engine, registry version, seeds, **algorithm version** (see below). **Not** the criterion set. **Not** the candidate set. **Not** the package version. | warm-start key component; the gate for **reusing fits** |
 | **`compat_hash`** | `fit_hash` + criterion set + anything else affecting stored *derived* arrays | the gate for reusing `/selection/` |
 | **`run_hash`** | everything, plus memory budget, tile size, thread count, output path, verbosity, machine fingerprint | provenance only, never a gate |
 
@@ -1519,9 +1519,23 @@ compat-relevant and the failure mode is "resume broke and nobody knows why." A t
 enumerates the compat-relevant field set and asserts it against a hardcoded list, so
 changing it requires updating the test — golden-file discipline.
 
-The sharp edge, named explicitly: because defaults are included, **any metamer version bump
-touching a compat-relevant default invalidates every in-progress store**, including bugfix
-releases. The allowlist is what keeps that surface small and reviewable.
+The sharp edge, named explicitly: because defaults are included, **any version bump touching
+a compat-relevant default invalidates every in-progress store**, including bugfix releases.
+The allowlist is what keeps that surface small and reviewable.
+
+**Algorithm version, not package version** (revised 2026-08-10, after publishing). This
+section originally said "metamer version", which was correct while the version was a literal
+in `pyproject.toml`. It is not correct now: the package version is derived from the git tag
+by `hatch-vcs`, so an untagged commit reports `0.1.1.dev3+g6a0fb3b` — **a new string on
+every commit** — and the same tree reports `0.0.0.dev0` when run uninstalled off
+`PYTHONPATH=src`. Either variation inside `fit_hash` means a finished 10⁷-point store stops
+resuming and silently refits, with no symptom but a bill. `fit_hash` therefore carries
+`hashing.ALGORITHM_VERSION`, a **hand-bumped** constant whose bump rule is "this change
+moves `θ̂` or `log_lik` for an input that previously fit", stated in its docstring and on
+the release checklist. The package version remains in the config and reaches `run_hash`,
+which is provenance and never a gate. The reasoning, including the alternatives weighed
+(stripped release version, `registry_version` alone, hashing the source), is in
+`docs/superpowers/notes/phase2-preliminaries-preflight.md`.
 
 ### 13.4 `metamer validate --explain`
 
