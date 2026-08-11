@@ -347,6 +347,83 @@ Full record under open question 11. The three things that carry:
 
 ---
 
+## Phase 2 brainstorm — settled decisions (in progress, 2026-08-11)
+
+**Live record, appended as each question is settled.** It migrates into the Phase 2
+implementation plan when that exists, and is deleted from here at that point — migrate,
+do not duplicate. Design-doc amendments made along the way are noted with their section.
+
+### Q1 — the entry point and the config path
+
+`python -m metamer <config.toml> <store>`. **Design doc §17 amended** with the Phase 2 /
+Phase 5 split table; §17 previously assigned "the CLI" wholesale to Phase 5, which read as
+though Phase 2 needed no config, and **a resume gate is a comparison of hashes with
+nothing to hash until a config is loaded and normalized.**
+
+- **The Python API is the unit of implementation and testing** —
+  `metamer.batch.run(config, store_path)`. Everything is tested against it directly.
+- **Config always comes from disk through the real path.** `metamer.config.load(path)`
+  going through `tomllib` → pydantic → `normalize` → canonical JSON → the three hashes. **No
+  production path constructs a `Config` inline.** Tests may build one for unit purposes;
+  every integration test and every exit criterion loads from a real TOML file, because a
+  `compat_hash`-only difference proves nothing unless it survived the actual normalizer.
+- **`python -m`, not `metamer run <config>` via `console_scripts`.** Naming a subcommand
+  presupposes the tree it belongs to and designs the argument structure now rather than in
+  Phase 5 when `validate` and `report` are real. `python -m` presupposes nothing and reads
+  as provisional. argparse, one screen, no typer, no rich; flags limited to
+  `--memory-budget` and whatever exit criterion 7 needs.
+- **All five exit codes land now**, as an enum and a return value, because retrofitting
+  them means revisiting every early return — the argument that made the failure taxonomy a
+  Phase 1 deliverable. Sub-phase 1 produces a subset; each of the rest gets a constructed
+  test or an explicit note that it is unreachable until its producer exists.
+- **Codes 3 and 4 cannot be distinguished without validation staging**, so the 1/2/3/4
+  split exists in sub-phase 1 even where layer 3 holds only the two or three checks
+  sub-phase 1 can trigger. **The staging is the structure; the checks accrete.**
+
+### Q2 — store width in sub-phase 1
+
+**M = 2 with unequal `p`, C = 2, every group written except `/detail/`.** The reasoning is
+the length-1 axis entry under the fixture facts below: `M = 1` and `C = 1` are the widths
+at which every array under test is constant across its own comparison axis.
+
+- Candidates: `white` (p=1) and `white + matern12` (p=3) — unequal `p` is the load-bearing
+  half, giving `off_1 = 1` and `P_total = 4`.
+- Groups written: `/signal/`, `/primitives/` (including `iterations` uint16),
+  `/selection/`, `/noise/`, `/status/`, `/warmstart/`, `/completion/`.
+- **`/detail/` is not created.** An uncreated group is a cleaner deferral than an empty
+  one, and its selection rule is still open.
+- **One point must have candidate 1 failing and candidate 2 succeeding**, as a *required*
+  property of the fixture and not an incidental one. Phase 1's offset-inside-a-gap
+  construction gives it: a breakpoint with no support for one candidate's design and full
+  support for the other's. That point has `n_valid = 1` and a weight vector renormalized
+  over one survivor — **the case that reads as confident selection and is not.**
+- **`/warmstart/` is written but unread in sub-phase 1, and therefore needs its own
+  guard**: nothing else will notice if it is written wrong. Assert a round trip — the
+  stored unconstrained `θ̂` reloads and maps back through the Bijector to the natural
+  parameters in `/noise/` — so 2c inherits a verified array instead of discovering the
+  layout is wrong underneath a feature that has its own bugs.
+
+### §12.8 narrowed, and the allowlist finding
+
+**Design doc §12.8 amended.** A `compat_hash` mismatch licenses recomputing derived arrays
+from stored primitives; it does **not** license resizing an axis in place. Adding a
+criterion is refused, with a message naming the stored set, the requested set, and the two
+resolutions. Reasons, in full, are in §12.8: a resize is a whole-store rewrite with no
+completion bitmap of its own; recomputing into a new store is arithmetic and avoids the
+refit either way; and an in-place resize is the one operation that breaks "every write is a
+region write into a fixed geometry".
+
+**Measured against the code, not assumed:**
+`hashing.COMPAT_RELEVANT_FIELDS == FIT_RELEVANT_FIELDS | {"criteria"}` — **the two sets
+differ by exactly one field.** So every constructible compat-only mismatch is a
+criterion-set change, every criterion-set change is now refused, and **§12.8's middle row
+has no reachable in-place input.** The split is not vacuous (`criteria` is the field §13.3
+exists to separate) but the partition is two-way plus one field, and the recompute path
+must be exercised **into a new store**. Inventing a config field to make the test
+constructible would be backwards.
+
+---
+
 ## Required pre-flight for every remaining task
 
 Run this against the task brief **before dispatching an implementer**, and fold what it
@@ -920,6 +997,16 @@ will do.
   Pin the seed, and never assert `design.condition_number` as a proxy.
 - **A quadratic cannot test a step rule** (third derivative zero), and **a fixture sitting
   above a floor cannot test the floor** (`n_eff = 12` against a floor at 2.0).
+- **A SCHEMA AXIS OF LENGTH 1 IS THE CANCELLATION RULE APPLIED TO A SCHEMA.** Every
+  quantity *defined across* that axis is constant, so every assertion over it passes
+  against an implementation that never normalizes, never excludes, and never writes a
+  sentinel. **Minimum meaningful width for an axis under test is 2, and 2 with UNEQUAL
+  extent where the axis is ragged.** At `M = 1`: `delta_ic ≡ 0`, `weight ≡ 1`,
+  `best_index ≡ 0`, `n_valid ∈ {0, 1}`, and a point where one candidate fails while
+  another succeeds is unconstructible. **Unequal `p` is the load-bearing half** — `white`
+  (p=1) beside `white + matern12` (p=3) gives `off_1 = 1` and `P_total = 4`, which is the
+  minimum that can falsify a "`/signal/` adopts this flattening unchanged" claim. At
+  `M = 1` the offset arithmetic is exercised only at the value where it cannot be wrong.
 - **HETEROGENEITY MUST COME FROM A PARAMETER THE LIKELIHOOD IS NOT EQUIVARIANT IN.**
   Timescale, mixing ratio, mask pattern, series length. **Varying an equivariant parameter
   produces a fixture that looks diverse and is identical.** The worked case is amplitude:

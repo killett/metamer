@@ -1410,8 +1410,44 @@ outcomes, not two:
 | condition | action |
 |---|---|
 | `fit_hash` matches, `compat_hash` matches, candidate set is a **superset** | resume normally: reuse all completed tiles, fit only what the completion bitmap says is outstanding |
-| `fit_hash` matches, **`compat_hash` differs** (e.g. a criterion was added) | **recompute the derived `/selection/` arrays from the stored `log_lik`, `k`, `n_eff` primitives and continue. Do not refuse. Do not refit.** |
+| `fit_hash` matches, **`compat_hash` differs** (e.g. a criterion was added) | ~~recompute the derived `/selection/` arrays and continue~~ — **NARROWED 2026-08-11, see below** |
 | `fit_hash` differs | refuse — the stored fits are not reusable |
+
+**NARROWED 2026-08-11. A `compat_hash` mismatch licenses recomputing the derived arrays
+from stored primitives; it does NOT license resizing an axis in place.** Adding a criterion
+grows `c`, so an in-place resume is **refused**, with a message naming the stored criterion
+set, the requested one, and the two operations that resolve it: recompute into a new store,
+or rerun.
+
+Three reasons to narrow rather than implement the resize:
+
+1. **A zarr axis resize is not a region write.** Growing `c` touches every chunk of every
+   array carrying that axis, across the whole grid. It is a whole-store rewrite wearing the
+   costume of an incremental update, and it has **no completion bitmap of its own** — so an
+   interruption mid-resize leaves a store that is neither shape. That is a second
+   resumability problem nested inside the first.
+2. **The value it buys is small.** Recomputing derived arrays from stored primitives into a
+   **new** store is arithmetic over `log_lik`, `k` and `n_eff` with no refitting, and it
+   preserves the property that mattered: **nobody refits 10⁷ series to add BIC.** The
+   expensive thing is avoided either way. An in-place resize saves disk, not compute.
+3. **It keeps the store append-only in shape.** Every write is a region write into a fixed
+   geometry, which is what makes the data-then-bitmap ordering sufficient and keeps the
+   object-storage story simple. An in-place resize is the one operation that breaks that
+   invariant.
+
+**And a consequence that is a finding in its own right, measured against the code rather
+than assumed.** `hashing.COMPAT_RELEVANT_FIELDS` is `FIT_RELEVANT_FIELDS | {"criteria"}` —
+**the two sets differ by exactly one field, and it is the criterion set.** So after this
+narrowing, *every* constructible `compat_hash`-only mismatch is a criterion-set change and
+*every* criterion-set change is refused: the middle row above has **no reachable in-place
+input at all**. The three-hash split is not thereby vacuous — `criteria` is precisely the
+field §13.3 was built to separate, and separating it is what makes the recompute path legal
+without refitting — but the field *partition* is currently two-way plus one field, and the
+recompute path must therefore be exercised through a criterion-set change **into a new
+store**. Any later field that changes stored derived arrays without moving `θ̂` (a
+model-averaging policy, a ΔIC cutoff for averaging, a tie-breaking rule) widens the
+partition; none exists today, and **inventing one to make a test constructible would be
+backwards**.
 
 The candidate-set **superset** rule (same candidates in the same order, possibly more)
 exists because §12.5 stores per-candidate primitives, making candidate-set extension a
