@@ -227,35 +227,41 @@ iterations at `1.45e-04 .. 1.84e-02` — and both bounds are pinned by a test. I
 
 ## 3. The number every Phase 2 tile calculation inherits
 
-**`tile_side` is 171, not 339.**
+**`tile_side` is 338. It was 171 for the whole of Phase 1, and the engines were fixed on
+2026-08-10 (P2).**
 
 | figure | what it is | use it for |
 |---|---|---|
-| **339** (8 682 B/series) | design doc §9.4's **target** — the streaming filter the document describes. `memory.bytes_per_series` | the goal to engineer toward |
-| **171** (33 882 B/series) | what the code **actually holds**. `memory.resident_bytes_per_series` | **every Phase 2 tile calculation, until the engine streams** |
+| **339** (8 682 B/series) | design doc §9.4's **model** — the streaming filter the document describes. `memory.bytes_per_series` | reading §9.4 |
+| **338** (8 722 B/series) | what the code **actually holds** on path A. `memory.resident_bytes_per_series` | **every Phase 2 tile calculation** |
+| ~~171~~ (33 882 B/series) | what it held while `_augment` materialized `[y \| X]` | **nothing. Any Phase 1 note quoting 171 predates the fix** |
 
-At a 1 GB budget, shared X, d=3, k_β=4, p=4, M=12.
+At a 1 GB budget, shared X, d=3, k_β=4, p=4, M=12. Path B's resident figure is 8 B/series
+above its own model rather than 40, because its extra term is a `(B,)` index array and not
+a row of columns.
 
-**The cause:** `KalmanEngine._augment` ends in
-`np.concatenate([y[:, :, None], x], axis=2)`, materializing a `(B, N, 1+k_β)` float64 array
-— **25 200 B/series at N=630**, nearly three times §9.4's entire per-series total, and it
-**does not vanish when the design is shared**, the case §9.4 treats as free. The
-`np.broadcast_to` on the line above **is a view and allocates nothing**, which is exactly
-why the copy reads as free on a code read.
+**What the defect was, kept because the mechanism is the transferable part.**
+`KalmanEngine._augment` ended in `np.concatenate([y[:, :, None], x], axis=2)`, materializing
+a `(B, N, 1+k_β)` float64 array — **25 200 B/series at N=630**, nearly three times §9.4's
+entire per-series total, and it **did not vanish when the design was shared**, the case
+§9.4 treats as free. The `np.broadcast_to` on the line above **is a view and allocates
+nothing**, which is exactly why the copy read as free on a code read. The accumulator only
+ever needed one row, so both engines now index the observation out of `y` and the design
+columns out of a `(1, N, k)` or `(B, N, k)` block, per timestep. **§9.4 was right and the
+engines were wrong**; the fix made the document true rather than replacing it.
 
-**The engine is what is wrong, not §9.4.** The accumulator only ever needs one row —
-`cols[:, step, :]` is the sole consumer — so the columns can be indexed out of `y` and the
-shared `X` per timestep with no allocation. That makes §9.4's model true rather than
-replacing it. It touches the reference engine's hot loop, so fixing it means re-pinning the
-path-B agreement test and the MVN oracles.
+**The measurement, because the fix is only worth what it measures.** The slope of resident
+RSS against B, in a fresh process, sampled on a thread during the workload, went
+**43 392 → 8 471 B/series** — a fall of 34 921, *more than the block itself*, because the
+per-step temporaries at peak scaled with it. Against the arithmetic floor of 6 382 B/series
+that is a ratio of **1.33**, inside the ~1.5× below.
 
-**Using 339 overcommits a hard 16 GB constraint by 3.9×, and the run does not degrade, it
-dies.**
-
-**And a standing check:** *does the memory formula describe the code, or a model of the
-code?* §9.4 was wrong twice in ways three places agreed on. **Verify against measured
-resident bytes** — the slope of RSS against B, in a fresh process, sampled during the
-workload — and treat any factor above ~1.5× as a missing term rather than measurement noise.
+**And the standing check that produced that number:** *does the memory formula describe the
+code, or a model of the code?* §9.4 was wrong twice in ways three places agreed on.
+**Verify against measured resident bytes** — the slope of RSS against B, in a fresh process,
+sampled during the workload — and treat any factor above ~1.5× as a missing term rather than
+measurement noise. It was 5.0× before the fix and nothing in the suite said so until the
+measurement existed.
 
 ---
 
@@ -339,9 +345,22 @@ Every one of these was discovered by building a fixture that could not fail.
   a `ProcessSpec` before any data and flags exactly those compositions.
 - **Path A is the permanent correctness reference.** `engines/kalman.py` plus
   `optimize.optimize_series`. It is not deprecated and must not be deleted; every MVN
-  oracle and the path-B agreement test are pinned against it. **The stage-1 verdict carries
-  one condition: re-measure after `_augment` is fixed**, because that fix removes ~25 KB/series
-  of memory traffic and path A is memory-bound — see
+  oracle and the path-B agreement test are pinned against it. ~~The stage-1 verdict carries
+  one condition: re-measure after `_augment` is fixed~~ — **discharged 2026-08-10.** The
+  falsifier is not met in any cell or any harness: the lowest A:B measured is **3.27** and
+  at the new production-scale B = 114 244 it is **4.05**, so Task 19 stays deleted.
+  **But the two harnesses disagree about whether the ratio moved** — the spike says
+  3.04 → 3.84 at the worst cell, the batch sweep says 3.31 → 3.27, a 0.57 spread against
+  the ±0.15 scatter the verdict assumed. What is resolved: **path B's per-pass cost fell
+  ~20% in both**, because it had been reading a per-series private copy of the shared
+  design. What is not: **path A did not measurably move**, which contradicts the
+  condition's stated reasoning. See
   [`spike-stage1-verdict.md`](spike-stage1-verdict.md).
+- **The path-B agreement test cannot carry a change made to both engines.** It compares two
+  implementations of the same recursion, so anything both do identically is invisible to
+  it — the cancellation rule at the level of an engine. What pins the values is
+  `test_kalman.py`'s MVN oracle, which builds the covariance explicitly. For the streaming
+  change the available check was stronger than either: **bit-identical** output against the
+  pre-fix modules loaded out of git, across both engines and all three design regimes.
 - **The benchmark harness is a one-command run and must stay that way**, so a later session
   can produce `box64.json` or `macbook.json` without reconstructing anything.

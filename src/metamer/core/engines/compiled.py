@@ -6,6 +6,13 @@ observation, masked gaps, augmented `[y | X]` columns, plain (non-Joseph)
 covariance update -- with the per-timestep loop compiled and the series loop
 parallel.
 
+**`[y | X]` IS NEVER MATERIALIZED HERE EITHER.** Until 2026-08-10 this engine
+called `KalmanEngine._augment` and then `np.ascontiguousarray` on the result,
+so path B -- the path the stage-1 gate adopted for production -- carried the
+same 25 200 B/series block as path A, plus the copy. The kernel reads column 0
+out of `y` and the rest out of a `(1, N, k)` or `(B, N, k)` design block, so a
+shared design is stored once per tile rather than once per series.
+
 **What is compiled and what is not.** The state-space construction stays in
 numpy: `F` and `Q` are built once per *distinct* timestep, which is
 `O(n_distinct * d^3)` and independent of `N`. Only the `O(N)` recursion is
@@ -43,7 +50,9 @@ from metamer.core.statespace import StateSpace
 
 @njit(cache=True, fastmath=False, parallel=True, nogil=True)
 def _filter_batch(  # pragma: no cover - compiled, exercised via the engine
-    cols: NDArray[np.float64],
+    y: NDArray[np.float64],
+    block: NDArray[np.float64],
+    block_row: NDArray[np.intp],
     mask: NDArray[np.bool_],
     index: NDArray[np.intp],
     f_all: NDArray[np.float64],
@@ -57,7 +66,17 @@ def _filter_batch(  # pragma: no cover - compiled, exercised via the engine
     """Run the augmented scalar-observation filter, one series per thread.
 
     Args:
-        cols: Augmented `[y | X]` columns, shape (B, N, C).
+        y: Observations, shape (B, N). Read one element per timestep.
+        block: Design columns, (1, N, k) shared or (B, N, k) per series, from
+            `KalmanEngine._design_block`. NEVER stacked with `y`: the
+            augmented `[y | X]` array this kernel used to take was
+            25 200 B/series at N=630, k=4, and a shared design was replicated
+            into it once per series.
+        block_row: Which row of `block` each series reads, shape (B,). All
+            zeros for a shared design, `arange(B)` for a per-point one. An
+            index array rather than a flag because a branch on a boolean
+            argument inside `prange` is what numba refuses to type here, and
+            B int64 is 8 B/series against the 25 200 the block cost.
         mask: Presence mask, shape (B, N).
         index: Per-interval index into the distinct steps, length N-1.
         f_all: Transition per distinct step, shape (S, B, d, d).
@@ -70,7 +89,8 @@ def _filter_batch(  # pragma: no cover - compiled, exercised via the engine
         `(accum, sum_log_s, n_used, degenerate)` with shapes
         (B, C, C), (B,), (B,), (B,).
     """
-    batch, n_time, n_cols = cols.shape
+    batch, n_time = y.shape
+    n_cols = 1 + block.shape[2]
     dim = h_all.shape[1]
 
     accum = np.zeros((batch, n_cols, n_cols), dtype=np.float64)
@@ -82,6 +102,7 @@ def _filter_batch(  # pragma: no cover - compiled, exercised via the engine
     # numba rewrites into a parallel loop and that falls back to `range`
     # when parallelism is unavailable.
     for b in prange(batch):  # type: ignore[no-untyped-call, attr-defined]
+        d = block_row[b]
         x = np.zeros((dim, n_cols), dtype=np.float64)
         p = p0_all[b].copy()
         x_new = np.zeros((dim, n_cols), dtype=np.float64)
@@ -140,11 +161,20 @@ def _filter_batch(  # pragma: no cover - compiled, exercised via the engine
                 degenerate[b] = True
             safe_s = s if usable else 1.0
 
-            for c in range(n_cols):
+            # Column 0 is the observation and columns 1.. are the design, read
+            # straight out of `y` and `block` -- never out of a materialized
+            # `[y | X]`. Split rather than selected inside the loop because a
+            # ternary over the column index is a construct numba refuses to
+            # type inside a parfor.
+            acc = 0.0
+            for i in range(dim):
+                acc += h_all[b, i] * x[i, 0]
+            v[0] = y[b, step] - acc
+            for c in range(1, n_cols):
                 acc = 0.0
                 for i in range(dim):
                     acc += h_all[b, i] * x[i, c]
-                v[c] = cols[b, step, c] - acc
+                v[c] = block[d, step, c - 1] - acc
 
             for i in range(dim):
                 gain = hp[i] / safe_s
@@ -168,8 +198,8 @@ def _filter_batch(  # pragma: no cover - compiled, exercised via the engine
 class CompiledEngine:
     """Path B: the compiled per-series filter.
 
-    Shares `KalmanEngine`'s state-space preparation and post-processing --
-    `_augment`, `_step_matrices` and `_rank` -- so the only thing that differs
+    Shares `KalmanEngine`'s design validation and post-processing --
+    `_design_block`, `_step_matrices` and `_rank` -- so the only thing that differs
     between the two engines is the recursion itself. That is what makes the
     agreement test meaningful: it compares two implementations of the loop, not
     two implementations of the whole pipeline.
@@ -217,7 +247,14 @@ class CompiledEngine:
         t = np.asarray(t, dtype=np.float64)
         batch, n_time = y.shape
 
-        cols = np.ascontiguousarray(reference._augment(y, design, batch, n_time))
+        block, per_series = reference._design_block(design, batch, n_time)
+        block = np.ascontiguousarray(block)
+        block_row = (
+            np.arange(batch, dtype=np.intp)
+            if per_series
+            else np.zeros(batch, dtype=np.intp)
+        )
+        n_cols = 1 + block.shape[2]
         index, matrices = reference._step_matrices(state_space, theta, t)
         dim = state_space.state_dim
 
@@ -230,7 +267,9 @@ class CompiledEngine:
             index = np.zeros(max(n_time - 1, 0), dtype=np.intp)
 
         accum, sum_log_s, n_used, degenerate = _filter_batch(
-            cols,
+            np.ascontiguousarray(y),
+            block,
+            block_row,
             np.ascontiguousarray(mask),
             np.ascontiguousarray(index),
             f_all,
@@ -243,7 +282,6 @@ class CompiledEngine:
         loglik = -0.5 * (
             n_used.astype(np.float64) * np.log(2.0 * np.pi) + sum_log_s + accum[:, 0, 0]
         )
-        n_cols = cols.shape[2]
         if n_cols > 1:
             rank_x, gram_ok = reference._rank(accum[:, 1:, 1:])
         else:

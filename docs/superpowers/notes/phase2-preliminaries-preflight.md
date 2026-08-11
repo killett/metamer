@@ -280,4 +280,135 @@ regression in the thing that is still correct.
 
 ## P2 — make `_augment` stream
 
-*(Filled in with the P2 commit.)*
+### (d) — grep for the vocabulary the task requires. **`compiled.py` is missing from it.**
+
+The brief scopes the change to one place: "It touches the reference engine's hot loop, so:
+re-pin the path-B agreement test and the MVN oracles." That sentence treats path B as a
+*consumer* of the change. It is not — it is a second site of the same defect.
+`CompiledEngine.score` reads
+
+```
+cols = np.ascontiguousarray(reference._augment(y, design, batch, n_time))
+```
+
+so **path B materialized the same `(B, N, 1+k_β)` block, and additionally forced it
+contiguous.** One grep for `_augment` across `src/` returns two call sites, and only one of
+them is in the brief.
+
+This is the finding that most changes the work, because **path B is the adopted production
+path** — the stage-1 gate chose it. Fixing path A alone would have moved
+`resident_bytes_per_series` for the reference engine, left the production engine at 33 882
+B/series, and produced a `tile_side` of 338 that no production run could honour. The
+memory formula is already parameterized by backend, so the wrong number would have been
+reported per backend, confidently, with a test pinning it.
+
+Both engines are fixed. `_augment` is replaced by `_design_block`, which validates the
+design and returns it as a `(1, N, k)` **view** when shared or `(B, N, k)` when per-point,
+copying nothing; each engine reads column 0 out of `y` and the rest out of that block, per
+timestep.
+
+### (b) — batch versus series, in the numba kernel
+
+The shared-design case must stay *one copy for the whole tile*, not one row per series —
+that is the entire point of `X_term = 0` in §9.4. Inside `prange`, selecting the block row
+with a branch on a boolean argument (`d = b if per_series else 0`) does not compile: numba
+rejects it with `Unsupported array index type float64`, and it does so from inside the
+parfor lowering pass, so the error names the indexing line rather than the branch. Passing
+an explicit `block_row` index array of length B costs **8 B/series** and types cleanly. The
+alternative that would have "worked" — broadcasting the shared design to `(B, N, k)` before
+the call — reintroduces exactly the defect being removed, and would have looked like a fix.
+
+### (j) — the oracles must not share a derivation path with the thing they check
+
+Satisfied, and worth stating because it is easy to assume the agreement test carries the
+weight here. The path-B agreement test compares two *implementations of the same
+recursion*, so it is blind to anything both engines do identically — and both engines were
+changed. What pins the values is `tests/test_kalman.py`'s MVN oracle, which builds the
+covariance matrix explicitly and evaluates a multivariate-normal density; it shares no
+construction with the filter. Both are green unchanged.
+
+The stronger check available here is exactness rather than tolerance: indexing a value out
+of `y` and writing it into a row is bit-identical to reading it out of a concatenated copy,
+so the fix should move **no digit at all**. Measured, against the pre-fix modules loaded
+straight out of git — `git show 29884aa:src/metamer/core/engines/kalman.py` into a temp
+file and imported, never checked out into the working tree, per CLAUDE.md's rule about
+investigative checkouts. Six comparisons, both engines × {shared design, per-point design,
+no design}, on a gapped mask, over `loglik`, `normal_equations`, `rank_x`, `outcome` and
+`n_used`:
+
+**bit-identical in all thirty fields.** No tolerance, no `approx`. A tolerance-based
+re-pin would have accepted a change that quietly perturbed the last digits; this says the
+arithmetic is the same arithmetic in a different order of reads.
+
+### (k)/(a) — the memory claim is a delta, so its baseline is the whole question
+
+`resident_bytes_per_series` falling is not evidence: it is a formula, and the formula is
+what changed. The standing check demands a measured slope of RSS against B in a fresh
+process, and the number that matters is the **ratio to the arithmetic floor**, not the
+fall. Measured: 43 392 → 8 471 B/series against a floor that went 31 542 → 6 382, i.e. a
+ratio of 1.38 before and **1.33** after. Both inside ~1.5×, which is the honest reading —
+*the old formula was not wrong about the code, it was wrong about the design*, and the
+1.5× check would never have caught it. What caught it was reading the source.
+
+The measured fall of **34 921 B/series exceeds the 25 200 B block itself**, because the
+per-step temporaries at peak scaled with it. That is a term neither formula names, and it
+is the reason the measurement is worth taking rather than inferring.
+
+### The consequence the brief could not have anticipated
+
+`tile_side` at 1 GB goes 171 → 338, so **production-scale B goes from ~29 000 to ~114 000**
+— tile side squared. The stage-1 verdict's falsifier is stated "at production-scale B", and
+its batch sweep tops out at B = 20 000, which was close to 29 000 and is not close to
+114 000. **The fix moved the goalposts of its own re-measurement**, so the re-run carries a
+point at the new production scale as well as the two the brief names.
+
+### What the re-measurement falsified
+
+The brief inherits the verdict's reasoning verbatim: "the fix removes ~25 kB/series of
+memory traffic and path A is memory-bound, so path A's bound improves". Measured, the half
+of that which is resolvable is **wrong**, and it is wrong in the direction that makes the
+verdict *safer* — which is why reporting only the ratio would have buried it.
+
+Per-pass seconds per series at d=3, one thread, no gaps, B=1000, in both harnesses:
+
+| | spike 08-07 | sweep 08-07 | spike 08-10 | sweep 08-10 |
+|---|---|---|---|---|
+| path A | 6.88e-4 | 8.73e-4 | 6.97e-4 | 6.79e-4 |
+| path B | 2.26e-4 | 2.64e-4 | **1.82e-4** | **2.07e-4** |
+
+**Path B's gain is consistent across harnesses (−19% and −22%). Path A did not measurably
+move** — +1% by one harness and −22% by the other, against a **27% between-harness
+disagreement on that same quantity before the fix**. Quoting the spike's path-A row alone
+(+1.3% / −11.5% / −3.8% across gap cases) would have read as "inside its own scatter" and
+been an accident: the scatter that matters here is between harnesses, not within one.
+
+The mechanism the prediction missed is the one (d) turned up: **path B was the engine
+holding a per-series private copy of the shared design.** B copies of the same `(N, k)`
+bytes competing for cache is a locality problem, not a bandwidth one, and it belongs to the
+compiled per-series loop rather than to the batched numpy one — whose cost is the
+`(B, d, n_cols)` einsum temporaries it rebuilds every timestep, which the block never
+touched.
+
+**And the (k) lesson underneath it:** the verdict quoted **±0.15** run-to-run scatter, and
+the two harnesses differ by **0.57** on the ratio. A delta asserted against a baseline taken
+by a different harness, on a different day, on a loaded 4-core box, is not a controlled
+comparison — the falsifier survives only because it is a **threshold on an absolute value**
+(≥3×, cleared by 9% at the worst measurement) rather than a claim about a change.
+
+### A P1 constant changed a P2 measurement, and the report nearly attributed it to P2
+
+`mean_iterations` at d=3 moved 68.7 → 90.0 and path A's utilization 0.64 → 0.84 between the
+two spike runs. Neither is an effect of the streaming fix. `measure_mean_iterations` filters
+to `outcome == OK` before averaging, and P1's derived `HESSIAN_COND_LIMIT` moved one of the
+four sampled series from `OK` to `DEGENERATE_HESSIAN` — measured,
+`['DEGENERATE_HESSIAN', 'OK', 'DEGENERATE_HESSIAN', 'OK']` at d=3. The sample is
+`rng.standard_normal(...)` fitted with white + Matérn 1/2 + Matérn 3/2: **white noise fitted
+with two timescales, the same fixture defect for the third time in a third place.**
+
+This is (k) in its "every delta has a baseline" form. Two runs of the same harness across
+two commits are not a controlled comparison unless every constant between them is fixed,
+and here one was not. What saves the headline is that the **A:B ratio is structurally immune**
+— the iteration count is common to both paths and cancels — so the falsifier is evaluated on
+a quantity the confound cannot reach. The per-fit millisecond columns are not immune and
+carry the new count. Recorded as open question 11 rather than fixed here, so the
+re-measurement compares like with like.

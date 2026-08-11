@@ -116,9 +116,15 @@ def test_the_compiled_engine_agrees_with_the_numpy_reference(gaps):
     determination. `KalmanEngine` is the numpy implementation validated in
     Task 8 against an MVN oracle, so agreeing with it to 1e-10 relative is a
     statement that the compiled recursion is the same recursion. The two share
-    only `_augment`, `_step_matrices` and `_rank` -- the state-space
-    construction and the post-processing -- so what is being compared is the
-    loop, which is the part that was rewritten.
+    only `_design_block`, `_step_matrices` and `_rank` -- the design validation
+    and the post-processing -- so what is being compared is the loop, which is
+    the part that was rewritten.
+
+    THIS TEST CANNOT SEE ANYTHING BOTH ENGINES DO IDENTICALLY, which is why it
+    is not on its own the guard for the 2026-08-10 streaming change: both
+    engines were changed. `tests/test_kalman.py`'s MVN oracle is what pins the
+    values, and it builds the covariance matrix explicitly rather than
+    filtering.
 
     1e-10 is far looser than the reordering-free arithmetic should need and far
     tighter than any real divergence would be: a transposed F, a dropped Q, a

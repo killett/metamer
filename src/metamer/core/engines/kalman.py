@@ -21,6 +21,13 @@ observation column and every design column at once: the filter runs on the
 augmented matrix [y | X] and accumulates the whitened cross-products from which
 the GLS solution and the REML penalty both follow.
 
+**[y | X] IS NEVER MATERIALIZED.** It is a way of describing the recursion, not
+an array. The accumulator consumes one row at a time, so the observation is
+indexed out of `y` and the design columns out of `_design_block`'s (1, N, k)
+or (B, N, k) view, per timestep, into a single reused (B, 1+k) row. Building
+the (B, N, 1+k) array instead cost 25 200 B/series at N=630 and did not shrink
+when the design was shared -- see `_design_block`.
+
 THE ACCUMULATOR IDENTITY, stated because it is the whole reason the augmented
 form works. The innovations of a column z are e_z = L z for a unit
 lower-triangular L determined by the state space alone (not by the data), and
@@ -146,8 +153,12 @@ class KalmanEngine:
         batch, n_time = y.shape
         dim = state_space.state_dim
 
-        cols = self._augment(y, design, batch, n_time)
-        n_cols = cols.shape[2]
+        block, per_series = self._design_block(design, batch, n_time)
+        n_cols = 1 + block.shape[2]
+        # ONE ROW, REUSED. `[y | X]` is never materialized -- see
+        # `_design_block` for the 25 200 B/series this used to cost, and for
+        # why the shared design did not make it free.
+        row = np.empty((batch, n_cols), dtype=np.float64)
 
         index, matrices = self._step_matrices(state_space, theta, t)
 
@@ -184,7 +195,10 @@ class KalmanEngine:
             degenerate |= active & ~usable
             safe_s = np.where(usable, s, 1.0)
 
-            v = cols[:, step, :] - np.einsum("bd,bdc->bc", h, x)  # (B, n_cols)
+            row[:, 0] = y[:, step]
+            if n_cols > 1:
+                row[:, 1:] = block[:, step, :] if per_series else block[0, step, :]
+            v = row - np.einsum("bd,bdc->bc", h, x)  # (B, n_cols)
             # ZERO THE INNOVATION UNDER THE MASK, do not merely down-weight it.
             # Masked slots holding NaN is the normal convention for gappy data,
             # and `0 * NaN` is NaN: a weight of zero would let one series' gap
@@ -311,49 +325,67 @@ class KalmanEngine:
         return index, matrices
 
     @staticmethod
-    def _augment(
-        y: NDArray[np.float64],
+    def _design_block(
         design: NDArray[np.float64] | None,
         batch: int,
         n_time: int,
-    ) -> NDArray[np.float64]:
-        """Stack [y | X] into a (B, N, 1+k) array of columns to filter.
+    ) -> tuple[NDArray[np.float64], bool]:
+        """Validate the design and present it as (D, N, k) WITHOUT copying it.
+
+        THIS REPLACED `_augment`, WHICH MATERIALIZED `[y | X]` AS A
+        `(B, N, 1+k)` FLOAT64 ARRAY -- 25 200 B/series at N=630, k=4, against
+        design doc section 9.4's per-series target of 8 682 B for the whole
+        filter. The block did not vanish when the design was shared, which is
+        the case section 9.4 treats as free, because
+        `np.concatenate([y[:, :, None], np.broadcast_to(x, ...)], axis=2)`
+        copies the broadcast view into a real array, replicating one shared
+        design once per series. The `broadcast_to` above it allocates nothing,
+        which is exactly why the copy read as free on a code read.
+
+        The accumulator only ever needed one row at a time, so both engines
+        now index the columns out of `y` and this block per timestep. That
+        makes section 9.4's model true rather than replacing it.
+
+        A shared design is returned as `x[None]`, a VIEW of shape (1, N, k),
+        so the shared case costs one copy of X for the whole tile rather than
+        one per series. `per_series` says which axis-0 length the caller has.
 
         Args:
-            y: Observations, shape (B, N).
             design: Optional design, (N, k) shared or (B, N, k) per series.
             batch: B.
             n_time: N.
 
         Returns:
-            The augmented columns, shape (B, N, 1+k).
+            `(block, per_series)`. `block` is (1, N, k) when the design is
+            shared and (B, N, k) when it is per series; `k` is 0 when there is
+            no design, which keeps the shape uniform and makes `n_cols` fall
+            out as `1 + block.shape[2]` in both engines.
 
         Raises:
             ValueError: If `design` has the wrong rank or the wrong time axis.
         """
         if design is None:
-            return y[:, :, None]
+            return np.empty((1, n_time, 0), dtype=np.float64), False
         x = np.asarray(design, dtype=np.float64)
-        # The time axis is checked BEFORE `broadcast_to`, not left to it. A
-        # (k, N) design handed in transposed is a shape numpy will happily
-        # broadcast in some combinations and reject with its own message in
-        # others; neither is a diagnosis the caller can act on.
+        # The time axis is checked EXPLICITLY, not left to indexing. A (k, N)
+        # design handed in transposed is a shape numpy will happily index in
+        # some combinations and reject with its own message in others; neither
+        # is a diagnosis the caller can act on.
         if x.ndim == 2:
             if x.shape[0] != n_time:
                 raise ValueError(
                     f"design shape {x.shape} does not match y shape "
                     f"{(batch, n_time)}: a shared design must be (N, k)"
                 )
-            x = np.broadcast_to(x, (batch, n_time, x.shape[1]))
-        elif x.ndim == 3:
+            return x[None], False
+        if x.ndim == 3:
             if x.shape[:2] != (batch, n_time):
                 raise ValueError(
                     f"design shape {x.shape} does not match y shape "
                     f"{(batch, n_time)}: a per-series design must be (B, N, k)"
                 )
-        else:
-            raise ValueError(f"design must be (N, k) or (B, N, k); got shape {x.shape}")
-        return np.concatenate([y[:, :, None], x], axis=2)
+            return x, True
+        raise ValueError(f"design must be (N, k) or (B, N, k); got shape {x.shape}")
 
     @staticmethod
     def _rank(

@@ -221,36 +221,45 @@ def tile_side(budget_bytes: int, per_series_bytes: int) -> int:
     return side
 
 
-def augmented_block_bytes(n_time: int, k_beta: int) -> int:
-    """The materialized `[y | X]` block the current engine holds resident.
+def streaming_overhead_bytes(backend: Backend, k_beta: int) -> int:
+    """What the streaming filter costs per series beyond section 9.4's model.
 
-    **This term is absent from design doc section 9.4, and it is the largest
-    single per-series cost in the real implementation.** Section 9.4 accounts
-    for a *streaming* filter whose per-series state is O(d^2): the augmented
-    columns would be indexed step by step out of `y` and the shared `X`.
-    `KalmanEngine._augment` instead ends in
-    `np.concatenate([y[:, :, None], x], axis=2)`, which materializes a
-    `(B, N, 1+k_beta)` float64 array. The `np.broadcast_to` above it is a view
-    and costs nothing; the concatenate copies.
+    **THIS REPLACED `augmented_block_bytes`, AND THE REPLACEMENT IS THE WHOLE
+    POINT OF THE 2026-08-10 ENGINE CHANGE.** Until then `KalmanEngine._augment`
+    ended in `np.concatenate([y[:, :, None], x], axis=2)`, materializing a
+    `(B, N, 1+k_beta)` float64 array -- **25 200 B/series at N=630, k_beta=4**,
+    roughly three times section 9.4's entire per-series total, and it did not
+    vanish when the design was shared, which is exactly the case the section's
+    `X_term` calls free. Both engines now index the observation and the design
+    columns per timestep, so section 9.4's model is true of the code rather
+    than aspirational.
 
-    At N=630, k_beta=4 that is **25 200 B/series** -- roughly three times
-    section 9.4's entire per-series total, and it does **not** vanish when the
-    design is shared, which is exactly the case the section's `X_term` calls
-    free.
+    What is left is genuinely per series and genuinely small:
 
-    Kept as its own named term rather than folded in, because it is a property
-    of the current engine and not of the design. The fix is to index rather
-    than concatenate; until then, tile budgeting must use
-    `resident_bytes_per_series`.
+    - **Path A** reuses one `(B, 1+k_beta)` float64 row across all `N` steps:
+      `(1 + k_beta) * 8` bytes per series, **40 B at k_beta=4**, against
+      25 200 before. It is `N` times smaller because the row is the thing the
+      accumulator ever needed.
+    - **Path B** carries `block_row`, a `(B,)` `intp` map from series to design
+      row, so the compiled kernel can read a shared design without a per-series
+      copy and without a branch on a boolean argument inside `prange`:
+      **8 B/series**.
+
+    Kept as a named term rather than folded into `bytes_per_series` because
+    the seam is the standing check -- *does the memory formula describe the
+    code, or a model of the code?* -- and section 9.4 remains the model. The
+    next divergence needs somewhere to live.
 
     Args:
-        n_time: Series length.
+        backend: Which execution strategy.
         k_beta: Number of design columns.
 
     Returns:
-        Bytes per series held by the augmented observation block.
+        Bytes per series beyond section 9.4's accounting.
     """
-    return int(n_time * (1 + k_beta) * 8)
+    if backend is Backend.COMPILED:
+        return 8
+    return int((1 + k_beta) * 8)
 
 
 def resident_bytes_per_series(
@@ -262,16 +271,23 @@ def resident_bytes_per_series(
     n_models: int,
     per_point_design: bool = False,
 ) -> int:
-    """What a series actually costs today, against `bytes_per_series`'s target.
+    """What a series actually costs, against `bytes_per_series`'s model.
 
     `bytes_per_series` is design doc section 9.4's formula: the memory a
-    streaming implementation would use, and the number to aim at. This adds
-    `augmented_block_bytes`, the one measured deviation, and is the number to
-    **budget** against until the engine stops materializing that block.
+    streaming implementation uses, and the number to aim at. This adds
+    `streaming_overhead_bytes`, everything the real engines hold that the
+    section does not name, and is the number to **budget** against.
 
-    At the section 9.4 worked example the two differ by 25 200 B/series --
-    8682 B target against 33 882 B resident, a factor of 3.9, which moves
-    `tile_side` at a 1 GB budget from 339 to 171.
+    **The two now agree to 0.5%.** At the section 9.4 worked example the gap is
+    40 B/series -- 8682 B model against 8722 B resident on path A -- and
+    `tile_side` at a 1 GB budget is 338 against the model's 339. Until
+    2026-08-10 the gap was 25 200 B/series, 8682 against 33 882, a factor of
+    3.9, and `tile_side` was **171**. Every Phase 1 tile figure quoting 171
+    predates the streaming engines.
+
+    **Still budget against this one, not against the model.** The gap being
+    small today is a measurement, not a guarantee, and the seam is what makes
+    the next divergence visible instead of silent.
 
     Args:
         backend: Which execution strategy.
@@ -287,16 +303,23 @@ def resident_bytes_per_series(
     """
     return bytes_per_series(
         backend, d, k_beta, p, n_time, n_models, per_point_design
-    ) + augmented_block_bytes(n_time, k_beta)
+    ) + streaming_overhead_bytes(backend, k_beta)
 
 
 def data_and_workspace_bytes_per_series(d: int, k_beta: int, n_time: int) -> int:
     """The subset of the formula one batched likelihood evaluation allocates.
 
     The data tile plus the engine's per-series working set -- `P`, `F`, `Q`,
-    `P_inf` and two workspace copies, the augmented state, and the
-    normal-equation accumulators. It excludes the optimizer state, the Hessian
-    and the output slots, none of which a single evaluation touches.
+    `P_inf` and two workspace copies, the augmented state, the normal-equation
+    accumulators, and the one reused `[y | X]` row. It excludes the optimizer
+    state, the Hessian and the output slots, none of which a single evaluation
+    touches.
+
+    **This was 31 542 B/series until 2026-08-10 and is now 6382**, because
+    25 200 of it was the materialized augmented block. Measured against it,
+    the slope of resident RSS on batch size went from 43 392 B/series to
+    **8471** -- a ratio to the floor of 1.33, inside the ~1.5x the standing
+    check allows before a term counts as missing rather than as transients.
 
     This exists because it is what `measure_evaluation_rss_slope` can actually
     measure. **A full `fit` at tile scale is not runnable**: measured on this
@@ -316,7 +339,13 @@ def data_and_workspace_bytes_per_series(d: int, k_beta: int, n_time: int) -> int
     d2 = 6 * d * d * 8
     x_aug = d * (1 + k_beta) * 8
     accum = (k_beta * (k_beta + 1) // 2 + k_beta + 1) * 8
-    return int(data + augmented_block_bytes(n_time, k_beta) + d2 + x_aug + accum)
+    return int(
+        data
+        + d2
+        + x_aug
+        + accum
+        + streaming_overhead_bytes(Backend.NUMPY_BATCHED, k_beta)
+    )
 
 
 _CHILD = """
@@ -340,10 +369,10 @@ def _term(kind):
 
 
 # Sample RESIDENT size during the evaluation and keep the maximum. Reading it
-# once at the end misses the peak entirely -- the augmented [y | X] block is
-# local to the engine and is freed the moment `score` returns -- and reading
-# `ru_maxrss` instead reports whatever high-water mark this process inherited
-# from its parent across fork/exec.
+# once at the end misses the peak entirely -- the engine's working set is local
+# to `score` and is freed the moment it returns -- and reading `ru_maxrss`
+# instead reports whatever high-water mark this process inherited from its
+# parent across fork/exec.
 high = [current_rss_bytes()]
 stop = threading.Event()
 

@@ -1,0 +1,247 @@
+{
+  "canonical_filter_pass": {
+    "detail": {
+      "batch": 256.0,
+      "d": 3.0,
+      "n_time": 630.0
+    },
+    "name": "canonical_filter_pass",
+    "seconds": 0.0006847985196145601,
+    "unit": "s per series per likelihood evaluation"
+  },
+  "cells": [
+    {
+      "a_over_b": 3.643243113494507,
+      "batch": 1000,
+      "d": 1,
+      "gaps": "none",
+      "pass_in_canonical_units": 0.4131872235825898,
+      "path_a_bound_ms_per_fit": 12.26116662476367,
+      "path_a_over_budget": 0.6453245591980878,
+      "path_a_pass_s_per_series": 0.00028294999903300775,
+      "path_b_ms_per_fit": 3.36545386700891,
+      "path_b_over_budget": 0.17712915089520578,
+      "path_b_pass_s_per_series": 7.766432000789791e-05,
+      "predicted_bytes_per_series_resident": 6473,
+      "predicted_bytes_per_series_target": 6417,
+      "threads": 1
+    },
+    {
+      "a_over_b": 3.6980842954601005,
+      "batch": 1000,
+      "d": 1,
+      "gaps": "scattered_10",
+      "pass_in_canonical_units": 0.4113959185553437,
+      "path_a_bound_ms_per_fit": 12.208010360094098,
+      "path_a_over_budget": 0.6425268610575842,
+      "path_a_pass_s_per_series": 0.0002817233160021715,
+      "path_b_ms_per_fit": 3.3011714673678703,
+      "path_b_over_budget": 0.17374586670357212,
+      "path_b_pass_s_per_series": 7.618088001618162e-05,
+      "predicted_bytes_per_series_resident": 6473,
+      "predicted_bytes_per_series_target": 6417,
+      "threads": 1
+    },
+    {
+      "a_over_b": 5.55761169129681,
+      "batch": 1000,
+      "d": 1,
+      "gaps": "contiguous_40",
+      "pass_in_canonical_units": 0.43233428445904143,
+      "path_a_bound_ms_per_fit": 12.829348045634108,
+      "path_a_over_budget": 0.6752288445070583,
+      "path_a_pass_s_per_series": 0.00029606187797617166,
+      "path_b_ms_per_fit": 2.3084282886702567,
+      "path_b_over_budget": 0.12149622571948719,
+      "path_b_pass_s_per_series": 5.3271422046236696e-05,
+      "predicted_bytes_per_series_resident": 6473,
+      "predicted_bytes_per_series_target": 6417,
+      "threads": 1
+    },
+    {
+      "a_over_b": 4.585270957258861,
+      "batch": 20000,
+      "d": 1,
+      "gaps": "none",
+      "pass_in_canonical_units": 0.48696239054133555,
+      "path_a_bound_ms_per_fit": 14.450415379862536,
+      "path_a_over_budget": 0.7605481778875018,
+      "path_a_pass_s_per_series": 0.00033347112415067385,
+      "path_b_ms_per_fit": 3.15148559693868,
+      "path_b_over_budget": 0.16586766299677264,
+      "path_b_pass_s_per_series": 7.272659069858492e-05,
+      "predicted_bytes_per_series_resident": 6473,
+      "predicted_bytes_per_series_target": 6417,
+      "threads": 1
+    },
+    {
+      "a_over_b": 4.698227581461615,
+      "batch": 20000,
+      "d": 1,
+      "gaps": "scattered_10",
+      "pass_in_canonical_units": 0.48112658119332613,
+      "path_a_bound_ms_per_fit": 14.277240057097515,
+      "path_a_over_budget": 0.7514336872156587,
+      "path_a_pass_s_per_series": 0.0003294747705484042,
+      "path_b_ms_per_fit": 3.038856634666445,
+      "path_b_over_budget": 0.15993982287718134,
+      "path_b_pass_s_per_series": 7.012746079999488e-05,
+      "predicted_bytes_per_series_resident": 6473,
+      "predicted_bytes_per_series_target": 6417,
+      "threads": 1
+    },
+    {
+      "a_over_b": 6.496559251802468,
+      "batch": 20000,
+      "d": 1,
+      "gaps": "contiguous_40",
+      "pass_in_canonical_units": 0.4864942429159749,
+      "path_a_bound_ms_per_fit": 14.43652328516085,
+      "path_a_over_budget": 0.7598170150084659,
+      "path_a_pass_s_per_series": 0.00033315053734986577,
+      "path_b_ms_per_fit": 2.22217988409102,
+      "path_b_over_budget": 0.11695683600479052,
+      "path_b_pass_s_per_series": 5.12810742482543e-05,
+      "predicted_bytes_per_series_resident": 6473,
+      "predicted_bytes_per_series_target": 6417,
+      "threads": 1
+    },
+    {
+      "a_over_b": 3.8387491959622904,
+      "batch": 1000,
+      "d": 3,
+      "gaps": "none",
+      "pass_in_canonical_units": 1.017539426629421,
+      "path_a_bound_ms_per_fit": 62.712854370474815,
+      "path_a_over_budget": 3.300676545814464,
+      "path_a_pass_s_per_series": 0.0006968094930052758,
+      "path_b_ms_per_fit": 16.336793879745528,
+      "path_b_over_budget": 0.859831256828712,
+      "path_b_pass_s_per_series": 0.00018151993199717255,
+      "predicted_bytes_per_series_resident": 7321,
+      "predicted_bytes_per_series_target": 7265,
+      "threads": 1
+    },
+    {
+      "a_over_b": 3.633948047912922,
+      "batch": 1000,
+      "d": 3,
+      "gaps": "scattered_10",
+      "pass_in_canonical_units": 0.9081693171856148,
+      "path_a_bound_ms_per_fit": 55.97217035712674,
+      "path_a_over_budget": 2.9459037030066706,
+      "path_a_pass_s_per_series": 0.0006219130039680749,
+      "path_b_ms_per_fit": 15.402578578214163,
+      "path_b_over_budget": 0.8106620304323243,
+      "path_b_pass_s_per_series": 0.00017113976198015736,
+      "predicted_bytes_per_series_resident": 7321,
+      "predicted_bytes_per_series_target": 7265,
+      "threads": 1
+    },
+    {
+      "a_over_b": 4.424340524847155,
+      "batch": 1000,
+      "d": 3,
+      "gaps": "contiguous_40",
+      "pass_in_canonical_units": 0.9997326328526704,
+      "path_a_bound_ms_per_fit": 61.61538842890877,
+      "path_a_over_budget": 3.242915180468883,
+      "path_a_pass_s_per_series": 0.0006846154269878753,
+      "path_b_ms_per_fit": 13.926457080524415,
+      "path_b_over_budget": 0.7329714252907586,
+      "path_b_pass_s_per_series": 0.00015473841200582683,
+      "predicted_bytes_per_series_resident": 7321,
+      "predicted_bytes_per_series_target": 7265,
+      "threads": 1
+    },
+    {
+      "a_over_b": 3.8452972784808748,
+      "batch": 20000,
+      "d": 3,
+      "gaps": "none",
+      "pass_in_canonical_units": 1.1173063279724804,
+      "path_a_bound_ms_per_fit": 68.86167474163813,
+      "path_a_over_budget": 3.624298670612533,
+      "path_a_pass_s_per_series": 0.0007651297193515347,
+      "path_b_ms_per_fit": 17.90802368571167,
+      "path_b_over_budget": 0.9425275624058773,
+      "path_b_pass_s_per_series": 0.00019897804095235188,
+      "predicted_bytes_per_series_resident": 7321,
+      "predicted_bytes_per_series_target": 7265,
+      "threads": 1
+    },
+    {
+      "a_over_b": 4.058929234882066,
+      "batch": 20000,
+      "d": 3,
+      "gaps": "scattered_10",
+      "pass_in_canonical_units": 1.1217008953677274,
+      "path_a_bound_ms_per_fit": 69.13252013383317,
+      "path_a_over_budget": 3.638553691254377,
+      "path_a_pass_s_per_series": 0.0007681391125981463,
+      "path_b_ms_per_fit": 17.032206311880145,
+      "path_b_over_budget": 0.8964319111515866,
+      "path_b_pass_s_per_series": 0.00018924673679866828,
+      "predicted_bytes_per_series_resident": 7321,
+      "predicted_bytes_per_series_target": 7265,
+      "threads": 1
+    },
+    {
+      "a_over_b": 5.026837859611437,
+      "batch": 20000,
+      "d": 3,
+      "gaps": "contiguous_40",
+      "pass_in_canonical_units": 1.115351181659495,
+      "path_a_bound_ms_per_fit": 68.74117542456952,
+      "path_a_over_budget": 3.6179566012931326,
+      "path_a_pass_s_per_series": 0.0007637908380507724,
+      "path_b_ms_per_fit": 13.6748344275984,
+      "path_b_over_budget": 0.7197281277683368,
+      "path_b_pass_s_per_series": 0.00015194260475109332,
+      "predicted_bytes_per_series_resident": 7321,
+      "predicted_bytes_per_series_target": 7265,
+      "threads": 1
+    }
+  ],
+  "core_budget_ms": 19.0,
+  "iterations": {
+    "d1": {
+      "max_iterations": 66.0,
+      "mean_iterations": 43.333333333333336,
+      "utilization": 0.6565656565656566
+    },
+    "d3": {
+      "max_iterations": 107.0,
+      "mean_iterations": 90.0,
+      "utilization": 0.8411214953271028
+    }
+  },
+  "machine": {
+    "numba_threads_available": 4,
+    "platform": "Linux-6.8.0-137-generic-x86_64-with-glibc2.36",
+    "processor": "x86_64",
+    "python": "3.13.14"
+  },
+  "roofline": {
+    "bandwidth_1t": {
+      "detail": {
+        "gb_per_s_per_core": 9.984464847910795,
+        "gb_per_s_total": 9.984464847910795,
+        "mib_per_vector": 256.0,
+        "threads": 1.0
+      },
+      "name": "bandwidth_reference",
+      "seconds": 0.08065593702485785,
+      "unit": "s per STREAM triad pass"
+    },
+    "compute": {
+      "detail": {
+        "d": 3.0,
+        "gflops": 1.0753192415856738
+      },
+      "name": "compute_reference",
+      "seconds": 1.1717450513970107e-07,
+      "unit": "s per P = F P F' + Q step (plus rank-1 downdate)"
+    }
+  }
+}

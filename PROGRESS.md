@@ -20,16 +20,22 @@
   [`docs/superpowers/notes/phase1-to-phase2-handoff.md`](docs/superpowers/notes/phase1-to-phase2-handoff.md)
   **FIRST.** It is self-contained and carries the transferable part of Phase 1: the
   eleven pre-flight categories (a)–(k) with their worked instances, the standing rules,
-  the corrected `tile_side` of 171, open questions 5–8, the fixture facts, and what
+  the `tile_side` of 338 (**171 until P2 fixed the engines on 2026-08-10**), open
+  questions 5–8, the fixture facts, and what
   Phase 2 inherits structurally. This file stays the running notebook; that one is the
   method.
 - **Exit criteria:** **13 met, 3 met with reduced scope, nothing deferred** — the full
   table with reasons is at the end of the Phase 1 plan.
-- **Next:** **Phase 1 is COMPLETE.** Tasks 0–18 done; **Task 19 deleted, not deferred**
-  (path B won by >=3x, so the batched trust-region has no purpose). The stage-1 verdict,
-  its scope, and what it does **not** establish are in
+- **Next: Phase 2 needs an implementation plan.** Phase 1 is COMPLETE (Tasks 0–18; **Task 19
+  deleted, not deferred** — path B won by ≥3×, so the batched trust-region has no purpose),
+  and the three Phase 2 preliminaries **P0, P1 and P2 are done and pushed** — see the
+  Phase 2 preliminaries section below. **Nothing is blocking.** Design doc §17 already
+  covers Phase 2's territory, so what it needs is a plan plus a phase list with only the
+  first phase detailed, and that first slice vertical as Phase 1's was.
+- The stage-1 verdict, its scope, and what it does **not** establish are in
   [`docs/superpowers/notes/spike-stage1-verdict.md`](docs/superpowers/notes/spike-stage1-verdict.md)
-  — read it before quoting the >=3x result.
+  — read it before quoting the ≥3× result. **Its one condition is discharged**: re-measured
+  after the engines were made to stream, the worst cell went 3.04 → **3.84**.
 - **The benchmark harness is a one-command run and must stay that way.** To produce a
   second machine's numbers without reconstructing anything:
 
@@ -202,6 +208,66 @@ them landing on `2^±26` by different routes is a hazard rather than a confirmat
   invisible to its own tests: every rank, outcome and tolerance assertion compares a fixture
   against the constant, so both sides move together. That is the cancellation rule applied
   to a threshold.
+
+### P2 — both engines stream, and `tile_side` is 338
+
+- **PATH B WAS THE SECOND SITE OF THE SAME DEFECT AND NOTHING SAID SO.** Every note
+  described `_augment` as the reference engine's problem. `CompiledEngine.score` called
+  `np.ascontiguousarray(reference._augment(...))`, so **the adopted production path carried
+  the same `(B, N, 1+k_β)` block plus a copy**. One `rg _augment src/` returns two call
+  sites. Fixing path A alone would have published a `tile_side` no production run could
+  honour, per backend, with a test pinning it.
+- **`_augment` is replaced by `_design_block`**, which validates the design and returns it
+  as a `(1, N, k)` **view** when shared or `(B, N, k)` when per point, copying nothing. Both
+  engines read the observation out of `y` and the design columns out of that block per
+  timestep — path A into one reused `(B, 1+k)` row, path B element by element.
+- **`tile_side` is 338**, resident 8722 B/series against §9.4's 8682 B model, a 0.5% gap
+  where it was a factor of 3.9. **Budget against `resident_bytes_per_series` regardless**;
+  the gap being small is a measurement, not a guarantee.
+- **Measured, not inferred.** Slope of resident RSS against B in a fresh process, sampled on
+  a thread during the workload: **43 392 → 8471 B/series**, against an arithmetic floor that
+  went 31 542 → 6382. Ratio to floor **1.38 → 1.33**, both inside the ~1.5× the standing
+  check allows. **The fall of 34 921 B/series is larger than the 25 200 B block itself**,
+  because the per-step temporaries at peak scaled with it — a term neither formula names.
+  **Note what this says about the standing check:** it would never have caught the original
+  defect, because the old formula described the code correctly and it was the *design* it
+  disagreed with. Reading the source is what caught it.
+- **BIT-IDENTICAL, not within tolerance.** The pre-fix modules were loaded straight out of
+  git (`git show 29884aa:...` into a temp file, never checked out) and compared field by
+  field: both engines × {shared, per-point, no design} × {`loglik`, `normal_equations`,
+  `rank_x`, `outcome`, `n_used`}, on a gapped mask — thirty comparisons, all exact.
+  **The path-B agreement test could not have carried this** and it is worth knowing why:
+  it compares two implementations of the same recursion, and *both* were changed, so
+  anything they do identically is invisible to it. The cancellation rule at the level of an
+  engine.
+- **THE SPIKE'S CONDITION IS DISCHARGED. The falsifier is not met in any cell or any
+  harness**: the lowest A:B measured after the fix is **3.27**, and at the new
+  production-scale B = 114 244 it is **4.05**. Task 19 stays deleted.
+- **THE TWO HARNESSES DISAGREE ABOUT WHETHER THE RATIO MOVED, AND THAT IS THE FINDING.** At
+  d=3, one thread, no gaps, B=1000 the spike says 3.04 → **3.84** and the batch sweep says
+  3.31 → **3.27**. A 0.57 spread on one quantity, against the **±0.15** run-to-run scatter
+  the verdict assumed — so **±0.15 understates the variation on this machine, and any
+  restatement of the margin must name its harness as well as its B and thread count.**
+  Absolute per-pass seconds per series separate what is resolved from what is not:
+  **path B's gain is consistent — −19% (spike) and −22% (sweep)** — while **path A did not
+  measurably move**: +1% by one harness, −22% by the other, and the two disagreed by **27%**
+  on that identical quantity *before* the fix. The verdict's stated reasoning (path A is
+  memory-bound, so path A gains most, by more than path B) is therefore **wrong on the half
+  that is resolved**. The mechanism it missed: path B had been reading a **per-series
+  private copy of the shared design** — B copies of the same `(N, k)` bytes competing for
+  cache, a locality problem in the per-series loop — while path A's cost is the
+  `(B, d, n_cols)` einsum temporaries it rebuilds every timestep, which the block never
+  touched.
+- **The fix moved the goalposts of its own re-measurement.** Production-scale B is tile side
+  squared, so it went ~29 000 → **~114 000**. The verdict's falsifier is stated "at
+  production-scale B" and its sweep topped out at 20 000, which was close to 29 000 and is
+  not close to 114 000.
+- **A P1 constant changed a P2 benchmark input, and the two are easy to conflate.**
+  `mean_iterations` at d=3 went 68.7 → 90.0 and path A's utilization 0.64 → 0.84. Neither is
+  a P2 effect: both are computed over the **OK series only** in a four-series sample, and
+  the derived `HESSIAN_COND_LIMIT` moved one of the four to `DEGENERATE_HESSIAN`. **The A:B
+  ratio is untouched** — the iteration count is common to both paths and cancels — but the
+  per-fit millisecond columns carry the new count. See open question 11.
 
 ---
 
@@ -609,13 +675,16 @@ rather than from the pre-audit shape. Two things beyond that:
      answer and it makes §9.4's model true rather than replacing it. **Phase 2 work, not a
      Task 17 patch:** it touches the hot loop of the reference engine, which every oracle
      test and the path-B agreement test are pinned against.
-  2. **`tile_side` is 171, not 339, until it is fixed** (1 GB budget, shared X, d=3,
-     k_β=4, p=4, M=12). Both figures are carried deliberately and both are labelled:
-     `memory.bytes_per_series` is §9.4's **target** (8 682 B → 339) and
-     `memory.resident_bytes_per_series` is what the code actually holds (**33 882 B → 171**).
-     **Every Phase 2 tile-arithmetic number must be budgeted against the resident figure**
-     until the engine streams; using the target overcommits a hard 16 GB constraint by 3.9×,
-     and the run does not degrade, it dies.
+  2. ~~**`tile_side` is 171, not 339, until it is fixed**~~ **SUPERSEDED 2026-08-10 (P2):
+     `tile_side` is 338.** Both engines now stream, `resident_bytes_per_series` is 8 722 B
+     on path A against §9.4's 8 682 B model, and the two agree to 0.5%. **Every Phase 2 tile
+     calculation uses 338; any Phase 1 note quoting 171 predates the fix.** The rule that
+     survives is the labelling: budget against `resident_bytes_per_series`, never against
+     `bytes_per_series`, because the gap being small today is a measurement rather than a
+     guarantee. Historical figures, kept because the mechanism is the transferable part:
+     the resident cost was 33 882 B/series → 171, against the 8 682 B → 339 model, and using
+     the model would have overcommitted a hard 16 GB constraint by 3.9× — the run does not
+     degrade, it dies.
   3. **STANDING CHECK — DOES THE MEMORY FORMULA DESCRIBE THE CODE, OR A MODEL OF THE
      CODE?** This is the **second** time §9.4 was wrong in a way that three places agreed
      on (the first was the `+2` output-slot cascade, where the formula, the prose and the
@@ -1590,6 +1659,23 @@ Still open. **A new session must not assume these were settled.**
     rather than merely untested. Supporting either platform means first deciding what the
     RSS accounting should mean there — peak vs current, and what `ru_maxrss` has no
     equivalent for on Windows. Closed by that decision plus a green run on both.
+11. **`bench/spike.py`'s iteration sample is white noise fitted with two timescales, and it
+    is now mostly `DEGENERATE_HESSIAN`.** `measure_mean_iterations` builds
+    `rng.standard_normal((4, N)) * logspace(-1, 1, 4)` and fits it with
+    `white + Matérn 1/2 + Matérn 3/2` at d=3. Under the derived `HESSIAN_COND_LIMIT`,
+    measured 2026-08-10: **d=3 reports `['DEGENERATE_HESSIAN', 'OK', 'DEGENERATE_HESSIAN',
+    'OK']` and d=1 reports one degenerate of four.** The verdicts are correct — white noise
+    cannot identify two timescales, which is open question 9's defect for the third time in
+    a third fixture — but `mean_iterations` and `utilization` are computed over the OK
+    subset only, so both are now measured on **two series** at d=3 (68.7 → 90.0 and
+    0.64 → 0.84). **The A:B ratio is unaffected**: the iteration count is common to both
+    paths and cancels. Recommended fix, deliberately NOT applied during P2 so the
+    re-measurement compares like with like: draw each row from the candidate's own
+    covariance with `rho` at ~10 sampling intervals, keeping the amplitude spread that makes
+    the batch heterogeneous, exactly as `test_fit.py::_healthy_row` and `_plain_batch` now
+    do. **Until then, treat the utilization figure as provisional** — PROGRESS's Task 17
+    entry quoting 0.64 was measured on three series and the note quoting 0.84 on two.
+
 9. ~~**`optimize.HESSIAN_COND_LIMIT = 1e10` is picked, not derived.**~~ **CLOSED 2026-08-10
    (P1), before Phase 2 planning as it required.** `HESSIAN_COND_LIMIT` is now
    `eps^(-1/2) = 2**26 = 6.7109e7` — one inversion, so one square root — and §4.8's two

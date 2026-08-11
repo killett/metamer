@@ -28,12 +28,12 @@ from metamer.core.machine import current_rss_bytes, peak_rss_bytes
 from metamer.core.memory import (
     Backend,
     _measure_child,
-    augmented_block_bytes,
     bytes_per_series,
     data_and_workspace_bytes_per_series,
     measure_evaluation_rss_slope,
     output_slot_bytes,
     resident_bytes_per_series,
+    streaming_overhead_bytes,
     thread_state_bytes,
     tile_bytes,
     tile_side,
@@ -373,30 +373,48 @@ def test_path_b_thread_term_is_the_only_thread_dependence():
 # --------------------------------------------------------------------------
 
 
-def test_the_augmented_block_is_the_dominant_resident_term():
-    """The engine materializes [y | X], and section 9.4 does not account for it.
+def test_the_streaming_engines_leave_only_one_row_above_the_formula():
+    """Resident cost now matches section 9.4's model to 0.5%.
 
-    Expected value determined independently: `KalmanEngine._augment` ends in
-    `np.concatenate([y[:, :, None], x], axis=2)`, producing a
-    `(B, N, 1+k_beta)` float64 array. At N=630, k_beta=4 that is
-    630 * 5 * 8 = 25 200 B/series, computed by hand from the shape. Section
-    9.4's per-series total is 8682 B, so the block alone is 2.9x the entire
-    documented cost and the true resident figure is 33 882 B.
+    Expected value determined independently from the shapes the engines
+    allocate, not from the formula: path A keeps ONE `(B, 1+k_beta)` float64
+    row and reuses it across all N steps, so `(1 + 4) * 8 = 40` B/series; path
+    B keeps a `(B,)` `intp` map from series to design row, so 8 B/series.
+    Section 9.4's per-series total at this case is 8682 B, giving 8722 and
+    8690 resident. `tile_side` at a 1 GB budget is `floor(sqrt(1e9/8722))`
+    = 338, one below the model's 339.
 
-    Bug this catches: budgeting a 10^7-point run against the streaming
-    formula. `tile_side` at a 1 GB budget drops from 339 to 171, so a tile
-    sized by section 9.4 needs about 3.9x the RAM it was allotted -- and the
-    16 GB machine is a hard constraint, so the run does not degrade, it dies.
-    The `np.broadcast_to` immediately above the concatenate is a view and
-    costs nothing, which is exactly why the copy is easy to miss on a read.
+    Bug this catches: a return to materializing `[y | X]`, which is what
+    `_augment` did until 2026-08-10 -- `np.concatenate([y[:, :, None], x],
+    axis=2)`, a `(B, N, 1+k_beta)` float64 array, 25 200 B/series at N=630 and
+    k_beta=4. That is 2.9x section 9.4's ENTIRE per-series total, it did not
+    vanish when the design was shared, and it put `tile_side` at 171 rather
+    than 339. The `np.broadcast_to` immediately above the concatenate is a
+    view and costs nothing, which is exactly why the copy was easy to miss on
+    a read -- so the guard is arithmetic on the resident total, not a reading
+    of the source.
+
+    The two backends are asserted separately because the terms differ in kind
+    (a row of columns against an index array), and a single formula with
+    different constants would be wrong rather than merely imprecise.
     """
-    assert augmented_block_bytes(n_time=630, k_beta=4) == 25200
+    assert streaming_overhead_bytes(Backend.NUMPY_BATCHED, k_beta=4) == 40
+    assert streaming_overhead_bytes(Backend.COMPILED, k_beta=4) == 8
+
     target = bytes_per_series(Backend.NUMPY_BATCHED, **CASE)
     resident = resident_bytes_per_series(Backend.NUMPY_BATCHED, **CASE)
-    assert resident - target == 25200
-    assert resident == 33882
-    assert tile_side(10**9, resident) == 171
+    assert resident - target == 40
+    assert resident == 8722
+    assert tile_side(10**9, resident) == 338
     assert tile_side(10**9, target) == 339
+
+    compiled_target = bytes_per_series(Backend.COMPILED, **CASE)
+    compiled_resident = resident_bytes_per_series(Backend.COMPILED, **CASE)
+    assert compiled_resident - compiled_target == 8
+
+    # The headline: the gap is now a rounding error on the tile side, where it
+    # used to be a factor of 3.9 and 168 grid points.
+    assert resident < 1.01 * target
 
 
 @pytest.mark.slow
@@ -406,15 +424,26 @@ def test_measured_peak_rss_is_at_least_the_arrays_that_provably_exist():
 
     Expected value determined independently: the arrays are named and their
     shapes are known, so the per-series floor is arithmetic --
-    `y` (630*8) + mask (630) + the augmented block (630*5*8) + the engine's
-    O(d^2) working set (672) = 31 542 B/series. That is a FLOOR, not an
+    `y` (630*8) + mask (630) + the engine's O(d^2) working set (672) + the one
+    reused `[y | X]` row (40) = 6382 B/series. That is a FLOOR, not an
     estimate: every one of those arrays demonstrably exists and is
     simultaneously live during the evaluation. The upper bound is 2x, which
     admits per-step transients and allocator rounding while still rejecting a
     term that scales with an extra factor of N or k_beta.
 
-    Measured on this machine: 43 392 B/series against the 31 542 floor,
-    intercept ~76 MB. The ~12 kB residual is per-step temporaries at peak.
+    Measured on this machine after the streaming fix: **8471 B/series against
+    the 6382 floor, a ratio of 1.33**, intercept ~77 MB. Before it, the floor
+    was 31 542 -- the extra 25 200 being the materialized augmented block --
+    and the measured slope was 43 392. **The measurement fell by 34 921
+    B/series, more than the block itself**, because the per-step temporaries
+    at peak scaled with it.
+
+    THE 1.33 IS THE POINT AND IT IS WHY THIS TEST IS A SLOPE. The standing
+    check asks whether the formula describes the code or a model of the code,
+    and answers it against measured resident bytes, treating anything above
+    ~1.5x as a term the formula is missing rather than as noise. 1.33 clears
+    that; 43 392 against 8682 did not, and nothing in the suite said so until
+    this measurement existed.
 
     Each batch size runs in a FRESH SUBPROCESS. `ru_maxrss` is a high-water
     mark that never decreases, so an in-process reading is contaminated by
@@ -433,7 +462,7 @@ def test_measured_peak_rss_is_at_least_the_arrays_that_provably_exist():
         batches=(1000, 3000, 5000), n_time=630
     )
     floor = data_and_workspace_bytes_per_series(d=3, k_beta=4, n_time=630)
-    assert floor == 31542
+    assert floor == 6382
     print(
         f"\nfloor {floor} B/series, measured {measured:.0f} B/series, "
         f"intercept {intercept / 1e6:.1f} MB"

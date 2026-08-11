@@ -52,6 +52,11 @@ and that transient has completed by B=1000. Across B = 1000 → 20 000 the ratio
 **3.15–3.35** band. Production B is ~29 000 (tile side 171 squared), so B=20 000 is close to
 production scale.
 
+> **All figures in this section are the 2026-08-07 measurement, taken while both engines
+> materialized `[y | X]`.** They are kept as the baseline the re-measurement is against;
+> the current numbers, and the production-scale B that replaced ~29 000, are under
+> "The one condition attached to this answer" below.
+
 Supporting measurements: mean iterations 68.7 at d=3; path A active-mask utilization
 **0.64**, so path A's real cost sits a further ~1.6× above its own optimistic bound;
 canonical filter pass 0.745 ms/series; compute reference 125.6 ns per `P = F P Fᵀ + Q` step
@@ -107,54 +112,116 @@ better than the worst cell that occurs.
 | **Path B at high thread occupancy** | measured at 1 and 4 threads on a 4-core box. `prange` over series at 64 threads may hit false sharing on `accum`, or saturate the controller at a different point | run `bench/spike.py` on the 64-core box at `--threads 1 --threads 4 --threads 64` |
 | **The roofline model's predictive accuracy** | the compute/bandwidth pair is meant to predict one machine's result from another's. **One data point cannot validate a two-parameter fit** — nothing here tests the model, it only supplies its first point | a second machine's roofline pair plus its measured canonical filter pass, checked against the prediction |
 | **arm64 portability of the toolchain** | `numba` on `osx-arm64`/`linux-aarch64` is untested here, and `celerite2` has **no `osx-arm64` conda-forge build** at all, so it is pinned to `[target.linux-64.dependencies]` | run the suite and `bench/spike.py` on the MacBook |
-| **Whether the 16 GB machine can hold a production tile** | blocked on the `_augment` defect below, not on the spike | fix `_augment`, then re-measure `tile_side` |
+| ~~**Whether the 16 GB machine can hold a production tile**~~ | **UNBLOCKED 2026-08-10.** `_augment` is gone from both engines and `tile_side` is 338 at a 1 GB budget, 8722 B/series resident against §9.4's 8682 B model | — |
 
 ---
 
-## The one condition attached to this answer
+## The one condition attached to this answer — DISCHARGED 2026-08-10
 
-**Re-measure the spike after `_augment` is fixed.** This is not a reopening of the gate —
-the decision holds on current measurements — it is a condition naming the single code
-change that would warrant re-running it.
+**Re-measure the spike after `_augment` is fixed.** Done. `bench/minipc-streamed.json`,
+same one-command harness, `--threads 1 --batch 1000 --batch 20000 --repeats 3`.
 
-The reasoning: the fix removes the materialized `(B, N, 1+k_β)` block, i.e. **~25 KB/series
-of memory traffic**, from the filter's inner loop. **Path A is memory-bound** and scales
-with bandwidth per core, so that traffic is exactly what its cost is made of — the fix
-improves **path A's bound specifically**, and by more than it improves path B, whose
-compiled loop already reads `y` and `X` with far better locality.
-
-Against a **3.15–3.35** margin at production-scale B with **±0.15** run-to-run scatter,
-that is enough to matter. It is not enough, on any estimate available now, to overturn a
-3× result — but the margin is thin enough that the question should be re-asked rather than
-assumed.
-
-**What to re-run, and what would change the verdict:**
-
-```bash
-pixi run python -m metamer.bench.spike \
-    --threads 1 --threads 4 --batch 1000 --repeats 3 --out bench/minipc-streamed.json
-```
-
-plus the worst-cell batch sweep at `B ∈ {1000, 5000, 20000}`. **If the d=3, one-thread,
+**THE FALSIFIER IS NOT MET, IN ANY CELL OR ANY HARNESS.** It was: *if the d=3, one-thread,
 no-gaps ratio falls below 3× at production-scale B, the ≥3× rule is no longer satisfied and
-the stage-2 decision (build the batched trust-region) is back on the table.** Task 19's
-deleted content is recoverable from git history for exactly this case.
+the stage-2 decision (build the batched trust-region) is back on the table.* The lowest A:B
+measured anywhere after the fix is **3.27**; at the new production-scale B it is **4.05**.
+Task 19 stays deleted.
 
-Nothing else in this note is contingent on that measurement: path A's retention as the
-correctness reference, the gap-structure result, and the utilization figure are all
-independent of it.
+The spike harness, d=3 one thread — path B's worst cell in every column:
 
-## Carried into Phase 2
+| gaps | A:B before | A:B after (B=1000) | A:B after (B=20 000) |
+|---|---|---|---|
+| none | 3.04 | 3.84 | 3.85 |
+| 10% scattered | 3.19 | 3.63 | 4.06 |
+| 40% contiguous | 3.41 | 4.42 | 5.03 |
 
-**`KalmanEngine._augment` materializes the augmented `[y | X]` block** — a
+The batch-sweep harness at the same cell, `bench/batch-sweep-d3-1thread-nogaps-streamed.json`:
+
+| batch | A:B before | A:B after |
+|---|---|---|
+| 1 000 | 3.31 | 3.27 |
+| 20 000 | 3.35 | 3.28 |
+| **114 244** (the new production tile) | — | **4.05** |
+
+### THE TWO HARNESSES DISAGREE ABOUT WHETHER THE RATIO MOVED, AND THAT IS THE FINDING
+
+The spike says the worst cell went 3.04 → 3.84; the sweep says 3.31 → 3.27. **A 0.57 spread
+on the same quantity, against the ±0.15 run-to-run scatter this note assumed.** The ±0.15
+figure understates the variation on this machine, and any future restatement of the margin
+must name its harness as well as its B and thread count.
+
+Going to absolute per-pass seconds per series (d=3, one thread, no gaps, B=1000) separates
+what is resolved from what is not:
+
+| | spike 08-07 | sweep 08-07 | spike 08-10 | sweep 08-10 |
+|---|---|---|---|---|
+| path A | 6.88e-4 | 8.73e-4 | 6.97e-4 | 6.79e-4 |
+| path B | 2.26e-4 | 2.64e-4 | **1.82e-4** | **2.07e-4** |
+
+- **Path B's gain is real and consistent: −19% in the spike harness, −22% in the sweep
+  harness.** Both directions agree and the size agrees.
+- **Path A's change is NOT resolved.** +1% by the spike, −22% by the sweep — and the two
+  harnesses already disagreed by **27%** on this identical quantity *before* the fix
+  (6.88e-4 against 8.73e-4), so the between-harness scatter is larger than the effect being
+  asked about. **The honest answer is that path A's cost did not measurably move.**
+
+**The reasoning written into this condition is therefore wrong on the half that is
+resolved.** It predicted the fix would help **path A** most — path A being memory-bound,
+the removed block being ~25 kB/series of its traffic — and *by more than it improves path
+B, whose compiled loop already reads `y` and `X` with far better locality*. Measured, path
+B is the engine that gained. The mechanism the prediction missed is that path B was reading
+a **per-series private copy of the shared design**: B copies of the same `(N, k)` bytes
+competing for cache, which is a locality problem in the per-series loop and not a bandwidth
+problem in the batched one. Path A's cost is dominated by the `(B, d, n_cols)` einsum
+temporaries it rebuilds every timestep, which the block never touched.
+
+**Both machines were under load** (4 cores, load average ~3 from unrelated containers)
+while these were taken, and `_time_pass` is best-of-3, which reduces but does not remove
+that. A quieter re-run would tighten the numbers; it would not change the verdict, which
+turns on a ≥3× threshold that the *lowest* measurement clears by 9%.
+
+**Production-scale B moved with the fix and this note's old figure is stale.** It said
+"production B is ~29 000 (tile side 171 squared)". `tile_side` is now **338**, so production
+B is **~114 000** — the fix quadrupled the tile it was measured against, which is the one
+way it could have invalidated its own re-measurement.
+
+**Two supporting figures moved for a reason that is NOT this fix**, and conflating them
+would be easy: `mean_iterations` at d=3 went 68.7 → 90.0 and path A's utilization 0.64 →
+0.84. Both are computed over the **OK series only** in a four-series sample, and P1's
+derived `HESSIAN_COND_LIMIT` moved one of those four from `OK` to `DEGENERATE_HESSIAN`
+(d=3; one of four at d=1). The sample is `rng.standard_normal(...)` fitted with
+white + Matérn 1/2 + Matérn 3/2 — white noise fitted with two timescales, the same fixture
+defect open question 9 found twice elsewhere — so the verdict is right and the sample is
+now two series wide. **The A:B ratio is unaffected**: the iteration count is common to both
+paths and cancels. The per-fit millisecond columns are not, and they carry the new count.
+See open question 11.
+
+## Carried into Phase 2 — RESOLVED 2026-08-10
+
+~~**`KalmanEngine._augment` materializes the augmented `[y | X]` block**~~ — it did: a
 `(B, N, 1+k_β)` float64 array, 25 200 B/series at N=630, k_β=4, against design doc §9.4's
-per-series target of 8 682 B, and it does not vanish when the design is shared. `tile_side`
-at a 1 GB budget is therefore **171, not 339**, and **all Phase 2 tile arithmetic must use
-`memory.resident_bytes_per_series`, not `memory.bytes_per_series`**, until the engine
-streams those columns instead of concatenating them. Full note in `PROGRESS.md`.
+per-series model of 8 682 B, and it did not vanish when the design was shared, which put
+`tile_side` at **171 rather than 339**.
 
-This is the reference engine's hot loop, so fixing it means re-pinning the path-B agreement
-test and the MVN oracles — Phase 2 work, deliberately not patched during Task 17.
+**Both engines now stream.** `_augment` is replaced by `_design_block`, which validates the
+design and hands back a `(1, N, k)` view when it is shared; each engine reads the
+observation out of `y` and the design columns out of that block per timestep, into one
+reused row. `tile_side` at a 1 GB budget is **338**, resident 8722 B/series against the
+8682 B model.
+
+**Path B was the second site of the same defect and this note did not say so** — it called
+`_augment` and then `np.ascontiguousarray` on the result, so the adopted production path
+carried the block *and* a copy. Fixing path A alone would have reported a `tile_side` no
+production run could honour.
+
+**The standing rule survives the fix:** all Phase 2 tile arithmetic uses
+`memory.resident_bytes_per_series`, never `memory.bytes_per_series`. The two agreeing to
+0.5% today is a measurement, not a guarantee.
+
+Re-pinned rather than argued: the fix is **bit-identical** to the pre-fix engines — both
+paths, shared / per-point / no design, gapped masks, across `loglik`, `normal_equations`,
+`rank_x`, `outcome` and `n_used`, compared against the modules loaded out of git at
+`29884aa`. Not a tolerance; the same digits.
 
 ---
 
@@ -175,3 +242,50 @@ For the 64-core box add `--threads 64`; for the MacBook use `--threads 1 --threa
 its real core count) and `--out bench/macbook.json`. Output is self-describing JSON: machine
 fingerprint, the three references, mean iterations and utilization per state dimension, and
 one row per (d, batch, gap case, thread count).
+
+The 2026-08-10 re-measurement was:
+
+```bash
+pixi run python -m metamer.bench.spike \
+    --threads 1 --batch 1000 --batch 20000 --repeats 3 \
+    --out bench/minipc-streamed.json
+```
+
+**The batch sweep is not a CLI flag and never was** — it is a short script over the same
+harness functions, kept here so it does not need reconstructing.
+`bench/batch-sweep-d3-1thread-nogaps-streamed.json` came from this, with
+`BATCHES = [1000, 20000, 114244]`:
+
+```python
+import numpy as np
+from numba import set_num_threads
+from metamer.bench.spike import (
+    _time_pass, build_spec, full_theta, gap_mask, measure_mean_iterations,
+)
+from metamer.core.engines.compiled import CompiledEngine
+from metamer.core.engines.kalman import KalmanEngine
+from metamer.core.signal import Annual, Constant, SemiAnnual, SignalSpec, Trend
+from metamer.core.statespace import StateSpace
+
+N_TIME, REPEATS = 630, 3
+set_num_threads(1)
+t = np.arange(N_TIME, dtype=np.float64) / 12.0
+design, _ = SignalSpec([Constant(), Trend(), Annual(), SemiAnnual()]).design_matrix(t)
+spec = build_spec(3)
+ss = StateSpace.from_spec(spec)
+iters = measure_mean_iterations(3, N_TIME)["mean_iterations"]
+
+for batch in BATCHES:
+    theta = full_theta(spec, batch)
+    y = np.random.default_rng(3).standard_normal((batch, N_TIME))
+    mask = gap_mask("none", batch, N_TIME)
+    a = _time_pass(KalmanEngine(), ss, theta, y, mask, t, design, REPEATS)
+    b = _time_pass(CompiledEngine(), ss, theta, y, mask, t, design, REPEATS)
+    print(batch, a, b, a / b, a * iters * 1e3, b * iters * 1e3)
+    del y, mask, theta
+```
+
+`B = 114244` is `tile_side(1e9, resident_bytes_per_series(...))` squared — the production
+tile at a 1 GB budget — and it needs ~1 GB of RAM to run. **Recompute it rather than
+copying it** if the memory accounting ever changes again; that number moved from ~29 000 to
+~114 000 when the engines started streaming.
