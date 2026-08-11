@@ -1326,6 +1326,15 @@ able to read.
 no metamer installed.** This is the kind of thing that works on the author's machine and
 fails for a collaborator.
 
+**STORE INVARIANT, ADDED 2026-08-11: every store is self-contained.** No store resolves
+through another store — not by a zarr reference, not by a symlink, not by a path in attrs
+that a reader has to follow. The no-metamer read is the criterion the whole schema is built
+around (fixed-width coordinate dtypes, natural units on disk, the flattened ragged index),
+and a store that resolves elsewhere fails it however the pointer is encoded. **Provenance
+records a source store's path and hashes; it never depends on that store being present.**
+The immediate consequence is for §12.8's recompute path, which **copies** the groups it does
+not recompute rather than referencing them.
+
 ### 12.5 Status invariants and primitives
 
 **Both directions asserted, and tested:**
@@ -1333,6 +1342,26 @@ fails for a collaborator.
 - A NaN value never coexists with an `OK` status.
 - A non-`OK` status has NaN in **all** corresponding value slots. Otherwise a partially
   written failure leaves stale or garbage numbers that read as valid.
+
+**SCOPED 2026-08-11: the invariant is between status and the FIT value slots.**
+`/status/outcome[y,x,m]` governs `/signal/`, `/noise/` and `/primitives/`. **`/selection/`
+carries its own criterion-wise validity** through NaN ΔIC — excluded from weight
+normalization — and the `-1` no-winner sentinel in `selected[y,x,c]`. **A NaN in
+`/selection/` beside an `OK` status is legal** and means "this criterion could not rank
+this point".
+
+The reason is a shape, not a preference: **`outcome` has no `c` axis.** A selection-stage
+failure is criterion-specific — HQIC is undefined for `n ≤ e` while AIC ranks the same
+point — so folding it into the outcome ladder would make a criterion-independent array
+depend on which criterion was requested. This is the same argument §10.2 already settled
+for `n_valid`, which counts *fits* rather than finite criterion values precisely because
+the store holds one `n_valid[y,x]` shared by every criterion.
+
+**The constructible test point is one where every fit is `OK` and one criterion cannot rank
+it.** Two routes, and a plan must pick one rather than discover neither works: under REML
+`n = n_obs − design_rank`, so `n_obs = 6` against a rank-4 design gives `n = 2` and HQIC is
+undefined while AIC is fine; under ML `n = n_obs`, so it needs a small design — with the
+four-column design the precheck refuses the series first and the point is unreachable.
 
 **The status array is initialized to `NOT_ATTEMPTED`, not to zero/OK**, so an interrupted or
 partial write reads as unattempted rather than as success.

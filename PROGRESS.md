@@ -422,6 +422,77 @@ exists to separate) but the partition is two-way plus one field, and the recompu
 must be exercised **into a new store**. Inventing a config field to make the test
 constructible would be backwards.
 
+**Confirmed against the golden test's own hardcoded set** (`tests/test_hashing.py:606–626`),
+not against the module: `FIT_RELEVANT_FIELDS` is eight fields and `criteria` is the only
+addition. **One adjacent fact falls out of the same assertion:** `candidates` is asserted
+*not* compat-relevant, so **the candidate set is a store property no hash covers.** §12.8's
+superset rule assumes it is compared and no hash enforces that — the resume gate must
+compare it explicitly against the per-candidate spec hashes in root attrs.
+
+### Q3 — the recompute path lands in sub-phase 1
+
+`python -m metamer <config.toml> <new-store> --reuse-fits-from <old-store>`. A flag on the
+one runner: read `/primitives/` for a tile, call `rank_candidates`, region-write
+`/selection/`, set the completion bit. **Same tiling loop, same write path, same bitmap,
+same resume semantics** — the fit step is replaced by a read.
+
+Decided on three arguments, the second decisive:
+
+1. **A refusal naming a command that does not exist is a defect committed on purpose**, and
+   it survives, because nobody grep-audits error strings.
+2. **The three-hash split has been carried since Task 16 on containment tests and an
+   in-memory contract.** Deferring the recompute path leaves it untested through Phase 2's
+   largest sub-phase, and the recompute path is where `fit_hash` either does what it claims
+   or does not.
+3. Cost is one flag and one branch — the least important argument, because **a cheap thing
+   that is never exercised is not cheap.**
+
+`--reuse-fits-from` over `--recompute`: it names a **source**, a fact about the invocation,
+rather than an **operation**, which presupposes a verb the command tree has not chosen.
+Same reasoning as `python -m` over a subcommand.
+
+**Exit criterion 5 splits three ways, all constructible at C=2:**
+
+- **5a** — recompute into a new store with a different criterion set: `/primitives/`,
+  `/noise/`, `/signal/`, `/status/` byte-identical to the source, `/selection/` differs,
+  **and no fit ran**, asserted by a stub engine that raises if called, never by timing.
+- **5b** — an in-place resume with a changed criterion set is refused, both sets named.
+- **5c** — a `fit_hash` mismatch is refused.
+
+**Four requirements on the path:**
+
+1. **The raising stub engine goes in the shared fixtures, not in one test module.** Timing
+   cannot falsify "no fit ran"; a raising stub proves it. The same construction proves the
+   negative in at least two other places — that a resumed tile did not refit completed
+   work, and that a compat-only rewrite touched nothing upstream of `/selection/`.
+2. **The recompute path writes its own provenance and does not inherit the source's.** New
+   `run_hash`, new `compat_hash`, `fit_hash` **equal to the source's** — and that equality
+   is the entire claim. Record the source store's path and all three of its hashes as
+   provenance fields, so a reader can verify the claim instead of trusting the label and a
+   test can assert `fit_hash` equality across the two stores directly. That assertion is
+   the cleanest available statement of what the split bought.
+3. **Verify the source BEFORE the tiling loop, not after.** Check `schema_version`,
+   `fit_hash` against the requested config, and that the source's **completion bitmap is
+   fully set**. Recomputing from a partially fitted store yields a complete-looking new
+   store built on incomplete primitives — a plausible-number failure with no symptom. An
+   incomplete source is a layer-4 validation error, **exit code 4**.
+4. **Status does not simply copy — and it does not go through the ladder either.**
+   Fit-stage outcomes transfer unchanged. Recompute-stage failures are criterion-specific
+   and **`outcome[y,x,m]` has no `c` axis**, so folding them into the precedence ladder
+   would make a criterion-independent array depend on the criterion requested. They live in
+   `/selection/`: NaN ΔIC excluded from normalization, `-1` in `selected[y,x,c]`. **Design
+   doc §12.5 amended** with the scoped invariant and the two routes to the fit-OK /
+   criterion-undefined test point.
+
+**Consequence for the C=2 choice: the pair is AIC and HQIC, not AIC and BIC.** HQIC has the
+wider reachable undefined region (`n ≤ 2` against BIC's `n ≤ 1`), so the criterion axis
+carries a real asymmetry rather than two criteria that agree everywhere.
+
+**Store invariant added to design doc §12.4: every store is self-contained.** No store
+resolves through another — not by zarr reference, symlink, or a path in attrs a reader must
+follow. Provenance records a source store's hashes; it never depends on that store being
+present. The recompute path therefore **copies** the groups it does not recompute.
+
 ---
 
 ## Required pre-flight for every remaining task
