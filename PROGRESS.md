@@ -826,6 +826,15 @@ will do.
   Pin the seed, and never assert `design.condition_number` as a proxy.
 - **A quadratic cannot test a step rule** (third derivative zero), and **a fixture sitting
   above a floor cannot test the floor** (`n_eff = 12` against a floor at 2.0).
+- **AMPLITUDE SPREAD IS NOT HETEROGENEITY FOR A GAUSSIAN LIKELIHOOD.** Scaling a series by
+  `c` scales every σ by `c` and leaves the shape of the surface alone, so the optimizer
+  takes the same path. Measured on the spike's iteration sample, one realization at four
+  amplitudes: `n_iter = [28, 28, 28, 28]`, utilization **exactly 1.0**. Three separate
+  fixtures used `* logspace(-1, 1, k)` and described it as what made the batch
+  heterogeneous. Real heterogeneity has to come from the **generating parameters** —
+  timescale, nugget ratio, mask — or from the realization. **A fixture's stated mechanism
+  of heterogeneity is a claim to measure**: hold everything but that mechanism fixed and
+  see whether the statistic moves.
 - **AN IDENTITY EXACT IN ℝ NEED NOT BE EXACT IN FLOAT64, AND THE EXACT CASE IS WHAT MAKES
   THE OVER-GENERALIZATION LOOK SAFE.** Task 15 asserted `array_equal` for both halves of
   the additive-variance identity. `white(3) + white(4) == white(5)` **is** bit-exact: at
@@ -1659,8 +1668,36 @@ Still open. **A new session must not assume these were settled.**
     rather than merely untested. Supporting either platform means first deciding what the
     RSS accounting should mean there — peak vs current, and what `ru_maxrss` has no
     equivalent for on Windows. Closed by that decision plus a green run on both.
-11. **`bench/spike.py`'s iteration sample is white noise fitted with two timescales, and it
-    is now mostly `DEGENERATE_HESSIAN`.** `measure_mean_iterations` builds
+11. ~~**`bench/spike.py`'s iteration sample is white noise fitted with two timescales, and it
+    is now mostly `DEGENERATE_HESSIAN`.**~~ **CLOSED 2026-08-10 (P3).** The sample is now
+    drawn from the candidate's own covariance, one parameter set per row, and all four rows
+    come back `OK` at both d=1 and d=3 with the tightest `cond(H)` a factor of **4188** below
+    `HESSIAN_COND_LIMIT`. `mean_iterations` at d=3 is **32.5** (was 90.0 on two series) and
+    utilization **0.637**; at d=1, **13.0** and **0.929**. **Every `ms/fit` column in the
+    verdict note and in `bench/*-streamed.json` is rescaled by 32.5/90.0 = 0.361 at d=3 and
+    13.0/43.3 = 0.300 at d=1**, recomputed from the stored per-pass seconds rather than
+    re-run; **no A:B ratio moves**, because the iteration count is common to both paths.
+    Path B at production B = 114 244 goes 19.5 → **7.1 ms** against the 19 ms budget.
+
+    **Two findings, one of them not the one being looked for.**
+
+    - **The general form, which is what carries:** *a fixture whose data does not come from
+      the model being fitted produces fits that are not representative of the workload, and
+      every statistic conditioned on `OK` inherits that.* Three instances of the one defect
+      now — `_healthy_row`, `_plain_batch`, the spike — and in all three the *verdicts* were
+      correct while the *sample the statistics averaged over* silently narrowed.
+    - **THE AMPLITUDE SPREAD WAS NEVER HETEROGENEITY, AND THE DOCSTRING CLAIMED IT WAS.**
+      The Gaussian log-likelihood is scale-equivariant, so `* logspace(-1, 1, 4)` cannot
+      move an iteration count. Measured, one realization at four amplitudes gives
+      `n_iter = [28, 28, 28, 28]` and utilization **exactly 1.0** — the number the same
+      docstring said the spread existed to challenge. Rows now differ by **generating
+      parameters** (timescale and nugget at a fixed unit state amplitude), which is what
+      varies across a grid. **Generalize: a fixture's stated mechanism of heterogeneity is a
+      claim to measure**, and the cheap measurement is to hold everything but that mechanism
+      fixed and see whether the statistic moves at all.
+
+    The original record, kept because the diagnosis is the transferable part:
+    `measure_mean_iterations` built
     `rng.standard_normal((4, N)) * logspace(-1, 1, 4)` and fits it with
     `white + Matérn 1/2 + Matérn 3/2` at d=3. Under the derived `HESSIAN_COND_LIMIT`,
     measured 2026-08-10: **d=3 reports `['DEGENERATE_HESSIAN', 'OK', 'DEGENERATE_HESSIAN',
@@ -1675,6 +1712,8 @@ Still open. **A new session must not assume these were settled.**
     the batch heterogeneous, exactly as `test_fit.py::_healthy_row` and `_plain_batch` now
     do. **Until then, treat the utilization figure as provisional** — PROGRESS's Task 17
     entry quoting 0.64 was measured on three series and the note quoting 0.84 on two.
+    *(The recommendation's second half — "keeping the amplitude spread" — was wrong, and
+    measuring it is what closed this. See above.)*
 
 9. ~~**`optimize.HESSIAN_COND_LIMIT = 1e10` is picked, not derived.**~~ **CLOSED 2026-08-10
    (P1), before Phase 2 planning as it required.** `HESSIAN_COND_LIMIT` is now

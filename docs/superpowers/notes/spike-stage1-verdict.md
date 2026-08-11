@@ -57,11 +57,13 @@ production scale.
 > the current numbers, and the production-scale B that replaced ~29 000, are under
 > "The one condition attached to this answer" below.
 
-Supporting measurements: mean iterations 68.7 at d=3; path A active-mask utilization
-**0.64**, so path A's real cost sits a further ~1.6× above its own optimistic bound;
-canonical filter pass 0.745 ms/series; compute reference 125.6 ns per `P = F P Fᵀ + Q` step
-at d=3 (1.00 GF/s); STREAM 10.59 GB/s at one thread against 12.03 GB/s total at four, i.e.
-**3.01 GB/s per core at full occupancy**.
+Supporting measurements: ~~mean iterations 68.7 at d=3; path A active-mask utilization
+**0.64**~~ — **both superseded 2026-08-10 (P3); see "The iteration sample was not the
+workload" below.** They are now **32.5** and **0.637**, measured on four series that are
+realizations of the fitted composite rather than on the white-noise sample these figures
+came from. Canonical filter pass 0.745 ms/series; compute reference 125.6 ns per
+`P = F P Fᵀ + Q` step at d=3 (1.00 GF/s); STREAM 10.59 GB/s at one thread against
+12.03 GB/s total at four, i.e. **3.01 GB/s per core at full occupancy**.
 
 ---
 
@@ -93,9 +95,11 @@ absence does not block the decision.
   B=1000 and the batch sweep measured **3.31** at the same B, on the same machine, minutes
   apart. The rule is met at every measurement taken, but the margin is inside the range a
   repeated measurement could move.
-- **Path B is inside the 19 ms budget by ~0.4 ms at B=20 000** (18.6 ms). That is the mini
-  PC's slow cores and it is the number a faster machine improves — but on *this* machine it
-  is not comfortable.
+- ~~**Path B is inside the 19 ms budget by ~0.4 ms at B=20 000** (18.6 ms).~~
+  **SUPERSEDED 2026-08-10 (P3).** That figure carried an iteration count measured on white
+  noise. On a representative sample path B is **6.5 ms at B=20 000** and **7.1 ms at the
+  production B = 114 244** — a 2.7× margin, not 0.4 ms. **Nothing about the ratio moved**;
+  the iteration count cancels from A:B and multiplies both ms/fit columns. See below.
 
 Where the margin is comfortable: **every other cell**. Four threads gives 4.72–5.92 at
 d=3, and the ratio **rises monotonically with gappiness in all four rows** of the full
@@ -194,7 +198,64 @@ white + Matérn 1/2 + Matérn 3/2 — white noise fitted with two timescales, th
 defect open question 9 found twice elsewhere — so the verdict is right and the sample is
 now two series wide. **The A:B ratio is unaffected**: the iteration count is common to both
 paths and cancels. The per-fit millisecond columns are not, and they carry the new count.
-See open question 11.
+See open question 11. **Closed by P3, below.**
+
+---
+
+## THE ITERATION SAMPLE WAS NOT THE WORKLOAD — P3, 2026-08-10
+
+**A fixture whose data does not come from the model being fitted produces fits that are not
+representative of the workload, and every statistic conditioned on `OK` inherits that.**
+
+`measure_mean_iterations` drew `rng.standard_normal((4, N)) * logspace(-1, 1, 4)` and fitted
+it with a composite carrying one or two free timescales. This was the **third** instance of
+one generator defect — `test_fit.py`'s `_healthy_row` (open question 9) and `_plain_batch`
+(P1) were the first two, and both were fixed by drawing from the candidate's own covariance.
+The sample now does the same, with one parameter set per row.
+
+**Two things came out of the fix, and only one of them was expected.**
+
+**1. The workload is 2.8× cheaper than reported.** Every `ms/fit` column in this note and in
+`bench/*-streamed.json` was `pass_seconds × mean_iterations`, so correcting the iteration
+count rescales both paths by the same factor and **leaves every A:B ratio, and the falsifier,
+exactly where they were.**
+
+| | old (white-noise sample) | new (drawn from the candidate) |
+|---|---|---|
+| `mean_iterations` d=3 | 90.0, over **2** OK series of 4 | **32.5**, over **4** of 4 |
+| `mean_iterations` d=1 | 43.3, over 3 of 4 | **13.0**, over 4 of 4 |
+| utilization d=3 | 0.84 | **0.637** |
+| utilization d=1 | 0.66 | **0.929** |
+
+Re-reported `ms/fit` at d=3, one thread, no gaps — recomputed from the stored per-pass
+seconds, which a fixture change cannot touch:
+
+| harness | B | path A bound | path B | A:B |
+|---|---|---|---|---|
+| spike | 1 000 | 62.7 → **22.7** | 16.3 → **5.9** | 3.84 |
+| spike | 20 000 | 68.9 → **24.9** | 17.9 → **6.5** | 3.85 |
+| sweep | 1 000 | 61.1 → **22.1** | 18.7 → **6.7** | 3.27 |
+| sweep | 20 000 | 70.2 → **25.4** | 21.4 → **7.7** | 3.28 |
+| sweep | **114 244** | 79.1 → **28.6** | 19.5 → **7.1** | 4.05 |
+
+**The verdict's conclusion strengthens and its numbers all move.** Path B is inside the
+19 ms budget by 2.7× at production B rather than being marginally outside it at 19.5 ms.
+Path A's *optimistic bound* is still 1.5× over budget, and at the measured utilization of
+0.637 its realistic cost is ~44.8 ms, **2.4× over**. Both statements are the same shape as
+before; the margins are wider.
+
+**2. THE AMPLITUDE SPREAD WAS NEVER HETEROGENEITY, AND THE FIXTURE'S OWN DOCSTRING SAID IT
+WAS.** The Gaussian log-likelihood is scale-equivariant: scaling a series by `c` scales every
+σ by `c` and leaves the shape of the surface alone. Measured — one realization at four
+amplitudes — `n_iter = [28, 28, 28, 28]` and utilization **exactly 1.0**, which is precisely
+the number the docstring said the spread existed to challenge. Whatever heterogeneity the old
+figures carried came from the noise realizations and, at d=3, from two of the four fits
+failing. Rows now differ by **generating parameters** — timescale and nugget, at a fixed unit
+state amplitude — which is what actually varies across a grid.
+
+**Scope, stated rather than assumed.** The iteration sample is four ungapped series on one
+machine. It is not a claim about the iteration count under 40% contiguous gaps, and the
+per-fit columns above inherit that. Widening it is affordable only at ~5.4 s per series.
 
 ## Carried into Phase 2 — RESOLVED 2026-08-10
 

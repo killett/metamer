@@ -179,7 +179,128 @@ def _time_pass(
     return float(best / y.shape[0])
 
 
-def measure_mean_iterations(dim: int, n_time: int, sample: int = 4) -> dict[str, float]:
+MATERN32_RHO_MULTIPLE = 6.0
+"""Separation between the two timescales in the d=3 iteration sample.
+
+Both terms have a free timescale, so a row that puts them close together is
+weakly identified whichever kernel drew it -- design doc section 4.8, and the
+static half of it is `core.lint`'s overlap rule. Six sampling-interval
+multiples apart keeps every row well clear of that ridge while leaving the
+longer scale far inside the record: the largest is `13.5 * 6 = 81` intervals,
+6.75 years against a 52.5-year record.
+"""
+
+ITERATION_ROWS: dict[int, tuple[tuple[float, float], ...]] = {
+    1: ((4.0, 0.30), (8.0, 0.40), (16.0, 0.55), (32.0, 0.75)),
+    3: ((4.0, 0.30), (6.0, 0.40), (9.0, 0.55), (13.5, 0.75)),
+}
+"""Per-row generating parameters for the iteration sample, as
+`(matern12 rho in sampling intervals, white sigma)`.
+
+**One row is one parameter set, not one amplitude.** See
+`measure_mean_iterations` for the measurement that forced that: the
+log-likelihood is scale-equivariant, so amplitude spread alone reports
+utilization of exactly 1.0.
+
+Every state amplitude is 1.0, so the pairs above are signal-to-noise ratios of
+3.3 down to 1.3 -- a spread wide enough to move the iteration count and narrow
+enough that every row stays identified. Measured margins at d=3 are
+`cond(H) = 5.3e2, 3.8e2, 6.0e3, 1.6e4` against `HESSIAN_COND_LIMIT = 6.71e7`,
+the tightest a factor of 4188.
+"""
+
+
+def _process_covariance(
+    state_space: StateSpace,
+    theta: NDArray[np.float64],
+    t: NDArray[np.float64],
+) -> NDArray[np.float64]:
+    """Sigma for one parameter set: the state terms' ACVF plus measurement noise.
+
+    Only families with `state_dim > 0` contribute to the lag part. White noise
+    lives in R and never in a state block, so summing the composite ACVF --
+    which already places sigma^2 at lag 0 -- *and* adding `R * I` would count
+    the white variance twice. And the measurement noise is keyed on INDEX, not
+    on the lag being zero, so two observations sharing a timestamp stay two
+    independent measurements.
+
+    Args:
+        state_space: The assembled state space.
+        theta: Full natural-unit parameters, shape (1, p_full).
+        t: Time axis, decimal years.
+
+    Returns:
+        Shape (t.size, t.size).
+    """
+    lags = np.abs(t[:, None] - t[None, :])
+    cov = np.zeros((t.size, t.size), dtype=np.float64)
+    for family, pslice in zip(
+        state_space.families, state_space.param_slices, strict=True
+    ):
+        if family.state_dim == 0:
+            continue
+        cov = cov + family.acvf(theta[:, pslice], lags.ravel())[0].reshape(lags.shape)
+    nugget = np.eye(t.size) * state_space.measurement_variance(theta)[0]
+    return np.asarray(cov + nugget, dtype=np.float64)
+
+
+def iteration_sample(
+    dim: int, t: NDArray[np.float64], seed: int = 5
+) -> NDArray[np.float64]:
+    """Draw the iteration sample from the candidate's OWN covariance.
+
+    **A fixture whose data does not come from the model being fitted produces
+    fits that are not representative of the workload, and every statistic
+    conditioned on `OK` inherits that.** This sample was
+    `rng.standard_normal(...) * logspace(-1, 1, 4)` -- white noise fitted with
+    a composite carrying one or two free timescales -- until 2026-08-10. With
+    no correlation structure in the data the Matern amplitudes collapse and
+    the timescales sit on a flat ridge, so under the derived
+    `HESSIAN_COND_LIMIT` the d=3 sample came back
+    `[DEGENERATE_HESSIAN, OK, DEGENERATE_HESSIAN, OK]`. The verdicts were
+    right; the sample was two series wide, and `mean_iterations` and
+    `utilization` are computed over `OK` only. **This was the third instance
+    of one generator defect** -- `test_fit.py`'s `_healthy_row` and
+    `_plain_batch` were the first two.
+
+    Rows differ by GENERATING PARAMETERS, not by amplitude. See
+    `ITERATION_ROWS` and `measure_mean_iterations`.
+
+    Args:
+        dim: 1 or 3.
+        t: Time axis, decimal years.
+        seed: RNG seed, pinned so the sample is identical across processes and
+            machines -- the iteration count multiplies both paths' ms/fit
+            columns, so a sample that moved between runs would move the budget
+            comparison with it.
+
+    Returns:
+        Shape (len(ITERATION_ROWS[dim]), t.size).
+
+    Raises:
+        KeyError: If `dim` has no row table.
+    """
+    from metamer.core.statespace import StateSpace
+
+    spec = build_spec(dim)
+    state_space = StateSpace.from_spec(spec)
+    dt = float(t[1] - t[0])
+    rng = np.random.default_rng(seed)
+    rows = []
+    for rho_intervals, white_sigma in ITERATION_ROWS[dim]:
+        rho = rho_intervals * dt
+        if dim == 1:
+            theta = np.array([[1.0, rho, white_sigma]])
+        else:
+            theta = np.array(
+                [[1.0, rho, 1.0, MATERN32_RHO_MULTIPLE * rho, white_sigma]]
+            )
+        cov = _process_covariance(state_space, theta, t)
+        rows.append(rng.multivariate_normal(np.zeros(t.size), cov))
+    return np.vstack(rows)
+
+
+def measure_mean_iterations(dim: int, n_time: int) -> dict[str, float]:
     """Fit a small real sample to get the mean iteration count and utilization.
 
     This is the one place the spike runs the actual optimizer, and it is
@@ -193,13 +314,26 @@ def measure_mean_iterations(dim: int, n_time: int, sample: int = 4) -> dict[str,
     to the slowest member without compaction. It is a property of the
     heterogeneity, not of the backend, which is why one sample serves both.
 
+    **AMPLITUDE SPREAD IS NOT HETEROGENEITY HERE, AND THE OLD DOCSTRING SAID
+    IT WAS.** The Gaussian log-likelihood is scale-equivariant: scaling a
+    series by `c` scales every sigma by `c` and leaves the surface's shape
+    alone. Measured, one realization at four amplitudes gives
+    `n_iter = [28, 28, 28, 28]` and utilization **exactly 1.0** -- which is
+    the number this measurement exists to challenge. What the old fixture
+    actually varied was the noise realization. Rows now differ by generating
+    parameters; see `ITERATION_ROWS`.
+
+    `n_ok` is reported beside the statistics because both are conditioned on
+    it. A sample silently narrowing to two series is what made the previous
+    figures uncomparable, and a rate without its denominator cannot show that.
+
     Args:
         dim: 1 or 3.
         n_time: Series length.
-        sample: Series to fit.
 
     Returns:
-        Mapping with `mean_iterations`, `max_iterations` and `utilization`.
+        Mapping with `mean_iterations`, `max_iterations`, `utilization`,
+        `n_ok` and `n_sample`.
     """
     from metamer.core.capability import Objective
     from metamer.core.criteria import Criterion
@@ -210,11 +344,7 @@ def measure_mean_iterations(dim: int, n_time: int, sample: int = 4) -> dict[str,
     spec = build_spec(dim)
     signal = SignalSpec([Constant(), Trend(), Annual(), SemiAnnual()])
     t = np.arange(n_time, dtype=np.float64) / 12.0
-    rng = np.random.default_rng(5)
-    # Heterogeneous on purpose: a homogeneous batch converges in lockstep and
-    # would report utilization of 1.0 by construction, which is the number the
-    # measurement exists to challenge.
-    y = rng.standard_normal((sample, n_time)) * np.logspace(-1, 1, sample)[:, None]
+    y = iteration_sample(dim, t)
     result = fit(y, t, signal, [spec], criterion=Criterion.AIC, objective=Objective.ML)
     ok = result.outcome[:, 0] == Outcome.OK.code
     iters = result.n_iter[:, 0][ok].astype(np.float64)
@@ -223,11 +353,15 @@ def measure_mean_iterations(dim: int, n_time: int, sample: int = 4) -> dict[str,
             "mean_iterations": float("nan"),
             "max_iterations": float("nan"),
             "utilization": float("nan"),
+            "n_ok": 0.0,
+            "n_sample": float(y.shape[0]),
         }
     return {
         "mean_iterations": float(iters.mean()),
         "max_iterations": float(iters.max()),
         "utilization": float(iters.mean() / iters.max()),
+        "n_ok": float(iters.size),
+        "n_sample": float(y.shape[0]),
     }
 
 
