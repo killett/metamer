@@ -10,6 +10,7 @@ import pytest
 
 from metamer.core.engines.kalman import KalmanEngine
 from metamer.core.signal import (
+    X_RANK_RTOL,
     Accel,
     Annual,
     Constant,
@@ -24,6 +25,33 @@ from metamer.core.signal import (
     SignalSpec,
     Trend,
 )
+
+
+def test_the_x_rank_tolerance_counts_one_squaring():
+    """`X_RANK_RTOL` is derived from float64, at the Gram's squaring.
+
+    Behaviour under test: the VALUE of the constant. Every rank assertion in
+    this file compares a fixture against it, and a fixture built around the
+    threshold moves with the threshold -- the cancellation rule, applied to a
+    tolerance.
+
+    Expected value worked out by hand rather than by restating the module's
+    own expression: no consumer uses `X` directly, they all form
+    `X' Sigma^-1 X`, whose singular values are the SQUARES. A direction
+    survives that squaring only while `(s_i/s_max)^2 > eps`, i.e. while
+    `s_i/s_max > sqrt(eps) = sqrt(2^-52) = 2^-26 = 1.4901161193847656e-08`.
+
+    Bug this catches: the previous `1e-10`, picked, 149x tighter, and wrong
+    in the direction that matters -- it called a column full rank whose
+    squared contribution `1e-20` had already vanished below `eps`. The
+    measured instance is the seconds-since-1970 design, whose second
+    singular-value ratio is `8.182e-09`: above `1e-10`, below `sqrt(eps)`,
+    and `6.7e-17` once squared. It equally catches copying
+    `objective.CONDITION_LOG_LIMIT`'s fourth root, which belongs to a
+    condition number rather than to a singular-value ratio.
+    """
+    assert X_RANK_RTOL == 2.0**-26
+    assert X_RANK_RTOL**2 == pytest.approx(np.finfo(np.float64).eps, rel=1e-12)
 
 
 def _present(t, batch=1):
@@ -134,8 +162,9 @@ def test_signal_rank_and_gram_rank_disagree_at_cond_1e7():
 
     Expected values determined independently: X is built by SVD synthesis
     with singular values fixed at [1e7, 1e4, 1.0] (cond(X) = 1e7). At
-    X_RANK_RTOL = 1e-10 all three singular values clear `1e-10 * s_max`
-    (ratios 1, 1e-3, 1e-7, all above 1e-10) so SignalSpec.rank = 3. The Gram's
+    X_RANK_RTOL = sqrt(eps) = 1.4901e-08 all three singular values clear
+    `X_RANK_RTOL * s_max` (ratios 1, 1e-3, 1e-7, all above 1.49e-8, the last
+    by a factor of 6.7) so SignalSpec.rank = 3. The Gram's
     singular values are the squares [1e14, 1e8, 1.0]; at the engine's
     GRAM_RANK_RTOL = 1e-10 the ratio for the third is (1e-7)**2 = 1e-14 <
     1e-10, so it is dropped and the Gram rank is 2. The Gram rank is computed
@@ -349,13 +378,28 @@ def test_decimal_years_vs_seconds_since_1970_condition_number():
     Annual, SemiAnnual] (task-7-report.md records the exact script and
     output): decimal years gives cond(X) ~ 3.4e1 and rank 7/7; the identical
     record in seconds since 1970 (period left un-converted, the ordinary way
-    this contract gets violated) gives cond(X) > 1e30 and rank 2 of 7 --
+    this contract gets violated) gives cond(X) > 1e30 and rank **1** of 7 --
     pinned exactly (fix round 1: the original version only asserted
     `rank < 7`, which a broken column that merely dropped rank by one, to 6,
     would also have passed). The condition-number bounds stay coarse, since
     the precise value is sensitive to the exact epoch chosen (see
     task-7-report.md for what was actually measured), but the rank collapse
     itself is deterministic for this fixed t and is pinned exactly.
+
+    THE SECONDS RANK WAS 2 UNTIL 2026-08-10 AND THE CHANGE IS THE POINT.
+    `X_RANK_RTOL` was the picked `1e-10` and is now the derived `sqrt(eps) =
+    1.4901e-08`. Measured, this design's singular-value ratios on the seconds
+    axis are
+
+        1.000e+00  8.182e-09  5.185e-17  1.228e-21  1.177e-26  4.723e-33  3.040e-33
+
+    and the second one, `8.182e-09`, is the whole difference: it clears `1e-10`
+    and does not clear `sqrt(eps)`. Squared -- which is what the Gram sees --
+    it is `6.7e-17`, below `eps`, so that column contributes nothing any
+    consumer can carry and the old constant was calling a numerically dead
+    direction alive. On the years axis the smallest ratio is `2.978e-02`,
+    twenty-six orders clear of either threshold, so the contract's good case
+    is nowhere near the boundary and this test is not measuring the constant.
     """
     n = 20 * 12
     t_years = 2000.0 + np.arange(n) / 12.0
@@ -367,7 +411,7 @@ def test_decimal_years_vs_seconds_since_1970_condition_number():
     seconds_per_year = 365.25 * 86400
     t_seconds = (t_years - 1970.0) * seconds_per_year
     seconds_info = spec.design_info(t_seconds, _present(t_seconds))
-    assert seconds_info.rank[0] == 2
+    assert seconds_info.rank[0] == 1
     assert seconds_info.condition_number[0] > 1e20
 
 
@@ -622,8 +666,9 @@ def test_numerically_deficient_design_has_finite_gram_logdet():
     determinant merely happens to still be nonzero to float64 precision.
 
     Expected values determined independently: X is built by SVD synthesis
-    with singular values fixed at [1, 1e-2, 1e-11]. At X_RANK_RTOL = 1e-10
-    the ratio 1e-11/1 = 1e-11 is below tolerance, so rank = 2 of 3
+    with singular values fixed at [1, 1e-2, 1e-11]. At X_RANK_RTOL =
+    sqrt(eps) = 1.4901e-08 the ratio 1e-11/1 = 1e-11 is below tolerance
+    (it was also below the previous 1e-10), so rank = 2 of 3
     (deficient), but log|X'X| = 2*sum(log(s)) = 2*(log(1) + log(1e-2) +
     log(1e-11)) = -59.867..., a large negative but perfectly finite number,
     not -inf.
@@ -709,9 +754,21 @@ def test_gram_logdet_accurate_at_cond_1e9_slogdet_route_fails():
     few digits: `np.linalg.slogdet` returns a NEGATIVE sign for this exactly
     positive-semidefinite Gram matrix -- which the pre-fix `design_info`
     (`float(logdet) if sign > 0 else float("-inf")`) would have turned into
-    `gram_logdet = -inf`, misclassifying a design that is actually full rank
-    (4 of 4, since s_min/s_max = 1e-9 clears X_RANK_RTOL = 1e-10) as exactly
-    singular -- a far worse failure than an imprecise-but-finite number.
+    `gram_logdet = -inf`, i.e. **exactly singular**. A finite, if very
+    negative, number is the honest answer for a design that is merely
+    numerically deficient, and it is what `2 * sum(log(svdvals(X)))` gives.
+    THAT is what this test pins, and it holds whatever the rank comes out as.
+
+    THE RANK ASSERTION MOVED FROM 4 TO 3 ON 2026-08-10, and the fixture is
+    what was wrong, not the tolerance. `X_RANK_RTOL` was the picked `1e-10`,
+    under which `s_min/s_max = 1e-9` cleared and this design read as full
+    rank. It is now the derived `sqrt(eps) = 1.4901e-08`, which `1e-9` does
+    not clear. The derivation says why the old answer was wrong rather than
+    merely different: every consumer of this rank forms the Gram, whose
+    singular values are the squares, and `(1e-9)^2 = 1e-18` is below `eps`.
+    The docstring above already says this Gram is "deep in float64's ~1e16
+    precision-loss regime"; calling a design full rank in that regime is the
+    contradiction the derived constant removes.
 
     Expected value determined independently, on paper, not by running the
     code under test: X is built by SVD synthesis with singular values fixed
@@ -731,8 +788,10 @@ def test_gram_logdet_accurate_at_cond_1e9_slogdet_route_fails():
     info = SignalSpec([Regressor(x[:, i]) for i in range(4)]).design_info(
         t, _present(t)
     )
-    assert info.rank[0] == 4
-    assert info.is_deficient[0] is np.False_
+    assert info.rank[0] == 3
+    assert info.is_deficient[0] is np.True_
+    # The point of the test: FINITE and accurate, deficient or not.
+    assert np.isfinite(info.gram_logdet[0])
     assert info.gram_logdet[0] == pytest.approx(expected_gram_logdet, rel=1e-6)
 
     # Confirm the slogdet route this fix replaces actually fails, deliberate

@@ -14,6 +14,16 @@ gap in this module, not a run-time accident. (`ILL_CONDITIONED_X` is *not* the
 counterpart: it is a property of the whitened design matrix, and this pass
 never sees a design.)
 
+**BOTH HALVES ARE NOW DERIVED FROM float64, WHICH THEY WERE NOT UNTIL
+2026-08-10.** `HESSIAN_COND_LIMIT` was a picked `1e10` against a derived
+`eps^(-1/2) = 6.711e7`, so the a-posteriori half was ~150x more permissive
+than this one and a composite flagged here could come back `OK` from the fit
+-- the pair agreeing was not something either constant enforced. The two are
+comparable again by construction, not by coincidence: this module's
+`WHITE_COLLAPSE_LOG_LIMIT` is `-0.5*log(eps)` because a minimum is locatable
+only to `sqrt(eps)`, and that limit is `eps^(-1/2)` because the Hessian is
+inverted once. Both are `2**26` in their own units.
+
 Near-degeneracy is a geography, not a per-fit accident. Every rule here is a
 statement about the *searched space*, so it depends on which parameters are
 free:

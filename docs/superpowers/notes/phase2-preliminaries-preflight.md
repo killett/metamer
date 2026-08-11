@@ -170,7 +170,111 @@ package version either.
 
 ## P1 — `HESSIAN_COND_LIMIT`, and the constants around it
 
-*(Filled in with the P1 commit.)*
+### (f)/(g) — the brief's own dependency claim, checked against the tree
+
+Carried forward from the P0 section: **`RANK_DEFICIENT_LOG_LIMIT` does not rest on
+`signal.X_RANK_RTOL`.** It rests on `engines.kalman._RANK_RTOL`. The brief inherits the
+handoff's wording — "re-derive `X_RANK_RTOL` rather than keeping it … a derived constant
+resting on a picked one inherits the arbitrariness" — and the second half of that sentence
+is aimed at the wrong constant. Acting on the brief verbatim would have re-derived
+`X_RANK_RTOL`, left `RANK_DEFICIENT_LOG_LIMIT` resting on `_RANK_RTOL` exactly as before,
+and produced a report saying the arbitrariness had been removed.
+
+Checked further, and this is the part that changes the answer rather than merely the
+citation: **`_RANK_RTOL` is not a picked constant.** Its docstring carries a measured
+calibration table (cond(X_w) against the Gram's singular-value ratio, at n = 200 on
+numpy 2.x / OpenBLAS) and a window bounded from both sides — an exactly deficient design
+lands at 0 or ~5e-17 of the leading singular value, and a Gram accumulated at
+`cond(X_w) = 1e8` has already lost its small singular value into float64 noise, so a
+threshold below ~1e-16 would be reading rounding error. The standing rule offers three
+acceptable states, "derive, measure, or document explicitly why a picked value is
+correct"; `_RANK_RTOL` is in the second and third of them and is left alone. Saying so is
+the finding, because the alternative was moving a calibrated constant on the strength of a
+misquoted dependency.
+
+### (i) — can the brief's expected outcome be observed at all?
+
+The brief predicts `DEGENERATE_HESSIAN` will "start firing on cases that previously
+reported OK" and asks which fixtures move. Before changing anything, the question is
+whether the suite contains a fixture *capable* of showing it: a fixture whose `cond(H)`
+lands between `6.7e7` and `1e10`. It does, and finding it first is what made the result
+interpretable rather than a surprise. `test_fit.py::_plain_batch` builds
+`rng.standard_normal(...) + trend` and fits it with `[white, white + Matérn 1/2]` — **pure
+white noise fitted with a composite that has a timescale**, which is precisely the
+construction open question 9 diagnosed in `_mixed_batch`'s row 0 and fixed there. Measured
+before the constant was touched, at `batch=2, n=200`: series 0 at
+`sigma_matern = 9.3e-4`, `cond(H) = 1.194e+08`; series 1, same generator and seed stream,
+at `cond(H) = 1.447e+03`. **One non-identified row and one healthy row from an identical
+construction** is the signature of a fixture that is not asserting what it claims, and it
+was invisible under `1e10` because `1.194e+08` reads as healthy by 84x.
+
+So the answer to "is this fixture genuinely healthy?" was available *before* the change,
+which is the only order in which the question can be answered honestly.
+
+### (a) — the cancellation rule, applied to a threshold
+
+**Every rank, outcome and tolerance assertion in the suite compares a fixture against the
+constant, so both sides move together and the constant's value is invisible to all of
+them.** This is the same structure as the hash module's, where six comparison tests passed
+against a silently unstable serializer. The cure is the same: an absolute value, worked out
+by hand. Each of the four constants now has a pin stated as a power of two —
+`HESSIAN_COND_LIMIT == 2**26`, `X_RANK_RTOL == 2**-26`,
+`_NEGATIVE_REDUCTION_RTOL == 2**-26` — plus the other half of its derivation written as an
+independent identity (`eps * HESSIAN_COND_LIMIT == sqrt(eps)`,
+`X_RANK_RTOL**2 == eps`, `_NEGATIVE_REDUCTION_RTOL == eps * exp(2*CONDITION_LOG_LIMIT)`).
+Restating `float(EPS) ** -0.5` in the test would assert only that the line was copied.
+
+### The three landing on `2^±26` is a hazard, not a confirmation
+
+`HESSIAN_COND_LIMIT = eps^(-1/2)`, `X_RANK_RTOL = eps^(1/2)` and
+`_NEGATIVE_REDUCTION_RTOL = eps^(1/2)` are the same numeral by three different routes: one
+inversion; one squaring; one solve at the worst admitted conditioning. The standing rule
+warns that copying the neighbouring constant is the measured default mistake, and a family
+that agrees numerically is exactly the condition under which copying looks safe. Each
+docstring therefore states its own count and names the neighbour whose exponent must
+**not** be borrowed — `objective.CONDITION_LOG_LIMIT` takes a *fourth* root because its
+solve forms the normal equations.
+
+### (h)/(e) — `GRAD_TOL`, where the brief's three options all fail
+
+The brief says "derive, measure, or document explicitly why a picked value is correct".
+Attempting the first is what produced the finding. Two candidate derivations exist and
+both are wrong:
+
+- **`sqrt(eps)`**, by the same argument that fixes `WHITE_COLLAPSE_LOG_LIMIT` — a model
+  difference below `sqrt(eps)` is unresolvable. Measured, no converged fit gets within
+  three decades of `1.49e-08`, so `ITER_CAP_SMALL_GRAD` would have become dead code.
+- **`eps^(2/3)`**, the finite-difference gradient's own error floor. Measured against a
+  nested-Richardson gradient at the optimum, that floor really is ~3e-10 relative to
+  `|loglik|` — and it is not what stops the optimizer either.
+
+**The floor is set by scipy's L-BFGS-B stopping rule**, which is not a property of float64
+at all, so this constant is measured rather than derived and is labelled as such. What it
+separates is two populations, measured over six fits, two compositions and three record
+lengths:
+
+    converged (max_iter = 200, OK)              3.46e-07 .. 2.30e-05
+    genuinely unconverged (max_iter = 1, 2, 3)  1.45e-04 .. 1.84e-02
+
+**The previous `1e-5` sat below the converged population's maximum**, so a fit that was
+done would be reported `ITER_CAP_LARGE_GRAD`. That is the clamp rule inverted: a guard
+below the diagnostic limit of what it guards does not fabricate a number, it makes the
+milder outcome under-reachable and mislabels the fits that do reach it. `5e-5` sits 2.2x
+above the converged maximum and 2.9x below the unconverged minimum. A 2-3x margin is
+accepted here and would not be accepted for `HESSIAN_COND_LIMIT`, because both cap outcomes
+are already `is_failure` — this splits one flagged category in two rather than calling a
+bad fit good, and the docstring says so.
+
+### What the change surfaced that the brief did not anticipate
+
+Making `_plain_batch` honest broke `test_bic_neff_and_bic_disagree_end_to_end`, which is
+not a constants failure at all. On white noise the white candidate won every series, so the
+correlated candidate's ΔIC was always positive and comparing it across criteria was safe.
+On data that really is correlated the correlated candidate **wins** some series, and a
+winner's ΔIC is zero under both criteria by definition, so the assertion became `0 < 0`.
+**A fixture made honest can invalidate an assertion that was only true because the fixture
+was dishonest** — and the failure names the criterion, not the fixture, so it reads as a
+regression in the thing that is still correct.
 
 ---
 

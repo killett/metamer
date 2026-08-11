@@ -14,6 +14,7 @@ from metamer.core.capability import EngineId, Objective
 from metamer.core.engines.kalman import KalmanEngine
 from metamer.core.engines.protocol import ScoredResult
 from metamer.core.objective import (
+    _NEGATIVE_REDUCTION_RTOL,
     CONDITION_LOG_LIMIT,
     OUTCOME_PRECEDENCE,
     RANK_DEFICIENT_LOG_LIMIT,
@@ -801,6 +802,38 @@ def test_the_conditioning_ladder_is_ordered_and_derived_from_float64():
     # And the band is wide enough to be reachable in practice, not merely
     # ordered by a rounding error.
     assert RANK_DEFICIENT_LOG_LIMIT - CONDITION_LOG_LIMIT > 1.0
+
+
+def test_the_implausible_reduction_tolerance_is_the_solve_error_at_that_limit():
+    """`_NEGATIVE_REDUCTION_RTOL` is derived from `CONDITION_LOG_LIMIT`.
+
+    Behaviour under test: the VALUE of the constant, which every other test
+    of `implausible_reduction_mask` is blind to -- they all compare a
+    reduction against a bound that moves with it.
+
+    Expected value worked out by hand and not by restating the module's own
+    expression: `rss_reduction` comes out of one Cholesky solve against the
+    Gram, so its relative forward error is `eps * cond(Gram)`; the largest
+    `cond(Gram)` reachable before `ILL_CONDITIONED_X` fires is
+    `cond(X_w)^2 = (eps^(-1/4))^2 = eps^(-1/2)`; so the largest excursion
+    attributable to rounding is `eps * eps^(-1/2) = sqrt(eps)`, and
+    `sqrt(2^-52) = 2^-26 = 1.4901161193847656e-08` exactly.
+
+    Bug this catches: the previous `1e-6`, which was picked and is 67x
+    looser, so an `rss_reduction` overshoot of up to `1e-6` of `y'Sigma^-1y`
+    passed as rounding. The upper-bound half is the dangerous one: an
+    overshoot drives `y'Py` negative, raises the log-likelihood above its
+    true value, and a too-high log-likelihood wins model selection. It also
+    catches the reverse error -- tightening below `sqrt(eps)`, which would
+    make the check fire on genuine rounding at the worst conditioning the
+    module still admits.
+    """
+    assert _NEGATIVE_REDUCTION_RTOL == 2.0**-26
+    # Stated the other way as well, so the two halves of the derivation are
+    # both pinned: it is exactly eps times the largest admitted cond(Gram).
+    assert _NEGATIVE_REDUCTION_RTOL == pytest.approx(
+        np.finfo(np.float64).eps * float(np.exp(2.0 * CONDITION_LOG_LIMIT)), rel=1e-12
+    )
 
 
 @pytest.mark.parametrize(

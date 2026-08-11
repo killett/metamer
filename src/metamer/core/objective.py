@@ -281,8 +281,38 @@ if not CONDITION_LOG_LIMIT < RANK_DEFICIENT_LOG_LIMIT:  # pragma: no cover
         "RANK_DEFICIENT_X and the milder outcome would be dead code."
     )
 
-_NEGATIVE_REDUCTION_RTOL = 1e-6
-"""Relative size of a residual-reduction excursion below zero that is not rounding."""
+_NEGATIVE_REDUCTION_RTOL: float = _EPS**0.5
+"""Excursion in `rss_reduction` too large to be rounding. sqrt(eps) = 1.490e-8.
+
+DERIVED, NOT PICKED. It was `1e-6` until 2026-08-10, and `1e-6` is not a
+statement about anything: the quantity it bounds has a forward error this
+module already knows the size of.
+
+UNITS: relative to `max(|quadratic|, 1)`, i.e. to `y' Sigma^-1 y`, which is
+both the upper bound on `rss_reduction` and its natural scale.
+
+THE DERIVATION, WHICH RESTS ON `CONDITION_LOG_LIMIT` AND NOT ON A SECOND
+OPINION. `rss_reduction` comes out of one Cholesky solve against the
+accumulated Gram, so its relative forward error goes like `eps * cond(Gram)`.
+The largest `cond(Gram)` this module admits is fixed by `CONDITION_LOG_LIMIT`:
+above `cond(X_w) = eps^(-1/4)` the series is already reported
+`ILL_CONDITIONED_X`, and `cond(Gram) = cond(X_w)^2 = eps^(-1/2)`. So the
+largest excursion attributable to rounding, anywhere this check can still be
+reached, is
+
+    eps * cond(Gram)_max = eps * eps^(-1/2) = sqrt(eps) = 1.4901e-08
+
+and anything bigger is not rounding. Note the exponent is inherited rather
+than chosen: it is one squaring (the Gram) and one solve, and it is stated in
+the same units as the limit it comes from so the two are comparable.
+
+CONSEQUENCE: 67x tighter than `1e-6`, so `IMPLAUSIBLE_REDUCTION` now fires on
+excursions between `sqrt(eps)` and `1e-6` of the quadratic form that were
+previously silent. That is the intended direction -- the upper-bound half of
+this check is the dangerous one, because an `rss_reduction` above `y'Sigma^-1y`
+drives `y'Py` negative and raises the log-likelihood above its true value,
+which wins model selection.
+"""
 
 
 @dataclass(frozen=True)

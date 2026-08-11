@@ -147,6 +147,62 @@ only the durable conclusions are here.
   read at import time or at call time, and asserts `run_hash` **does** move so the fixture
   can fail at all. 4/4 mutations caught.
 
+### P1 — the constants around `HESSIAN_COND_LIMIT` (closes open question 9)
+
+Four constants, each with its own derivation stated in its own docstring in the units of
+the quantity it thresholds. **They are not one construction with four names**, and three of
+them landing on `2^±26` by different routes is a hazard rather than a confirmation.
+
+| constant | was | is | why |
+|---|---|---|---|
+| `optimize.HESSIAN_COND_LIMIT` | `1e10`, picked | `eps^(-1/2)` = **6.7109e7** | H is inverted **once**, for `H^-1` and `theta_err`; `eps·cond(H) = √eps` |
+| `signal.X_RANK_RTOL` | `1e-10`, picked | `eps^(1/2)` = **1.4901e-08** | no consumer uses X directly; they form the Gram, so the ratio is **squared** |
+| `objective._NEGATIVE_REDUCTION_RTOL` | `1e-6`, picked | `eps^(1/2)` = **1.4901e-08** | `eps` × the largest `cond(Gram)` reachable before `ILL_CONDITIONED_X` fires |
+| `optimize.GRAD_TOL` | `1e-5`, picked | **5e-5**, measured | NOT eps-derivable — see below |
+
+- **`GRAD_TOL` cannot be derived from float64 and is labelled a measured separator.** Its
+  floor is set by **scipy's L-BFGS-B stopping rule**, not by the arithmetic: measured at the
+  optimum against a nested-Richardson gradient, the finite-difference instrument's own floor
+  is ~3e-10 relative to `|loglik|`, and no converged fit comes within four decades of it.
+  What it separates is measured, over six fits spanning two compositions and three record
+  lengths: **converged 3.46e-07 .. 2.30e-05**, **stopped at one to three iterations
+  1.45e-04 .. 1.84e-02**, two populations a factor of 6.3 apart with nothing between them.
+  **The old `1e-5` sat BELOW the converged maximum**, so two of the six converged fits would
+  have been filed `ITER_CAP_LARGE_GRAD` had they hit the cap — the clamp rule pointed the
+  other way: a guard *below* the diagnostic limit of what it guards makes the milder outcome
+  under-reachable. Both bounds are now pinned by a test that fails against `1e-5` and
+  against `5e-4`.
+- **THE HANDOFF'S ATTRIBUTION WAS WRONG AND IT MATTERED.**
+  `objective.RANK_DEFICIENT_LOG_LIMIT` is derived from `engines.kalman._RANK_RTOL` (the
+  **Gram** cutoff), not from `signal.X_RANK_RTOL`. Different modules, different matrices,
+  same numeral `1e-10` — which is the whole mechanism of the misreading. Re-deriving
+  `X_RANK_RTOL` alone would have left the derived constant resting on the other one.
+- **`kalman._RANK_RTOL` stays at `1e-10`, and that is the "measure or document" branch of
+  the rule, not the "picked" branch.** Its docstring carries a measured calibration table
+  and a two-sided window: an exactly deficient design puts its null singular value at 0 or
+  ~5e-17 of the leading one, while a Gram accumulated at `cond(X_w) = 1e8` has already lost
+  its small singular value into float64 noise, so anything below ~1e-16 reads rounding.
+- **FOUR FIXTURES MOVED. NONE WAS HEALTHY.**
+
+  | fixture | what changed | verdict |
+  |---|---|---|
+  | `test_fit.py::_plain_batch` (2 tests) | one series went `OK` → `DEGENERATE_HESSIAN` at `cond(H) = 1.194e+08` | **the fixture was wrong.** It was pure white noise fitted with white + Matérn 1/2 — open question 9's own defect, in the fixture that was never fixed. Its sibling row, same generator and seed stream, sat at `cond(H) = 1.447e+03`. Now drawn from the composite's own covariance, as `_healthy_row` already was |
+  | `test_signal.py::test_decimal_years_vs_seconds_since_1970` | seconds-axis rank 2 → **1** | **the constant was wrong.** The ratio that decides it is `8.182e-09`: clears `1e-10`, does not clear `√eps`, and is `6.7e-17` once squared — a numerically dead direction the old value called alive |
+  | `test_signal.py::test_gram_logdet_accurate_at_cond_1e9` | rank 4 → **3**, deficient | **the constant was wrong.** `(1e-9)² = 1e-18` is below `eps`; the test's own docstring already called that Gram "deep in float64's ~1e16 precision-loss regime" |
+
+- **A knock-on the constants did not cause but the fixture did.**
+  `test_bic_neff_and_bic_disagree_end_to_end` compared the correlated candidate's ΔIC
+  across criteria. On genuinely correlated data that candidate **wins** some series, and a
+  winner's ΔIC is 0 under both criteria by definition, so the comparison asserted `0 < 0`.
+  The winner mask is now explicit and the reason is in the test. **Generalize: a fixture
+  made honest can invalidate an assertion that was only true because the fixture was
+  dishonest.**
+- **Every one of the four constants now has an absolute pin**, hand-worked as a power of two
+  rather than by restating the module's own expression. Without it the whole family is
+  invisible to its own tests: every rank, outcome and tolerance assertion compares a fixture
+  against the constant, so both sides move together. That is the cancellation rule applied
+  to a threshold.
+
 ---
 
 ## Required pre-flight for every remaining task
@@ -1534,19 +1590,12 @@ Still open. **A new session must not assume these were settled.**
     rather than merely untested. Supporting either platform means first deciding what the
     RSS accounting should mean there — peak vs current, and what `ru_maxrss` has no
     equivalent for on Windows. Closed by that decision plus a green run on both.
-9. **`optimize.HESSIAN_COND_LIMIT = 1e10` is picked, not derived**, while its static
-   counterpart in `lint.py` is derived from float64 — so the two halves of §4.8 sit on
-   different footings. The eps rule gives `1/√eps = 6.7e7` for a single inversion.
-   **BLOCKING for the point where the identifiability machinery is actually used, which is
-   the start of Phase 2 — close it before, not at.** `1e10` against `6.7e7` is precisely the
-   band in which a near-degenerate fit reports as healthy, so the *a posteriori* half is
-   currently more permissive than the *a priori* half by ~150×, and a candidate the lint
-   flags can come back `OK`. Changing it moves a reported outcome (`DEGENERATE_HESSIAN`),
-   so it needs its own tests, not a drive-by edit. **When it is resolved, re-derive
-   `signal.X_RANK_RTOL = 1e-10` in the same pass rather than keeping it** —
-   `RANK_DEFICIENT_LOG_LIMIT` is derived *from* it, and a derived constant resting on a
-   picked one inherits the arbitrariness it was supposed to remove. See the
-   eps-derived-constant sweep above.
+9. ~~**`optimize.HESSIAN_COND_LIMIT = 1e10` is picked, not derived.**~~ **CLOSED 2026-08-10
+   (P1), before Phase 2 planning as it required.** `HESSIAN_COND_LIMIT` is now
+   `eps^(-1/2) = 2**26 = 6.7109e7` — one inversion, so one square root — and §4.8's two
+   halves are on the same footing. Three related constants moved with it; the full record,
+   including which fixtures flipped and why none of them was healthy, is in the **Phase 2
+   preliminaries** section above.
 
 ---
 

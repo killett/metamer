@@ -119,10 +119,41 @@ def _healthy_row():
 
 
 def _plain_batch(batch=3, n=120, seed=5):
-    """A small well-conditioned batch with a shared complete mask."""
-    rng = np.random.default_rng(seed)
+    """A small well-conditioned batch with a shared complete mask.
+
+    EVERY ROW IS A REALIZATION OF CANDIDATE 1'S OWN PROCESS -- white +
+    Matern 1/2 with `rho` at ten sampling intervals -- plus the trend the
+    design carries. It was `rng.standard_normal(...) + trend` until
+    2026-08-10, i.e. **pure white noise fitted with a composite that has a
+    timescale**, which is the same defect open question 9 diagnosed in
+    `_mixed_batch`'s row 0 and fixed there. With no Matern structure in the
+    data its amplitude collapses and `rho` sits on a flat ridge: measured on
+    the old fixture at `batch=2, n=200`, series 0 came out at
+    `sigma_matern = 9.3e-4` with `cond(H) = 1.194e+08`, and series 1 -- same
+    generator, same seed stream -- came out at `cond(H) = 1.447e+03`. One
+    non-identified row and one healthy one from an identical construction is
+    the signature of a fixture that is not asserting what it claims.
+
+    That went unnoticed because `HESSIAN_COND_LIMIT` was `1e10`, under which
+    `1.194e+08` reads as healthy by 84x. The limit is now the derived
+    `eps^(-1/2) = 6.711e+07` and the row is correctly `DEGENERATE_HESSIAN`.
+    **The lesson is open question 9's, restated: a fixture that is healthy by
+    a large factor is not healthy.** `rho` at ten sampling intervals is
+    `_healthy_row`'s choice and for its reasons -- far enough above the
+    sampling interval that the Matern component is distinguishable from the
+    white one, far enough below the record length that the design's own
+    intercept does not absorb it.
+
+    Drawn from the composite covariance directly rather than by iterating an
+    AR(1) recursion, so the fixture shares no construction with the
+    state-space machinery it exercises.
+    """
     t = np.arange(float(n)) / 12.0
-    y = rng.standard_normal((batch, n)) + 0.4 * (t - t.mean())
+    spec = ProcessSpec((_term("white"), _term("matern12")))
+    theta = np.array([[0.5, 1.0, 10.0 * float(t[1] - t[0])]])
+    cov = _covariance(StateSpace.from_spec(spec), theta, t)
+    rng = np.random.default_rng(seed)
+    y = rng.multivariate_normal(np.zeros(n), cov, size=batch) + 0.4 * (t - t.mean())
     return y, t, SignalSpec([Constant(), Trend()]), np.ones((batch, n), dtype=bool)
 
 
@@ -397,15 +428,23 @@ def test_bic_neff_and_bic_disagree_end_to_end():
     assert np.all(np.isfinite(loose.ranking.ic_best))
     assert not np.allclose(strict.ranking.delta_ic, loose.ranking.delta_ic)
     # The looser penalty shows up on the CORRELATED candidate, whose n_eff is
-    # below n; the winner here is the white candidate, whose n_eff equals n
-    # exactly, so its criterion value is identical under both and comparing
-    # `ic_best` would test nothing. Measured: n_eff 194.25 against n = 200 for
-    # candidate 1 of series 1, moving its delta-IC from 7.823 to 7.677.
+    # below n. The white candidate's n_eff equals n exactly, so its criterion
+    # value is identical under both and comparing `ic_best` would test nothing.
+    #
+    # THE WINNER MASK IS LOAD-BEARING, and it became so when `_plain_batch`
+    # started drawing from candidate 1's own process on 2026-08-10. On white
+    # noise the white candidate won every series and the correlated candidate's
+    # delta-IC was always positive; on data that really is correlated, the
+    # correlated candidate wins some of them, and where it wins its delta-IC is
+    # ZERO BY DEFINITION under both criteria. Comparing those series asserts
+    # `0 < 0` and fails for a reason that has nothing to do with the criterion.
+    # Measured at batch=2, n=200: series 0 moves 1.6888 -> 1.0057, series 1 is
+    # the winner and sits at 0.0 under both.
     correlated = loose.n_eff_bic[:, 1] < loose.n_eff_bic[:, 0]
     assert correlated.any(), "no candidate reported a reduced effective count"
-    assert np.all(
-        loose.ranking.delta_ic[correlated, 1] < strict.ranking.delta_ic[correlated, 1]
-    )
+    moved = correlated & (strict.ranking.delta_ic[:, 1] > 0.0)
+    assert moved.any(), "the correlated candidate won everywhere; nothing to compare"
+    assert np.all(loose.ranking.delta_ic[moved, 1] < strict.ranking.delta_ic[moved, 1])
 
 
 def test_n_eff_trend_is_written_when_the_design_has_a_trend():

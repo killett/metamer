@@ -64,23 +64,49 @@ from typing import Protocol, runtime_checkable
 import numpy as np
 from numpy.typing import NDArray
 
-X_RANK_RTOL = 1e-10
-"""Relative singular-value tolerance for the numerical rank of X itself.
+X_RANK_RTOL: float = float(np.finfo(np.float64).eps) ** 0.5
+"""Relative singular-value tolerance for the numerical rank of X. sqrt(eps).
 
-Thresholds the singular values of the DESIGN MATRIX `X` directly. Contrast with
-`metamer.core.engines.kalman._RANK_RTOL`, which thresholds the accumulated
-GRAM `X'Sigma^-1 X`: squaring a matrix squares its condition number, so a Gram
-threshold of `1e-10` is an effective `1e-5` tolerance on `X`'s own singular
-values -- five orders of magnitude looser than this constant. **The engine's
-threshold is the calibrated one** (its docstring records the measured
-`sqrt(1e-10) = 1e-5` correspondence and the reasoning for keeping it at that
-value); this constant only governs `SignalSpec.rank`'s upfront, X-only
-diagnostic -- `design_matrix`'s returned rank and `DesignInfo.rank`. A design
-this module calls full rank can still be reported rank-deficient once the
-engine forms the Gram over a series' unmasked epochs:
-`test_signal_rank_and_gram_rank_disagree_at_cond_1e7` in the test suite pins a
-synthetic design at `cond(X) = 1e7` where the two literally disagree (3 here,
-2 there), so the gap is a recorded fact rather than a future surprise.
+DERIVED FROM float64, NOT PICKED. It was `1e-10` until 2026-08-10 -- a round
+number with no argument behind it, and 149x tighter than the derivation gives,
+which is the wrong direction: it called a column full rank whose contribution
+to the Gram had already vanished.
+
+UNITS: a ratio of singular values of the DESIGN MATRIX `X` itself,
+`s_i / s_max`, not of the Gram.
+
+THE DERIVATION. COUNT THE SQUARINGS. `X` is never used directly: every
+consumer of this rank forms `X' Sigma^-1 X`, whose singular values are the
+SQUARES of the whitened design's. A direction survives that squaring only if
+its squared ratio is still representable,
+
+    (s_i / s_max)^2 > eps   =>   s_i / s_max > sqrt(eps) = 1.4901e-08
+
+so `sqrt(eps)` is where a column stops contributing anything the Gram can
+carry. One squaring, hence the square root -- the same count that gives
+`objective.CONDITION_LOG_LIMIT` its fourth root (that constant thresholds a
+condition number, which is a ratio of a ratio; this one thresholds the ratio).
+Copying either exponent to the other is the measured default mistake.
+
+CONSEQUENCE, STATED SO IT IS NOT QUIETLY RETUNED: a design whose singular
+values span more than `1/sqrt(eps) = 6.7e7` is now reported rank deficient
+where `1e-10` called it full rank. The measured instance is
+`test_gram_logdet_accurate_at_cond_1e9_slogdet_route_fails`, whose fixture sits
+at `cond(X) = 1e9`: its Gram is at `cond = 1e18`, past float64 entirely, and
+calling it full rank was the old constant's error rather than that fixture's.
+
+CONTRAST WITH THE ENGINE'S GRAM CUTOFF, which is a different constant with a
+different job. `engines.kalman._RANK_RTOL` thresholds the accumulated
+`X'Sigma^-1X`, and it is **calibrated with a recorded measurement** rather than
+derived -- its docstring carries the measured window that bounds it from both
+sides and its reason for staying at `1e-10`, which is an effective `1e-5` on
+`X_w`'s own singular values. `objective.RANK_DEFICIENT_LOG_LIMIT` is derived
+from THAT constant, not from this one; PROGRESS.md and the Phase 1 handoff said
+otherwise, and were wrong. This constant only governs `SignalSpec.rank`'s
+upfront, X-only diagnostic -- `design_matrix`'s returned rank and
+`DesignInfo.rank`. The two still disagree by construction, which is the point:
+`test_signal_rank_and_gram_rank_disagree_at_cond_1e7` pins a synthetic design
+at `cond(X) = 1e7` where this module says 3 and the engine says 2.
 """
 
 

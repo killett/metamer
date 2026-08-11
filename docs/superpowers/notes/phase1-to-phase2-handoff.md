@@ -151,6 +151,14 @@ many times the quantity is squared or differenced on its way to the objective.**
 | `lint.WHITE_COLLAPSE_LOG_LIMIT` | ℓ is quadratic in θ near the optimum, so a model difference is resolvable only above `√eps` — one squaring | `−½·log eps` | 18.0218 |
 | `objective.CONDITION_LOG_LIMIT` | the solve runs on the normal equations, so the Cholesky sees `cond(X_w)²` | `−¼·log eps` | 9.0109 |
 | `gradients.fd_step` / `hessian_step` | an `m`-th difference divides by `h^m` | `eps^(1/(m+2))` | 6.055e-06 / 1.221e-04 |
+| `optimize.HESSIAN_COND_LIMIT` | H is inverted **once**, for `H^-1` and `theta_err` | `eps^(-1/2)` | 6.7109e7 = 2²⁶ |
+| `signal.X_RANK_RTOL` | every consumer forms the Gram, so the ratio is squared | `eps^(1/2)` | 1.4901e-08 = 2⁻²⁶ |
+| `objective._NEGATIVE_REDUCTION_RTOL` | `eps` × the largest `cond(Gram)` reachable before `ILL_CONDITIONED_X` | `eps · eps^(-1/2)` | 1.4901e-08 = 2⁻²⁶ |
+
+**The last three landed 2026-08-10 (P1) and all three replaced picked values.** They come
+out at `2^±26` by three different routes, which is a hazard in itself: state each
+derivation separately and never reach for the neighbour's exponent because the answer
+looks familiar.
 
 State each in the **units of the quantity it thresholds** so they are comparable. **When a
 fourth is needed, count the squarings and differences and read the exponent off — do not
@@ -162,9 +170,33 @@ its consequence stated.** `lint.OVERLAP_RATIO = 1.5` says in its own docstring t
 Matérn ν=1/2 ACFs a factor `r` apart differ at most by `r^(−1/(r−1)) − r^(−r/(r−1))`, which
 at `r = 3/2` is exactly **4/27**.
 
-**Still picked, flagged:** `optimize.HESSIAN_COND_LIMIT = 1e10` (open question 9) and
-`signal.X_RANK_RTOL = 1e-10`, on which `RANK_DEFICIENT_LOG_LIMIT` is derived — a derived
-constant resting on a picked one inherits the arbitrariness.
+**~~Still picked, flagged:~~ CLOSED 2026-08-10 (P1).** `optimize.HESSIAN_COND_LIMIT` and
+`signal.X_RANK_RTOL` are both derived now; see the table above and open question 9 in
+`PROGRESS.md` for which fixtures moved.
+
+**Two corrections to what this section originally said, both worth carrying:**
+
+- **`RANK_DEFICIENT_LOG_LIMIT` is NOT derived from `signal.X_RANK_RTOL`.**
+  `objective.py` imports `_RANK_RTOL` from `engines.kalman` — the **Gram** cutoff — and
+  derives from that. The two constants live in different modules, threshold different
+  matrices, and both happened to hold the numeral `1e-10`, which is the entire mechanism of
+  the misreading. Re-deriving `X_RANK_RTOL` alone would have left
+  `RANK_DEFICIENT_LOG_LIMIT` resting on the other one regardless.
+- **`kalman._RANK_RTOL` is deliberately left at `1e-10`, and that is not a picked value.**
+  Its docstring carries a measured calibration table and a window bounded from both sides:
+  an exactly deficient design puts its null singular value at 0 or ~5e-17 of the leading
+  one, decades below any candidate threshold, while a Gram accumulated at `cond(X_w) = 1e8`
+  has already lost its small singular value into float64 noise, so a threshold below
+  ~1e-16 would be reading rounding error. That is the "measure, or document explicitly"
+  branch of the rule, satisfied, not the "picked" branch.
+
+**`optimize.GRAD_TOL` is the one constant here that is NOT eps-derived, deliberately.** Its
+floor is set by scipy's L-BFGS-B stopping rule, several decades above what the
+finite-difference gradient could resolve (measured instrument floor ~3e-10 relative to
+`|loglik|`), so float64 has nothing to say about it. It is a **measured separator** between
+two populations — converged fits at `3.46e-07 .. 2.30e-05` and fits stopped at one to three
+iterations at `1.45e-04 .. 1.84e-02` — and both bounds are pinned by a test. Its previous
+`1e-5` sat *below* the converged population's maximum.
 
 ### The other standing rules
 
@@ -236,10 +268,9 @@ workload — and treat any factor above ~1.5× as a missing term rather than mea
 | **7** | **Path B at high thread occupancy.** Measured at 1 and 4 threads on a 4-core box. `prange` over series at 64 threads may hit false sharing on the per-series `accum` block, or saturate the controller elsewhere | `bench/spike.py --threads 1 --threads 4 --threads 64` on the 64-core box |
 | **8** | **`numba` and `celerite2` on arm64.** `celerite2` has no `osx-arm64` conda-forge build and is pinned to `[target.linux-64.dependencies]`; `numba` on arm64 has never been run here | the suite plus `bench/spike.py` on the MacBook |
 
-Questions 1–4 and 9 are in `PROGRESS.md`; 9 (`HESSIAN_COND_LIMIT`) is **blocking for the
-start of Phase 2**, because `1e10` against the derived `6.7e7` is the band in which a
-near-degenerate fit reports as healthy — so §4.8's *a posteriori* half is ~150× more
-permissive than its *a priori* half, and a candidate the lint flags can come back `OK`.
+Questions 1–4 and 9 are in `PROGRESS.md`. **9 (`HESSIAN_COND_LIMIT`) was closed on
+2026-08-10**, before Phase 2 planning as it required: the limit is now the derived
+`eps^(-1/2) = 6.711e7`, and §4.8's two halves are on the same footing.
 
 ---
 

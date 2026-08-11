@@ -24,9 +24,10 @@ import pytest
 
 from metamer.core.capability import Objective
 from metamer.core.engines.kalman import KalmanEngine
-from metamer.core.gradients import EPS, richardson_gradient
+from metamer.core.gradients import EPS, fd_gradient, richardson_gradient
 from metamer.core.objective import ConcentratedObjective
 from metamer.core.optimize import (
+    GRAD_TOL,
     HESSIAN_COND_LIMIT,
     InitRung,
     SeriesFit,
@@ -417,6 +418,102 @@ def test_the_iteration_cap_splits_on_the_gradient_norm():
     assert capped.outcome in {Outcome.ITER_CAP_SMALL_GRAD, Outcome.ITER_CAP_LARGE_GRAD}
     assert capped.outcome.is_failure
     assert capped.n_iter <= 1
+
+
+def test_the_hessian_cond_limit_is_the_single_inversion_eps_bound():
+    """`HESSIAN_COND_LIMIT` is derived from float64 and counts ONE inversion.
+
+    Behaviour under test: the VALUE of the constant. Every other test of
+    `DEGENERATE_HESSIAN` asserts an outcome that holds over a wide band of it.
+
+    Expected value worked out by hand rather than by restating the module's
+    own expression: the Hessian is inverted exactly once, to produce `H^-1`
+    and hence `theta_err`; the forward error of that inversion goes like
+    `eps * cond(H)`; half the significant digits are gone when that reaches
+    `sqrt(eps)`, i.e. at `cond(H) = eps^(-1/2) = (2^-52)^(-1/2) = 2^26 =
+    67108864` exactly.
+
+    Bug this catches: the previous `1e10`, picked, 149x more permissive, and
+    the reason design doc section 4.8's a-posteriori half was looser than its
+    a-priori half -- a composite `lint.py` flags statically could come back
+    `OK` from the fit. It also catches the far more tempting error of copying
+    `objective.CONDITION_LOG_LIMIT`'s exponent: that constant takes a FOURTH
+    root because its solve forms the normal equations and so sees
+    `cond(X_w)^2`. Nothing is squared on the way to `H^-1`.
+    """
+    assert HESSIAN_COND_LIMIT == 2.0**26
+    assert HESSIAN_COND_LIMIT == 67108864.0
+    # The other half of the derivation: eps * cond == sqrt(eps) at the limit.
+    assert EPS * HESSIAN_COND_LIMIT == pytest.approx(EPS**0.5, rel=1e-12)
+
+
+def _composite_series(sigma_white=0.5, sigma=1.0, rho=8.0, n=200, seed=11):
+    """Simulate white + Matern 1/2 from the composite's own covariance."""
+    spec = ProcessSpec((_term("white"), _term("matern12")))
+    state_space = StateSpace.from_spec(spec)
+    theta = np.array([[sigma_white, sigma, rho]])
+    t = np.arange(float(n))
+    cov = _covariance(state_space, theta, t)
+    rng = np.random.default_rng(seed)
+    return spec, state_space, t, rng.multivariate_normal(np.zeros(n), cov)[None, :]
+
+
+def _relative_gradient_norm(obj, y, mask, t, fit):
+    """`||g|| / max(|loglik|, 1)` at a fit's reported parameters."""
+
+    def negative(u):
+        return -float(obj.unconstrained_loglik(u[None, :], y, mask, t, None)[0])
+
+    scale = max(abs(fit.loglik), 1.0)
+    point = obj.to_unconstrained(fit.theta)[0]
+    return float(np.linalg.norm(fd_gradient(negative, point, scale=scale))) / scale
+
+
+@pytest.mark.slow
+def test_grad_tol_separates_converged_from_unconverged_with_margin():
+    """`GRAD_TOL` sits strictly between two measured populations.
+
+    Behaviour under test: the VALUE of `GRAD_TOL`, which nothing else pins.
+    Every other test here asserts an outcome that holds over a wide band of
+    the constant.
+
+    Expected values determined independently by measurement, recorded in the
+    constant's own docstring: over six fits spanning two compositions and
+    three record lengths, converged fits reach `||g|| / max(|loglik|, 1)` in
+    `3.46e-07 .. 2.30e-05` and fits stopped at one to three iterations sit in
+    `1.45e-04 .. 1.84e-02`. The two cases used here are the TIGHT ends of
+    those ranges -- the slowest-converging composite, and the shortest
+    unconverged gradient -- so the assertions are against the boundary rather
+    than against a comfortable middle.
+
+    Bug this catches: `GRAD_TOL` set anywhere outside that gap, in either
+    direction, which no outcome-level test can see. The previous `1e-5` was
+    BELOW the converged population's maximum, so a fit that was done would be
+    filed `ITER_CAP_LARGE_GRAD` -- and this test fails against `1e-5`, which
+    is how the defect was confirmed rather than argued. A value above
+    `1.45e-04` fails the other assertion. The margin factors are asserted
+    separately from the inequalities because "on the right side of the
+    threshold" and "not about to cross it" are different facts, and open
+    question 9's lesson is that only the second one means healthy.
+    """
+    spec, state_space, t, y = _composite_series()
+    obj = _objective(spec, state_space)
+    mask = np.ones_like(y, dtype=bool)
+    converged = optimize_series(obj, y, mask, t, None)
+    assert converged.outcome is Outcome.OK
+    converged_norm = _relative_gradient_norm(obj, y, mask, t, converged)
+
+    spec, state_space, _, t, y = _ou_series(sigma=2.0, rho=20.0, n=630, seed=7)
+    obj = _objective(spec, state_space)
+    mask = np.ones_like(y, dtype=bool)
+    stalled = optimize_series(obj, y, mask, t, None, max_iter=2)
+    assert stalled.outcome is Outcome.ITER_CAP_LARGE_GRAD
+    stalled_norm = _relative_gradient_norm(obj, y, mask, t, stalled)
+
+    assert converged_norm < GRAD_TOL
+    assert stalled_norm > GRAD_TOL
+    assert GRAD_TOL / converged_norm > 2.0
+    assert stalled_norm / GRAD_TOL > 2.0
 
 
 @pytest.mark.slow

@@ -91,16 +91,87 @@ from metamer.core.outcomes import Outcome, outcome_array
 from metamer.core.signal import DesignInfo
 from metamer.core.terms import ProcessSpec, free_param_index
 
-GRAD_TOL: float = 1e-5
+GRAD_TOL: float = 5e-5
 """Relative gradient-norm tolerance, judged in unconstrained coordinates.
 
 The comparison is `||g|| < GRAD_TOL * max(|loglik|, 1)`, because `|loglik|`
 scales with N and an absolute gradient tolerance would tighten with record
 length for no reason.
+
+THIS IS A MEASURED SEPARATOR, NOT AN eps-DERIVED CONSTANT, and it is labelled
+as such deliberately. It cannot be derived from float64 the way
+`HESSIAN_COND_LIMIT` and `objective.CONDITION_LOG_LIMIT` are, because the floor
+it has to clear is not set by the arithmetic: it is set by **scipy's L-BFGS-B
+stopping rule**, which halts several decades above what the finite-difference
+gradient could resolve. Measured at the optimum against a nested-Richardson
+gradient, the instrument's own floor is `~3e-10` relative to `|loglik|`
+(`max|fd - richardson| / |loglik|` = 2.79e-10 and 3.42e-10 on two cases), and
+no converged fit comes anywhere near it.
+
+What this constant separates is a fit that hit the iteration cap essentially
+done from one that hit it nowhere near, so it is bounded from BOTH sides by
+measurement. Measured 2026-08-10 over six fits, two compositions
+(`matern12`, `white + matern12`) and three record lengths (N = 200, 400, 630),
+`||g|| / max(|loglik|, 1)`:
+
+    converged (max_iter = 200, outcome OK)      3.46e-07 .. 2.30e-05
+    genuinely unconverged (max_iter = 1, 2, 3)  1.45e-04 .. 1.84e-02
+
+The two populations are separated by a factor of 6.3 and nothing lands
+between them. `5e-5` sits 2.2x above the converged maximum and 2.9x below the
+unconverged minimum, i.e. near the middle in log space.
+
+CONSEQUENCE, AND WHY THE PREVIOUS `1e-5` WAS WRONG: it sat *below* the
+converged population's maximum, so two of the six converged fits above
+(2.30e-05 and 1.14e-05) would have been reported `ITER_CAP_LARGE_GRAD` had
+they hit the cap -- a fit that was done, filed as nowhere near. That is the
+"guard below the diagnostic limit of what it guards" failure, the mirror of
+the clamp rule: it does not fabricate a number, it makes
+`ITER_CAP_SMALL_GRAD` under-reachable and mislabels the fits that do reach it.
+
+The stakes are lower than for `HESSIAN_COND_LIMIT`: both outcomes are
+`is_failure`, so this splits one flagged category into two rather than calling
+a bad fit good. That is why a 2-3x margin is accepted here and would not be
+accepted there. `test_the_iteration_cap_splits_on_the_gradient_norm_at_a
+_measured_separation` pins both bounds, so the margin cannot silently erode.
 """
 
-HESSIAN_COND_LIMIT: float = 1e10
-"""Above this condition number the fit is reported as near-degenerate."""
+HESSIAN_COND_LIMIT: float = float(EPS) ** -0.5
+"""Above this cond(H) the fit is reported as near-degenerate. 2**26 = 6.711e7.
+
+DERIVED FROM float64, NOT PICKED. It was `1e10` until 2026-08-10, which was
+picked, and the gap mattered: `lint.py`'s static half of design doc section 4.8
+is derived from `eps` while this, its a-posteriori half, was ~150x more
+permissive, so a composition the lint flags could come back `OK`. Two halves of
+one diagnostic sitting on different footings is exactly the band in which a
+near-degenerate fit reports as healthy.
+
+UNITS: the 2-norm condition number of the Hessian of the negative
+log-likelihood in unconstrained coordinates, as `np.linalg.cond` returns it --
+not its log, and not the Gram of anything.
+
+THE DERIVATION. COUNT THE INVERSIONS: the Hessian is inverted exactly once, to
+produce the parameter covariance `H^-1` from which `theta_err` follows. The
+forward error of that inversion goes like `eps * cond(H)`, and roughly half the
+significant digits are gone when it reaches `sqrt(eps)`:
+
+    eps * cond(H) = sqrt(eps)   =>   cond(H) = eps^(-1/2) = 2**26 = 6.7109e7
+
+ONE inversion, so the exponent is -1/2. Contrast `objective.CONDITION_LOG_LIMIT`,
+whose solve runs on the normal equations and therefore sees `cond(X_w)^2`,
+taking the fourth root instead. Copying that neighbour's exponent here -- or
+this one's there -- is the measured default mistake the eps-constant rule exists
+to prevent.
+
+CONSEQUENCE, STATED SO IT IS NOT QUIETLY RETUNED: this is 149x tighter than the
+old value, so fits whose curvature is resolvable to fewer than half the
+available digits now report `DEGENERATE_HESSIAN` where they previously reported
+`OK`. That is the intended direction. The worked case is in PROGRESS.md's open
+question 9: a white-noise series fitted with white + Matern 1/2 measured
+`cond(H) = 3.525e8`, which is degenerate under this limit and was `OK` under
+`1e10` -- and the verdict `DEGENERATE_HESSIAN` was arguably right, the fixture
+having been calling a near-degenerate series healthy by 28x.
+"""
 
 _RATIO_FLOOR: float = 1.0
 """Smallest admissible `|f| / |f''''|`, so a degenerate scale cannot give h = 0."""
