@@ -2,8 +2,17 @@
 
 ## Start here (cold-start summary)
 
-- **Branch:** `phase-1`. **Last commit:** see `git log --oneline -1`; the handoff below was
+- **Branch:** `main`. **Last commit:** see `git log --oneline -1`; the handoff below was
   written at the commit that completed Task 14.
+- **`main` and `phase-1` are reconciled, and they never diverged.** Checked rather than
+  assumed on 2026-08-10: `git merge-base --is-ancestor phase-1 main` succeeds and
+  `git log main..phase-1` is empty, so `phase-1` held **no** commit that `main` lacked — it
+  was simply a stale pointer five commits behind `main`'s publishing work (measured at
+  `2372bbb`), left where the 2026-08-07 fast-forward put it. **No merge and no rebase was required, and neither was performed**; `phase-1` was
+  fast-forwarded onto `main` so the two names agree, which is not a history rewrite and
+  drops nothing. Everything the publishing run added (hatchling + hatch-vcs, `dynamic =
+  ["version"]`, the wheel/sdist targets, the CI and release workflows) is on both.
+  **All Phase 2 work happens on `main`.**
 - **Done:** Phase 1 **Tasks 0–18**. Task 18 (the stage-1 gate) was closed on the mini PC
   alone — see the verdict note for why one machine suffices and in which direction the
   inference runs. **Task 19 deleted.**
@@ -85,6 +94,7 @@
 | Phase 1 implementation plan | [`docs/superpowers/plans/2026-08-05-metamer-phase1.md`](docs/superpowers/plans/2026-08-05-metamer-phase1.md) |
 | Phase 1 task tracker | `docs/superpowers/plans/2026-08-05-metamer-phase1.md.tasks.json` (native task ids 8–27) |
 | Original build prompt | [`docs/phase1-prompt.md`](docs/phase1-prompt.md) — **superseded** by design doc §2 where they conflict |
+| Phase 2 preliminaries pre-flight | [`docs/superpowers/notes/phase2-preliminaries-preflight.md`](docs/superpowers/notes/phase2-preliminaries-preflight.md) — the (a)–(k) audit of the P0/P1/P2 briefs and what each finding changed |
 
 Phase list is design doc §17. Phase 1 exit criteria are §18. Do not duplicate either here.
 
