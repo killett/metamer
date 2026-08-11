@@ -47,7 +47,7 @@ pip install "metamer[test]"
 | [`docs/superpowers/specs/2026-08-04-metamer-design.md`](docs/superpowers/specs/2026-08-04-metamer-design.md) | The design. Module boundaries, the public API surface, the likelihood engines, the zarr output schema, the phased implementation plan, and the testing strategy. |
 | [`docs/superpowers/plans/2026-08-05-metamer-phase1.md`](docs/superpowers/plans/2026-08-05-metamer-phase1.md) | The Phase 1 implementation plan: twenty tasks building the likelihood spine end to end on arrays. |
 | [`PROGRESS.md`](PROGRESS.md) | Current state, cross-cutting decisions, gotchas, and open questions. |
-| [`metamer-build-prompt.md`](metamer-build-prompt.md) | The original brief. Superseded by the design document's §2 wherever they conflict. |
+| [`docs/phase1-prompt.md`](docs/phase1-prompt.md) | The original brief. Superseded by the design document's §2 wherever they conflict. |
 
 ## Background
 

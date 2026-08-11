@@ -84,7 +84,7 @@
 | Design document | [`docs/superpowers/specs/2026-08-04-metamer-design.md`](docs/superpowers/specs/2026-08-04-metamer-design.md) |
 | Phase 1 implementation plan | [`docs/superpowers/plans/2026-08-05-metamer-phase1.md`](docs/superpowers/plans/2026-08-05-metamer-phase1.md) |
 | Phase 1 task tracker | `docs/superpowers/plans/2026-08-05-metamer-phase1.md.tasks.json` (native task ids 8–27) |
-| Original build prompt | [`metamer-build-prompt.md`](metamer-build-prompt.md) — **superseded** by design doc §2 where they conflict |
+| Original build prompt | [`docs/phase1-prompt.md`](docs/phase1-prompt.md) — **superseded** by design doc §2 where they conflict |
 
 Phase list is design doc §17. Phase 1 exit criteria are §18. Do not duplicate either here.
 

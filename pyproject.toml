@@ -78,7 +78,7 @@ exclude = [
     "/docs/superpowers/plans",
     "/docs/superpowers/specs",
     "/bench",
-    "/metamer-build-prompt.md",
+    "/docs/phase1-prompt.md",
     "/.pixi",
     "/.superpowers",
     "/.claude",
