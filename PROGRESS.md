@@ -106,10 +106,10 @@ Phase list is design doc §17. Phase 1 exit criteria are §18. Do not duplicate 
 
 ---
 
-## Phase 2 preliminaries (P0–P2, 2026-08-10)
+## Phase 2 preliminaries (P0–P4, 2026-08-10)
 
-Three pieces of work that had to land **before** Phase 2 planning. The (a)–(k) pre-flight
-on all three briefs is in
+Five pieces of work that had to land **before** Phase 2 planning. The (a)–(k) pre-flight
+on the P0/P1/P2 briefs is in
 [`docs/superpowers/notes/phase2-preliminaries-preflight.md`](docs/superpowers/notes/phase2-preliminaries-preflight.md);
 only the durable conclusions are here.
 
@@ -268,6 +268,82 @@ them landing on `2^±26` by different routes is a hazard rather than a confirmat
   the derived `HESSIAN_COND_LIMIT` moved one of the four to `DEGENERATE_HESSIAN`. **The A:B
   ratio is untouched** — the iteration count is common to both paths and cancels — but the
   per-fit millisecond columns carry the new count. See open question 11.
+
+### P3 — the spike's iteration sample (closes open question 11)
+
+Full record under open question 11. The three things that carry:
+
+- **A fixture whose data does not come from the model being fitted produces fits that are
+  not representative of the workload, and every statistic conditioned on `OK` inherits
+  that.** Third instance of one defect (`_healthy_row`, `_plain_batch`, the spike). In all
+  three the *verdicts* were correct and it was the *sample being averaged over* that
+  silently narrowed — 4 → 2 series at d=3 here.
+- **The amplitude spread was never heterogeneity, and the fixture's docstring claimed it
+  was.** The Gaussian log-likelihood is scale-equivariant, so one realization at four
+  amplitudes gives `n_iter = [28, 28, 28, 28]` and utilization **exactly 1.0** — the number
+  the docstring said the spread existed to challenge. Rows now vary by generating
+  parameters.
+- `mean_iterations` at d=3 went **90.0 → 32.5** and utilization **0.84 → 0.637**; at d=1,
+  43.3 → 13.0 and 0.66 → 0.929. **Every `ms/fit` column rescales; no A:B ratio moves.**
+  Path B at production B = 114 244 goes **19.5 → 7.1 ms** against the 19 ms budget.
+
+### P4 — the two benchmark harnesses, reconciled
+
+- **THERE WAS NO HARNESS EFFECT. THE 0.57 DISAGREEMENT IS INSIDE ONE HARNESS'S OWN
+  SCATTER, AND THE ±0.15 IN THE VERDICT WAS AN ASSUMPTION DRAWN FROM A SAMPLE OF TWO.**
+  Measured at d=3, one thread, no gaps, B=1000, twenty-nine measurements in four
+  conditions:
+
+  | condition | A:B range | spread |
+  |---|---|---|
+  | eight rounds in one process, **same arrays** | 3.34 .. 3.47 | 0.13 |
+  | eight rounds in one process, **fresh arrays each round** | 3.63 .. 4.08 | 0.45 |
+  | eight **fresh processes**, that cell only | 3.18 .. 4.00 | 0.82 |
+  | five **fresh processes**, the full sweep each | 3.07 .. 3.78 | 0.71 |
+
+  Both published numbers (3.84, 3.27) sit inside that. The full-sweep and single-cell
+  medians are 0.18 apart against a within-condition spread of 0.7–0.8, so process context
+  is not the cause either.
+- **THE SCATTER IS BETWEEN ALLOCATIONS, WHICH IS THE ONE PLACE `repeats` CANNOT LOOK.**
+  `_time_pass` takes the best of `repeats` back-to-back passes over **one** allocation —
+  the tight 0.13 row — and publishes it as if it were the last row. Re-allocating also
+  moves the level: **path A is ~16% slower on fresh inputs, path B ~4%**, and the
+  reallocating run was taken at a *lower* load average, so machine load is not the
+  explanation and points the wrong way. **Generalize: a repeat that reuses the fixture
+  measures the fixture's placement once.** If the production condition allocates, the
+  benchmark must allocate inside the repeat.
+- **The harnesses are now one.** `--dim` and `--gaps` are filters on `run_spike`, so the
+  batch sweep is `--dim 3 --gaps none --threads 1 --batch ...` rather than a second script.
+  Two entry points into one measurement is what let "which harness" become a variable.
+  `--cell-repeats` (default 3) runs independent rounds on fresh allocations and the report
+  carries the **median with its min and max** for both pass costs and the ratio.
+- **Any restated margin must name its harness invocation, B, thread count AND cell-repeat
+  count**, and should be quoted as a range. The falsifier is unaffected: it is stated
+  against the lowest measurement, and the lowest anywhere is **3.07**, still clearing 3×.
+- **The restated margin**, `bench/minipc-unified-d3-nogaps-1thread.json`, d=3, one thread,
+  no gaps, `--repeats 3 --cell-repeats 3`, median of three rounds on fresh allocations:
+
+  | B | A:B median [min, max] | path A bound ms/fit | path B ms/fit |
+  |---|---|---|---|
+  | 1 000 | 3.86 [3.70, 4.01] | 21.5 | 5.42 |
+  | 20 000 | 3.80 [3.43, 4.00] | 22.4 | 6.32 |
+  | **114 244** | **4.33 [4.25, 4.39]** | **25.8** | **5.88** |
+
+  Path B is inside the 19 ms budget by **3.2×** at production B. Path A's optimistic bound
+  is 1.36× over, and 2.1× over at the measured utilization of 0.637. **Three rounds report
+  a range, they do not bound one** — the eight-round study is the figure to quote for
+  scatter, this table for level.
+- **A CORRECT CONCLUSION REACHED THROUGH A WRONG MECHANISM IS A FINDING IN ITS OWN RIGHT.**
+  The verdict predicted the `_augment` fix would help path A most; measured, path B gained
+  ~20% and path A did not move. The conclusion (path B wins) survived; the reasoning (path
+  A is memory-bound, so it gains from any traffic reduction) did not — and **the reasoning
+  is what the next prediction is built on.** A verdict that records only outcomes gives a
+  later reader no way to know its mechanism failed. One clause of it is now independently
+  supported: path A is ~4× more sensitive to memory placement than path B, so "path A is
+  the memory-sensitive path" stands and "therefore this block helps path A most" never
+  followed from it. The design doc's "why one machine is enough" argument rests on that
+  clause and is left standing by P4 — but on the reallocation measurement, not on the
+  prediction that failed.
 
 ---
 
@@ -1576,6 +1652,25 @@ question; compute/bandwidth roofline pair for cross-machine prediction) are in d
   `k` and `n` came out NaN and twelve tests failed against a correct implementation. It was
   the implementation's own `OK`-beside-NaN guard that reported it, by name and by index —
   which is the argument for making that guard raise rather than silently drop the cell.
+- **A NEW TEST THAT ALLOCATES RAISES THE SESSION WATERMARK AND CAN FAIL A TEST IN ANOTHER
+  MODULE.** P4's new `run_spike` tests called `bandwidth_reference` at its default
+  `mib=256` — three vectors, so ~768 MiB — which took the pytest session's watermark to
+  **991.7 MB** before `test_memory.py` ran. `test_a_child_measurement_is_not_contaminated_by_a_large_parent`
+  then asserted `after >= 1.2 * before` after a fixed 400 MiB ballast, and the ballast
+  moved the watermark by **exactly zero**. Fixed at the source: `run_spike` takes
+  `bandwidth_mib` and the tests pass 64. **This is the delta-with-an-external-baseline
+  hazard the module's own docstring describes, arriving from a different file** — the
+  baseline is the whole session, so any test anywhere can set it.
+- **OPEN, and measured while chasing the above: the inherited watermark tracks the
+  parent's CURRENT RSS at spawn time, not the parent's watermark.** Running the
+  contamination probe in its own subprocess gave `before = 454.8 MB` (inherited from
+  pytest) while that probe's own child reported `84.6 MB` — the probe's *current* RSS, not
+  the 454.8 MB it had inherited. The existing test passes because pytest's inherited
+  watermark and its current RSS happen to be close at that point, which is not a property
+  anything guarantees. **The test was left as it was**: restating it needs the inheritance
+  semantics pinned first, and doing that inside P4 would have been a change to the RSS
+  shim's contract made in passing. `machine.py`'s docstring says `ru_maxrss` is inherited;
+  it does not say *what value* is inherited, and the two are different claims.
 - Per user global instructions: never do investigative `git checkout <sha>` inside the
   working tree. Use `git show <sha>:<path>`, `git worktree add`, or `git diff <sha>`.
 

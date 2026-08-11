@@ -304,6 +304,18 @@ Every one of these was discovered by building a fixture that could not fail.
   goes from `cond(X) = 3.4e1` to `3.3e32` and rank 7/7 to 2/7.
 - **A quadratic cannot test a step rule**, and **a fixture above a floor cannot test the
   floor.**
+- **AMPLITUDE SPREAD IS NOT HETEROGENEITY FOR A GAUSSIAN LIKELIHOOD.** It is
+  scale-equivariant, so `* logspace(-1, 1, k)` cannot move an iteration count. Measured on
+  the spike's iteration sample: one realization at four amplitudes gives
+  `n_iter = [28, 28, 28, 28]` and utilization **exactly 1.0** — the number the fixture's own
+  docstring said the spread existed to challenge. Heterogeneity has to come from the
+  generating parameters, the mask, or the realization. **A fixture's stated mechanism of
+  heterogeneity is a claim to measure.**
+- **A BENCHMARK REPEAT THAT REUSES ITS FIXTURE MEASURES THAT FIXTURE'S PLACEMENT ONCE.**
+  Best-of-N over one allocation gave an A:B spread of 0.13 at the spike's worst cell;
+  re-allocating each round gave 0.45, and fresh processes 0.82. Path A also runs ~16%
+  slower on freshly allocated inputs (path B ~4%). If the production condition allocates —
+  and a tile is materialized, fitted and dropped — the repeat must allocate inside it.
 - **`fit` costs ~5.4 s per series** through the per-series scipy loop, linear in B. Anything
   wanting tile-scale behaviour must use a batched *evaluation*, not a fit.
 - **`ru_maxrss` is inherited across `fork()`/`exec()` and updated lazily.** A child spawned
@@ -347,15 +359,26 @@ Every one of these was discovered by building a fixture that could not fail.
   `optimize.optimize_series`. It is not deprecated and must not be deleted; every MVN
   oracle and the path-B agreement test are pinned against it. ~~The stage-1 verdict carries
   one condition: re-measure after `_augment` is fixed~~ — **discharged 2026-08-10.** The
-  falsifier is not met in any cell or any harness: the lowest A:B measured is **3.27** and
-  at the new production-scale B = 114 244 it is **4.05**, so Task 19 stays deleted.
-  **But the two harnesses disagree about whether the ratio moved** — the spike says
-  3.04 → 3.84 at the worst cell, the batch sweep says 3.31 → 3.27, a 0.57 spread against
-  the ±0.15 scatter the verdict assumed. What is resolved: **path B's per-pass cost fell
-  ~20% in both**, because it had been reading a per-series private copy of the shared
-  design. What is not: **path A did not measurably move**, which contradicts the
-  condition's stated reasoning. See
-  [`spike-stage1-verdict.md`](spike-stage1-verdict.md).
+  falsifier is not met in any cell or any harness, so Task 19 stays deleted.
+  ~~**But the two harnesses disagree about whether the ratio moved**~~ — **CLOSED by P4,
+  2026-08-10: there was no harness effect.** The 0.57 spread (spike 3.84, sweep 3.27) is
+  inside a single harness's own between-process scatter, measured at **±0.4** at that cell
+  over twenty-nine runs, against the **±0.15** the verdict had assumed from a sample of two.
+  **The scatter lives between allocations, which is the one place `repeats` cannot look**:
+  `_time_pass` takes the best of N passes over *one* allocation (spread 0.13) and publishes
+  it as if it were a fresh one (spread 0.82). Path A is ~16% slower on freshly allocated
+  inputs, path B ~4%. The two harnesses are now one — `--dim` and `--gaps` are filters, so
+  the batch sweep is a flag combination — and every cell reports a median with its min and
+  max. **Any restated margin must name its harness invocation, B, thread count and
+  cell-repeat count.** What was already resolved and still is: **path B's per-pass cost fell
+  ~20%**, because it had been reading a per-series private copy of the shared design, and
+  **path A did not measurably move**, which contradicts the condition's stated reasoning.
+  See [`spike-stage1-verdict.md`](spike-stage1-verdict.md).
+- **A CORRECT CONCLUSION REACHED THROUGH A WRONG MECHANISM IS A FINDING IN ITS OWN RIGHT.**
+  The verdict predicted the `_augment` fix would help path A most; path B is what gained.
+  The conclusion survived, the reasoning did not, and **the reasoning is what the next
+  prediction is built on** — a note that records only outcomes gives a later reader no way
+  to know its mechanism failed.
 - **The path-B agreement test cannot carry a change made to both engines.** It compares two
   implementations of the same recursion, so anything both do identically is invisible to
   it — the cancellation rule at the level of an engine. What pins the values is

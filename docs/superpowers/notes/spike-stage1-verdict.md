@@ -147,7 +147,13 @@ The batch-sweep harness at the same cell, `bench/batch-sweep-d3-1thread-nogaps-s
 | 20 000 | 3.35 | 3.28 |
 | **114 244** (the new production tile) | — | **4.05** |
 
-### THE TWO HARNESSES DISAGREE ABOUT WHETHER THE RATIO MOVED, AND THAT IS THE FINDING
+### THE TWO HARNESSES DISAGREE ABOUT WHETHER THE RATIO MOVED — RESOLVED BY P4, BELOW
+
+**They were never measuring different things.** The 0.57 spread is inside one harness's own
+between-process scatter, which is **±0.4 at this cell, not the ±0.15 this note assumed**.
+See "The scatter was assumed, and it is four times what was assumed" below. The paragraphs
+that follow are the state of knowledge on 2026-08-10 before that was measured, kept because
+the separation they draw — path B's gain resolved, path A's not — survives.
 
 The spike says the worst cell went 3.04 → 3.84; the sweep says 3.31 → 3.27. **A 0.57 spread
 on the same quantity, against the ±0.15 run-to-run scatter this note assumed.** The ±0.15
@@ -257,6 +263,102 @@ state amplitude — which is what actually varies across a grid.
 machine. It is not a claim about the iteration count under 40% contiguous gaps, and the
 per-fit columns above inherit that. Widening it is affordable only at ~5.4 s per series.
 
+---
+
+## THE SCATTER WAS ASSUMED, AND IT IS FOUR TIMES WHAT WAS ASSUMED — P4, 2026-08-10
+
+The two harnesses disagreed by **0.57** on the A:B ratio at d=3, one thread, no gaps,
+B=1000 (spike 3.84, sweep 3.27), and by **27%** on path A's per-pass seconds at that cell
+before the streaming fix. This note's stated run-to-run scatter was **±0.15**, and that
+figure was an assumption — it came from two measurements taken minutes apart, which is a
+sample of two.
+
+**Measured, on the mini PC, at exactly that cell.** Four conditions, twenty-nine
+measurements:
+
+| condition | A:B range | spread | path A range |
+|---|---|---|---|
+| eight rounds in one process, **same arrays** (rounds 1–7) | 3.34 .. 3.47 | **0.13** | 3.7% |
+| eight rounds in one process, **fresh arrays each round** | 3.63 .. 4.08 | **0.45** | 7.6% |
+| eight **fresh processes**, that cell only | 3.18 .. 4.00 | **0.82** | 18% |
+| five **fresh processes**, the full sweep each | 3.07 .. 3.78 | **0.71** | 26% |
+
+**There is no harness effect to find.** Both published numbers — 3.84 and 3.27 — sit inside
+the range a single harness produces from identical code, identical seeds and identical
+inputs. The full-sweep and single-cell contexts have overlapping distributions and medians
+0.18 apart, against a within-condition spread of 0.7–0.8.
+
+**What the cause IS.** The scatter is between allocations, and the level moves with them
+too: path A is **~16% slower on freshly allocated inputs than on reused ones**, path B
+**~4%** — so path A is about four times as sensitive to where its inputs land. The
+reallocating run was taken at a *lower* load average than the reusing run (1.4–1.5 against
+1.8–2.0), so machine load is not the explanation and points the wrong way.
+
+**`repeats` cannot see any of this, by construction.** `_time_pass` takes the best of
+`repeats` back-to-back passes over **one** allocation — the tight 0.13 row — and reports it
+as though it were the last row. Increasing `repeats` tightens a number that was never the
+uncertain one.
+
+**What changed.** `run_spike` re-allocates its inputs per round, runs `--cell-repeats`
+independent rounds, and reports the **median with its min and max** for the pass costs and
+for the ratio. Fresh allocations are the production condition: a tile is materialized,
+fitted and dropped. A point estimate whose scatter has to be assumed is what produced the
+±0.15.
+
+**Consequences for how the margin is quoted.** It must name its **harness invocation, B,
+thread count and cell-repeat count**, and it should be quoted as a range. The falsifier is
+unaffected — it is stated against the *lowest* measurement, and the lowest measurement
+anywhere across all twenty-nine of the above is **3.07**, still clearing 3×, at B=1000
+rather than at production scale.
+
+### THE RESTATED MARGIN — one harness, measured scatter, named scope
+
+`bench/minipc-unified-d3-nogaps-1thread.json`. Mini PC, d=3, **one thread, no gaps** —
+path B's worst cell in every column — `--repeats 3 --cell-repeats 3`, so each row is the
+**median of three independent rounds on freshly allocated inputs**, with the round-to-round
+min and max beside it. `mean_iterations = 32.5` over 4 of 4 `OK`, utilization 0.637.
+
+| B | A:B median | A:B [min, max] | path A bound ms/fit | path B ms/fit |
+|---|---|---|---|---|
+| 1 000 | 3.86 | [3.70, 4.01] | 21.5 | 5.42 |
+| 20 000 | 3.80 | [3.43, 4.00] | 22.4 | 6.32 |
+| **114 244** (production tile) | **4.33** | [4.25, 4.39] | **25.8** | **5.88** |
+
+- **Path B is inside the 19 ms budget by 3.2× at production B** (5.88 ms), where the
+  pre-P3 figure had it at 19.5 ms, i.e. marginally outside.
+- **Path A's optimistic bound is 25.8 ms, 1.36× over budget**, and at the measured
+  utilization of 0.637 its realistic cost is ~40.5 ms, **2.1× over**. Same conclusion as
+  before, wider margins.
+- **A min/max over three rounds brackets less than the eight-round study above does**, and
+  the numbers show it: [4.25, 4.39] at B=114 244 against a spread of 0.82 measured over
+  eight fresh processes at B=1000. **Three rounds report a range, they do not bound one.**
+  Quote the eight-round figure when what is wanted is the scatter, and this table when what
+  is wanted is the level.
+
+### A CORRECT CONCLUSION REACHED THROUGH A WRONG MECHANISM IS A FINDING IN ITS OWN RIGHT
+
+This note predicted that removing the materialized `[y | X]` block would help **path A**
+most, path A being memory-bound and the block being ~25 kB/series of its traffic. Measured,
+**path B is the engine that gained** (−19% and −22% in the two harnesses) and path A did not
+measurably move. The mechanism the prediction missed is that path B had been reading a
+per-series private copy of the shared design — B copies of the same `(N, k)` bytes competing
+for cache, a locality problem in a per-series loop, not a bandwidth problem in a batched one.
+
+**The conclusion survived and the reasoning did not, and that is worth recording as its own
+finding**, because the reasoning is what the *next* prediction is built on. The next
+prediction built on "path A is memory-bound, so path A gains from any traffic reduction"
+would have been wrong in the same way, and a verdict that only records outcomes gives a
+later reader no way to know it.
+
+**What the reasoning is worth after P4.** One clause of it is now supported by an
+independent measurement: path A really is about **four times more sensitive to memory
+placement** than path B (16% against 4% on reallocation). So "path A is the
+memory-sensitive path" stands; "therefore removing this particular block helps path A
+most" did not, and did not follow. **This matters beyond the postmortem**: the "why one
+machine is enough" argument above rests on path A scaling with bandwidth per core, and
+that argument is left standing by P4 rather than undermined by it — but it is standing on
+the reallocation measurement now, not on the `_augment` prediction that failed.
+
 ## Carried into Phase 2 — RESOLVED 2026-08-10
 
 ~~**`KalmanEngine._augment` materializes the augmented `[y | X]` block**~~ — it did: a
@@ -312,38 +414,17 @@ pixi run python -m metamer.bench.spike \
     --out bench/minipc-streamed.json
 ```
 
-**The batch sweep is not a CLI flag and never was** — it is a short script over the same
-harness functions, kept here so it does not need reconstructing.
-`bench/batch-sweep-d3-1thread-nogaps-streamed.json` came from this, with
-`BATCHES = [1000, 20000, 114244]`:
+~~**The batch sweep is not a CLI flag and never was**~~ — **it is one now, as of P4,
+2026-08-10.** It was a short script over the same harness functions, and having two
+entry points into one measurement is what let "which harness" become a variable in the
+first place. `--dim` and `--gaps` are filters on the sweep, so the batch sweep is:
 
-```python
-import numpy as np
-from numba import set_num_threads
-from metamer.bench.spike import (
-    _time_pass, build_spec, full_theta, gap_mask, measure_mean_iterations,
-)
-from metamer.core.engines.compiled import CompiledEngine
-from metamer.core.engines.kalman import KalmanEngine
-from metamer.core.signal import Annual, Constant, SemiAnnual, SignalSpec, Trend
-from metamer.core.statespace import StateSpace
-
-N_TIME, REPEATS = 630, 3
-set_num_threads(1)
-t = np.arange(N_TIME, dtype=np.float64) / 12.0
-design, _ = SignalSpec([Constant(), Trend(), Annual(), SemiAnnual()]).design_matrix(t)
-spec = build_spec(3)
-ss = StateSpace.from_spec(spec)
-iters = measure_mean_iterations(3, N_TIME)["mean_iterations"]
-
-for batch in BATCHES:
-    theta = full_theta(spec, batch)
-    y = np.random.default_rng(3).standard_normal((batch, N_TIME))
-    mask = gap_mask("none", batch, N_TIME)
-    a = _time_pass(KalmanEngine(), ss, theta, y, mask, t, design, REPEATS)
-    b = _time_pass(CompiledEngine(), ss, theta, y, mask, t, design, REPEATS)
-    print(batch, a, b, a / b, a * iters * 1e3, b * iters * 1e3)
-    del y, mask, theta
+```bash
+pixi run python -m metamer.bench.spike \
+    --dim 3 --gaps none --threads 1 \
+    --batch 1000 --batch 20000 --batch 114244 \
+    --repeats 3 --cell-repeats 3 \
+    --out bench/minipc-unified-d3-nogaps-1thread.json
 ```
 
 `B = 114244` is `tile_side(1e9, resident_bytes_per_series(...))` squared — the production

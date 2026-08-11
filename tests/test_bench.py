@@ -12,6 +12,7 @@ import hashlib
 import os
 import subprocess
 import sys
+from typing import cast
 
 import numpy as np
 import pytest
@@ -30,6 +31,7 @@ from metamer.bench.spike import (
     full_theta,
     gap_mask,
     iteration_sample,
+    run_spike,
 )
 from metamer.core.statespace import StateSpace
 
@@ -378,3 +380,79 @@ def test_every_iteration_row_fits_with_margin_to_the_degeneracy_limit():
         assert fitted.outcome is Outcome.OK
         assert fitted.hessian is not None
         assert np.linalg.cond(fitted.hessian) < HESSIAN_COND_LIMIT / 1e3
+
+
+@pytest.mark.slow
+@pytest.mark.machine
+def test_the_sweep_filters_select_exactly_the_cells_they_name():
+    """`--dim` and `--gaps` make the batch sweep a flag combination, not a script.
+
+    Expected value determined independently: the sweep is the product of
+    `dims x batches x gaps x threads`, so restricting two of the four factors
+    to one value each must leave `len(batches) * len(threads)` cells and no
+    others -- one here. The `iterations` block must narrow with `dims` too,
+    because fitting d=1 is part of what a d=1 run costs and therefore part of
+    what a d=3-only run must not do.
+
+    Bug this catches: a filter that is accepted and ignored. The sweep would
+    still run every cell, the requested rows would still be present and
+    correct, and the claim this whole change rests on -- that there is now ONE
+    harness and "which harness" is no longer a variable -- would be false with
+    nothing in the output saying so. The batch sweep was a separate script,
+    and the two disagreed by 0.57 on the A:B ratio at one cell.
+
+    Marked `machine` because it times a real workload; nothing about the
+    DURATIONS is asserted, only the shape of the sweep.
+    """
+    report = run_spike(
+        threads=(1,),
+        batches=(4,),
+        dims=(3,),
+        n_time=64,
+        repeats=1,
+        gaps=("none",),
+        cell_repeats=2,
+        bandwidth_mib=64,
+    )
+    cells = cast("list[dict[str, object]]", report["cells"])
+    assert [(c["d"], c["gaps"], c["batch"], c["threads"]) for c in cells] == [
+        (3, "none", 4, 1)
+    ]
+    assert list(cast("dict[str, object]", report["iterations"])) == ["d3"]
+
+
+@pytest.mark.slow
+@pytest.mark.machine
+def test_every_cell_reports_the_spread_it_measured_and_not_only_a_point():
+    """A cell carries min and max around its median, over independent rounds.
+
+    Expected value determined independently: a median of `cell_repeats`
+    samples lies between their minimum and maximum by definition, and
+    `cell_repeats` rounds produce `cell_repeats` ratios. Nothing here asserts
+    how WIDE the spread is -- that is a property of the machine and of its
+    load -- only that the report states it.
+
+    Bug this catches: publishing a point estimate whose scatter has to be
+    assumed. The stage-1 verdict assumed +/-0.15 at its worst cell; measured
+    across fresh processes the range at that cell is 3.07 .. 4.08, so the
+    0.57 disagreement between the two harnesses that prompted this work sits
+    comfortably inside one harness's own scatter. A reader cannot discover
+    that from a single number, and the previous report printed a single
+    number.
+
+    Marked `machine` for the same reason as the test above.
+    """
+    report = run_spike(
+        threads=(1,),
+        batches=(4,),
+        dims=(3,),
+        n_time=64,
+        repeats=1,
+        gaps=("none",),
+        cell_repeats=3,
+        bandwidth_mib=64,
+    )
+    cell = cast("list[dict[str, float]]", report["cells"])[0]
+    assert cell["cell_repeats"] == 3
+    for stem in ("a_over_b", "path_a_pass_s_per_series", "path_b_pass_s_per_series"):
+        assert cell[f"{stem}_min"] <= cell[stem] <= cell[f"{stem}_max"]

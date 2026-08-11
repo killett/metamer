@@ -365,21 +365,66 @@ def measure_mean_iterations(dim: int, n_time: int) -> dict[str, float]:
     }
 
 
+CELL_REPEATS = 3
+"""Independent re-measurements of each cell, each on freshly allocated inputs.
+
+**THE SCATTER IS BETWEEN ALLOCATIONS, NOT WITHIN A TIMING LOOP, SO
+`repeats` CANNOT SEE IT.** Measured at d=3, one thread, no gaps, B=1000 on the
+mini PC:
+
+| condition | A:B range | path A range |
+|---|---|---|
+| eight rounds in one process, **same arrays** | 3.34 .. 3.47 | 3.7% |
+| eight rounds in one process, **fresh arrays each round** | 3.63 .. 4.08 | 7.6% |
+| eight **fresh processes**, one cell each | 3.18 .. 4.00 | 18% |
+| five **fresh processes**, full sweep each | 3.07 .. 3.78 | 26% |
+
+`_time_pass` takes the best of `repeats` back-to-back passes over one
+allocation, so it measures the tight first row and reports it as if it were
+the last. Re-allocating also shifts the LEVEL: path A is ~16% slower on fresh
+arrays than on reused ones (and path B ~4%, so path A is about four times as
+sensitive). **Fresh arrays are the production condition** -- a tile is
+materialized, fitted and dropped -- so the harness re-allocates per round and
+reports the median with its min and max, rather than a point estimate whose
+scatter has to be assumed.
+"""
+
+
 def run_spike(
     threads: tuple[int, ...],
     batches: tuple[int, ...] = (1000,),
     dims: tuple[int, ...] = (1, 3),
     n_time: int = 630,
     repeats: int = 3,
+    gaps: tuple[str, ...] = GAP_CASES,
+    cell_repeats: int = CELL_REPEATS,
+    bandwidth_mib: int = 256,
 ) -> dict[str, object]:
     """Run the stage-1 comparison and return the JSON-ready report.
+
+    **This is the only harness.** The batch sweep used to be a separate script
+    over these same functions, and the two disagreed by 0.57 on the A:B ratio
+    at one cell against a ±0.15 scatter that had been assumed rather than
+    measured. `dims` and `gaps` are filters so that sweep is a flag
+    combination -- `--dim 3 --gaps none` -- and "which harness" stops being a
+    variable.
 
     Args:
         threads: Thread counts to sweep.
         batches: Batch sizes to sweep.
         dims: State dimensions to sweep.
         n_time: Series length.
-        repeats: Timing repeats per cell; the minimum is taken.
+        repeats: Back-to-back timing passes per round; the minimum is taken.
+            This is the WITHIN-allocation repeat and it is not the one that
+            matters -- see `CELL_REPEATS`.
+        gaps: Gap cases to sweep, a subset of `GAP_CASES`.
+        cell_repeats: Independent rounds per cell, each on fresh allocations.
+        bandwidth_mib: Vector size for the STREAM reference. It must exceed L3
+            by a good margin for the reference to mean anything, so the
+            default stands for any published run -- but three vectors at 256
+            MiB put this process's peak RSS near 1 GB, and `ru_maxrss` is
+            INHERITED by every later child, so a test calling this wants a
+            smaller one.
 
     Returns:
         The report, ready for `json.dumps`.
@@ -424,7 +469,9 @@ def run_spike(
 
     roofline: dict[str, object] = report["roofline"]  # type: ignore[assignment]
     for count in sorted({1, *threads}):
-        roofline[f"bandwidth_{count}t"] = as_dict(bandwidth_reference(threads=count))
+        roofline[f"bandwidth_{count}t"] = as_dict(
+            bandwidth_reference(threads=count, mib=bandwidth_mib)
+        )
 
     iterations: dict[str, dict[str, float]] = report["iterations"]  # type: ignore[assignment]
     for dim in dims:
@@ -437,26 +484,47 @@ def run_spike(
         p_free = len(free_param_index(spec))
         iters = iterations[f"d{dim}"]["mean_iterations"]
         for batch in batches:
-            theta = full_theta(spec, batch)
-            rng = np.random.default_rng(3)
-            y = rng.standard_normal((batch, n_time))
-            for gaps in GAP_CASES:
-                mask = gap_mask(gaps, batch, n_time)
+            for case in gaps:
                 for count in threads:
                     set_num_threads(count)  # type: ignore[no-untyped-call]
-                    a_pass = _time_pass(
-                        KalmanEngine(), state_space, theta, y, mask, t, design, repeats
-                    )
-                    b_pass = _time_pass(
-                        CompiledEngine(),
-                        state_space,
-                        theta,
-                        y,
-                        mask,
-                        t,
-                        design,
-                        repeats,
-                    )
+                    a_rounds: list[float] = []
+                    b_rounds: list[float] = []
+                    for _ in range(cell_repeats):
+                        # Allocated INSIDE the round: the scatter this harness
+                        # exists to report lives between allocations, and
+                        # reusing one buffer across rounds hides it and
+                        # flatters path A by ~16%.
+                        theta = full_theta(spec, batch)
+                        y = np.random.default_rng(3).standard_normal((batch, n_time))
+                        mask = gap_mask(case, batch, n_time)
+                        a_rounds.append(
+                            _time_pass(
+                                KalmanEngine(),
+                                state_space,
+                                theta,
+                                y,
+                                mask,
+                                t,
+                                design,
+                                repeats,
+                            )
+                        )
+                        b_rounds.append(
+                            _time_pass(
+                                CompiledEngine(),
+                                state_space,
+                                theta,
+                                y,
+                                mask,
+                                t,
+                                design,
+                                repeats,
+                            )
+                        )
+                        del theta, y, mask
+                    ratios = [a / b for a, b in zip(a_rounds, b_rounds, strict=True)]
+                    a_pass = float(np.median(a_rounds))
+                    b_pass = float(np.median(b_rounds))
                     # The mean iteration count is common to both paths -- same
                     # optimizer, same likelihood -- so it cancels from the
                     # ratio and only converts a pass cost into a fit time.
@@ -466,11 +534,18 @@ def run_spike(
                         {
                             "d": dim,
                             "batch": batch,
-                            "gaps": gaps,
+                            "gaps": case,
                             "threads": count,
+                            "cell_repeats": cell_repeats,
                             "path_a_pass_s_per_series": a_pass,
+                            "path_a_pass_s_per_series_min": min(a_rounds),
+                            "path_a_pass_s_per_series_max": max(a_rounds),
                             "path_b_pass_s_per_series": b_pass,
-                            "a_over_b": a_pass / b_pass,
+                            "path_b_pass_s_per_series_min": min(b_rounds),
+                            "path_b_pass_s_per_series_max": max(b_rounds),
+                            "a_over_b": float(np.median(ratios)),
+                            "a_over_b_min": min(ratios),
+                            "a_over_b_max": max(ratios),
                             "path_a_bound_ms_per_fit": a_fit_ms,
                             "path_b_ms_per_fit": b_fit_ms,
                             "path_a_over_budget": a_fit_ms / CORE_BUDGET_MS,
@@ -517,15 +592,44 @@ def main(argv: list[str] | None = None) -> int:
         help="thread count to sweep; repeat the flag (mini PC: --threads 1 --threads 4)",
     )
     parser.add_argument("--batch", action="append", type=int, default=None)
+    parser.add_argument(
+        "--dim",
+        action="append",
+        type=int,
+        default=None,
+        choices=(1, 3),
+        help="state dimension to sweep; repeat the flag (default: both)",
+    )
+    parser.add_argument(
+        "--gaps",
+        action="append",
+        default=None,
+        choices=GAP_CASES,
+        help="gap case to sweep; repeat the flag (default: all three). "
+        "The former batch-sweep script is `--dim 3 --gaps none --threads 1`",
+    )
     parser.add_argument("--n-time", type=int, default=630)
     parser.add_argument("--repeats", type=int, default=3)
+    parser.add_argument(
+        "--cell-repeats",
+        type=int,
+        default=CELL_REPEATS,
+        help="independent rounds per cell, each on fresh allocations; the "
+        "report carries the median with its min and max",
+    )
     parser.add_argument("--out", type=Path, default=None)
     args = parser.parse_args(argv)
 
     threads = tuple(args.threads or (1,))
     batches = tuple(args.batch or (1000,))
     report = run_spike(
-        threads=threads, batches=batches, n_time=args.n_time, repeats=args.repeats
+        threads=threads,
+        batches=batches,
+        dims=tuple(args.dim or (1, 3)),
+        n_time=args.n_time,
+        repeats=args.repeats,
+        gaps=tuple(args.gaps or GAP_CASES),
+        cell_repeats=args.cell_repeats,
     )
     text = json.dumps(report, indent=2, sort_keys=True)
     if args.out is not None:

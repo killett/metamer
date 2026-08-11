@@ -1,0 +1,121 @@
+{
+  "canonical_filter_pass": {
+    "detail": {
+      "batch": 256.0,
+      "d": 3.0,
+      "n_time": 630.0
+    },
+    "name": "canonical_filter_pass",
+    "seconds": 0.0006887070155698893,
+    "unit": "s per series per likelihood evaluation"
+  },
+  "cells": [
+    {
+      "a_over_b": 3.863055533986376,
+      "a_over_b_max": 4.010926442074857,
+      "a_over_b_min": 3.702092457240906,
+      "batch": 1000,
+      "cell_repeats": 3,
+      "d": 3,
+      "gaps": "none",
+      "pass_in_canonical_units": 0.9583481133088262,
+      "path_a_bound_ms_per_fit": 21.450684742303565,
+      "path_a_over_budget": 1.1289834074896614,
+      "path_a_pass_s_per_series": 0.0006600210689939558,
+      "path_a_pass_s_per_series_max": 0.0006610249420045875,
+      "path_a_pass_s_per_series_min": 0.0006437805919558741,
+      "path_b_ms_per_fit": 5.416145083727316,
+      "path_b_over_budget": 0.28506026756459557,
+      "path_b_pass_s_per_series": 0.00016665061796084047,
+      "path_b_pass_s_per_series_max": 0.0001785544120357372,
+      "path_b_pass_s_per_series_min": 0.0001645557649899274,
+      "predicted_bytes_per_series_resident": 7321,
+      "predicted_bytes_per_series_target": 7265,
+      "threads": 1
+    },
+    {
+      "a_over_b": 3.7958028406851034,
+      "a_over_b_max": 3.9968607549321273,
+      "a_over_b_min": 3.4260573084140518,
+      "batch": 20000,
+      "cell_repeats": 3,
+      "d": 3,
+      "gaps": "none",
+      "pass_in_canonical_units": 1.0016420776977972,
+      "path_a_bound_ms_per_fit": 22.41973259501538,
+      "path_a_over_budget": 1.179985926053441,
+      "path_a_pass_s_per_series": 0.0006898379260004731,
+      "path_a_pass_s_per_series_max": 0.0007383179931493942,
+      "path_a_pass_s_per_series_min": 0.0006810455147497123,
+      "path_b_ms_per_fit": 6.3215440275671435,
+      "path_b_over_budget": 0.3327128435561654,
+      "path_b_pass_s_per_series": 0.00019450904700206594,
+      "path_b_pass_s_per_series_max": 0.000198784040499595,
+      "path_b_pass_s_per_series_min": 0.00017259493595047387,
+      "predicted_bytes_per_series_resident": 7321,
+      "predicted_bytes_per_series_target": 7265,
+      "threads": 1
+    },
+    {
+      "a_over_b": 4.3266830054149645,
+      "a_over_b_max": 4.393261853565259,
+      "a_over_b_min": 4.24773529844242,
+      "batch": 114244,
+      "cell_repeats": 3,
+      "d": 3,
+      "gaps": "none",
+      "pass_in_canonical_units": 1.1536853877195083,
+      "path_a_bound_ms_per_fit": 25.82291465919403,
+      "path_a_over_budget": 1.359100771536528,
+      "path_a_pass_s_per_series": 0.0007945512202828933,
+      "path_a_pass_s_per_series_max": 0.000797333130860221,
+      "path_a_pass_s_per_series_min": 0.0007571038120777273,
+      "path_b_ms_per_fit": 5.8778455552878075,
+      "path_b_over_budget": 0.3093602923835688,
+      "path_b_pass_s_per_series": 0.00018085678631654792,
+      "path_b_pass_s_per_series_max": 0.00018428277039532048,
+      "path_b_pass_s_per_series_min": 0.0001782370507774686,
+      "predicted_bytes_per_series_resident": 7321,
+      "predicted_bytes_per_series_target": 7265,
+      "threads": 1
+    }
+  ],
+  "core_budget_ms": 19.0,
+  "iterations": {
+    "d3": {
+      "max_iterations": 51.0,
+      "mean_iterations": 32.5,
+      "n_ok": 4.0,
+      "n_sample": 4.0,
+      "utilization": 0.6372549019607843
+    }
+  },
+  "machine": {
+    "numba_threads_available": 4,
+    "platform": "Linux-6.8.0-137-generic-x86_64-with-glibc2.36",
+    "processor": "x86_64",
+    "python": "3.13.14"
+  },
+  "roofline": {
+    "bandwidth_1t": {
+      "detail": {
+        "gb_per_s_per_core": 10.769361460766284,
+        "gb_per_s_total": 10.769361460766284,
+        "mib_per_vector": 256.0,
+        "threads": 1.0
+      },
+      "name": "bandwidth_reference",
+      "seconds": 0.0747775409836322,
+      "unit": "s per STREAM triad pass"
+    },
+    "compute": {
+      "detail": {
+        "d": 3.0,
+        "gflops": 0.9999074293704336
+      },
+      "name": "compute_reference",
+      "seconds": 1.2601166497915982e-07,
+      "unit": "s per P = F P F' + Q step (plus rank-1 downdate)"
+    }
+  }
+}
