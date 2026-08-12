@@ -684,6 +684,50 @@ and the calibration tile both behave differently under it.
   its own grid, and a GIA field silently regridded under a fixed URI is the same hole one
   level out.
 
+### Q8 — screening, and `NOT_ATTEMPTED` meaning two things
+
+**Design doc §8.6, §11.1, §12.5 and §14.1 amended.** The screening *feature* is deferred
+(no Whittle engine; §17 places it in Phase 4) and its *regime* is declared per (a3): the
+config block is validated and **refused at layer 3 naming the missing engine specifically**
+— "screening requires the debiased Whittle engine (Phase 4)" — because a refusal that says
+what would lift it is planning information and one that does not is a wall. **Elimination is
+per-point in pass 2**, §11.1's safer branch and the one matching the premise that spectral
+shape varies spatially; a global mode would need unanimity across coarse points plus the
+eliminated set in root attrs.
+
+**THE FINDING: `NOT_ATTEMPTED` was carrying two incompatible meanings.** §12.5 initializes
+status to it so an interrupted write reads as unattempted — *nothing wrote here*; §8.6 and
+§14.1 used it to mean *screened out*, which is a verdict. **They are opposites in the only
+way that matters — the absence of information against information — and they were sharing a
+stored `uint8` whose meaning cannot change after data exists.** The completion bitmap
+separates them only at tile granularity and only while a run is unfinished, i.e. **precisely
+until the store is worth keeping**. `SCREENED_OUT` is added; both wordings corrected.
+
+**`NOT_APPLICABLE` is separated from `INSUFFICIENT_DATA` now, one sub-phase early**, because
+the reporting sub-phase will write against stores sub-phase 1 produced. They coincide in the
+common case and are not synonyms: **a shelf pixel with a genuine but short record is
+`INSUFFICIENT_DATA` and eligible; a land pixel is not eligible at all**, so they sit on
+opposite sides of §14.2's denominator and collapsing them makes the failure rate
+uninterpretable.
+
+**`NOT_APPLICABLE` is UNDERIVABLE today, not merely unreachable.** The mask comes from the
+data, so a land pixel is all-NaN → all-masked → `INSUFFICIENT_DATA`, and nothing can
+distinguish land from every-value-happens-to-be-NaN. Reaching it needs **a declared
+domain-mask variable in §13.6's input contract** — a second data source with its own
+geometry-fingerprint entry, exactly like a per-point regressor. Three members are unreachable
+in sub-phase 1 (`SCREENED_OUT`, `CANDIDATE_DROPPED`, `NOT_APPLICABLE`) and take **one
+consolidated criterion-12 note** listing what would make each reachable.
+
+**PUSHBACK THAT WAS CHECKED AND STOOD: `INSUFFICIENT_DATA` is NOT candidate-dependent in
+v1.** `fit.py:175` computes `design_info(t, mask)` **once**, before the candidate loop at
+line 208, because §12.1 fixes the signal spec and selects only the noise model. So every
+design-derived outcome is identical for every `m`. The location/series distinction survives
+— it is **location eligibility vs record adequacy** — but the "a 4-parameter design may be
+insufficient where a 1-parameter one is fine" reason becomes true only under joint
+signal × noise search (§19). **Consequence: the cancellation rule reaches the store's model
+axis** — a test asserting design-failure behaviour must vary the **mask**, never the
+candidate.
+
 **THE (a2) CHECK CAME BACK CLEAN, AND THAT IS WORTH RECORDING.** Every prior seam check in
 this project found the seam imagined or stale. This one found `DesignInfo.per_point` with
 `series()` and `window()` branching on it, `memory.py`'s `X_term`, an explicit refusal in
