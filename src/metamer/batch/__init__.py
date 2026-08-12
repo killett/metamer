@@ -11,7 +11,8 @@ The Python API is the unit of implementation and testing;
 `python -m metamer <config.toml> <store>` is a thin argparse wrapper over it and
 presupposes no command tree, which Phase 5 is what decides.
 
-Skeleton only in Task 0. Task 2 adds `input`, Task 4 the runner.
+Task 2 added `input` (the opener registry and the stage-4a contract) and
+`timeaxis` (the decimal-year conversion). Task 4 adds the runner.
 """
 
 from __future__ import annotations

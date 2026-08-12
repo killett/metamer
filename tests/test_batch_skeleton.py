@@ -49,13 +49,22 @@ def test_the_installed_zarr_is_version_3() -> None:
 
 
 def test_the_batch_extra_declares_every_dependency_the_batch_layer_imports() -> None:
-    """`pyproject.toml` carries a `batch` extra naming all four packages.
+    """`pyproject.toml` carries a `batch` extra naming every batch dependency.
 
     Bug this catches: a dependency that exists only in `pixi.toml`. `pixi run`
     executes off `PYTHONPATH=src` inside an environment that already has
     everything, so an import that would break the published wheel is invisible
     in development -- the failure appears for someone who ran `pip install
     metamer[batch]`, and never here.
+
+    **`cftime` IS THE ENTRY THAT IS NOT AN IMPORT, AND IT IS WHY THIS SET IS
+    SPELLED OUT RATHER THAN DERIVED FROM `src/`.** Nothing under `src/` imports
+    it; xarray reaches for it to decode any non-standard calendar, and `noleap`
+    and `360_day` are ordinary climate-model calendars. So it is a genuine
+    runtime dependency of the batch layer that
+    `tests/test_packaging.py`'s import scan **cannot see** -- that check guards
+    "imported but undeclared", and this is the case it does not reach. Deriving
+    this set from the imports would therefore quietly drop it.
 
     The core runtime dependencies are deliberately NOT widened. `metamer.core`
     must stay importable without any of these; `test_core_isolation.py` is what
@@ -69,7 +78,7 @@ def test_the_batch_extra_declares_every_dependency_the_batch_layer_imports() -> 
         requirement.split(">")[0].split("=")[0].split("[")[0].strip()
         for requirement in extras["batch"]
     }
-    assert declared == {"xarray", "zarr", "pydantic", "threadpoolctl"}
+    assert declared == {"xarray", "zarr", "pydantic", "threadpoolctl", "cftime"}
 
     core = {
         requirement.split(">")[0].split("=")[0].split("[")[0].strip()
@@ -89,5 +98,5 @@ def test_every_batch_dependency_is_actually_installed() -> None:
     `threadpoolctl` is the live instance -- it was present transitively and
     undeclared before Task 0, which is a dependency nothing guarantees.
     """
-    for name in ("xarray", "zarr", "pydantic", "threadpoolctl"):
+    for name in ("xarray", "zarr", "pydantic", "threadpoolctl", "cftime"):
         assert importlib.metadata.version(name)

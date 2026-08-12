@@ -67,6 +67,16 @@ batch = [
     "zarr>=3,<4",
     "pydantic>=2.13",
     "threadpoolctl>=3.6",
+    # cftime is a runtime dependency of the batch layer that nothing under src/
+    # imports: xarray reaches for it to decode any non-standard calendar, and
+    # `noleap` and `360_day` are ordinary climate-model calendars. Without it a
+    # store on either simply fails to decode.
+    #
+    # NOTE WHAT THIS MEANS FOR tests/test_packaging.py: its requirement check
+    # scans src/ for imports, so a dependency used only THROUGH another library
+    # is invisible to it. That check guards "imported but undeclared"; this entry
+    # is a case it cannot reach, and it is declared by hand for that reason.
+    "cftime>=1.6",
 ]
 
 [project.urls]
@@ -167,6 +177,13 @@ ignore_missing_imports = true
 # so it is absent from a working tree. __init__.py imports it inside a try/except
 # ImportError for exactly that reason; without this override mypy would fail on a
 # module whose absence is by design.
+# cftime ships no type stubs. tests/test_input.py imports it directly to build
+# non-standard-calendar fixtures, which is the only way to construct a `noleap`
+# or `360_day` axis. Declared centrally, same pattern as scipy above.
+[[tool.mypy.overrides]]
+module = ["cftime.*"]
+ignore_missing_imports = true
+
 [[tool.mypy.overrides]]
 module = ["metamer._version"]
 ignore_missing_imports = true

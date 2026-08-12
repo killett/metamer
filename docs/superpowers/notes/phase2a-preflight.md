@@ -382,3 +382,115 @@ self-reported identity in either allowlist, and Task 3 is what removes it.
   nothing. **Task 5 must supply those arguments from `core.machine`, not from the config**;
   noted here because that is the moment a self-reported machine could enter the calibration
   cache key, where it WOULD be a gate.
+
+---
+
+## Task 2 — the opener registry, the zarr opener, and stage 4a (audited 2026-08-12)
+
+**Two of the brief's own statements are wrong, and both were found by running the numbers
+rather than by reading.** That is the pre-flight's highest-yield move for the third time.
+
+### (d) — the design doc requires the conversion rule and never states it
+
+§13.6 says the conversion to decimal years is fit identity and that three calendars give
+different answers for one timestamp. **It does not say what the formula is**, and two
+reasonable formulas differ enough to matter:
+
+| candidate | a calendar year measures |
+|---|---|
+| `year + (t − start_of_year) / (start_of_next_year − start_of_year)` | exactly 1.0, every calendar |
+| `epoch + elapsed_seconds / (365.25 · 86400)` | 0.9993–1.0027 (Gregorian), 0.9993 (`noleap`), **0.9856 (`360_day`)** |
+
+**Measured**, and the `360_day` row decides it: under `/365.25` a `360_day` calendar year is
+1.46% short, so an `Annual` design column drifts 5.25 days per year and accumulates **0.72
+years of phase over 50 years** — the harmonic is decorrelated from the season it models. The
+design matrix carries `Annual` and `SemiAnnual`, and `360_day` is an ordinary climate-model
+calendar, so this is reachable rather than hypothetical.
+
+**Adopted: fraction of the actual year, evaluated in the timestamp's own calendar.** Stated in
+one place, in `timeaxis.py`'s module docstring, under `ALGORITHM_VERSION`.
+
+**Its cost is stated rather than hidden:** because a year is exactly 1.0, a Gregorian daily
+axis has **two** distinct timesteps (1/365 and 1/366) where `/365.25` has one, so `F` and `Q`
+are built twice per series per iteration instead of once. Measured on 20 years of daily data.
+
+### (i) — MEASURED: the brief's unique-Δt test cannot fail as written
+
+The brief asks for a test that the count is *"1 for a regular axis and large for one perturbed
+by float noise."* **Neither half holds against the real function.**
+
+`StateSpace.unique_dt` is tolerance-aware with `UNIQUE_DT_RTOL = 1e-9` applied per adjacent
+pair. Measured on a 50-year monthly axis:
+
+| axis | unique steps |
+|---|---|
+| month-start timestamps, real calendar | **6** |
+| the same, mid-month | **8** |
+| 20 years of daily timestamps | **2** |
+| synthetic `2000 + arange(n)/12` | **1** |
+| monthly perturbed at 1e-16 of value (float64 rounding) | **1** — collapses |
+| monthly perturbed at 1e-12 of value | 36 |
+| monthly perturbed at 1e-10 of value | 571 |
+
+So: **a real "regular" axis gives 6, not 1** — calendar months are 28–31 days — and **float
+noise does not inflate the count at all**, because the tolerance sits decades above float64
+rounding at these magnitudes. The hazard the number exists to report is real but its trigger
+is **sub-second jitter**: on a monthly axis the per-pair tolerance is about 2.6 ms.
+
+Transcribing the brief's test verbatim would have produced a failing assertion, and **the
+tempting fix is lowering `UNIQUE_DT_RTOL`** — which would destroy the `F`/`Q` amortization on
+every axis in order to hide a number that is telling the truth about one. Both sides of the
+crossover are now pinned so that the constant's role is explicit.
+
+### (a) — the seconds-versus-datetimes test is blind to the convention
+
+*"A seconds-since-1970 axis and a decimal-years axis produce the same result"* sends both sides
+through the same converter, so **any uniformly wrong convention cancels exactly** — including
+`/365.25`, and including an off-by-one year.
+
+**Changed:** four hand-computed decimal years are the absolute anchor
+(`2000-01-01 → 2000.0`; `2000-07-01 → 2000 + 182/366`; `2001-07-01 → 2001 + 181/365`, the leap
+year visible in the axis; `2000-12-31T12:00 → 2000 + 365.5/366`), and the differential test is
+kept as an additional check rather than as the check.
+
+### (a3) — netCDF's seam is asserted, not intended
+
+"Adding netCDF must be a registration, not a refactor" is impossible to verify by reading while
+zarr is the only opener. **Changed:** a test registers a second opener under its own scheme and
+drives the whole of `open_input` and `check_contract` through it. Mutating `open_input` to call
+`_open_zarr` directly fails it. The registry is `core.registry.Registry`, so the entry-point
+group comes free and a third-party opener is a package, not a patch.
+
+### Two defects the tests caught on their first run
+
+- **`type(sample)(year, 1, 1)` SILENTLY DROPS cftime's CALENDAR.** `cftime.datetime` carries
+  its calendar as an *attribute*, not as a subclass, so reconstructing through `type()` yields
+  a date on the **default** calendar — the denominator would be a standard year while the
+  numerator was measured in a `noleap` or `360_day` one. Wrong on exactly the calendars the
+  conversion exists to handle. `.replace()` preserves it and is spelled the same way on
+  `datetime.datetime`.
+- **A stage-4a helper was escaping as a bare `ValueError`.** `check_strictly_increasing` lives
+  in `timeaxis`, which knows nothing about validation staging, so a duplicate timestamp raised
+  `ValueError` rather than `InputContractError` — and Task 4 maps the staged type to exit code
+  4, so a bare one would be an unhandled error instead. Now wrapped at the stage boundary.
+
+### One defect found by running the code, which no test had asked for
+
+**CF decoding CONSUMES `units` and `calendar` and files them under `.encoding`.** Reading
+`.attrs` returns None for every successfully decoded axis — that is, for every axis this code
+ever sees. Measured on a round-tripped store: `.attrs` gave None while `.encoding` carried
+`days since 2000-01-01`. **A provenance field that is always empty records nothing**, and
+nothing else in the system would have reported it.
+
+### (d) — `cftime` is a dependency the packaging guard cannot see
+
+Nothing under `src/` imports it; **xarray reaches for it to decode any non-standard calendar**,
+and `noleap` and `360_day` are ordinary. `tests/test_packaging.py` scans `src/` for imports, so
+it guards "imported but undeclared" and **this case is outside it**. Declared by hand in the
+`batch` extra, with the limit stated in both places.
+
+### Bite checks
+
+Six mutations, six different guards, all bit: `/365.25`; `units` from `.attrs` only;
+`np.unique(np.diff(t))` without tolerance; `steps < 0` instead of `<= 0`; `_open_zarr` called
+directly instead of through the registry; `.astype(object)` on nanoseconds.

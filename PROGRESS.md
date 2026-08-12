@@ -26,8 +26,8 @@
   method.
 - **Exit criteria:** **13 met, 3 met with reduced scope, nothing deferred** — the full
   table with reasons is at the end of the Phase 1 plan.
-- **NEXT ACTION: Phase 2a Task 2 — the opener registry, the zarr opener, and stage 4a.**
-  Tasks 0 and 1 are done and committed. Run the (a)–(k) pre-flight against Task 2's brief first and
+- **NEXT ACTION: Phase 2a Task 3 — `geometry_hash`: components, allowlist change, golden
+  re-derivation.** Tasks 0–2 are done and committed. Run the (a)–(k) pre-flight against Task 3's brief first and
   append the result to
   [`docs/superpowers/notes/phase2a-preflight.md`](docs/superpowers/notes/phase2a-preflight.md),
   as Task 0 did. The plan is
@@ -59,9 +59,9 @@
   MacBook: `--threads 1 --threads 8`, `--out bench/macbook.json`.
   Batch sweep at path B's worst cell (d=3, 1 thread, no gaps) is
   `bench/batch-sweep-d3-1thread-nogaps.json`.
-- **Tests:** **652 collected** (588 at the close of Phase 1; Phase 2a Tasks 0 and 1 added the
-  batch-skeleton, stub-engine, packaging and config modules). Full sweep
-  `pixi run test` (~273 s, measured 2026-08-11). `pixi run test-fast` (~12 s)
+- **Tests:** **675 collected** (588 at the close of Phase 1; Phase 2a Tasks 0–2 added the
+  batch-skeleton, stub-engine, packaging, config and input modules). Full sweep
+  `pixi run test` (~291 s, measured 2026-08-12). `pixi run test-fast` (~12 s)
   deselects the `slow` marker and is for iteration only — **a green fast run is not evidence
   a task is done.** `pixi run test-ci` reproduces what CI runs (`-m 'not machine'`); it is
   also not evidence on its own, because the `machine` marker covers exactly the tests that
@@ -127,7 +127,7 @@
 | Phase 1 task tracker | `docs/superpowers/plans/2026-08-05-metamer-phase1.md.tasks.json` (native task ids 8–27) |
 | Original build prompt | [`docs/phase1-prompt.md`](docs/phase1-prompt.md) — **superseded** by design doc §2 where they conflict |
 | Phase 2 preliminaries pre-flight | [`docs/superpowers/notes/phase2-preliminaries-preflight.md`](docs/superpowers/notes/phase2-preliminaries-preflight.md) — the (a)–(k) audit of the P0/P1/P2 briefs and what each finding changed |
-| **Phase 2a implementation plan** | [`docs/superpowers/plans/2026-08-11-metamer-phase2a.md`](docs/superpowers/plans/2026-08-11-metamer-phase2a.md) — **Tasks 0–1 done; Task 2 next** |
+| **Phase 2a implementation plan** | [`docs/superpowers/plans/2026-08-11-metamer-phase2a.md`](docs/superpowers/plans/2026-08-11-metamer-phase2a.md) — **Tasks 0–2 done; Task 3 next** |
 | **Phase 2a pre-flight, per task** | [`docs/superpowers/notes/phase2a-preflight.md`](docs/superpowers/notes/phase2a-preflight.md) — the (a)–(k) audit of each 2a task brief and what each finding changed. **Append to it before each task, not after.** |
 
 Phase list is design doc §17. Phase 1 exit criteria are §18. Do not duplicate either here.
@@ -445,6 +445,57 @@ Only the durable conclusions are here.
   docstring — the reproduction recipe for its conditioning table — and **not** live code. So
   `fit(engine=...)` is the only engine construction site on the fit path and the injection
   seam is genuinely single.
+
+### Task 2 — the opener registry, the zarr opener, and stage 4a (done)
+
+- **THE DECIMAL-YEAR CONVENTION IS NOW FIXED, AND THE DESIGN DOC NEVER STATED IT.** §13.6 says
+  the conversion is fit identity and that calendars disagree; it does not say what the formula
+  is. Adopted: **`year + (t − start_of_year) / (start_of_next_year − start_of_year)`**, in the
+  timestamp's own calendar, so **a calendar year is exactly 1.0 in every calendar**. Stated in
+  one place, `batch/timeaxis.py`, under `ALGORITHM_VERSION`.
+  **Rejected `/365.25` on a measurement**: under `360_day` a calendar year is 1.46% short, so
+  an `Annual` column drifts 5.25 days per year and accumulates **0.72 years of phase over 50
+  years** — the harmonic is decorrelated from the season it models, with no crash and a
+  full-rank design. **Its cost, stated:** a Gregorian daily axis now has **two** distinct
+  timesteps (1/365, 1/366) where `/365.25` has one.
+- **A REAL MONTHLY AXIS HAS 6 DISTINCT TIMESTEPS, NOT 1 — AND ONLY THE SYNTHETIC ONE HAS 1.**
+  Measured on 50 years: month-start **6**, mid-month **8**, daily **2**, synthetic
+  `2000 + arange(n)/12` **1**. Calendar months are 28–31 days, so real monthly data is
+  genuinely irregular and the `F`/`Q` amortization does not apply to it. **See open question
+  14** — the benchmarks are built on the synthetic axis.
+- **THE unique-Δt HAZARD IS NOT FLOAT NOISE, WHICH IS WHAT THE PLAN SAID.** `UNIQUE_DT_RTOL =
+  1e-9` is applied per adjacent pair, decades above float64 rounding at these magnitudes:
+  monthly perturbed at 1e-16 of value still collapses to the same count. What breaks it is
+  **real sub-second jitter** — the per-pair tolerance on a monthly axis is about **2.6 ms**.
+  Measured crossover: 1e-16 → 1, 1e-12 → 36, 1e-10 → 571.
+  **DO NOT RESPOND TO A LARGE COUNT BY LOWERING `UNIQUE_DT_RTOL`.** It destroys the
+  amortization on every axis to hide a number telling the truth about one. Both sides of the
+  crossover are pinned so the constant's role is visible.
+- **`type(sample)(year, 1, 1)` SILENTLY DROPS cftime's CALENDAR.** `cftime.datetime` carries
+  its calendar as an **attribute**, not as a subclass, so reconstruction through `type()`
+  lands on the default calendar — a standard-year denominator against a `noleap` or `360_day`
+  numerator. Wrong on exactly the calendars the conversion exists to handle. `.replace()`
+  preserves it and is spelled the same on `datetime.datetime`.
+- **CF DECODING CONSUMES `units` AND `calendar` AND FILES THEM UNDER `.encoding`.** Reading
+  `.attrs` returns None for every successfully decoded axis — i.e. every axis this code sees.
+  Found by running the code, not by a test: **a provenance field that is always empty records
+  nothing**, and nothing else would have reported it.
+- **EVERY STAGE-4a FAILURE MUST CARRY THE STAGED EXCEPTION TYPE, INCLUDING ONES RAISED BY
+  HELPERS.** `check_strictly_increasing` lives in `timeaxis`, which knows nothing about
+  validation staging, so a duplicate timestamp escaped as a bare `ValueError` — and Task 4
+  maps `InputContractError` to exit code 4, so a bare one is an unhandled error instead.
+  Wrapped at the stage boundary.
+- **"netCDF IS A REGISTRATION, NOT A REFACTOR" IS ASSERTED, NOT INTENDED.** A test registers a
+  second opener under its own scheme and drives the whole path through it; mutating
+  `open_input` to call `_open_zarr` directly fails it. Impossible to verify by reading while
+  zarr is the only opener. The registry is `core.registry.Registry`, so the entry-point group
+  comes free and a third-party opener is a package rather than a patch.
+- **`cftime` IS A RUNTIME DEPENDENCY THE PACKAGING GUARD CANNOT SEE.** Nothing under `src/`
+  imports it; xarray reaches for it to decode any non-standard calendar.
+  `tests/test_packaging.py` scans `src/` imports, so it guards "imported but undeclared" and
+  **this is outside it**. Declared by hand, with the limit stated in both places.
+  **Generalize: a dependency used THROUGH another library is still a dependency, and an
+  import scan is structurally blind to it.**
 
 ### Task 1 — the config model, `load()`, and the hash wiring (done)
 
@@ -2663,6 +2714,22 @@ Still open. **A new session must not assume these were settled.**
     **Deliberately left open rather than fixed inside P4.** Restating the test means
     pinning the shim's inheritance contract, and pinning a contract in passing, inside a
     task about something else, is the change this project keeps paying for.
+
+14. **THE BENCHMARKS ARE BUILT ON A SYNTHETIC TIME AXIS THAT HAS ONE DISTINCT TIMESTEP, AND
+    REAL MONTHLY DATA HAS SIX.** Measured 2026-08-12 during Task 2: 50 years of month-start
+    timestamps give `unique_dt = 6`, mid-month 8, daily 2 — while `2000 + arange(n)/12`, the
+    shape every synthetic fixture and the spike use, gives 1. `StateSpace.unique_dt`'s whole
+    purpose is that `F` and `Q` are built once per DISTINCT step per series per optimizer
+    iteration, so on real monthly data that is **six times** what the benchmarks measured.
+
+    **This is not known to change any A:B ratio** — both paths build `F` and `Q` the same way,
+    so it plausibly cancels, which is exactly the reasoning that has failed twice before in
+    this project and must be measured rather than asserted. What it could move is the
+    **absolute** ms/fit against the 19 ms budget, which is a Phase 2b input.
+
+    **What would close it:** run the spike with a realistic calendar axis
+    (`unique_dt = 6`) beside the synthetic one at the same B and thread count, and report both
+    per-pass costs and the ratio. Cheap — it is a fixture change, not a harness change.
 
 13. **THE PACKAGING GUARD CANNOT RESOLVE DEPENDENCIES, SO A WRONG VERSION FLOOR IS
     UNCAUGHT.** `tests/test_packaging.py` installs the wheel with `--no-deps --no-index`,
