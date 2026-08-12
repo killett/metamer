@@ -107,6 +107,14 @@ class ContractReport:
             usefully, what it is not.
         t_start: First timestamp in decimal years.
         t_end: Last timestamp in decimal years.
+        median_dt: Median gap between adjacent timestamps, in decimal years.
+            **The identifiability lint's `sampling_interval` is this number**,
+            and it is measured here because this is where the decoded axis
+            already exists -- measure in the phase that can. It is the MEDIAN
+            of the realized gaps, not `(t_end - t_start) / n_time`: the latter
+            is off by `(n-1)/n` on a regular axis and is silently wrong on a
+            gapped one, and a lint comparing a timescale against it would
+            report on a sampling that never happened.
     """
 
     n_time: int
@@ -118,6 +126,7 @@ class ContractReport:
     unique_dt: int
     t_start: float
     t_end: float
+    median_dt: float
 
 
 def _scheme_of(uri: str) -> str:
@@ -334,4 +343,5 @@ def check_contract(handle: InputHandle) -> ContractReport:
         unique_dt=unique_dt_count(t),
         t_start=float(t[0]),
         t_end=float(t[-1]),
+        median_dt=float(np.median(np.diff(t))),
     )

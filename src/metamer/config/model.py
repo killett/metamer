@@ -39,6 +39,35 @@ from metamer.core.terms import ProcessSpec
 
 _STAMPED_KEYS = (hashing.ALGORITHM_VERSION_KEY, hashing.REGISTRY_VERSION_KEY)
 
+
+class StampedKeyError(ValueError):
+    """A config supplied a key that identifies the installed code.
+
+    A `ValueError` subclass so nothing that already catches `ValueError` around
+    `load` changes behaviour, and a distinct type so a caller can tell it apart
+    from `_read`'s parse failures.
+
+    **THE TWO WERE INDISTINGUISHABLE AND THE LAYER ATTRIBUTION NEEDS THEM
+    APART.** `_read` raises a bare `ValueError` for an unrecognized suffix and
+    for a parse failure, both of which are validation **layer 1** -- the file.
+    This one is **layer 2** -- the schema -- because the fault it describes is a
+    key that must not appear, which is what `extra="forbid"` would report as
+    `extra_forbidden` if this pre-check were not here to give a better message.
+    Both layers exit 3, so the exit code never depended on the distinction; the
+    message did, and design doc section 13.2 requires each stage to name itself.
+    """
+
+
+PER_POINT_TERM_PREFIX = "regressor_field:"
+"""Prefix marking a `signal_terms` entry as a PER-POINT regressor field.
+
+`"regressor_field:gia"` declares a regressor supplied as a `(time, y, x)` field
+rather than as one column shared by every series. The feature is refused at
+validation layer 3 until the design builder supports it; the declaration exists
+so that the refusal, the memory formula's branch and the calibration-cache key
+all have the same single source of truth. See `Config.per_point_regressors`.
+"""
+
 _STRICT = ConfigDict(extra="forbid", frozen=True)
 """Every block refuses unknown keys.
 
@@ -160,16 +189,18 @@ class Config(BaseModel):
     """A validated run configuration.
 
     Attributes:
-        data_uri: Where the input lives. **Fit-relevant until Task 3**, which
-            replaces it with `geometry_hash` and demotes it to provenance. The
-            gate is wrong in both directions today -- moving a file invalidates
-            a valid resume, editing one in place permits an invalid one -- and a
-            gate wrong both ways is not a conservative approximation of the
-            right gate.
+        data_uri: Where the input lives. **Provenance only since Task 3**,
+            which replaced it in fit identity with `geometry_hash`. It reaches
+            `run_hash` and neither gate, because a URI is a location and the
+            gate built on it was wrong in both directions at once -- moving a
+            file invalidated a valid resume, editing one in place permitted an
+            invalid one.
         variable: Name of the variable to fit.
         signal_terms: Deterministic design terms, in column order. **Order is
             data**: two orderings are two different design matrices, so
             `canonical_json` preserves list order rather than sorting it.
+            **This is also where the per-point regressor REGIME is declared**,
+            with `PER_POINT_TERM_PREFIX` -- see `per_point_regressors`.
         objective: ML or REML.
         engine: Likelihood engine key.
         seed: Seed for anything stochastic.
@@ -219,6 +250,40 @@ class Config(BaseModel):
     memory_budget_gb: float = Field(default=1.0, gt=0.0)
     threads: int = Field(default=1, ge=1)
     output: str = "out.zarr"
+
+    def per_point_regressors(self) -> tuple[str, ...]:
+        """Return the per-point regressor fields declared in `signal_terms`.
+
+        **THE REGIME LIVES INSIDE `signal_terms`, AND THAT IS THE WHOLE OF THE
+        CALIBRATION-CACHE ANSWER.** `signal_terms` is already in
+        `FIT_RELEVANT_FIELDS`, and a per-point regressor changes the design
+        matrix and therefore `theta_hat` and `log_lik`, so a regime change moves
+        `fit_hash` and invalidates a calibration cache keyed on it **by
+        construction**. A sibling field -- `regressor_fields` -- would have left
+        that key naming `fit_hash` while `fit_hash` said nothing about the
+        regime, and a cached shared-X measurement reused for a per-point run
+        understates peak bytes-per-series by ~3.3x against a hard RAM
+        constraint. Design doc section 11.4.
+
+        **THE FEATURE IS REFUSED AND THE REGIME IS DECLARED**, per pre-flight
+        (a3). The memory formula's branch (`memory.per_point_design`) and the
+        narrowing seam (`signal.DesignInfo.per_point`) already exist; this is
+        the config half, without which the layer-3 refusal has nothing to fire
+        on and its test asserts nothing.
+
+        **The spelling is provisional; the location is not.** Which prefix names
+        a per-point field is Task 6's business, when something first builds a
+        design from these strings. That it must be expressed inside
+        `signal_terms` rather than beside it is settled.
+
+        Returns:
+            The declared field names, without the prefix, in config order.
+        """
+        return tuple(
+            term[len(PER_POINT_TERM_PREFIX) :]
+            for term in self.signal_terms
+            if term.startswith(PER_POINT_TERM_PREFIX)
+        )
 
     def process_specs(self) -> tuple[ProcessSpec, ...]:
         """Return the candidate set as `ProcessSpec` objects, in config order.
@@ -402,8 +467,10 @@ def load(path: Path | str) -> Config:
 
     Raises:
         FileNotFoundError: If `path` does not exist.
-        ValueError: If the suffix is unrecognized, the file does not parse, or
-            the config supplies a stamped key.
+        StampedKeyError: If the config supplies a stamped key. A `ValueError`
+            subclass, and a distinct one so a caller can attribute it to the
+            schema layer rather than to the file layer.
+        ValueError: If the suffix is unrecognized or the file does not parse.
         pydantic.ValidationError: If the config does not satisfy the model,
             including an unrecognized key -- see `_STRICT`.
     """
@@ -418,7 +485,7 @@ def load(path: Path | str) -> Config:
     # caller goes through, including ones that never touch a file.
     supplied = sorted(set(_STAMPED_KEYS) & set(raw))
     if supplied:
-        raise ValueError(
+        raise StampedKeyError(
             f"{path}: {supplied} identifies the installed code and must not "
             "appear in a config. It is refused rather than overridden, so a "
             "config that tries to pin it fails loudly instead of being ignored"

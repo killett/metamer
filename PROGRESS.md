@@ -5,14 +5,15 @@
 - **Branch:** `main`. **Last commit:** `git log --oneline -1`. All Phase 2 work is on `main`;
   `phase-1` is a stale name that never diverged and needs nothing done to it.
 - **DONE: Phase 1 Tasks 0–18 (Task 19 deleted), Phase 2 preliminaries P0–P4, and Phase 2a
-  Tasks 0, 1, 2 and 3.**
-- **NEXT: Phase 2a Task 4 — validation staging 1/2/3/4a, the five exit codes, and
-  `python -m metamer`.** Read **[WHAT TASK 4 INHERITS](#what-task-4-inherits--read-this-before-the-task-sections-below)**
+  Tasks 0, 1, 2, 3 and 4.**
+- **NEXT: Phase 2a Task 5 — the thread budget: ownership, `threadpoolctl`, and the
+  observed-limits check.** Read **[WHAT TASK 5 INHERITS](#what-task-5-inherits--read-this-before-the-task-sections-below)**
   below before the plan; it carries what the plan does not.
-- **Tests: 693 collected.** `pixi run test` is the full sweep (~331 s, measured 2026-08-12) and
-  is what every end-of-task verification must run. `pixi run test-fast` deselects `slow` and is
-  for iteration only — **a green fast run is not evidence a task is done.** Verify a fresh
-  checkout with `pixi run test && pixi run typecheck && pixi run lint`.
+- **Tests: 743 collected (measured 2026-08-12, after Task 4).** `pixi run test` is the full
+  sweep (~298 s, measured 2026-08-12) and is what every end-of-task verification must run.
+  `pixi run test-fast` deselects `slow` and is for iteration only — **a green fast run is not
+  evidence a task is done.** Verify a fresh checkout with
+  `pixi run test && pixi run typecheck && pixi run lint`.
 - **The plan:**
   [`docs/superpowers/plans/2026-08-11-metamer-phase2a.md`](docs/superpowers/plans/2026-08-11-metamer-phase2a.md).
 - **THE METHOD IS THE PRE-FLIGHT, AND IT LIVES IN EXACTLY ONE PLACE:**
@@ -50,9 +51,12 @@
   MacBook: `--threads 1 --threads 8`, `--out bench/macbook.json`.
   Batch sweep at path B's worst cell (d=3, 1 thread, no gaps) is
   `bench/batch-sweep-d3-1thread-nogaps.json`.
-- **Tests:** **692 collected** (588 at the close of Phase 1; Phase 2a Tasks 0–3 added the
-  batch-skeleton, stub-engine, packaging, config, input and geometry modules). Full sweep
-  `pixi run test` (~331 s, measured 2026-08-12). `pixi run test-fast` (~12 s)
+- **Tests:** **743 collected, measured 2026-08-12** (588 at the close of Phase 1; Phase 2a
+  Tasks 0–4 added the batch-skeleton, stub-engine, packaging, config, input, geometry,
+  validation-staging and runner modules). **This bullet said 692 while the cold-start summary
+  twelve lines above said 693** — two undated copies of one measurement, which is how the drift
+  starts. One number now, dated. Full sweep
+  `pixi run test` (~298 s, measured 2026-08-12). `pixi run test-fast` (~12 s)
   deselects the `slow` marker and is for iteration only — **a green fast run is not evidence
   a task is done.** `pixi run test-ci` reproduces what CI runs (`-m 'not machine'`); it is
   also not evidence on its own, because the `machine` marker covers exactly the tests that
@@ -128,7 +132,7 @@
 | Phase 1 task tracker | `docs/superpowers/plans/2026-08-05-metamer-phase1.md.tasks.json` (native task ids 8–27) |
 | Original build prompt | [`docs/phase1-prompt.md`](docs/phase1-prompt.md) — **superseded** by design doc §2 where they conflict |
 | Phase 2 preliminaries pre-flight | [`docs/superpowers/notes/phase2-preliminaries-preflight.md`](docs/superpowers/notes/phase2-preliminaries-preflight.md) — the (a)–(k) audit of the P0/P1/P2 briefs and what each finding changed |
-| **Phase 2a implementation plan** | [`docs/superpowers/plans/2026-08-11-metamer-phase2a.md`](docs/superpowers/plans/2026-08-11-metamer-phase2a.md) — **Tasks 0–3 done; Task 4 next** |
+| **Phase 2a implementation plan** | [`docs/superpowers/plans/2026-08-11-metamer-phase2a.md`](docs/superpowers/plans/2026-08-11-metamer-phase2a.md) — **Tasks 0–4 done; Task 5 next** |
 | **Phase 2a pre-flight, per task** | [`docs/superpowers/notes/phase2a-preflight.md`](docs/superpowers/notes/phase2a-preflight.md) — the (a)–(k) audit of each 2a task brief and what each finding changed. **Append to it before each task, not after.** |
 
 Phase list is design doc §17. Phase 1 exit criteria are §18. Do not duplicate either here.
@@ -382,57 +386,65 @@ Per-task pre-flight audits live in
 [`docs/superpowers/notes/phase2a-preflight.md`](docs/superpowers/notes/phase2a-preflight.md).
 Only the durable conclusions are here.
 
-### WHAT TASK 4 INHERITS — read this before the task sections below
+### WHAT TASK 5 INHERITS — read this before the task sections below
 
-Task 4 is validation staging, the five exit codes, and `python -m metamer`. Everything it
-needs that is **not** in the plan:
+Task 5 is the thread budget: ownership, `threadpoolctl`, and the observed-limits check.
+Everything it needs that is **not** in the plan:
 
-**The four layers, and what belongs in each.** Layer 1 is the file: it parses, and it is a
-`.toml` or a `.json`. Layer 2 is the schema: pydantic, `extra="forbid"`. Layer 3 is
-cross-field and environment sense — **it needs no data**. Layer 4 is data-dependent, and
-**stage 4a is its first stage, deliberately not a fifth layer**, or it becomes one by accident
-when pass 1 lands and layer 4 acquires its "runs against pass 1" home.
+**THE LAYER-3 WIRING IS ALREADY THERE AND TASK 5 SUPPLIES THE OBSERVATION INTO IT.**
+`batch.validation.check_thread_limits(requested, observed)` raises a layer-3 `ValidationError`
+naming every library whose observed limit differs, and `check_semantics` calls it;
+`run(..., observed_thread_limits=...)` is the injection point. **`observed=None` skips the
+check, and that vacuity is Task 5's to remove** — it is pinned by a test today so the state is
+visible rather than believed. Task 5 replaces `None` with the `threadpoolctl` table; it must
+not invent a second error type, or exit criterion 10 gets satisfied by something that is not a
+layer-3 failure.
 
-**Layer 3 in 2a carries exactly what 2a can trigger**, and the checks accrete while the
-staging is the structure: the screening refusal (**naming the missing engine specifically** —
-"screening requires the debiased Whittle engine (Phase 4)"); the per-point regressor refusal
-(**naming the field and both tile sizes, 338 against 186**, because layer 3 knows them and
-"not implemented" wastes context the user needs for planning); duplicate candidates by spec
-hash; criterion/objective compatibility; the identifiability lint as a **warning**; **and Task
-5's observed-versus-requested thread-limit check.**
+**Record the observed limit for EVERY library `threadpoolctl` finds** — OpenBLAS, MKL, OpenMP,
+numba's layer. `OMP_NUM_THREADS=1` in provenance records a *request*, and whether it took
+effect depends on import ordering nothing enforces. A precondition that holds for OpenBLAS
+while MKL runs multithreaded is not a precondition that holds.
 
-> **TASK 5 EXPOSES THE THREAD CHECK; TASK 4 IS WHAT MAKES IT A LAYER-3 FAILURE.** Without the
-> wiring it ships as a bare exception with no layer attached, which would satisfy exit
-> criterion 10 with something that is not a layer-3 failure. Stated in both briefs.
+**`machine_fingerprint`'s arguments come from `core.machine`, never from the config**, and the
+reason is (a2): it is self-reported at its own boundary, harmless while it reaches `run_hash`
+alone, and an **identity** the moment §11.4's calibration cache key reads it. Wire it from the
+platform before the cache exists, because retrofitting means invalidating whatever the cache
+already holds.
 
-**The five exit codes:** 0 clean; 1 completed with failures above threshold; 2 aborted early;
-3 config/validation layers 1–3; 4 data-dependent layer 4. **2a can produce 0, 3 and 4**; 1 and
-2 get a constructed test each or an explicit note that their producer is 2e. Assert them
-**through a subprocess** — an exit code is a process property — and **enumerate the exits,
-never assert a count.**
+**Thread counts reach `run_hash` only.** If they moved `fit_hash` the hash boundary would be
+conceding that §11.3's determinism guarantee does not hold. The guarantee and the boundary are
+the same claim stated twice.
 
-**Stage 4a's exception type is already correct and exit code 4 depends on it.**
-`InputContractError` is a `ValueError` subclass, and Task 2 wraps `timeaxis`'s bare
-`ValueError` at the stage boundary so a duplicate timestamp arrives as the staged type. A
-helper raising an unstaged error is an unhandled crash rather than exit code 4; if Task 4 adds
-helpers, they inherit that requirement.
+**Assemble and fit never overlap, and the RATIO is the thing to record** — at ~5.4 s per series
+against a tile read of order seconds, fit dominates and the idle I/O is free. If that inverts
+(cheaper model, slower store, object storage over a network) the decision needs revisiting and
+nothing else would show it.
+
+### What the whole rest of 2a inherits from Task 4
+
+**The staging vocabulary lives in `batch/validation.py`**: `ValidationLayer` (1 FILE, 2 SCHEMA,
+3 SEMANTIC, 4 DATA), `ExitCode` (0/1/2/3/4), `ValidationError` (layers 1–3, and it renders its
+own layer into its message), `layer_of` and `exit_code_for`. **Layer 4 keeps Task 2's
+`InputContractError` and is NOT folded into `ValidationError`** — exit code 4 rests on that
+type being raised for every stage-4a failure including the ones helpers raise, so `__main__`
+attaches the layer prefix for it rather than the exception knowing about staging.
 
 **`STAGE_4A_FIELDS` is an exclusion, not a loosening.** `run_payload` validates
 `FIT_RELEVANT_FIELDS - STAGE_4A_FIELDS` because `geometry_hash` comes from an input rather than
-from a config, and §13.4 requires `--explain` to work with **no data staged** — sizing a run
-before moving 25 GB is its most valuable use. `Config.fit_hash()` and `compat_hash()` return
-`None` there and `run_hash()` returns a string. **Do not "fix" the exclusion by demanding the
-field.**
+from a config, and §13.4 requires `--explain` to work with **no data staged**.
+`Config.fit_hash()` and `compat_hash()` return `None` there and `run_hash()` returns a string.
+**Do not "fix" the exclusion by demanding the field.**
 
-**The runner is `python -m metamer <config.toml> <store>`, argparse, one screen.** No typer, no
-rich, **no `console_scripts` entry and no subcommand**: naming a subcommand presupposes the
-tree it belongs to and designs the argument structure before Phase 5 knows it. Flags:
-`--memory-budget`, and `--reuse-fits-from` at Task 12. The final line carries `fit_hash`,
-`compat_hash` and the store path.
+**The runner is `metamer.batch.run(config_path, store_path, ...) -> RunReport`**, with
+`python -m metamer <config.toml> <store>` a thin argparse wrapper. No typer, no rich, **no
+`console_scripts` entry and no subcommand**. `--reuse-fits-from` is Task 12's and is
+deliberately absent: a flag that parses and does nothing reads as supported.
 
-**The engine must stay injectable.** `fit(engine=...)` is the seam the raising stub fixture is
-delivered through; a runner that builds its engine internally from the config makes every
-downstream "no fit ran" assertion vacuous. See `tests/conftest.py`.
+**THE ENGINE SEAM IS STILL OWED, AND IT LANDS AT TASK 9.** `fit(engine=...)` is how the raising
+stub fixture is delivered, and a runner that builds its engine internally from the config makes
+every downstream "no fit ran" assertion vacuous. Task 4 deliberately did **not** add an
+`engine=` parameter, because nothing here fits and a parameter no test can make bite is a hook
+promised in argument form. **Task 9 is the first task that fits and is where it must arrive.**
 
 ### Phase 2a facts a fresh session cannot re-derive
 
@@ -476,6 +488,77 @@ downstream "no fit ran" assertion vacuous. See `tests/conftest.py`.
 | **12** | Does a child inherit the parent's **watermark** or its **current RSS**? Both instruments are load-bearing for 2b's calibration tile | a standalone cross-process probe varying the two independently — allocate, free, spawn — on Linux and macOS, then state the answer in `machine.py` and restate the test |
 | **13** | The packaging guard installs `--no-deps`, so a **wrong version floor** is uncaught | an offline wheelhouse: `pip wheel` the resolved set once, install `metamer[batch]` with `--no-index --find-links`. **Do not close it by loosening the floors** |
 | **14** | The benchmarks use a synthetic axis with `unique_dt = 1`; real monthly data has **6** | run the spike with a realistic calendar axis beside the synthetic one at the same B and thread count. **"It plausibly cancels in the ratio" is the reasoning that has failed twice** — measure it |
+
+### Task 4 — validation staging, exit codes, and `python -m metamer` (done)
+
+- **TWO EXIT CODES COLLIDE WITH CODES NOBODY WRITES, AND ONLY ONE IS FIXABLE.**
+  **argparse exits 2 on a usage error and 2 means "aborted early"** — a mistyped command line
+  would report the code for a run that started, evaluated its abort criterion and stopped.
+  Fixed: `_Parser.error` exits `CONFIG_INVALID`, pinned by a subprocess test.
+  **Python exits 1 on an unhandled exception and 1 means "completed with failures above
+  threshold."** Not fixable inside a taxonomy with no internal-error code. It is harmless only
+  while 1 has no producer, so in 2a **any observed 1 is a crash**. **REQUIREMENT ON 2e**: when
+  1 acquires a producer, a test asserting exit 1 must also assert the absence of a traceback,
+  or the two become indistinguishable.
+- **"LAYER 3 NEEDS NO DATA" AND "LAYER 3 CARRIES THE IDENTIFIABILITY LINT" CANNOT BOTH HOLD,
+  AND THE CONTRADICTION IS THE DESIGN DOC'S OWN.** §13.2 heads layer 3 "Semantic,
+  data-independent" and lists the lint inside it; `lint(spec, sampling_interval)` takes a
+  median observation spacing and **raises** on an unusable one, deliberately. **Resolved by
+  splitting on what fails rather than on when it runs**: every layer-3 check that can *fail*
+  stays upstream of the open, and the lint — a **warning**, which cannot move the exit code —
+  runs after stage 4a. That ordering is what makes a run with both a bad config and bad data
+  report the config, and it is asserted by a test constructing both faults at once.
+- **THE PER-POINT REGRESSOR REFUSAL HAD NO CONFIG FIELD TO FIRE ON.** Task 1 declared the
+  screening regime as a block and did not declare this one, so (a3)'s standard — a field, a
+  formula branch, and an explicit refusal with a test — was failed with two of three present.
+  **`config.model.PER_POINT_TERM_PREFIX = "regressor_field:"` and
+  `Config.per_point_regressors()`** close it. The declaration lives **inside `signal_terms`**,
+  which is already fit-relevant, so the calibration-cache key invalidates on a regime change by
+  construction and (a2) has no new field to classify. **The spelling is provisional; the
+  location is not.**
+- **THE PUBLISHED 338 / 186 ARE PATH A's NUMBERS AND NOTHING SAID SO.** Recomputed 2026-08-12
+  at §9.4's worked example (d=3, k_β=4, p=4, N=630, M=12, 1 GB): `NUMPY_BATCHED` gives
+  8 722 / 28 882 B/series, tile sides **338 / 186**, area ratio **3.30×**; `COMPILED` gives
+  7 634 / 27 794, **361 / 189**, **3.65×**. Design doc §13.4, the 2a plan and this file all
+  quote the first pair with no backend attached, and the spike adopted path B. **A tile size
+  without its backend is the same shape of claim as a benchmark ratio without its harness.**
+  The refusal computes both numbers live from `memory` and names the backend and the
+  parameters.
+- **`load` DOES NOT PARSE CANDIDATES, AND AN UNKNOWN KIND IS A `KeyError`.** Measured:
+  `candidates = ["nosuchkind"]` loads clean and raises from the kernel registry only when
+  `candidate_spec_hashes()` is called. Task 1's own (c) enumeration listed both candidate
+  failures among `load`'s exits; they are not, and one is not a `ValueError`. **A layer-3 pass
+  catching `ValueError` alone lets the `KeyError` escape as an unhandled exception**, i.e. exit
+  code 1. Both types are caught and staged.
+- **AN UNKNOWN CRITERION PASSED LAYERS 1 AND 2.** `Config.criteria` is `tuple[str, ...]` with
+  no membership constraint, so the fault would have surfaced at ranking time, inside the tile
+  loop, ten hours in. Refused at layer 3 naming the implemented set. Deliberately **not** moved
+  into pydantic: §13.2 places it at layer 3, and constraining the field would change what
+  reaches `compat_hash`.
+- **`pydantic.ValidationError` IS A `ValueError` SUBCLASS, AND SO IS `StampedKeyError`.**
+  Measured on the first run: a layer-1 `except ValueError` clause written above the schema
+  clauses swallows every schema failure and reports "layer 1 (file)" for a file that parsed
+  perfectly. The clause order is the whole of the attribution, and it is commented as such.
+  `config.model.StampedKeyError` is new — `_read`'s parse failures and the stamped-key refusal
+  were both bare `ValueError`, so no caller could tell layer 1 from layer 2.
+- **AN ORDERING TEST NEEDS A FIXTURE WHOSE TWO ORDERINGS RAISE DIFFERENT THINGS.** The first
+  version used a wrong-shaped variable, and **both orderings raise `InputContractError` there**
+  — so it would have passed against a fingerprint-first runner while looking like a test of
+  §13.7. The fixture that discriminates is a bare numeric time axis with no `units`:
+  contract-first gives `InputContractError`, fingerprint-first gives a bare `TypeError` out of
+  `to_decimal_years`. Same shape as Task 3's non-biting mutation.
+- **A SURVIVING MUTATION CAN ALSO BE A MUTATION THAT IS NOT A DEFECT — a fifth thing, beside
+  (e)'s four.** `if observed is None: return` mutated to `observed = {}` left everything green,
+  correctly: an empty table has no offenders, so the two are the same behaviour. The reachable
+  defect is deleting the guard so `observed.items()` runs against `None`, and that bites.
+  **22/22 caught** once the mutation expressed a defect.
+- **`ContractReport` gains `median_dt`** — the median of the realized gaps, not
+  `(t_end - t_start) / n_time`, which is off by `(n-1)/n` on a regular axis and silently wrong
+  on a gapped one. Measured where the decoded axis already exists: measure in the phase that
+  can.
+- **Open question 12 did not fire during this task's verification.** The full sweep was green
+  on the first run (743 passed, 298 s, 2026-08-12). That is an observation, not a resolution —
+  the test passes in isolation every time and the baseline is still the session watermark.
 
 ### Task 3 — `geometry_hash` (done)
 
@@ -2755,3 +2838,19 @@ deferred that is not recorded there. Phase 1 additions:
 - Cross-term shared parameters (blocks σ² profiling) — refused with `NotImplementedError`.
 - Per-point regressor fields — `signal.DesignInfo` carries the seam.
 - Nonlinear signal terms (`ExpDecay`, `LogDecay`) — constructible, raise on use.
+
+Phase 2a additions:
+
+- **Exit code 1 must be made distinguishable from a crash when sub-phase 2e gives it a
+  producer.** Python reports an unhandled exception as exit code 1, which the taxonomy defines
+  as "completed with failures above threshold". While 1 is unreachable the collision is
+  harmless and any observed 1 is a crash; the moment 2e wires the failure-rate threshold, a
+  test asserting exit 1 must also assert the absence of a traceback. Recorded here because the
+  task that creates the hazard is not the task that closes it.
+- **The `engine=` injection seam on the runner lands at Task 9**, the first task that fits.
+  Task 4 left it out deliberately: a parameter nothing consumes is a hook no test can make
+  bite. `tests/conftest.py`'s raising stub is undeliverable without it, and every downstream
+  "no fit ran" assertion is vacuous.
+- **`config.model.PER_POINT_TERM_PREFIX` is a provisional spelling.** That the per-point
+  regressor regime is declared inside `signal_terms` is settled (§11.4); which prefix names one
+  is Task 6's, when something first builds a design from those strings.

@@ -595,3 +595,238 @@ opened dataset. **The allowlist source sweep is now closed with nothing outstand
 Five mutations, four bit immediately: coordinates summarized as min/max/len; `source_dtype`
 constant; `list()` for `.tolist()`; `data_uri` restored to the allowlist. The fifth is the
 non-biting one recorded above, and it is the finding.
+
+---
+
+## Task 4 — validation staging, exit codes, and `python -m metamer` (audited 2026-08-12)
+
+The brief is a structure task, so the audit is mostly about **whether the structure it
+describes can exist as described**. Two of its own clauses contradict each other, one of the
+checks it lists has no config field to fire on, and two of the five exit codes collide with
+codes that Python and argparse produce for unrelated reasons.
+
+### (f) — "layer 3 needs no data" and "layer 3 carries the identifiability lint" cannot both hold
+
+`lint(spec, sampling_interval)` takes a **median observation spacing** and **raises** when it
+is not finite and positive — deliberately, because a diagnostic that reports "clean" because
+it could not run is worse than one that stops (Task 15). A sampling interval is a property of
+the data. So the lint cannot run in a data-independent layer.
+
+**This is the design doc's own contradiction, not the plan's.** §13.2 heads layer 3
+"**Semantic, data-independent**" and lists "identifiability lint (§4.8), as a warning" inside
+it. PROGRESS's Task 4 handoff repeats both halves.
+
+**Resolved by splitting on what fails rather than on when it runs.** Layer 3 is the layer of
+*config-internal* faults; every layer-3 check that can **fail** — screening, per-point
+regressors, duplicate candidates, criterion membership, thread limits — runs before anything
+is opened and needs no data. The lint is a **warning**, it cannot move the exit code, and it
+therefore runs after stage 4a with the sampling interval stage 4a already computed. That
+ordering is what keeps the attribution honest: a run with both a bad config and bad data must
+report the config, and it does, because every layer-3 *failure* is upstream of the open.
+
+`ContractReport` gains `median_dt`, computed where the decimal-year axis already exists —
+measure in the phase that can.
+
+### (a3) / (d) — the per-point regressor refusal has no config field to fire on
+
+The brief requires layer 3 to refuse a per-point regressor "**naming the field** and both
+tile sizes". `Config` has no such field. Task 1's (a3) sweep declared the `screening` regime
+as a block and **did not declare this one**; design doc §13.4 says the config field ships
+while the feature is refused, and §11.4 says the regime "is expressed inside `signal_terms`"
+so that it reaches `fit_hash` by construction rather than through a sibling field.
+
+Without a declaration the refusal is unreachable, its test is vacuous, and (a3)'s own
+standard — "a field, a formula branch, and an explicit refusal with a test, not a comment
+promising a hook" — is failed with two of the three present: the formula branch
+(`memory.per_point_design`) and the narrowing seam (`signal.DesignInfo.per_point`) both
+already exist.
+
+**Changed:** `config.model` gains `PER_POINT_TERM_PREFIX = "regressor_field:"` and
+`Config.per_point_regressors()`. The declaration lives inside `signal_terms`, which is
+already fit-relevant, so no new hashed field is created and (a2) has nothing new to classify
+— `signal_terms` is a REQUEST, self-reported correctly. The spelling is provisional and says
+so; what is not provisional is that the declaration must sit inside `signal_terms`.
+
+### MEASURED: the brief's 338 and 186 are path A's numbers, and the adopted path is B
+
+Recomputed 2026-08-12 from `memory.resident_bytes_per_series` and `memory.tile_side` at
+§9.4's worked example (d=3, k_β=4, p=4, N=630, M=12, 1 GB):
+
+| backend | shared X | per-point X | tile side | area ratio |
+|---|---|---|---|---|
+| `NUMPY_BATCHED` (path A) | 8 722 B | 28 882 B | **338 / 186** | 3.30× |
+| `COMPILED` (path B) | 7 634 B | 27 794 B | **361 / 189** | 3.65× |
+
+The brief, PROGRESS and design doc §13.4 all quote 338/186 and "3.3× in tile area" **without
+naming a backend**, and the spike adopted path B by ≥3×. So both the tile sides and the
+headline ratio are backend-specific, and the quoted pair is the one for the backend `fit()`
+actually defaults to today (`KalmanEngine`, i.e. `NUMPY_BATCHED`).
+
+**Changed:** the refusal computes its numbers live from `memory`, at the worked example's
+parameters, and **names the backend and the parameters in the message**. Nothing is
+hard-coded, so a change to the formula moves the message rather than dating it.
+
+### (c) — an unknown candidate kind raises `KeyError`, is LAZY, and Task 1's enumeration says otherwise
+
+Measured. `load()` does **not** validate candidates: `parse_candidate` runs only when
+`process_specs()` or `candidate_spec_hashes()` is called. And an unknown kind comes out of the
+kernel registry as a **`KeyError`**, not a `ValueError`:
+
+    load OK -> ('aic', 'not_a_criterion') ('nosuchkind',)
+    lazy raise: KeyError "kernel_registry: unknown key 'nosuchkind'. Available: matern12, matern32, white"
+
+Task 1's audit listed "candidate expression malformed; unknown term kind" among **`load`'s**
+exits. They are not `load`'s exits, and one of the two is not a `ValueError`. A layer-3 pass
+catching `ValueError` alone would let an unknown candidate kind escape as an unhandled
+exception — which Python reports as **exit code 1**, i.e. "completed with failures above
+threshold" in this taxonomy. Both types are caught and staged.
+
+Placement is nonetheless right: candidate parsing is semantic, so layer 3 is where it belongs.
+
+### (c) — an unknown criterion passes layers 1 and 2 today
+
+`Config.criteria` is `tuple[str, ...]` with no membership constraint, so `criteria =
+["aic", "not_a_criterion"]` loads clean and would fail at ranking time, inside a tile loop,
+ten hours in. This is the reachable half of §13.2's "criterion/objective compatibility" row:
+TIC and CV are the row's examples and neither is implemented, and every implemented criterion
+is computable under both ML and REML. Refused at layer 3, naming the offending value and the
+implemented set. **Deliberately not moved into the pydantic model**: §13.2 places it at layer
+3, the message can then name the objective, and constraining the field would change what
+reaches `compat_hash`.
+
+### TWO EXIT-CODE COLLISIONS, BOTH FROM CODE NOBODY WRITES
+
+- **argparse exits 2 on a usage error, and 2 is "aborted early".** `python -m metamer` with no
+  arguments would report the code that means a run started and stopped, from a run that never
+  started. **Changed:** the parser's `error()` exits `ExitCode.CONFIG_INVALID` (3), and a
+  subprocess test pins it — a bare invocation must be 3, never 2.
+- **Python exits 1 on an unhandled exception, and 1 is "completed with failures above
+  threshold".** Unfixable inside the taxonomy, which has no internal-error code. It is
+  harmless in 2a because **1 is unreachable here**, so any observed 1 is a crash; it stops
+  being harmless in 2e, when 1 acquires a producer. Recorded in PROGRESS as a 2e requirement:
+  a test asserting exit 1 must also assert the absence of a traceback.
+
+### (c) — `load`'s ValueError does not say which layer raised it
+
+`_read` raises `ValueError` for an unrecognized suffix and for a parse failure (layer 1);
+`load` raises a bare `ValueError` for a supplied stamped key (layer 2 — `extra="forbid"` would
+catch the same key as `extra_forbidden` if the pre-check were not there). The two are
+indistinguishable by type, so a runner cannot name the layer correctly. Both map to exit code
+3, so the **code** is unaffected and only the **message** would be wrong — which is exactly
+what "each layer names itself" exists to prevent.
+
+**Changed:** `config.model` gains `StampedKeyError(ValueError)`. One line, no behaviour
+change, and it keeps the staging vocabulary out of `config` — the layer enum stays in
+`batch.validation`, which is where layer 4 already lives.
+
+### (i2) — three pure negatives in this task, each given its control
+
+| the negative | the control |
+|---|---|
+| a clean config raises no layer-3 error | each of the five layer-3 checks raises on its own trigger |
+| a matching thread-limit table raises nothing | a mismatched table raises a layer-3 error naming the library |
+| `observed_thread_limits=None` skips the check | the same call with a table does not skip it |
+
+The third is the one that would otherwise ship silently: until Task 5 supplies the
+observation, the production runner passes `None` and the check does nothing. That is stated
+in the docstring and pinned by a test, so the vacuity is a recorded state rather than a
+belief.
+
+### (k) — an exit code is a process property, and so is the final line
+
+Every exit-code assertion runs `python -m metamer` in a subprocess and reads `returncode`.
+Calling `main()` in-process tests the mapping function, which is worth doing separately and is
+not the same claim: `sys.exit` semantics, argparse's own exits and an unhandled traceback are
+all invisible to an in-process call.
+
+### (a) — every exit-code test compares against an absolute integer, but the LAYER can still cancel
+
+A runner that reported layer 3 for everything passes any test that only asserts "an error
+naming a layer". **Changed:** the layer-3 and layer-4 tests assert **different** codes for
+**different** constructed faults, and one test constructs a config that fails layer 3 **and**
+stage 4a at once and asserts it reports 3 — the ordering claim, which no single-fault test can
+express.
+
+### (g) — signature binding
+
+Checked against the committed sources, not against the brief: `config.load(path)`,
+`Config.fit_hash(geometry_hash=None)` / `compat_hash` / `run_hash(machine=None,
+geometry_hash=None)`, `Config.candidate_spec_hashes()`, `open_input(uri, variable)`,
+`check_contract(handle) -> ContractReport`, `geometry_components(handle, variables=None)`,
+`geometry_hash(components)`, `lint(spec, sampling_interval) -> list[Finding]`,
+`memory.resident_bytes_per_series(backend, d, k_beta, p, n_time, n_models, per_point_design)`,
+`memory.tile_side(budget_bytes, per_series_bytes)`. All bind. **A clean (g) is not a
+pre-flight** — every finding above is one (g) cannot see.
+
+### (f) — one stale docstring in the tree, from Task 3
+
+`Config.data_uri`'s attribute docstring still reads "**Fit-relevant until Task 3**, which
+replaces it with `geometry_hash` and demotes it to provenance. The gate is wrong in both
+directions today". Task 3 landed; `to_payload`'s docstring three methods below already says
+`data_uri` is provenance only. Corrected.
+
+### The engine seam is NOT wired here, deliberately
+
+PROGRESS's Task 4 handoff requires the engine to stay injectable. Task 4's runner fits
+nothing, so an `engine=` parameter on `run()` would be a parameter no test could make bite —
+"a comment promising a hook" in argument form. It is stated in `run()`'s docstring and carried
+forward to **Task 9**, the first task that fits, where the raising stub can actually be
+delivered through it and the assertion can fail.
+
+### Bite checks
+
+**22 mutations, 22 caught**, against `tests/test_validation.py`, `tests/test_runner.py` and
+`tests/test_input.py`. The battery is grouped by what it attacks rather than by file:
+
+| what was mutated | outcome |
+|---|---|
+| screening refusal deleted | 3 failures |
+| per-point refusal deleted | 3 failures |
+| per-point message quotes the `COMPILED` backend | 2 failures |
+| tile sides hard-coded at the pre-streaming 171 | 1 failure |
+| duplicate-candidate check deleted | 1 failure |
+| duplicates compared by config string rather than by spec hash | 3 failures |
+| candidate resolution catches `ValueError` only | 1 failure |
+| criterion membership check deleted | 2 failures |
+| thread check not wired into layer 3 | 1 failure |
+| the `None` guard deleted, so an unobserved run dereferences None | 1 failure |
+| layer-1 `ValueError` clause placed above the schema clauses | 2 failures |
+| the lint promoted from warning to refusal | 11 failures |
+| unusable sampling interval attributed to layer 3 | 1 failure |
+| layer 3 moved below the open | 1 failure |
+| fingerprint taken before the contract check | 1 failure |
+| gates computed without the geometry (the degraded mode, always) | 2 failures |
+| memory-budget override applied with `model_copy`, i.e. unvalidated | 1 failure |
+| the lint never called | 1 failure |
+| `median_dt` taken as span / `n_time` | 1 failure |
+| argparse usage error left at its own exit code 2 | 1 failure |
+| every staged failure mapped to exit code 3 | 3 failures |
+| layer 4 loses its prefix on stderr | 1 failure |
+
+**ONE MUTATION SURVIVED ON THE FIRST PASS AND IT WAS NOT A DEFECT.** Replacing
+`if observed is None: return` with `if observed is None: observed = {}` left everything green
+— correctly, because the two are the same behaviour: an empty table has no offenders. That is
+none of (e)'s four causes; **it is a mutation that is not a defect at all**, which is a fifth
+thing a survivor can be and is worth naming. The mutation that expresses the reachable defect
+is deleting the guard outright, so `observed.items()` runs against `None` — and that one bites.
+**Diagnose the survivor before writing a test for it**: a test written to catch the first
+version would have been a test of an equivalence.
+
+### MEASURED: the ordering test had to be rebuilt before it could bite
+
+The first version of *"no hash is computed when the input contract fails"* used a
+two-dimensional variable. **Both orderings raise `InputContractError` there**, so the assertion
+passed against a fingerprint-first runner and the section 13.7 claim would have been untested
+while looking tested — (i) at its purest, and the same shape as Task 3's non-biting mutation.
+
+The fixture that discriminates is a **bare numeric time axis with no `units`**: contract-first
+gives `InputContractError` naming the decode failure, fingerprint-first gives a bare
+`TypeError` out of `to_decimal_years`, which is unstaged and reaches the user as a traceback
+and exit code 1. Measured both orderings before rewriting the test.
+
+### The stale number this audit found in PROGRESS itself
+
+The cold-start summary said **693 collected** and the same file's "Tests:" bullet said **692**,
+twelve lines apart. Measured: 693 before this task. **A recorded measurement carries its
+measurement date, and two undated copies of one measurement is how the drift starts.** There is
+now one number, and it is dated.
