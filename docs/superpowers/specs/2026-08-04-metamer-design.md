@@ -2493,6 +2493,16 @@ estimator as public API; `metamer report`.
 loading, `python -m metamer`, the validation staging and the exit codes are Phase 2 — see
 the table under Phase 2 for the split and its reasoning.
 
+**MEASURE IN THE PHASE THAT CAN, PRINT IN THE PHASE THAT SHOWS — a rule, not a note.**
+
+> **Any measurement a deferred UI is specified to display is computed and recorded by the
+> sub-phase that can measure it; the UI reads provenance.** Otherwise the measurement is
+> built twice and the two versions disagree.
+
+Three already in scope: **read amplification** (§11.1.1), the **regressor regime** and its
+two tile sizes (§9.4, §13.4), and the **unique-Δt count** (§13.6). All are computed and
+recorded in Phase 2; `--explain` only prints them.
+
 ### Phase 6 — validation suites
 
 Simulation-recovery benchmark including the spatial-field hysteresis measurement and the

@@ -101,6 +101,7 @@
 | Phase 1 task tracker | `docs/superpowers/plans/2026-08-05-metamer-phase1.md.tasks.json` (native task ids 8–27) |
 | Original build prompt | [`docs/phase1-prompt.md`](docs/phase1-prompt.md) — **superseded** by design doc §2 where they conflict |
 | Phase 2 preliminaries pre-flight | [`docs/superpowers/notes/phase2-preliminaries-preflight.md`](docs/superpowers/notes/phase2-preliminaries-preflight.md) — the (a)–(k) audit of the P0/P1/P2 briefs and what each finding changed |
+| **Phase 2a implementation plan** | [`docs/superpowers/plans/2026-08-11-metamer-phase2a.md`](docs/superpowers/plans/2026-08-11-metamer-phase2a.md) — **awaiting review, no code yet** |
 
 Phase list is design doc §17. Phase 1 exit criteria are §18. Do not duplicate either here.
 
@@ -683,6 +684,46 @@ and the calibration tile both behave differently under it.
   array, not only the primary variable.** A per-point regressor is a second data source with
   its own grid, and a GIA field silently regridded under a fixed URI is the same hole one
   level out.
+
+### Q11 — the sub-phase split, and the 2a plan
+
+**Plan written:**
+[`docs/superpowers/plans/2026-08-11-metamer-phase2a.md`](docs/superpowers/plans/2026-08-11-metamer-phase2a.md)
+— 14 tasks, dependencies, sixteen exit criteria. **Awaiting review; no code yet.**
+
+| | what | why here |
+|---|---|---|
+| **2a** | config → input contract → tiling → fit → store → resume, `--reuse-fits-from`, exit codes | the store and the bitmap cannot change after data exists |
+| **2b** | calibration tile, `--memory-budget` default, RSS validated at 2–3 tile sizes | **gated by open question 12** — it measures in a child process |
+| **2c** | two-pass warm start, nearest-valid spiral, `/warmstart/` read, determinism | **inherits exit criterion 2 and must keep it green** |
+| **2d** | hysteresis audit, simulated fields, boundary-smearing width | needs 2c to audit |
+| **2e** | reporting, `metamer report`, clustering, early abort, the mechanism producing `CANDIDATE_DROPPED` | needs every branch to exist |
+
+- **MEASURE IN THE PHASE THAT CAN, PRINT IN THE PHASE THAT SHOWS — a rule, in design doc
+  §17.** *Any measurement a deferred UI is specified to display is computed and recorded by
+  the sub-phase that can measure it; the UI reads provenance.* Otherwise it is built twice
+  and the two versions disagree. Three already: read amplification, the regressor regime with
+  both tile sizes, the unique-Δt count.
+- **Exit criterion 2 is trivially true in 2a and must say so.** No cross-point dependency
+  exists yet, so the memory-budget half is free; it is pinned anyway because **2c inherits it
+  and would otherwise inherit a criterion marked green and quietly make it false.** The
+  thread-count half is *not* trivial even in 2a — a float64 reduction inside the `prange` over
+  a tile breaks it, and that is what it tests.
+- **Exit criterion 7 was the wrong shape** — "at a formula-derived tile size" tested the
+  formula, which criterion 6 already does, and added a 16 GB machine for nothing. It is now:
+  *a run at a formula-derived tile size with `--memory-budget` well below available RAM
+  completes with measured peak RSS at or below that budget.* **The budget is the assertion;
+  the machine is incidental**, it is falsifiable anywhere, and it catches a formula that is
+  right per-series and wrong about what else is resident.
+- **Two criteria added from Q3–Q5:** the recomputed store opens with the source **deleted**
+  (the copy-not-reference invariant, which a "clever" optimization would break and which would
+  appear to work until someone moves the source); and its `fit_hash` **equals** the source's
+  while `compat_hash` and `run_hash` do not, **asserted directly rather than inferred from the
+  recompute succeeding**, because that equality is the entire claim the three-hash split makes.
+- **`CANDIDATE_DROPPED`'s enum member moves to 2a**, with `SCREENED_OUT` and `NOT_APPLICABLE`
+  under the one criterion-12 note; only the mechanism that **produces** it stays in 2e. Stored
+  code meanings are fixed at store creation, so the alphabet is 2a's regardless of who writes
+  into it.
 
 ### Q10 — `/detail/` selection, and a resume outcome the design doc lacked
 
