@@ -684,6 +684,48 @@ and the calibration tile both behave differently under it.
   its own grid, and a GIA field silently regridded under a fixed URI is the same hole one
   level out.
 
+### Q10 — `/detail/` selection, and a resume outcome the design doc lacked
+
+**Design doc §11.1, §12.2, §12.3, §12.8 and §14.1 amended.**
+
+**Union in dataset coordinates** — a named region **and/or** a deterministic subsample —
+with the **subsample defaulting to pass 1's coarse grid**, because §11.2's audit wants
+covariances at **cold-fitted** points and pass-1 points are cold by construction. **Fixed at
+store creation; a change on resume is refused, naming both selections.**
+
+**THE CATEGORY THE DESIGN DOC DID NOT HAVE: neither fit-relevant nor recomputable.** A
+change that does not move `θ̂` but cannot be satisfied from stored primitives has **no
+resolution available** — recomputation cannot produce it, and a refit contradicts the
+completion bitmap — and it is **invisible to both hashes**, since `fit_hash` does not move
+and a `compat_hash` move would only license the recomputation that is unavailable. §12.8 now
+carries the **three-outcome taxonomy** (recompute / refuse-and-rerun / refuse-fixed-at-
+creation) rather than three special cases, plus the general test:
+
+> **A quantity is recomputable iff it is a function of the stored primitives alone.**
+> `log_lik`, `k`, `n_eff` are stored; **the Hessian at the optimum is not**, so everything
+> downstream of it is fixed at store creation.
+
+**PASS 1 NOW DOES FIVE JOBS AND §11.1 LISTS THEM IN ONE PLACE** — warm-start source,
+calibration measurement, early-abort evaluation, cold audit reference, `/detail/` default —
+because a change to its stride or membership has five downstream consumers and nothing else
+said so. (Screening would be a sixth; deferred with its regime declared.)
+
+**TWO RAGGED INDICES WITH DIFFERENT EXTENTS.** `/noise/` is `Σ_m p_m`, a `/detail/`
+covariance block is `Σ_m p_m(p_m+1)/2` — **4 against 10** at the M=2 unequal-`p` fixture,
+which is the Q2 argument recurring: **one reused table looks correct at equal `p` and is
+wrong at unequal `p`.** So the generic builder takes a per-model **extent function**, not a
+parameter count; **both offset tables are stored as coordinate arrays**, not derived at read
+time; and a covariance is stored as the **packed lower triangle with its order in attrs** —
+the plausible-number failure here being that a wrongly-unpacked covariance is **still
+symmetric, often still positive definite**, and reports wrong correlations with no symptom.
+
+**LIVE COUNTERS: point-granularity, per-tile display, and DISPLAY-ONLY.** They sit in no
+decision path — abort reads pass 1's stored status, the report is computed from the store —
+which is what makes their approximation under resume harmless. **Marked display-only in the
+code, with "no decision may read them" stated**, because *"we already have these tallies,
+let's abort on them"* reintroduces the tile-prefix bias §14.1 exists to avoid and will look
+like a free optimization.
+
 ### Q9 — nearest valid coarse point, and warm-start settings are fit identity
 
 **Design doc §11.1 and §11.3 amended; §13.3 gains the consolidated allowlist finding;

@@ -1139,11 +1139,20 @@ Extends to a multi-level V-cycle if one level proves insufficient. The coarse gr
 **dataset** coordinates is the load-bearing detail: it decouples the result from available
 RAM.
 
-**Pass 1 does four jobs at once** — it already fits a stratified global subsample cold with
-no dependencies, so it is also the natural place for the Whittle screening pass, the
-calibration-tile RSS measurement (§11.4), the cold reference for the hysteresis audit
-(§11.2), and the early-abort decision point (§14.1). Four mechanisms collapse into one
-pass.
+**PASS 1 DOES FIVE JOBS, AND THEY ARE LISTED HERE BECAUSE A CHANGE TO ITS STRIDE OR
+MEMBERSHIP NOW HAS FIVE DOWNSTREAM CONSUMERS** and nowhere else says so. It already fits a
+stratified global subsample cold with no dependencies, so it is the natural place for all
+of:
+
+| # | job | section |
+|---|---|---|
+| 1 | the coarse warm-start source | §11.1 |
+| 2 | the calibration-tile RSS measurement | §11.4 |
+| 3 | the early-abort evaluation — stratified by construction, unlike a tile prefix | §14.1 |
+| 4 | the **cold** reference for the hysteresis audit | §11.2 |
+| 5 | the default `/detail/` subsample — the audit wants covariances at **cold-fitted** points, and pass-1 points are cold by construction, so the default costs nothing and serves both | §12.2 |
+
+(The Whittle screening pass would be a sixth; it is deferred with its regime declared.)
 
 **Screening caution — RESOLVED 2026-08-11: elimination is PER-POINT, in pass 2.** A
 candidate eliminated by coarse-grid screening is eliminated *everywhere*, which is a
@@ -1461,6 +1470,21 @@ and the completion bitmap to stay coherent across all of them.
 not hardcoded to noise parameters**, so `/signal/` can adopt it unchanged when v2's joint
 search makes `β` ragged too.
 
+**THERE ARE TWO RAGGED INDICES WITH DIFFERENT EXTENTS, AND THAT IS WHAT "GENERIC" HAS TO
+MEAN (2026-08-11).** `/noise/` is `Σ_m p_m`; a `/detail/` covariance block is
+`Σ_m p_m(p_m+1)/2`. **A design that reuses one table looks correct at equal `p` and is wrong
+at unequal `p`** — which is exactly why the M=2 fixture uses `white` (p=1) beside
+`white + matern12` (p=3): `P_total = 4` against `4 + 6 = 10`. Three consequences:
+
+- **The generic builder takes a per-model EXTENT FUNCTION, not a per-model parameter count**
+  — `p_m` for `/noise/`, `p_m(p_m+1)/2` for `/detail/`. Same builder, different callable.
+- **Both offset tables are stored as coordinate arrays, not derived at read time**, so a
+  no-metamer read can slice either without knowing the triangular formula.
+- **A covariance is stored as the packed lower triangle with its storage order stated in
+  attrs.** This is the plausible-number failure of this group: a consumer that unpacks
+  row-major-lower as column-major-lower gets a matrix that is **still symmetric**, often
+  still positive definite, and reports wrong correlations **with no symptom.**
+
 **`/signal/` carries an explicit model axis even in v1** (length M, or length 1 with a
 documented broadcast), so adding per-candidate `β` is a shape change rather than a
 restructure. Cost now is near zero; cost later is a format migration on a 10⁷-point store.
@@ -1702,6 +1726,29 @@ it, adding HQIC to a finished 10⁷-point run would demand a full refit to compu
 on numbers already sitting in the store.
 
 Refusal never silently mixes.
+
+**THE FULL TAXONOMY OF A RESUME WITH MATCHING `fit_hash` (2026-08-11) — three outcomes, not
+three special cases.**
+
+| what changed | outcome | why |
+|---|---|---|
+| nothing compat-relevant | **resume**: reuse completed tiles, fit the outstanding ones | — |
+| a compat-relevant field that is **not** the criterion set | **recompute** the derived arrays from stored primitives, do not refit | the arrays are functions of stored primitives |
+| the **criterion set** | **refuse**, and name the two resolutions | it resizes the `c` axis, which is a whole-store rewrite with no completion bitmap of its own |
+| the **`/detail/` selection** | **refuse**: fixed at store creation | **neither fit-relevant nor recomputable** |
+
+**The last row is a category this document did not previously have.** A change that does not
+move `θ̂` but cannot be satisfied from stored primitives has **no resolution available**:
+recomputation cannot produce it, and a refit contradicts the completion bitmap. It is also
+**invisible to both hashes** — `fit_hash` does not move because `θ̂` does not move, and even
+a `compat_hash` move only licenses recomputation, which is exactly what is unavailable.
+
+**The general test, stated because the mechanism generalizes:**
+
+> **A quantity is recomputable iff it is a function of the stored primitives alone.**
+> `log_lik`, `k` and `n_eff` are stored; **the Hessian at the optimum is not.** Anything
+> downstream of the Hessian — every parameter covariance in `/detail/`, and `theta_err`
+> beyond what is already written — is **fixed at store creation.**
 
 ---
 
@@ -2030,6 +2077,18 @@ of points and returns 0 is the failure mode this section exists to prevent.
 
 Per-tile tallies by taxonomy branch and by candidate on a `rich` progress display. At 10
 hours, discovering a config bug at hour 9 is the expensive outcome.
+
+**THE COUNTERS ARE POINT-GRANULARITY, ACCUMULATED AND DISPLAYED PER TILE, AND THEY ARE
+DISPLAY-ONLY — NO DECISION MAY READ THEM (2026-08-11).** A tile-granularity verdict is
+meaningless at ~10⁵ points per tile. More importantly the counters sit in **no decision
+path**: the abort below reads pass 1's stored status, and §14.2's report is computed from
+the store — which is what makes their inevitable approximation under a resume harmless
+rather than a correctness question. **Mark them display-only in the code and say that no
+decision may read them**, because the obvious future change — *"we already have these
+tallies, let's abort on them"* — reintroduces exactly the tile-prefix bias this section was
+written to avoid, and it will look like a free optimization. Same discipline as
+`SeriesFit`'s scalar docstring: **a deliberate choice has to say it is deliberate, or the
+next sweep files it as a defect.**
 
 **The abort is evaluated on pass 1, not on a fixed prefix of tiles.** Tiles are processed in
 spatial order, so "the first 1% of eligible points" is a geographically contiguous strip —
