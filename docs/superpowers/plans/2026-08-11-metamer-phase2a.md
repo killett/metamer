@@ -16,10 +16,13 @@
 ## Why this plan has no code fences
 
 **Phase 1's plan carried full implementation fences, and they were the principal vector for
-its defects.** Across Tasks 8–17, nearly every substantive defect passed the brief's own
-tests, because a brief-generated test validates the brief's *model* of the problem. Task 15
-bound cleanly against every current signature and was wrong five ways; Task 16 bound cleanly
-and shipped a serializer that hashed memory addresses.
+its defects.** Stated at its full strength: **across Tasks 8–17 the fence was wrong in every
+task where a defect was found.** Not "mostly right with a bug" — the brief encoded a model
+that omitted something, and its tests validated the omission. Task 15 bound cleanly against
+every current signature and was wrong five ways; Task 16 bound cleanly and shipped a
+serializer that hashed memory addresses. **Stating the bug each test must catch attacks
+exactly that**, because a test written to catch a named defect cannot be satisfied by a
+model that cannot produce it.
 
 So each task below states **behaviour, invariants, interfaces, and for every test the bug it
 must catch** — and stops there. The implementer writes the code and the tests. What replaces
@@ -28,6 +31,11 @@ statement of what each test exists to falsify.
 
 Interfaces are given as signatures where a later task calls into an earlier one, because
 pre-flight (g) needs something to bind against. Bodies are not.
+
+**The risk this creates, named so it is watched rather than discovered:** without a fence an
+implementer has more freedom to satisfy a brief in a way the brief did not intend. Behaviour
+plus invariants plus the named bug is the mitigation, and the standing requirement below is
+the rest of it.
 
 ## Standing requirements for every task
 
@@ -41,6 +49,11 @@ pre-flight (g) needs something to bind against. Bodies are not.
 - **Every test states the behaviour under test and a concrete bug that would make it fail**,
   and its expected values are derived independently of the implementation.
 - **Verify each test bites** by deleting the guard it protects.
+- **If an implementation deviates from what the brief's interfaces imply, REPORT the
+  deviation and why.** Phase 1's best findings came from implementers contradicting the
+  brief — the `DesignInfo` narrowing contract, the fully-masked-tile precedence, the
+  `_augment` block. **The point is to keep that visible, not to suppress it**, and a brief
+  without a fence has more room for a silent one.
 
 ---
 
@@ -53,18 +66,36 @@ pre-flight (g) needs something to bind against. Bodies are not.
 | 2 | The opener registry, the zarr opener, and the time-axis contract (stage 4a) | 1 |
 | 3 | `geometry_hash`: components, allowlist change, golden re-derivation | 1, 2 |
 | 4 | Validation staging 1/2/3/4a, exit codes, `python -m metamer` | 1, 2, 3 |
-| 5 | The thread budget: ownership, `threadpoolctl`, the observed-limits assertion | 0 |
+| 5 | The thread budget: ownership, `threadpoolctl`, the observed-limits **check** | 0 (**Task 4 wires the check into layer 3** — see below) |
 | 6 | Tiling: `tile_side` from budget, the tile iterator, read amplification | 2, 5 |
-| 7 | The store schema: creation, groups, coordinate dtypes, provenance attrs | 1, 3 |
-| 8 | The ragged index builder, generic over an extent function | 7 |
+| 7 | The ragged index builder, generic over an extent function | 1 |
+| 8 | The store schema: creation, groups, coordinate dtypes, provenance attrs | 1, 3, **7** |
 | 9 | The tile write path and the status/value invariant | 6, 7, 8 |
 | 10 | The completion bitmap, write ordering, and SIGTERM | 9 |
-| 11 | The resume gate and its three outcomes | 3, 7, 10 |
+| 11 | The resume gate and its three outcomes | 3, 8, 10 |
 | 12 | `--reuse-fits-from`: the recompute path | 9, 10, 11 |
 | 13 | The exit-criteria suite | 1–12 |
 
 **Task 13 is not a formality.** Six of the sixteen exit criteria are cross-process or
 cross-store properties that no single task's tests can express.
+
+**Two dependency corrections worth their reasons, because the obvious ordering is wrong in
+both cases.**
+
+- **The ragged builder is Task 7 and the store schema is Task 8, not the reverse.** The
+  schema's coordinate arrays — `noise_param_{model,name,unit,transform}[P]` and both offset
+  tables — **are the builder's output**, and creating the store requires `P_total` and the
+  offsets. There is no cycle, because the builder is pure arithmetic over the candidate list
+  and needs no store. But a table saying the builder depends on the schema leads an
+  implementer to **stub the offsets in the schema task and fix them in the builder task**,
+  and a stubbed offset table written into a store is exactly the class of thing that
+  survives.
+- **Task 5 exposes the observed-limits check; Task 4 wires it into layer 3.** The check is
+  specified as a *layer-3 validation failure*, and the staging is Task 4 — so Task 5 could
+  otherwise be implemented before the layer it reports into exists, and **the check would
+  ship as a bare exception with no layer attached**, satisfying exit criterion 10 with
+  something that is not a layer-3 failure. Task 5 stays parallelizable against Task 0; the
+  wiring is Task 4's, and it is stated in both briefs.
 
 ---
 
@@ -82,6 +113,17 @@ result looks identical to a failed query.
 `check-added-large-files` limit is 2000 KB and the lock file is currently 630 KB — **re-check
 the number, not this note.** A dependency add can also break `mypy` in files it never
 imports; re-run the whole typecheck, not the new files.
+
+**Also in this task: the raising stub engine, as a NAMED shared test fixture.** It raises if
+`score` is called, and it is the only honest way to prove a negative — **timing cannot
+falsify "no fit ran"; a raising stub can.** Named here with its consumers listed, so it is
+not written narrowly for one caller and re-invented twice:
+
+| consumer | the negative it proves |
+|---|---|
+| Task 12 | the recompute path ran no fits |
+| Task 11 | a resumed run did not refit tiles the bitmap says are complete |
+| Task 11 / 12 | a compat-only rewrite touched nothing upstream of `/selection/` |
 
 **Acceptance.** `python -c "import metamer.batch, metamer.config"` succeeds; the full suite,
 typecheck and lint are green; `pixi install` solves on all four platforms.
@@ -251,8 +293,11 @@ and a runner with a process boundary.
   missing engine specifically** — "screening requires the debiased Whittle engine (Phase 4)"),
   the per-point regressor refusal (**naming the field and both tile sizes**, 338 against 186,
   because layer 3 knows them and "not implemented" wastes context the user needs), duplicate
-  candidates by spec hash, criterion/objective compatibility, and the identifiability lint as
-  a warning. **The staging is the structure; the checks accrete.**
+  candidates by spec hash, criterion/objective compatibility, the identifiability lint as
+  a warning, **and Task 5's observed-vs-requested thread-limit check, wired in here.** Task 5
+  exposes that check; **this task is what makes it a layer-3 failure rather than a bare
+  exception**, and exit criterion 10 is satisfied only by the wired form.
+  **The staging is the structure; the checks accrete.**
 - **Exit codes:** 0 clean, 1 completed with failures above threshold, 2 aborted early, 3
   config/validation layers 1–3, 4 data-dependent layer 4. **2a can produce 0, 3 and 4**; 1 and
   2 get a constructed test each or an explicit note that their producer is 2e.
@@ -283,6 +328,10 @@ never assert a count.
   finds — OpenBLAS, MKL, OpenMP, numba's layer. `OMP_NUM_THREADS=1` in provenance records a
   *request*, and whether it took effect depends on import ordering nothing enforces.
 - **Observed ≠ requested is a layer-3 failure** naming the discrepancy, not a note.
+  **This task EXPOSES the check; Task 4 wires it into layer 3.** Stated in both briefs,
+  because otherwise this task can be finished before the layer it reports into exists and the
+  check ships as a bare exception with no layer attached — which would satisfy exit criterion
+  10 with something that is not a layer-3 failure.
 - **Thread counts reach `run_hash` only.** If they moved `fit_hash`, the hash boundary would
   be conceding that §11.3's guarantee does not hold.
 
@@ -311,6 +360,20 @@ observation being recorded and ignored.
 - **Peak RAM is derivable from the memory budget alone.** No concurrency degree here is set
   by core count.
 
+**Forward note — the coarse-grid stride is defined here later, and it has FIVE downstream
+consumers.** 2a has no pass 1, so nothing in this task defines a stride; but this is where it
+lands in 2c, and nowhere else records the consumer list:
+
+| # | consumer | section |
+|---|---|---|
+| 1 | the coarse warm-start source | §11.1 |
+| 2 | the calibration-tile RSS measurement | §11.4 |
+| 3 | the early-abort evaluation — stratified by construction, unlike a tile prefix | §14.1 |
+| 4 | the **cold** reference for the hysteresis audit | §11.2 |
+| 5 | the default `/detail/` subsample — the audit wants covariances at cold-fitted points | §12.2 |
+
+**A later change to pass 1's stride or membership touches all five.**
+
 **Tests.** *Tile geometry covers the grid exactly once, including ragged edge tiles* —
 catches a store with an unwritten seam. *Read amplification is >1 for a deliberately
 misaligned tile and 1 for an aligned one* — catches the metric being computed from the
@@ -318,9 +381,31 @@ request rather than the read.
 
 ---
 
-## Task 7 — the store schema
+## Task 7 — the ragged index builder
+
+**Goal.** One builder, generic over a **per-model extent function**, not a per-model
+parameter count. **Pure arithmetic over the candidate list; it needs no store**, which is
+why it precedes the schema rather than following it.
+
+**Behaviour.** `/noise/` uses `p_m`; `/detail/` will use `p_m(p_m+1)/2`. **Both offset tables
+are stored as coordinate arrays, not derived at read time**, so a no-metamer read can slice
+either without knowing the triangular formula. A covariance, when `/detail/` lands, is the
+**packed lower triangle with its storage order in attrs**.
+
+**Test the builder with BOTH extent functions now, even though `/detail/` is unwritten** —
+`P_total = 4` against `4 + 6 = 10` at the M=2 fixture. **A design that reuses one table looks
+correct at equal `p` and is wrong at unequal `p`**, which is the reason the fixture has
+unequal `p` at all.
+
+---
+
+## Task 8 — the store schema
 
 **Goal.** Store creation with every group except `/detail/`, and provenance.
+
+**Depends on Task 7**, whose builder produces the coordinate arrays and both offset
+tables this task writes. **Do not stub the offsets here** — a stubbed offset table that
+reaches a store survives.
 
 **Layout.** `/signal/`, `/primitives/` (including `iterations` uint16), `/selection/`,
 `/noise/`, `/status/`, `/warmstart/`, `/completion/`. **`/detail/` is not created** — an
@@ -352,23 +437,6 @@ sizes.
 
 **Every store is self-contained.** No store resolves through another — not by zarr reference,
 symlink, or a path in attrs a reader must follow.
-
----
-
-## Task 8 — the ragged index builder
-
-**Goal.** One builder, generic over a **per-model extent function**, not a per-model
-parameter count.
-
-**Behaviour.** `/noise/` uses `p_m`; `/detail/` will use `p_m(p_m+1)/2`. **Both offset tables
-are stored as coordinate arrays, not derived at read time**, so a no-metamer read can slice
-either without knowing the triangular formula. A covariance, when `/detail/` lands, is the
-**packed lower triangle with its storage order in attrs**.
-
-**Test the builder with BOTH extent functions now, even though `/detail/` is unwritten** —
-`P_total = 4` against `4 + 6 = 10` at the M=2 fixture. **A design that reuses one table looks
-correct at equal `p` and is wrong at unequal `p`**, which is the reason the fixture has
-unequal `p` at all.
 
 ---
 
@@ -497,9 +565,9 @@ without refitting.
 
 **Tests.**
 
-- *No fit ran*, proved by a **raising stub engine**, never by timing. **Put the stub in the
-  shared fixtures** — the same construction proves the negative for "a resumed tile did not
-  refit completed work" and "a compat-only rewrite touched nothing upstream of `/selection/`".
+- *No fit ran*, proved by the **raising stub engine defined in Task 0**, never by timing.
+  Do not define a local one — Task 0 lists its three consumers precisely so it is written
+  once.
 - *`fit_hash` equality across the two stores, asserted directly.* That equality is the entire
   claim the three-hash split makes; do not infer it from the recompute succeeding.
 - *The new store opens with `xr.open_zarr` after the source is deleted.*
@@ -551,3 +619,8 @@ abort and the mechanism that **produces** `CANDIDATE_DROPPED` (2e); the command 
 **Measure in the phase that can, print in the phase that shows.** Read amplification, the
 regressor regime with both tile sizes, and the unique-Δt count are computed and recorded into
 provenance by 2a; `--explain` only prints them in Phase 5.
+
+**And 2a defines no coarse-grid stride, which is the thing 2c's pass 1 will add.** Its five
+downstream consumers are listed in Task 6's forward note rather than left to be rediscovered:
+warm-start source, calibration measurement, early-abort evaluation, cold audit reference, and
+the `/detail/` subsample default.
