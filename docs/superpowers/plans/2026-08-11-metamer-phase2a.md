@@ -6,7 +6,7 @@
 **Read before starting, in this order:**
 
 1. [`docs/superpowers/notes/phase1-to-phase2-handoff.md`](../notes/phase1-to-phase2-handoff.md)
-   — the pre-flight (a)–(k) with (a2) and (a3), and the standing rules.
+   — the pre-flight (a)–(k) with (a2), (a3), (c2), (i2)–(i5) and (k2), and the standing rules.
 2. `PROGRESS.md`, whole file. The brainstorm section carries the reasoning behind every
    decision below; this plan carries only the decisions.
 3. Design doc §9.4, §11.1, §11.1.1, §11.3, §12, §13, §14.3.
@@ -41,8 +41,8 @@ the rest of it.
 
 - **Run the pre-flight against the task brief before writing code.** It lives in exactly one
   place — [`../notes/phase1-to-phase2-handoff.md`](../notes/phase1-to-phase2-handoff.md) §1 —
-  and it has grown past what this plan was written against: **(a)–(k) plus (a2), (a3) and
-  (i2)–(i5), and four causes of a non-biting mutation.** **Read it there rather than from any
+  and it has grown past what this plan was written against: **(a)–(k) plus (a2), (a3), (c2),
+  (i2)–(i5) and (k2), and five causes of a surviving mutation.** **Read it there rather than from any
   summary**, including this one; a restatement that drifts is worse than a single stale copy,
   and the two copies of it drifted once already. Append what each audit finds to
   [`../notes/phase2a-preflight.md`](../notes/phase2a-preflight.md).

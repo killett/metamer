@@ -18,8 +18,8 @@
   [`docs/superpowers/plans/2026-08-11-metamer-phase2a.md`](docs/superpowers/plans/2026-08-11-metamer-phase2a.md).
 - **THE METHOD IS THE PRE-FLIGHT, AND IT LIVES IN EXACTLY ONE PLACE:**
   [`docs/superpowers/notes/phase1-to-phase2-handoff.md`](docs/superpowers/notes/phase1-to-phase2-handoff.md)
-  §1 — (a)–(k) with (a2), (a3) and (i2)–(i5), the four causes of a non-biting mutation, the
-  standing rules and the fixture facts. **Run it against Task 4's brief before writing code**
+  §1 — (a)–(k) with (a2), (a3), (c2), (i2)–(i5) and (k2), the five causes of a surviving
+  mutation, the standing rules and the fixture facts. **Run it against Task 4's brief before writing code**
   and append what it finds to
   [`docs/superpowers/notes/phase2a-preflight.md`](docs/superpowers/notes/phase2a-preflight.md),
   as Tasks 0–3 did. This file is the running notebook; that one is the method. **Do not
@@ -1383,8 +1383,9 @@ explicit corrections. Per-task audits for Phase 2a are appended to
 | **(a3)** | Defer the feature, declare the regime |
 | **(b)** | Batch vs series |
 | **(c)** | Exit paths — enumerate, never count |
+| **(c2)** | Does dispatching on exception type actually discriminate? |
 | **(d)** | Grep for the vocabulary the task requires |
-| **(e)** | Do the tests bite? — **four causes of a non-biting mutation** |
+| **(e)** | Do the tests bite? — **five causes of a surviving mutation** |
 | **(f)** | Does the brief contradict a docstring already in the tree? |
 | **(g)** | Does every call match the module's CURRENT signature? — **clears staleness and nothing else** |
 | **(h)** | Does the test exercise the thing it names, or a default? |
@@ -1395,6 +1396,7 @@ explicit corrections. Per-task audits for Phase 2a are appended to
 | **(i5)** | If the obvious repair moves a shared constant, the fixture is a trap |
 | **(j)** | Does the oracle share a derivation path with the thing it checks? |
 | **(k)** | Does anything stable across runs depend on process-local state? — **test across processes** |
+| **(k2)** | A coded vocabulary crossing a process boundary — **enumerate what the runtime already emits** |
 
 **Also: run the brief's code, and re-check its numbers.** The highest-yield audits did.
 
@@ -2841,12 +2843,18 @@ deferred that is not recorded there. Phase 1 additions:
 
 Phase 2a additions:
 
-- **Exit code 1 must be made distinguishable from a crash when sub-phase 2e gives it a
-  producer.** Python reports an unhandled exception as exit code 1, which the taxonomy defines
-  as "completed with failures above threshold". While 1 is unreachable the collision is
-  harmless and any observed 1 is a crash; the moment 2e wires the failure-rate threshold, a
-  test asserting exit 1 must also assert the absence of a traceback. Recorded here because the
-  task that creates the hazard is not the task that closes it.
+- **2e SHOULD ADD AN `INTERNAL_ERROR` CODE RATHER THAN LIVE WITH THE ALIAS.** Python reports
+  an unhandled exception as exit code 1, which the taxonomy defines as "completed with failures
+  above threshold". **Those are opposite facts about a run** — one says the run finished and
+  the map is written, the other says it did not — so **a script that resumes on 1 would resume
+  from a crash.** While 1 has no producer the collision is harmless and any observed 1 is a
+  crash; the moment 2e wires the failure-rate threshold it becomes a real defect, and the
+  honest fix is a distinct code plus a catch-all in `__main__`, not a convention about
+  tracebacks (a traceback can be suppressed, and an absence is not a signal — (i2)). The
+  weaker fallback, if the five-code vocabulary is held fixed: a test asserting exit 1 must also
+  assert the absence of a traceback. Recorded here because the task that creates the hazard is
+  not the task that closes it. **Adding a code is cheap; changing what 1 means after a caller
+  branches on it is not.**
 - **The `engine=` injection seam on the runner lands at Task 9**, the first task that fits.
   Task 4 left it out deliberately: a parameter nothing consumes is a hook no test can make
   bite. `tests/conftest.py`'s raising stub is undeliverable without it, and every downstream

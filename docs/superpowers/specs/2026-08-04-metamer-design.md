@@ -1792,7 +1792,9 @@ job needs to say which layer and why.
 
 1. **Syntax** — TOML/JSON parse.
 2. **Schema** — pydantic: types, ranges, enums.
-3. **Semantic, data-independent** —
+3. **Semantic — every check that can FAIL here is data-independent** (amended 2026-08-12; it
+   read "Semantic, data-independent", which the identifiability lint at the end of this list
+   contradicts — see the note below) —
    - empty engine-capability intersection, naming which term eliminated which engine (§4.2)
    - **gradient-capability resolution across composite terms** (§4.3) — a silent FD
      fallback is a ~1.7× cost difference at p=6 and changes the wall-time projection
@@ -1803,7 +1805,22 @@ job needs to say which layer and why.
    - cost class incompatible with series count — refusing Toeplitz at 10⁷
    - duplicate candidates by spec hash
    - MCMC above the confirmation threshold
-   - identifiability lint (§4.8), as a warning
+   - identifiability lint (§4.8), **as a warning — and it therefore runs after stage 4a**,
+     because `lint(spec, sampling_interval)` needs a median observation spacing and *raises*
+     on an unusable one (§4.8: a diagnostic reporting "clean" because it could not run is
+     worse than one that stops)
+
+> **THE LAYER BOUNDARY IS ABOUT WHAT FAILS, NOT ABOUT WHEN IT RUNS** (2026-08-12, Phase 2a
+> Task 4). This section read "Semantic, data-independent" while listing a check whose
+> signature takes a property of the data, and the two cannot both hold. The resolution that
+> preserves the intent: **layer 3 is the layer of config-internal faults, and every layer-3
+> check that can FAIL is data-independent and runs before the input is opened**, so a run
+> whose config is wrong *and* whose data is wrong reports the config. A **warning** cannot
+> move the exit code, so producing it later cannot corrupt that attribution — which is what
+> makes the lint's placement after stage 4a safe rather than a compromise. Any future layer-3
+> check that can fail inherits the earlier position; any that only warns may take the later
+> one.
+
 4. **Data-dependent** — only checkable once data is open: epochs inside the record,
    harmonics resolvable by the sampling, regressor alignment, `rank(X)` (§5.2). Runs at
    startup against pass 1, not at parse time.

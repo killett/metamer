@@ -110,6 +110,29 @@ Enumerate every `return` and every `raise`; does each pass through the outcome l
 **Enumerate, never assert a count** — an asserted count is how two bypassed exits survived
 Task 8, and how a report claimed "exactly one early return" where there were four.
 
+### (c2) DOES DISPATCHING ON EXCEPTION TYPE ACTUALLY DISCRIMINATE?
+
+> **When you dispatch on exception type across a boundary you defined, verify the types are
+> actually disjoint.** A third-party exception subclassing a builtin you also catch is the
+> common case, and it fails toward the **earlier clause** — which is the more confident and
+> more wrong answer.
+
+(c) enumerates the exits. This asks whether the *handler* can tell them apart, and it is a
+different question: every exit can be enumerated correctly while two of them land in one
+clause.
+
+Worked instance (Phase 2a Task 4). Validation staging exists to name **which layer** refused.
+`pydantic.ValidationError` subclasses `ValueError`, and so did the config module's stamped-key
+refusal, so a layer-1 `except ValueError` clause written above the schema clause reported
+**"layer 1 (file)" for a file that parsed perfectly**. Measured on the test's first run. The
+defect attacked the feature's only purpose, and nothing in either module's source hints at it —
+the subclass relationship lives in a dependency.
+
+Two responses, and they are not equivalent. Ordering the clauses correctly is necessary and is
+**incidental disjointness**: it holds until someone reorders them. Introducing a distinct type
+— `config.model.StampedKeyError` — makes the disjointness **structural**. Prefer the second
+wherever you own one side of the boundary.
+
 ### (d) Grep for the vocabulary the task requires
 
 "mask", "n_used", "realized" appearing **zero** times in a 234-line brief was detectable in
@@ -120,8 +143,8 @@ one command. Task 15's brief never mentioned `fixed`, `state_dim` or `white + wh
 Delete the guard each one protects and confirm it fails. Two of Task 9's tests replaced
 assertions that could not fail at all.
 
-**A surviving mutation has three causes and they call for different responses.** Diagnose
-which before acting; two of the three are not defects, and treating them as coverage gaps
+**A surviving mutation has five causes and they call for different responses.** Diagnose
+which before acting; four of the five are not defects, and treating them as coverage gaps
 leads to deleting a real guard.
 
 | cause | tell | response |
@@ -130,6 +153,18 @@ leads to deleting a real guard.
 | **The mutated line is unreachable** because a guard *above* it fires first | removing that upper guard makes the mutation bite | defence in depth working; write the compound mutation |
 | **TWO INDEPENDENT GUARDS, EITHER SUFFICIENT** | mutating **either alone** does not bite; mutating **both at once** does | the code is doubly protected and the test is fine |
 | **GUARDED ONE LAYER UP** | the mutation is semantically real and the test is sound, but an **earlier layer already normalized the input**, so the mutated code cannot see the difference | **rewrite the assertion** — see below |
+| **THE MUTATION IS NOT A DEFECT** | the mutated code is **semantically identical** to the original on every reachable input | **correct the mutation, not the test** — see below |
+
+**THE FIFTH SAYS NOTHING ABOUT THE TEST AT ALL, AND THAT IS WHY IT IS LISTED.** A survivor is
+evidence about a test only once the mutation is known to be a real behaviour change, and that
+is a step people skip because writing the mutation feels like the check. **Verify the mutated
+code is semantically different before concluding anything.**
+
+Worked instance (Phase 2a Task 4): `if observed is None: return` mutated to
+`if observed is None: observed = {}` left every test green — correctly, because an empty table
+has no offenders, so the two are the same function. The reachable defect is deleting the guard
+outright, so `observed.items()` runs against `None`; that mutation bites. A test written to
+catch the first version would have been a test of an equivalence.
 
 **THE FOURTH IS THE ONLY ONE OF THE FOUR WHERE THE CORRECT RESPONSE IS TO CHANGE THE TEST.**
 The other three end in "leave it" or "write a compound mutation". This one means the test was
@@ -326,6 +361,33 @@ And the harder lesson: **both modules already documented, in capitals, the prope
 broke the test.** The violating tests were written anyway, by the same author, in the same
 sitting. **Documentation does not constrain the next author — tests do.**
 
+### (k2) THE RUNTIME'S OWN CODES ARE PART OF YOUR VOCABULARY WHETHER YOU CHOSE THEM OR NOT
+
+> **When defining a coded vocabulary that crosses a process boundary — exit codes, signal
+> numbers, HTTP statuses, error codes — enumerate the values the RUNTIME and its libraries
+> already emit before assigning your own.** A collision with a value you did not choose is
+> invisible in your source and appears only under a condition you did not test.
+
+The (k) family, one level out again: (k) is about state the process owns, this is about
+*symbols* the process emits that you never wrote. **Both instances below were found by
+enumerating the emitters, not by reading the code**, because there is nothing in the code to
+read — the emitting line is in argparse and in CPython's top level.
+
+Worked instances, Phase 2a Task 4's five-code exit taxonomy:
+
+| the runtime's code | what the taxonomy says it means | outcome |
+|---|---|---|
+| **argparse exits 2** on a usage error | `ABORTED_EARLY` — a run that started, evaluated its abort criterion and stopped | **fixable**: `ArgumentParser.error` overridden to exit 3 |
+| **CPython exits 1** on an unhandled exception | `COMPLETED_WITH_FAILURES` — a run that finished with a failure rate above threshold | **not fixable inside a taxonomy with no internal-error code** |
+
+**The second is the instructive one, and living with it is a decision rather than a
+consequence.** An unhandled exception and "completed with failures above threshold" are
+**opposite facts about a run**: the second says the run finished and the map is written, the
+first says it did not. A caller that resumes on 1 resumes from a crash. The alias is harmless
+only while 1 has no producer, so the honest fix when it acquires one is a **distinct
+`INTERNAL_ERROR` code**, not a convention about tracebacks. Recorded against sub-phase 2e in
+`PROGRESS.md`.
+
 **(h), (i) and (k) are not subsumed by mutation testing.** (e) asks whether a test bites
 when the guard is deleted; (h) and (i) ask whether the call site and fixture can *express*
 the defect at all; (k) asks whether the defect is observable in one process.
@@ -447,11 +509,18 @@ is safe to import.
   `cftime`, which xarray reaches for to decode any non-standard calendar, is the worked case.
   **The guard has a stated hole rather than an unknown one**, and such dependencies are
   declared by hand with a comment saying why.
-- **A recorded measurement carries its measurement date**, because a quoted figure drifts
-  and a stale one reads exactly like a fresh one. Two instances: `pixi.lock` was quoted at
-  645 KB, then 630 KB, and measured 635.6 KB when Phase 2a Task 0 re-checked it; and the
-  `tile_side` of 171 survived in notes after the engines were fixed. **Re-check the number,
-  never the note** — and date the number so the next reader knows whether re-checking is due.
+- **A recorded measurement carries its measurement date AND ITS PRECONDITIONS**, because a
+  quoted figure drifts and a stale one reads exactly like a fresh one — and a figure quoted
+  without the conditions that produced it is not a measurement, it is a number. **Three
+  instances, one family:** `pixi.lock` was quoted at 645 KB, then 630 KB, and measured
+  635.6 KB when Phase 2a Task 0 re-checked it; the `tile_side` of 171 survived in notes after
+  the engines were fixed; and `tile_side` **338 / 186** is quoted in design doc §13.4, the 2a
+  plan and `PROGRESS.md` with **no backend attached**, while the compiled path gives
+  **361 / 189** and a 3.65× area ratio against 3.30× (measured 2026-08-12). `PROGRESS.md` also
+  carried 693 and 692 as the test count twelve lines apart, both undated. **Re-check the
+  number, never the note** — date it, and state what it is a measurement *of*. **A
+  `tile_side` without its backend is not a number**, and an A:B ratio without its harness, B
+  and thread count is the same defect one subsystem over (P4).
 - **Heterogeneous batches by default.** A homogeneous batch cannot expose a
   batch-granularity defect. Task 13's only real finding came from the one mutation that
   survived because every fixture had `B = 1`. Task 17's utilization measurement uses a
