@@ -50,6 +50,23 @@ invalid one.
 All three failed the last clause differently. The check generalizes past hashes to every
 gate made of a name — a completion bitmap, a calibration cache key, a warm-start cache key.
 
+### (a3) DEFER THE FEATURE, DECLARE THE REGIME
+
+> **When deferring a feature, ask separately whether its REGIME must be declared.** If any
+> shipped mechanism — a memory formula, a cost projection, a validation branch — behaves
+> differently under it, **the regime ships now as a declared, validated, refused branch even
+> though the feature does not.** A mechanism that can only be right in one regime is not
+> right; it is untested in the other.
+
+Three deferrals of this shape in Phase 2's planning: Whittle screening, the netCDF opener,
+per-point regressors. The last is the worked case — one config field moves `tile_side` from
+338 to 186, a **3.3× change in tile area** — so a `--explain` that cannot report the
+per-point regime is a sizing tool that is only correct in the easy case. **A sizing tool
+correct only in the easy regime is worse than none, because it will be trusted.**
+
+**A deferral in this project's idiom is a field, a formula branch, and an explicit refusal
+with a test** — not a comment promising a hook.
+
 ### (b) Batch vs series
 
 Is any per-series fact computed at batch level, or any per-candidate fact stored per point?

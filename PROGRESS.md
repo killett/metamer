@@ -643,6 +643,53 @@ constants exactly), as P0 did. Never regenerate them from the failure.
   be conceding the determinism guarantee does not hold. **The guarantee and the hash boundary
   are the same claim stated twice**, and they must not drift apart.
 
+### Q7 — per-point regressors: defer the feature, declare the regime
+
+**Handoff pre-flight gains (a3).** The store schema does not change — `beta[y,x,m,b]` is
+shape-identical under either regime — so the *feature* is out of sub-phase 1 by the brief's
+own expensive-after-data-exists criterion. The *regime* is not, because the memory formula
+and the calibration tile both behave differently under it.
+
+**Measured rather than quoted** (d=3, k_β=4, p=4, N=630, M=12, 1 GB budget):
+
+| regime | resident B/series | `tile_side` | production B |
+|---|---|---|---|
+| shared X | 8 722 | **338** | 114 244 |
+| per-point X | 28 882 | **186** | 34 596 |
+
+**One config field moves the tile by 3.3× in area**, which is the whole argument.
+
+- **The layer-3 refusal names the field AND the consequence.** Layer 3 knows both tile
+  sizes; a message saying "not implemented" wastes context the user needs for planning.
+- **`--explain` prints both regimes' numbers when the config declares per-point**, with the
+  refusal noted. The formula already branches, so it costs nothing, and it is the planning
+  value the regime is being kept for.
+- **The formula's per-point branch is tested NOW**, against a directly constructed
+  `per_point=True` `DesignInfo` rather than through the config path — otherwise it is
+  untested live code inside the mechanism sub-phase 1 exists to establish, and the first
+  person to enable the feature discovers the formula was wrong all along. **That test is
+  also what makes the table above durable**: those numbers belong in an assertion, not in a
+  session report.
+- **THE REGIME LIVES INSIDE `signal_terms`, and that is the whole of the calibration-cache
+  answer.** `signal_terms` is already in `FIT_RELEVANT_FIELDS`, and a per-point regressor
+  changes the design matrix and therefore `θ̂` and `log_lik`, so it is genuinely fit-relevant.
+  The calibration cache — keyed on `fit_hash` + backend + machine fingerprint — then
+  invalidates on a regime change **by construction**. A sibling field (`regressor_fields`)
+  would have left the key naming `fit_hash` while `fit_hash` said nothing about the regime,
+  and a cached shared-X measurement reused for a per-point run understates peak by 3.3×
+  against a hard 16 GB constraint. **Name-is-not-a-gate, avoided by construction rather than
+  by a check.**
+- **Consequence for Q5 that Q5 did not cover: the geometry fingerprint covers EVERY input
+  array, not only the primary variable.** A per-point regressor is a second data source with
+  its own grid, and a GIA field silently regridded under a fixed URI is the same hole one
+  level out.
+
+**THE (a2) CHECK CAME BACK CLEAN, AND THAT IS WORTH RECORDING.** Every prior seam check in
+this project found the seam imagined or stale. This one found `DesignInfo.per_point` with
+`series()` and `window()` branching on it, `memory.py`'s `X_term`, an explicit refusal in
+`objective.evaluate`, and a test at `test_objective.py:457` pinning the refusal. **Recording
+a clean result is what makes the checks credible rather than ritual.**
+
 ---
 
 ## Required pre-flight for every remaining task

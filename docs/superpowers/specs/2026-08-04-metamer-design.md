@@ -1298,6 +1298,13 @@ bytes-per-series for this dataset and model set, validated against §9.4's analy
 **Cache key: `fit_hash` + backend + machine fingerprint** (§13.3 — the criterion set does
 not affect bytes-per-series).
 
+- **The regressor regime is in the key by construction, and that was checked rather than
+  assumed.** It is expressed inside `signal_terms`, which is already fit-relevant — a
+  per-point regressor changes the design matrix and therefore `θ̂` and `log_lik` — so a
+  regime change moves `fit_hash` and invalidates the cache. Had it been a sibling config
+  field, the key would have named `fit_hash` while `fit_hash` said nothing about the regime,
+  and **a cached shared-X measurement reused for a per-point run understates peak by 3.3×
+  against a hard memory constraint.**
 - **Backend must be in the key** because bytes-per-series is backend-dependent — path A's
   solver state is per-series, path B's is per-thread; the formulas have different *shapes*,
   not just different constants. (If the backend is fixed per metamer version, the version
@@ -1800,6 +1807,16 @@ class, gradient mode, and objective**, plus projected wall time and peak RSS.
 **It also reports which regressor regime the config lands in** — shared X or per-point X
 (§9.4) — because that single fact changes bytes-per-series by ~3.4× and `tile_side` by ~2×,
 and it is the difference between a configuration fitting in the available RAM and not.
+
+**And it reports BOTH regimes' numbers while the per-point feature is still refused
+(2026-08-11).** Per-point regressors are deferred, and the *regime* is not: the feature is
+refused at layer 3 while the config field, the memory formula's branch and this report all
+ship. Measured at d=3, k_β=4, p=4, N=630, M=12, 1 GB — shared X is 8 722 B/series and
+`tile_side` 338; per-point X is 28 882 B/series and `tile_side` 186, a **3.3× change in tile
+area from one config field**. The formula already branches, so printing both costs nothing,
+and **a sizing tool that is only correct in the easy regime is worse than none, because it
+will be trusted.** The layer-3 refusal names the field *and* both tile sizes, because layer
+3 knows them and "not implemented" wastes context the user needs to plan.
 
 Given the hard 16 GB constraint, finding out before starting is worth considerably more
 than the hours it costs to implement.
