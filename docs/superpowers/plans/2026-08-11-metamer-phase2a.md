@@ -39,8 +39,13 @@ the rest of it.
 
 ## Standing requirements for every task
 
-- **Run the (a)–(k) pre-flight against the task brief before writing code**, including (a2)
-  *a name is not a gate* and (a3) *defer the feature, declare the regime*.
+- **Run the pre-flight against the task brief before writing code.** It lives in exactly one
+  place — [`../notes/phase1-to-phase2-handoff.md`](../notes/phase1-to-phase2-handoff.md) §1 —
+  and it has grown past what this plan was written against: **(a)–(k) plus (a2), (a3) and
+  (i2)–(i5), and four causes of a non-biting mutation.** **Read it there rather than from any
+  summary**, including this one; a restatement that drifts is worse than a single stale copy,
+  and the two copies of it drifted once already. Append what each audit finds to
+  [`../notes/phase2a-preflight.md`](../notes/phase2a-preflight.md).
 - **`pixi run test && pixi run typecheck && pixi run lint` before every commit**, and
   `pixi run pre-commit run --all-files`. `pixi run test-fast` is for iteration only.
 - **Mark new slow tests `slow` as they land.** Tests that assert machine-specific numbers

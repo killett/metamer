@@ -2,47 +2,37 @@
 
 ## Start here (cold-start summary)
 
-- **Branch:** `main`. **Last commit:** see `git log --oneline -1`; the handoff below was
-  written at the commit that completed Task 14.
-- **`main` and `phase-1` are reconciled, and they never diverged.** Checked rather than
-  assumed on 2026-08-10: `git merge-base --is-ancestor phase-1 main` succeeds and
-  `git log main..phase-1` is empty, so `phase-1` held **no** commit that `main` lacked — it
-  was simply a stale pointer five commits behind `main`'s publishing work (measured at
-  `2372bbb`), left where the 2026-08-07 fast-forward put it. **No merge and no rebase was required, and neither was performed**; `phase-1` was
-  fast-forwarded onto `main` so the two names agree, which is not a history rewrite and
-  drops nothing. Everything the publishing run added (hatchling + hatch-vcs, `dynamic =
-  ["version"]`, the wheel/sdist targets, the CI and release workflows) is on both.
-  **All Phase 2 work happens on `main`.**
-- **Done:** Phase 1 **Tasks 0–18**. Task 18 (the stage-1 gate) was closed on the mini PC
-  alone — see the verdict note for why one machine suffices and in which direction the
-  inference runs. **Task 19 deleted.**
-- **STARTING PHASE 2? READ**
-  [`docs/superpowers/notes/phase1-to-phase2-handoff.md`](docs/superpowers/notes/phase1-to-phase2-handoff.md)
-  **FIRST.** It is self-contained and carries the transferable part of Phase 1: the
-  eleven pre-flight categories (a)–(k) with their worked instances, the standing rules,
-  the `tile_side` of 338 (**171 until P2 fixed the engines on 2026-08-10**), open
-  questions 5–8, the fixture facts, and what
-  Phase 2 inherits structurally. This file stays the running notebook; that one is the
-  method.
-- **Exit criteria:** **13 met, 3 met with reduced scope, nothing deferred** — the full
-  table with reasons is at the end of the Phase 1 plan.
-- **NEXT ACTION: Phase 2a Task 4 — validation staging 1/2/3/4a, exit codes, `python -m
-  metamer`.** Tasks 0–3 are done and committed. **Task 4 also wires Task 5's observed-thread
-  check into layer 3**, which is stated in both briefs. Run the (a)–(k) pre-flight against Task 4's brief first and
-  append the result to
-  [`docs/superpowers/notes/phase2a-preflight.md`](docs/superpowers/notes/phase2a-preflight.md),
-  as Task 0 did. The plan is
+- **Branch:** `main`. **Last commit:** `git log --oneline -1`. All Phase 2 work is on `main`;
+  `phase-1` is a stale name that never diverged and needs nothing done to it.
+- **DONE: Phase 1 Tasks 0–18 (Task 19 deleted), Phase 2 preliminaries P0–P4, and Phase 2a
+  Tasks 0, 1, 2 and 3.**
+- **NEXT: Phase 2a Task 4 — validation staging 1/2/3/4a, the five exit codes, and
+  `python -m metamer`.** Read **[WHAT TASK 4 INHERITS](#what-task-4-inherits--read-this-before-the-task-sections-below)**
+  below before the plan; it carries what the plan does not.
+- **Tests: 693 collected.** `pixi run test` is the full sweep (~331 s, measured 2026-08-12) and
+  is what every end-of-task verification must run. `pixi run test-fast` deselects `slow` and is
+  for iteration only — **a green fast run is not evidence a task is done.** Verify a fresh
+  checkout with `pixi run test && pixi run typecheck && pixi run lint`.
+- **The plan:**
   [`docs/superpowers/plans/2026-08-11-metamer-phase2a.md`](docs/superpowers/plans/2026-08-11-metamer-phase2a.md).
-  P3 and P4 are done and pushed; the Phase 2 brainstorm settled all eight of the brief's
-  open questions (Q1–Q11 in the brainstorm section below) and amended design doc §11.1,
-  §11.1.1, §11.3, §12.3, §12.4, §12.5, §12.8, §13.2, §13.3, §13.4, §13.6, §13.7, §14.1
-  and §17 along the way.
-- ~~**Next: Phase 2 needs an implementation plan.**~~ Phase 1 is COMPLETE (Tasks 0–18; **Task 19
-  deleted, not deferred** — path B won by ≥3×, so the batched trust-region has no purpose),
-  and the three Phase 2 preliminaries **P0, P1 and P2 are done and pushed** — see the
-  Phase 2 preliminaries section below. **Nothing is blocking.** Design doc §17 already
-  covers Phase 2's territory, so what it needs is a plan plus a phase list with only the
-  first phase detailed, and that first slice vertical as Phase 1's was.
+- **THE METHOD IS THE PRE-FLIGHT, AND IT LIVES IN EXACTLY ONE PLACE:**
+  [`docs/superpowers/notes/phase1-to-phase2-handoff.md`](docs/superpowers/notes/phase1-to-phase2-handoff.md)
+  §1 — (a)–(k) with (a2), (a3) and (i2)–(i5), the four causes of a non-biting mutation, the
+  standing rules and the fixture facts. **Run it against Task 4's brief before writing code**
+  and append what it finds to
+  [`docs/superpowers/notes/phase2a-preflight.md`](docs/superpowers/notes/phase2a-preflight.md),
+  as Tasks 0–3 did. This file is the running notebook; that one is the method. **Do not
+  restate the pre-flight here** — the two copies drifted once already.
+
+---
+
+- **Exit criteria (Phase 1):** 13 met, 3 met with reduced scope, nothing deferred — the table
+  is at the end of the Phase 1 plan.
+- Task 18 (the stage-1 gate) was closed on the mini PC alone; the verdict note says why one
+  machine suffices and in which direction the inference runs. **Task 19 was deleted, not
+  deferred** — path B won by ≥3×, so the batched trust-region has no purpose.
+- The Phase 2 brainstorm settled Q1–Q11 (section below) and amended design doc §11.1, §11.1.1,
+  §11.3, §12.3, §12.4, §12.5, §12.8, §13.2, §13.3, §13.4, §13.6, §13.7, §14.1 and §17.
 - The stage-1 verdict, its scope, and what it does **not** establish are in
   [`docs/superpowers/notes/spike-stage1-verdict.md`](docs/superpowers/notes/spike-stage1-verdict.md)
   — read it before quoting the ≥3× result. **Its one condition is discharged**: re-measured
@@ -392,70 +382,100 @@ Per-task pre-flight audits live in
 [`docs/superpowers/notes/phase2a-preflight.md`](docs/superpowers/notes/phase2a-preflight.md).
 Only the durable conclusions are here.
 
-### Task 0 — package skeleton and dependencies (done)
+### WHAT TASK 4 INHERITS — read this before the task sections below
 
-- **TWO INDEPENDENT GUARDS STAND BETWEEN A WHOLLY-MASKED BATCH AND THE ENGINE, AND EITHER
-  ONE IS SUFFICIENT.** `optimize.optimize_series` returns on the merged data-level +
-  design precheck before building anything; `objective.evaluate` returns before
-  `self.engine.score` when no series passes the precheck. **Mutating either alone does not
-  bite; mutating both at once does** — measured, not read off the source. Second instance of
-  Task 16's `_subset` shape, and worth having a second: the single surviving mutation reads
-  exactly like a coverage gap, and chasing it is wasted work. **Diagnose which of the two
-  causes a survivor has before acting on it.**
-- **THE RAISING STUB ENGINE IS A PURE NEGATIVE, SO IT NEEDS AN ABSOLUTE ANCHOR.** A stub
-  wired into a run and never reached, and a stub never wired in at all, produce
-  byte-identical green results — the cancellation rule at the level of a test fixture. It is
-  defined in Task 0 and first consumed in Task 11, so it would otherwise ship untested
-  through four tasks. `tests/test_stub_engine.py` carries the positive control (a fittable
-  batch through `fit()` raises) and the blind spot as an executable limit (a wholly-masked
-  batch does not, and the test says why). **The injection seam is `fit(..., engine=...)`**,
-  which defaults to `KalmanEngine()` — so a later runner that builds its engine internally
-  from the config makes the fixture undeliverable and every downstream "no fit ran"
-  assertion vacuous.
-- **THE ENGINE SEES B = 1 FROM `fit()`, NOT THE TILE'S B.** `fit` is the `(B, N)` driver but
-  it drives `optimize_series` once per series, and that is path A's permanent per-series
-  form. Caught by the positive control on its first run, against an assertion written from
-  the driver's name.
-- **`tests/test_core_isolation.py` HAS NAMED A `[batch]` EXTRA SINCE PHASE 1 AND NOTHING
-  IMPLEMENTED IT.** A packaging contract documented by a test docstring and enforced by
-  nothing — (a2) in the tree rather than in a brief. `pyproject.toml` now carries
-  `[project.optional-dependencies] batch`. Its guard set was `{xarray, dask, zarr}`, i.e.
-  **three of the five imports 2a adds**; `pydantic` and `threadpoolctl` cross the same
-  boundary and now sit in it, verified first to cost nothing (importing `metamer.core` pulls
-  in none of the five). The isolation test also gained its own bite check.
-- **`pixi run` HIDES A BROKEN WHEEL.** It executes off `PYTHONPATH=src` inside a complete
-  environment, so an import that would fail for someone who ran `pip install metamer` is
-  invisible here and surfaces only in CI's installed job or downstream. **A dependency added
-  to `pixi.toml` alone is a dependency the published package does not have.**
-- **Only one of Task 0's four dependencies was actually new.** `xarray` and `pydantic` were
-  already declared; `threadpoolctl` 3.6.0 was already **installed transitively and
-  undeclared**, which is a dependency nothing guarantees — and Task 5's whole subject is the
-  gap between a limit requested and a limit observed. Only `zarr` was absent. Second
-  instance of Phase 1 Task 0's `psutil` finding: **"adding a dependency rewrites the lock"
-  is a prediction, not a fact.**
-- **`zarr = "*"` IS A NAME, NOT A PIN.** It resolves to 3.x today because of which
-  conda-forge release is current and because of `exclude-newer = "7d"` — the solve is a
-  function of wall-clock time. The v2 and v3 on-disk layouts are different formats and Task
-  8 needs v3 sharding, so the manifest pins `>=3,<4` and a test asserts the **installed**
-  major version, because a lock refresh is what would move it silently.
-- **`pixi install` cannot be its own oracle** — it is the solver that wrote the lock and
-  cannot disagree with itself. The independent check is `pixi search --platform` per
-  platform with a known-good control. Run 2026-08-11: **zarr 3.3.0 and threadpoolctl 3.6.0
-  on all four platforms**, numba 0.66.0 as control on all four, so **neither needs
-  `[target.linux-64.dependencies]`.**
-- **`pixi.lock` is 644 KB after Task 0** (635.6 KB before; the plan's note said 630). The
-  `check-added-large-files` limit is 2000 KB. Re-check the number, not the note.
-- **`runtime_checkable` checks method PRESENCE, not signature**, so `isinstance(stub, Engine)`
-  passes against a stub whose `score` takes no arguments at all. `mypy` is the real gate on
-  the stub's shape, and the conformance test asserts the parameter list explicitly rather
-  than treating one check as the other's substitute. Conformance is checked with `isinstance`
-  and never `issubclass` — `engines/protocol.py` says so in capitals, and a `runtime_checkable`
-  protocol with a data member raises `TypeError` from the latter by design.
-- **A (g) seam check that came back clean, recorded because clean results are what make the
-  checks credible:** `objective.py:201`'s `KalmanEngine().score(...)` is inside a module
-  docstring — the reproduction recipe for its conditioning table — and **not** live code. So
-  `fit(engine=...)` is the only engine construction site on the fit path and the injection
-  seam is genuinely single.
+Task 4 is validation staging, the five exit codes, and `python -m metamer`. Everything it
+needs that is **not** in the plan:
+
+**The four layers, and what belongs in each.** Layer 1 is the file: it parses, and it is a
+`.toml` or a `.json`. Layer 2 is the schema: pydantic, `extra="forbid"`. Layer 3 is
+cross-field and environment sense — **it needs no data**. Layer 4 is data-dependent, and
+**stage 4a is its first stage, deliberately not a fifth layer**, or it becomes one by accident
+when pass 1 lands and layer 4 acquires its "runs against pass 1" home.
+
+**Layer 3 in 2a carries exactly what 2a can trigger**, and the checks accrete while the
+staging is the structure: the screening refusal (**naming the missing engine specifically** —
+"screening requires the debiased Whittle engine (Phase 4)"); the per-point regressor refusal
+(**naming the field and both tile sizes, 338 against 186**, because layer 3 knows them and
+"not implemented" wastes context the user needs for planning); duplicate candidates by spec
+hash; criterion/objective compatibility; the identifiability lint as a **warning**; **and Task
+5's observed-versus-requested thread-limit check.**
+
+> **TASK 5 EXPOSES THE THREAD CHECK; TASK 4 IS WHAT MAKES IT A LAYER-3 FAILURE.** Without the
+> wiring it ships as a bare exception with no layer attached, which would satisfy exit
+> criterion 10 with something that is not a layer-3 failure. Stated in both briefs.
+
+**The five exit codes:** 0 clean; 1 completed with failures above threshold; 2 aborted early;
+3 config/validation layers 1–3; 4 data-dependent layer 4. **2a can produce 0, 3 and 4**; 1 and
+2 get a constructed test each or an explicit note that their producer is 2e. Assert them
+**through a subprocess** — an exit code is a process property — and **enumerate the exits,
+never assert a count.**
+
+**Stage 4a's exception type is already correct and exit code 4 depends on it.**
+`InputContractError` is a `ValueError` subclass, and Task 2 wraps `timeaxis`'s bare
+`ValueError` at the stage boundary so a duplicate timestamp arrives as the staged type. A
+helper raising an unstaged error is an unhandled crash rather than exit code 4; if Task 4 adds
+helpers, they inherit that requirement.
+
+**`STAGE_4A_FIELDS` is an exclusion, not a loosening.** `run_payload` validates
+`FIT_RELEVANT_FIELDS - STAGE_4A_FIELDS` because `geometry_hash` comes from an input rather than
+from a config, and §13.4 requires `--explain` to work with **no data staged** — sizing a run
+before moving 25 GB is its most valuable use. `Config.fit_hash()` and `compat_hash()` return
+`None` there and `run_hash()` returns a string. **Do not "fix" the exclusion by demanding the
+field.**
+
+**The runner is `python -m metamer <config.toml> <store>`, argparse, one screen.** No typer, no
+rich, **no `console_scripts` entry and no subcommand**: naming a subcommand presupposes the
+tree it belongs to and designs the argument structure before Phase 5 knows it. Flags:
+`--memory-budget`, and `--reuse-fits-from` at Task 12. The final line carries `fit_hash`,
+`compat_hash` and the store path.
+
+**The engine must stay injectable.** `fit(engine=...)` is the seam the raising stub fixture is
+delivered through; a runner that builds its engine internally from the config makes every
+downstream "no fit ran" assertion vacuous. See `tests/conftest.py`.
+
+### Phase 2a facts a fresh session cannot re-derive
+
+- **The decimal-year rule is `year + (t − start_of_year) / (start_of_next_year −
+  start_of_year)`**, in the timestamp's own calendar, so **a calendar year is exactly 1.0 in
+  every calendar**. It lives in `batch/timeaxis.py` and is under `ALGORITHM_VERSION`.
+  **`/365.25` was rejected on a measurement**: under `360_day` a calendar year is **1.46%
+  short**, so an `Annual` design column drifts **5.25 days per year** and accumulates **0.72
+  years of phase over 50 years** — the harmonic is decorrelated from the season it models, with
+  **no crash and a full-rank design**. Cost of the chosen rule, stated: a Gregorian daily axis
+  has **two** distinct timesteps (1/365, 1/366) where `/365.25` has one.
+- **Real month-start timestamps give `unique_dt = 6`, not 1** (mid-month 8, daily 2). Only a
+  synthetic `2000 + arange(n)/12` gives 1. **Float noise does not inflate the count** —
+  `UNIQUE_DT_RTOL = 1e-9` is applied per adjacent pair, decades above float64 rounding — and
+  the real trigger is **sub-second jitter**, about **2.6 ms** on a monthly axis.
+  **LOWERING `UNIQUE_DT_RTOL` IS A GLOBAL REGRESSION, NOT A LOCAL FIX**: it destroys the `F`/`Q`
+  amortization on every axis to hide a number telling the truth about one.
+- **The golden reversal is a CHAIN, one hop per allowlist change, newest first**, and it must
+  not be collapsed: two hops reversed in a single transform give **two ways to be wrong that
+  cancel**, which is the cancellation rule applied to a test's own structure. Current →
+  2026-08-11 → 2026-08-10: `1eb1fd731b4ae8d6 / d368e07b5f99efe9 / 0b82f20c43f2f378` →
+  `1de18c706b69c39e / cc099be86aca999b / b89d484190d5d0af` → `faf2d107bab48b06 /
+  bb28cb8d4bffa049 / af313190251af95f`.
+- **`canonical_json` accepts `np.float64` and refuses `np.int64` and `np.ndarray`.** Only the
+  first subclasses a JSON scalar. `list(array)` therefore works on a float coordinate and
+  raises on an integer one, and index coordinates are routinely integers. Use `.tolist()`.
+  Pinned by `test_numpy_scalars_are_not_interchangeable_at_this_boundary`.
+- **`cftime` is declared by hand in the `batch` extra.** Nothing under `src/` imports it —
+  xarray reaches for it to decode any non-standard calendar — so **a static import scan of
+  `src/` cannot see it**, and `tests/test_packaging.py` has that hole stated rather than
+  unknown.
+- **Any test naming a specific field must be RE-POINTED when that field's status changes, not
+  merely re-run.** `test_a_missing_allowlisted_field_is_refused` probed `data_uri`; after the
+  demotion a config omitting it hashes happily, so it would have gone on passing while checking
+  nothing.
+
+**Open questions carried into Task 4 and beyond** (full text at the end of this file):
+
+| # | question | what closes it |
+|---|---|---|
+| **12** | Does a child inherit the parent's **watermark** or its **current RSS**? Both instruments are load-bearing for 2b's calibration tile | a standalone cross-process probe varying the two independently — allocate, free, spawn — on Linux and macOS, then state the answer in `machine.py` and restate the test |
+| **13** | The packaging guard installs `--no-deps`, so a **wrong version floor** is uncaught | an offline wheelhouse: `pip wheel` the resolved set once, install `metamer[batch]` with `--no-index --find-links`. **Do not close it by loosening the floors** |
+| **14** | The benchmarks use a synthetic axis with `unique_dt = 1`; real monthly data has **6** | run the spike with a realistic calendar axis beside the synthetic one at the same B and thread count. **"It plausibly cancels in the ratio" is the reasoning that has failed twice** — measure it |
 
 ### Task 3 — `geometry_hash` (done)
 
@@ -610,6 +630,71 @@ Only the durable conclusions are here.
   live here as `0.1.1.dev23+g883c0eb8b`. A golden would fail next commit and be "fixed" by
   pasting the new value. What it must satisfy is **stability across processes at a fixed
   tree**, and that is what is asserted.
+
+### Task 0 — package skeleton and dependencies (done)
+
+- **TWO INDEPENDENT GUARDS STAND BETWEEN A WHOLLY-MASKED BATCH AND THE ENGINE, AND EITHER
+  ONE IS SUFFICIENT.** `optimize.optimize_series` returns on the merged data-level +
+  design precheck before building anything; `objective.evaluate` returns before
+  `self.engine.score` when no series passes the precheck. **Mutating either alone does not
+  bite; mutating both at once does** — measured, not read off the source. Second instance of
+  Task 16's `_subset` shape, and worth having a second: the single surviving mutation reads
+  exactly like a coverage gap, and chasing it is wasted work. **Diagnose which of the two
+  causes a survivor has before acting on it.**
+- **THE RAISING STUB ENGINE IS A PURE NEGATIVE, SO IT NEEDS AN ABSOLUTE ANCHOR.** A stub
+  wired into a run and never reached, and a stub never wired in at all, produce
+  byte-identical green results — the cancellation rule at the level of a test fixture. It is
+  defined in Task 0 and first consumed in Task 11, so it would otherwise ship untested
+  through four tasks. `tests/test_stub_engine.py` carries the positive control (a fittable
+  batch through `fit()` raises) and the blind spot as an executable limit (a wholly-masked
+  batch does not, and the test says why). **The injection seam is `fit(..., engine=...)`**,
+  which defaults to `KalmanEngine()` — so a later runner that builds its engine internally
+  from the config makes the fixture undeliverable and every downstream "no fit ran"
+  assertion vacuous.
+- **THE ENGINE SEES B = 1 FROM `fit()`, NOT THE TILE'S B.** `fit` is the `(B, N)` driver but
+  it drives `optimize_series` once per series, and that is path A's permanent per-series
+  form. Caught by the positive control on its first run, against an assertion written from
+  the driver's name.
+- **`tests/test_core_isolation.py` HAS NAMED A `[batch]` EXTRA SINCE PHASE 1 AND NOTHING
+  IMPLEMENTED IT.** A packaging contract documented by a test docstring and enforced by
+  nothing — (a2) in the tree rather than in a brief. `pyproject.toml` now carries
+  `[project.optional-dependencies] batch`. Its guard set was `{xarray, dask, zarr}`, i.e.
+  **three of the five imports 2a adds**; `pydantic` and `threadpoolctl` cross the same
+  boundary and now sit in it, verified first to cost nothing (importing `metamer.core` pulls
+  in none of the five). The isolation test also gained its own bite check.
+- **`pixi run` HIDES A BROKEN WHEEL.** It executes off `PYTHONPATH=src` inside a complete
+  environment, so an import that would fail for someone who ran `pip install metamer` is
+  invisible here and surfaces only in CI's installed job or downstream. **A dependency added
+  to `pixi.toml` alone is a dependency the published package does not have.**
+- **Only one of Task 0's four dependencies was actually new.** `xarray` and `pydantic` were
+  already declared; `threadpoolctl` 3.6.0 was already **installed transitively and
+  undeclared**, which is a dependency nothing guarantees — and Task 5's whole subject is the
+  gap between a limit requested and a limit observed. Only `zarr` was absent. Second
+  instance of Phase 1 Task 0's `psutil` finding: **"adding a dependency rewrites the lock"
+  is a prediction, not a fact.**
+- **`zarr = "*"` IS A NAME, NOT A PIN.** It resolves to 3.x today because of which
+  conda-forge release is current and because of `exclude-newer = "7d"` — the solve is a
+  function of wall-clock time. The v2 and v3 on-disk layouts are different formats and Task
+  8 needs v3 sharding, so the manifest pins `>=3,<4` and a test asserts the **installed**
+  major version, because a lock refresh is what would move it silently.
+- **`pixi install` cannot be its own oracle** — it is the solver that wrote the lock and
+  cannot disagree with itself. The independent check is `pixi search --platform` per
+  platform with a known-good control. Run 2026-08-11: **zarr 3.3.0 and threadpoolctl 3.6.0
+  on all four platforms**, numba 0.66.0 as control on all four, so **neither needs
+  `[target.linux-64.dependencies]`.**
+- **`pixi.lock` is 644 KB after Task 0** (635.6 KB before; the plan's note said 630). The
+  `check-added-large-files` limit is 2000 KB. Re-check the number, not the note.
+- **`runtime_checkable` checks method PRESENCE, not signature**, so `isinstance(stub, Engine)`
+  passes against a stub whose `score` takes no arguments at all. `mypy` is the real gate on
+  the stub's shape, and the conformance test asserts the parameter list explicitly rather
+  than treating one check as the other's substitute. Conformance is checked with `isinstance`
+  and never `issubclass` — `engines/protocol.py` says so in capitals, and a `runtime_checkable`
+  protocol with a data member raises `TypeError` from the latter by design.
+- **A (g) seam check that came back clean, recorded because clean results are what make the
+  checks credible:** `objective.py:201`'s `KalmanEngine().score(...)` is inside a module
+  docstring — the reproduction recipe for its conditioning table — and **not** live code. So
+  `fit(engine=...)` is the only engine construction site on the fit path and the injection
+  seam is genuinely single.
 
 ### Promoted after Task 0 (2026-08-11)
 
@@ -1189,246 +1274,46 @@ a clean result is what makes the checks credible rather than ritual.**
 
 ## Required pre-flight for every remaining task
 
-Run this against the task brief **before dispatching an implementer**, and fold what it
-finds into the dispatch as explicit corrections.
+**THE PRE-FLIGHT LIVES IN ONE PLACE AND THIS IS NOT IT.** The full statement of every
+category, with its worked instances and its measurements, is
+[`docs/superpowers/notes/phase1-to-phase2-handoff.md`](docs/superpowers/notes/phase1-to-phase2-handoff.md)
+§1. **Read it there.**
 
-**Why it exists.** Across Tasks 8 and 9 every substantive defect passed the brief's own
-tests: the REML constant (a differential test is blind to a constant offset), the outcome
-laundering, the unmerged exit paths, and the total absence of mask handling in a module
-whose seven tests all passed. **Brief-generated tests validate the brief's model of the
-problem, so they cannot detect that the model omitted something.** That is the whole
-argument — a passing suite is not evidence the brief is right.
+It was duplicated here until 2026-08-12 and the two copies had already drifted: (a2) and (a3)
+existed only in the handoff, and one row of (a)'s cancellation table existed only here. **A
+split pre-flight is worse than a single stale one** — a reader who finds a category in one copy
+has no way to know the other says something different. Anything below is an index, not content;
+add findings to the handoff.
 
-- **(a) Absolute vs differential — THE CANCELLATION RULE.** Stated generally, because
-  three separate instances have now landed:
+**Why it exists.** Across Tasks 8 and 9 every substantive defect passed the brief's own tests.
+**Brief-generated tests validate the brief's model of the problem, so they cannot detect that
+the model omitted something.** A passing suite is not evidence the brief is right.
 
-  > **Any quantity that is constant across the comparison axis is invisible to every test
-  > that compares along that axis.** Selection tests cannot validate `k`, `n`, or any
-  > additive constant in the log-likelihood. Each requires an absolute value computed by
-  > hand.
+**Run it against the task brief BEFORE writing code**, and fold what it finds into the work as
+explicit corrections. Per-task audits for Phase 2a are appended to
+[`docs/superpowers/notes/phase2a-preflight.md`](docs/superpowers/notes/phase2a-preflight.md).
 
-  The three instances, all of which passed every differential and selection test that
-  existed at the time:
+| | category |
+|---|---|
+| **(a)** | Absolute vs differential — **the cancellation rule** |
+| **(a2)** | A name is not a gate — **classify request vs identity first** |
+| **(a3)** | Defer the feature, declare the regime |
+| **(b)** | Batch vs series |
+| **(c)** | Exit paths — enumerate, never count |
+| **(d)** | Grep for the vocabulary the task requires |
+| **(e)** | Do the tests bite? — **four causes of a non-biting mutation** |
+| **(f)** | Does the brief contradict a docstring already in the tree? |
+| **(g)** | Does every call match the module's CURRENT signature? — **clears staleness and nothing else** |
+| **(h)** | Does the test exercise the thing it names, or a default? |
+| **(i)** | Can the fixture fail at all? |
+| **(i2)** | A pure negative needs a positive control |
+| **(i3)** | A relation between observations is not a substitute for the observations |
+| **(i4)** | An error message matching the input is not evidence the input was diagnosed |
+| **(i5)** | If the obvious repair moves a shared constant, the fixture is a trap |
+| **(j)** | Does the oracle share a derivation path with the thing it checks? |
+| **(k)** | Does anything stable across runs depend on process-local state? — **test across processes** |
 
-  | instance | constant across | what caught it |
-  |---|---|---|
-  | REML's Harville constant `(n − rank(X))·log 2π` and `+½log\|XᵀX\|` | `θ` | review, not a test |
-  | `log\|XᵀX\|` under gaps | `θ` | the restricted-design contract |
-  | `design_rank` passed to `penalty_terms` as zeros | the **candidate axis** | a surviving mutation, then an absolute AIC recomputed by hand |
-
-  The third is the sharpest: `k` shifted by the same amount for every candidate at a point,
-  so it cancelled in every ΔIC and left the ranking, the weights and `n_valid` all
-  unchanged. **A whole category of test — every ΔIC, weight and selection assertion — is
-  structurally blind to it.** The only cure is an absolute check: recompute the criterion
-  value from `k = k_θ + rank(X_r)` and compare against `ic_best + delta_ic`.
-- **(b) Batch vs series.** Is any per-series fact computed at batch level, or any
-  per-candidate fact stored per point?
-- **(c) Exit paths.** Enumerate every `return` and every `raise`; does each pass through the
-  outcome ladder? **Enumerate, never assert a count** — an asserted count is how two
-  bypassed exits survived Task 8, and how a report claimed "exactly one early return" where
-  there were four.
-- **(d) Grep for the vocabulary the task requires.** "mask", "n_used", "realized" appearing
-  **zero** times in a 234-line brief was detectable in one command.
-- **(e) Do the tests bite?** Delete the guard each one protects and confirm it fails. Two of
-  Task 9's tests replaced assertions that could not fail at all.
-
-  **A SURVIVING MUTATION HAS THREE CAUSES AND ONLY ONE IS A DEFECT.** Diagnose which before
-  acting; treating either of the other two as a coverage gap leads to deleting a real guard.
-
-  | cause | tell | response |
-  |---|---|---|
-  | no test protects the guard | removing the guard changes nothing observable anywhere | act on it |
-  | the mutated line is unreachable, a guard above fires first | removing that upper guard makes the mutation bite | defence in depth; write the compound mutation |
-  | **two independent guards, either sufficient** | **either alone does not bite; both at once does** | the code is doubly protected and the test is fine |
-
-  **The third is a named outcome with two instances**: Task 16's `_subset`, and Phase 2a
-  Task 0's wholly-masked batch, where `optimize_series`'s merged-precheck return and
-  `objective.evaluate`'s short-circuit each independently keep the engine unreached.
-  **Corollary: doubled guards must be DELIBERATE.** If neither author knew the other's guard
-  existed, a later simplification removes one because it looks dead — and it is dead only
-  because the other is there. Comment both, each naming the other.
-
-- **(i5) WHEN A FIXTURE CANNOT EXPRESS THE DEFECT, ASK WHETHER THE OBVIOUS REPAIR IS LOCAL.**
-
-  > **If the tempting fix for a failing assertion moves a SHARED CONSTANT, the fixture is not
-  > merely weak — it is a trap.** A local test failure buys a global regression, and the
-  > commit that does it reads as a test fix.
-
-  First instance where the wrong repair is worse than the wrong test: the plan's unique-Δt
-  assertion cannot go green, and the obvious repair is lowering `UNIQUE_DT_RTOL` — which
-  destroys the `F`/`Q` amortization on **every** axis to satisfy one fixture. The check: name
-  what would have to change; if it is shared, fix the fixture.
-
-- **(i3) A RELATION BETWEEN OBSERVATIONS IS NOT A SUBSTITUTE FOR THE OBSERVATIONS.**
-
-  > **An assertion comparing two derived values passes when both are absent, both are wrong
-  > in the same direction, or both are degenerate.** Assert each value against its own
-  > expected result **first**; the relation only as an additional check.
-
-  **The cancellation rule (a) in a new location** — a relation is constant across any change
-  that moves both sides identically. Cleanest instance: Task 1's `assert fit_moved ==
-  compat_moved`, which `(False, False)` satisfies, so it passed against a payload flattening
-  that dropped the field entirely — the one defect it existed to catch. Recurs wherever the
-  natural assertion is `a == b`, `before < after` or `len(x) == len(y)`: each is satisfied by
-  two empties, two zeros, or two identical mistakes.
-
-- **(i4) AN ERROR MESSAGE MATCHING THE INPUT IS NOT EVIDENCE THE INPUT WAS DIAGNOSED.**
-
-  > **Any library that quotes user input back in its error text satisfies a `match=` on that
-  > input regardless of which error fired.** Assert the error **type** and the failure mode,
-  > never the presence of the user's own string.
-
-  Worked instance: `pytest.raises(ValidationError, match="data_url")` stayed green under
-  `extra="ignore"`, because the typo was dropped, the required key was then missing, and
-  pydantic echoed the offered mapping in `input_value=`. Match a phrase the **diagnosis**
-  owns, or read the structured error.
-
-- **(i2) A PURE NEGATIVE NEEDS A POSITIVE CONTROL.**
-
-  > **Any assertion of the form "X did not happen" is unfalsifiable unless a paired test
-  > proves X CAN happen through the same wiring.** The control is not scaffolding — it is
-  > the half of the test that can fail.
-
-  Applies wherever the observable is an *absence*: no fit ran, no write occurred, no refit
-  happened, nothing was recompiled. An absence is produced equally well by the thing being
-  correctly suppressed and by the thing never being connected, and **the two are
-  byte-identical in the output.** Worked case: Phase 2a Task 0's raising stub engine, where
-  a stub never reached and a stub never wired are the same green.
-
-  **And the control earns its place by finding wrong beliefs about the code's SHAPE, not
-  just wiring faults** — on its first run it caught that the engine is handed `B = 1`, not
-  the tile's `B`, because `fit` drives `optimize_series` per series. A negative-only test
-  can never surface that: it has no successful path to be wrong about. Full statement and
-  three further shapes in the handoff.
-- **(f) Does the brief contradict a docstring already in the tree?** `objective.py` named
-  `design_rank` in two places and the brief still passed `rank_x`.
-- **(g) Does every call the brief makes into an existing module match that module's
-  CURRENT signature and shapes?** Check the source, not the brief's assumption. (a)–(f)
-  catch a brief whose *model of the problem* is wrong; this one catches a brief that was
-  correct when written and has since gone stale, because the dependency it calls did not
-  exist yet and is therefore encoded as imagined. The symptom is a plausible number rather
-  than an error — `n_eff=float(n)` makes `BIC_NEFF` silently identical to `BIC`. The
-  forward audit below is (g) run once across every remaining task.
-
-  > **A CLEAN (g) MARK IS NOT A PRE-FLIGHT.** (g) asks one question — does every call bind
-  > against the current signature — and answers it for staleness only. It is necessary and
-  > nowhere near sufficient. **Task 15 bound cleanly and was wrong five ways**: a calibrated
-  > constant where a derivation existed, rules keyed on a parameter the target composition
-  > does not have, a starting value read as a structural property, a ratio test that missed
-  > the structural case entirely, and a silent skip where a finding was needed. Every one is
-  > an (a)–(f)/(h)/(i)/(j) question, and (g) cannot see any of them.
-  >
-  > **Tasks 16–19 are marked "no calls into changed modules". That clears them of
-  > STALENESS AND OF NOTHING ELSE.** Do not treat the audit mark as partial credit. Run the
-  > full pre-flight against each brief before writing code, exactly as if the row were
-  > blank.
-
-- **(h) Does the test exercise the thing it names, or a default?** Thread every parameter
-  the behaviour depends on through as a real caller would. A test that leaves a scale at 1
-  cannot detect a missing numerator. **Measured on this project:** Task 11's three-N step-rule
-  test passed against a deliberately broken step rule, because it called
-  `fd_gradient(fn, U0)` without `scale`; with `scale = 1.0` the numerator is 1, the
-  denominator is irrelevant, and deleting it changes no number.
-- **(i) Can the fixture fail at all?** Ask what property of the fixture makes the defect
-  visible; if the answer is "none", the fixture is wrong before the assertion is. Two
-  instances so far: Task 11's brief tested a step rule on a **quadratic**, whose third
-  derivative is zero, so central differences are exact at *any* step and no rule is
-  distinguishable from any other; and Task 10's brief tested a `max(n_eff, 2.0)` floor with
-  `n_eff = 12`, which sits above the floor and never reaches it.
-
-- **(j) Does the oracle share a derivation path with the thing it checks?** An independent
-  oracle means a **different construction**, not different constants. `tests/oracles.fd_hessian`
-  and `hessian_at_optimum` are the same second-difference stencil at different steps, so
-  checking one against the other measured the step choice and nothing else — the routine
-  could have been wrong in any way that a wider step also is, and the test would have passed.
-  This is distinct from (i): there the fixture cannot express the defect; here the fixture is
-  fine and the *reference* is a reparameterized copy of the subject. Nested Richardson
-  qualifies as independent; a wider step does not. The tell is that the oracle's accuracy is
-  the same order as the subject's — if the reference is not at least ~100× better, it is
-  probably the same algorithm.
-
-  **Two worked examples, both from this project:**
-
-  | subject | the bad "oracle" | why it is not one |
-  |---|---|---|
-  | `hessian_at_optimum` | `tests/oracles.fd_hessian` | the same second-difference stencil at a different step — it measured the step choice and nothing else |
-  | `theta_err` (delta method) | `theta_err / theta` | the same quantity rescaled by the very Jacobian under test; it cannot disagree |
-
-  The second is the more seductive because it *looks* like a derivation. Both were replaced
-  by references built a different way: nested Richardson for the Hessian, and for the
-  uncertainties a Hessian rebuilt from the objective and the published
-  `theta_unconstrained`, which shares no code with the driver's own path.
-
-- **(k) Does anything that must be stable ACROSS RUNS depend on process-local state?**
-  Set iteration order, `id()`, the `repr` of an unordered container, dict ordering from a
-  non-deterministic source, time, or the environment. **Test across processes, not within
-  one.**
-
-  **This is the only defect class so far that a perfect in-process suite cannot reach.**
-  Every test in one pytest run shares a single `PYTHONHASHSEED`, so a quantity that is
-  stable within a process and unstable between them is invisible to every same-process
-  test — *and to mutation testing*, which runs in that same process and therefore measures
-  the same frozen seed. (a)–(j) all assume the defect is observable somewhere in one run.
-  This one is not.
-
-  **(k) EXTENDS TO EVERY DELTA, RATE OR TREND.** The check as first written asks whether a
-  *value* depends on process-local state. The sharper form: **any assertion on a
-  difference, a rate or a trend must be checked for whether its BASELINE is set by history
-  outside the test.** Two Task 17 instances, both of which passed in isolation and failed
-  in the full suite:
-
-  | assertion | why the baseline is not the test's | the fix |
-  |---|---|---|
-  | "allocating 256 MiB moves peak RSS by 256 MiB" | peak RSS is a **high-water mark**, so the delta is `max(0, new − whatever the session already reached)`. Measured: watermark 385 MB, allocate 256 MiB, moves **67 MB** | pin the scale against an **absolute reading taken in the same test** (`current_rss_bytes`), which is not a watermark |
-  | "total STREAM throughput rises with thread count" | on a saturated controller the **sign** of the difference is the session's CPU load. Unloaded 10.59 → 12.03 GB/s; under full-suite contention **11.23 → 8.44**, i.e. it falls | assert a **ratio that survives either loading** — per-core bandwidth, ~3.5× measured against a 2× bound |
-
-  **BOTH MODULES ALREADY DOCUMENTED THE PROPERTY THAT BROKE THE TEST.** `machine.py`'s
-  docstring says in capitals that `ru_maxrss` never decreases; the test asserting a peak
-  delta was written anyway, by the same author, in the same sitting. **Documentation does
-  not constrain the next author — tests do.** If a property is load-bearing, the guard is a
-  test that fails when it is violated, not a paragraph saying it matters.
-
-  Also measured: **`ru_maxrss` is updated lazily and can TRAIL live RSS** — 470.8 MB against
-  a live 471.3 MB read an instant *earlier*. `peak >= current` is not guaranteed
-  instant-to-instant, so any comparison between the two instruments needs a few percent of
-  slack — nowhere near enough to absorb the 1024× unit error such a comparison exists to
-  catch.
-
-  **(k) EXTENDS TO REPEATED MEASUREMENT, AND THAT IS A DISTINCT SHAPE.**
-
-  > **A repeated measurement must vary everything the measured quantity depends on.**
-  > Repeats inside a fixed allocation, a fixed input, or a fixed process measure
-  > **precision, not accuracy** — the component held fixed outside the repeat loop is
-  > invisible to them by construction, and a best-of-N over one allocation, published as
-  > though it were fresh, reports a confidence the method cannot support.
-
-  **Measured (P4):** at the spike's worst cell the A:B spread is **0.13** across eight
-  repeats inside one allocation and **0.82** across eight fresh processes. The dominant
-  term was the one the repeats could not see, and `_time_pass`'s `repeats` argument
-  tightens only the small one. The published ±0.15 scatter came from that loop.
-
-  The check to run: **list what the number depends on, then list what the repeat loop
-  re-creates.** Anything in the first list and not the second is a systematic the
-  measurement cannot report — allocation, process, input realization, machine state, and
-  in this project's history all four at once.
-
-  **The worked instance:** Task 16's fence serialized with
-  `json.dumps(..., default=repr)`. Measured, `{"criteria": {"aic", "bic", "hqic"}}` renders
-  as three *different* strings under `PYTHONHASHSEED` 1, 2 and 3, and an object without
-  `__repr__` renders its memory address. Every one of the fence's six tests passed. The
-  hash changed on every resume, refitting a finished 10⁷-point store with no exception, no
-  warning and no symptom but a bill. The guard is a subprocess test across several seeds,
-  compared against a hand-derived constant rather than against this process.
-
-**(h) and (i) are refinements of (e), and mutation testing does not subsume them.** (e) asks
-whether the test bites when the guard is deleted; (h) and (i) ask whether the call site and
-the fixture are *capable of expressing* the defect at all. A mutation catches those two only
-when it happens to interact with the default or the fixture's blind spot, which is luck —
-Task 11's step-rule mutation was caught by a different test, and the three-N test that was
-supposed to catch it sailed through.
-
-Also run the brief's code if it supplies any: the two highest-yield audits did, and one
-found three collection errors and six failing tests out of twelve.
+**Also: run the brief's code, and re-check its numbers.** The highest-yield audits did.
 
 ### Forward audit of Tasks 11–19 (run 2026-08-06, after Task 10)
 
@@ -2790,6 +2675,23 @@ Still open. **A new session must not assume these were settled.**
     moment it runs, which nothing guarantees, and its `after >= 1.2 * before` assertion
     has a baseline set by the whole session (see the gotcha above, where a 400 MiB ballast
     moved that watermark by exactly zero).
+
+    **OBSERVED FAILING INTERMITTENTLY ON 2026-08-12**, during Phase 2a Task 3's verification
+    and **not caused by it**: `test_a_child_measurement_is_not_contaminated_by_a_large_parent`
+    failed twice — once in a full sweep and once running `tests/test_memory.py` alone — and
+    then passed on the next run of the same command, with no source change between. It passes
+    in true isolation (the single test, nothing else in the process) every time.
+
+    That pattern is the open question itself, not a new bug: the assertion is
+    `after >= 1.2 * before` after a fixed 400 MiB ballast, and its baseline is the **session
+    watermark**, which earlier tests in the module raise. PROGRESS already records a 400 MiB
+    ballast moving a 991.7 MB watermark by **exactly zero**. **A delta whose baseline is set by
+    history outside the test is order-dependent by construction**, and the fix is to pin the
+    inheritance contract rather than to retry the test.
+
+    **Do not "fix" it by loosening the ratio or by reordering the module.** Either hides the
+    measurement that would answer the question, and this project has paid for pinning a
+    contract in passing before.
 
     **Deliberately left open rather than fixed inside P4.** Restating the test means
     pinning the shim's inheritance contract, and pinning a contract in passing, inside a

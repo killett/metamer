@@ -28,6 +28,7 @@ Every entry below has at least one worked instance from this project.
 | instance | constant across | what caught it |
 |---|---|---|
 | REML's Harville constant `(n − rank(X))·log 2π` and `+½log\|XᵀX\|` | `θ` | review, not a test |
+| `log\|XᵀX\|` under gaps | `θ` | the restricted-design contract |
 | `design_rank` passed to `penalty_terms` as zeros | the **candidate** axis | a surviving mutation, then an absolute AIC recomputed by hand |
 | **The hash function itself** (Task 16) | both sides of every comparison | **nothing** — six fence tests passed against a serializer that was silently unstable. Separators, sort order, digest algorithm and truncation length all cancel |
 
@@ -128,6 +129,22 @@ leads to deleting a real guard.
 | **No test protects the guard** | removing the guard changes nothing observable anywhere | act on it — write the test |
 | **The mutated line is unreachable** because a guard *above* it fires first | removing that upper guard makes the mutation bite | defence in depth working; write the compound mutation |
 | **TWO INDEPENDENT GUARDS, EITHER SUFFICIENT** | mutating **either alone** does not bite; mutating **both at once** does | the code is doubly protected and the test is fine |
+| **GUARDED ONE LAYER UP** | the mutation is semantically real and the test is sound, but an **earlier layer already normalized the input**, so the mutated code cannot see the difference | **rewrite the assertion** — see below |
+
+**THE FOURTH IS THE ONLY ONE OF THE FOUR WHERE THE CORRECT RESPONSE IS TO CHANGE THE TEST.**
+The other three end in "leave it" or "write a compound mutation". This one means the test was
+pointed at a defect that is **not reachable**, so the question is not whether to accept the
+survivor — it is **what the mutation should have been**.
+
+Worked instance (Phase 2a Task 3): mutating `geometry_hash`'s time component from decimal
+years to `str()` of the decoded values left every test green, *including the two-calendar test
+written to catch exactly that*. Decoding happens in the **opener**, so any representation taken
+downstream is post-decode and already distinguishes calendars; the hazard the test named is
+guarded a layer up by `calendar_of`. **The reachable defect was different**: decimal years must
+be the component because they move when the **conversion rule** moves — the conversion is under
+`ALGORITHM_VERSION`, so a change to it must invalidate stored fits — and because `str()` of a
+datetime is a **repr**, i.e. a library-version artefact, which is (k). The assertion that bites
+pins the representation, not the difference.
 
 **The third is now a named outcome with two instances.** Task 16's `_subset` — an explicit
 `if missing: raise` above a comprehension — and Phase 2a Task 0's wholly-masked batch, where
@@ -536,6 +553,23 @@ Every one of these was discovered by building a fixture that could not fail.
   design more post-breakpoint degrees of freedom than the post-breakpoint samples carry.
 - **The time axis is decimal years.** In seconds since 1970 the same 20-year monthly design
   goes from `cond(X) = 3.4e1` to `3.3e32` and rank 7/7 to 2/7.
+- **NUMPY SCALAR TYPES ARE NOT INTERCHANGEABLE AT A SERIALIZATION BOUNDARY, AND A FIXTURE'S
+  DTYPE IS A HIDDEN PARAMETER.** `canonical_json` **accepts `np.float64` and refuses
+  `np.int64`**, because the first subclasses `float` and the second subclasses nothing JSON
+  knows; `np.ndarray` is refused too. So `list(array)` works on a float coordinate and raises
+  on an integer one — and index coordinates are routinely integers. **A fingerprint built that
+  way passes every test written on a float grid and fails on the first real store.**
+  `.tolist()` converts uniformly and reads identically to `list()`.
+  **Swept 2026-08-12 for other callers**: `hashing.digest` receives config payloads whose
+  numbers come from `tomllib`/pydantic as Python scalars, and `ContractReport` already casts
+  every count with `int(...)` and every year with `float(...)` — those casts are load-bearing,
+  not cosmetic. `terms.py` serializes with its own `json.dumps` and never reaches here.
+  `tests/test_hashing.py` pins the asymmetry so it cannot be "tidied" into symmetry.
+- **A TYPE DECLARED WIDER THAN CURRENTLY NEEDED IS THE COUNTER-EXAMPLE WORTH KEEPING.**
+  `Config.fit_hash()` was declared `str | None` at Task 1, when it could never return None.
+  Two tasks later `geometry_hash` made the None case real, and **no caller needed revisiting**
+  — where a `str` return would have had every caller written against it and then rewritten at
+  exactly the moment the None case started happening. Widening later is the expensive order.
 - **A REAL MONTHLY AXIS HAS SEVERAL DISTINCT TIMESTEPS, NOT ONE.** Calendar months are 28–31
   days, so 50 years of month-start timestamps give `unique_dt = 6` (mid-month 8, daily 2).
   **Only a synthetic `2000 + arange(n)/12` gives 1**, and that is the shape every synthetic

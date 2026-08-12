@@ -1131,3 +1131,33 @@ def test_a_shared_with_declaration_stays_json_safe_and_order_independent():
     # a canonical dict, so a consumer serializing it any other way must get the
     # same bytes.
     assert json.dumps(forward.canonical()) == json.dumps(backward.canonical())
+
+
+def test_numpy_scalars_are_not_interchangeable_at_this_boundary():
+    """`np.float64` is accepted, `np.int64` and `np.ndarray` are refused.
+
+    **THE ASYMMETRY IS THE TRAP AND IT IS PINNED HERE SO IT CANNOT BE TIDIED
+    AWAY.** `np.float64` subclasses `float`, so it satisfies `_JSON_SCALARS`
+    incidentally; `np.int64` subclasses nothing JSON knows and `np.ndarray` is
+    refused by name. Nothing about that is obvious from either side.
+
+    Bug this catches, measured on the geometry fingerprint at Task 3:
+    `list(coordinate_array)` yields numpy scalars, so it **works on a float
+    coordinate and raises on an integer one** -- and `y`/`x` index coordinates
+    are routinely integers. A fingerprint built that way passes every test
+    written against a float grid and fails on the first real store. `.tolist()`
+    converts uniformly, and the two spellings read identically.
+
+    It also catches the opposite tidying: "making" the serializer symmetric by
+    accepting `np.int64` as well. That would be a widening of what counts as
+    canonical, and the refusal exists because a numpy scalar in a payload means
+    a caller skipped a conversion it should have made explicit.
+    """
+    assert canonical_json({"k": np.float64(1.5)}) == '{"k":1.5}'
+    with pytest.raises(TypeError, match="int64"):
+        canonical_json({"k": np.int64(3)})
+    with pytest.raises(TypeError, match="ndarray"):
+        canonical_json({"k": np.arange(3)})
+    # The conversion a caller must make, and the one that works for both dtypes.
+    assert canonical_json({"k": np.arange(3).tolist()}) == '{"k":[0,1,2]}'
+    assert canonical_json({"k": np.arange(3.0).tolist()}) == '{"k":[0.0,1.0,2.0]}'
