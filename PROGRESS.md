@@ -26,8 +26,8 @@
   method.
 - **Exit criteria:** **13 met, 3 met with reduced scope, nothing deferred** — the full
   table with reasons is at the end of the Phase 1 plan.
-- **NEXT ACTION: Phase 2a Task 1 — the config model, `load()`, and the hash wiring.**
-  Task 0 is done and committed. Run the (a)–(k) pre-flight against Task 1's brief first and
+- **NEXT ACTION: Phase 2a Task 2 — the opener registry, the zarr opener, and stage 4a.**
+  Tasks 0 and 1 are done and committed. Run the (a)–(k) pre-flight against Task 2's brief first and
   append the result to
   [`docs/superpowers/notes/phase2a-preflight.md`](docs/superpowers/notes/phase2a-preflight.md),
   as Task 0 did. The plan is
@@ -59,9 +59,9 @@
   MacBook: `--threads 1 --threads 8`, `--out bench/macbook.json`.
   Batch sweep at path B's worst cell (d=3, 1 thread, no gaps) is
   `bench/batch-sweep-d3-1thread-nogaps.json`.
-- **Tests:** **612 collected** (588 at the close of Phase 1; Phase 2a Task 0 added the
-  batch-skeleton and stub-engine modules and one isolation guard). Full sweep
-  `pixi run test` (~240 s). `pixi run test-fast` (~12 s)
+- **Tests:** **652 collected** (588 at the close of Phase 1; Phase 2a Tasks 0 and 1 added the
+  batch-skeleton, stub-engine, packaging and config modules). Full sweep
+  `pixi run test` (~273 s, measured 2026-08-11). `pixi run test-fast` (~12 s)
   deselects the `slow` marker and is for iteration only — **a green fast run is not evidence
   a task is done.** `pixi run test-ci` reproduces what CI runs (`-m 'not machine'`); it is
   also not evidence on its own, because the `machine` marker covers exactly the tests that
@@ -127,7 +127,7 @@
 | Phase 1 task tracker | `docs/superpowers/plans/2026-08-05-metamer-phase1.md.tasks.json` (native task ids 8–27) |
 | Original build prompt | [`docs/phase1-prompt.md`](docs/phase1-prompt.md) — **superseded** by design doc §2 where they conflict |
 | Phase 2 preliminaries pre-flight | [`docs/superpowers/notes/phase2-preliminaries-preflight.md`](docs/superpowers/notes/phase2-preliminaries-preflight.md) — the (a)–(k) audit of the P0/P1/P2 briefs and what each finding changed |
-| **Phase 2a implementation plan** | [`docs/superpowers/plans/2026-08-11-metamer-phase2a.md`](docs/superpowers/plans/2026-08-11-metamer-phase2a.md) — **Task 0 done; Task 1 next** |
+| **Phase 2a implementation plan** | [`docs/superpowers/plans/2026-08-11-metamer-phase2a.md`](docs/superpowers/plans/2026-08-11-metamer-phase2a.md) — **Tasks 0–1 done; Task 2 next** |
 | **Phase 2a pre-flight, per task** | [`docs/superpowers/notes/phase2a-preflight.md`](docs/superpowers/notes/phase2a-preflight.md) — the (a)–(k) audit of each 2a task brief and what each finding changed. **Append to it before each task, not after.** |
 
 Phase list is design doc §17. Phase 1 exit criteria are §18. Do not duplicate either here.
@@ -445,6 +445,66 @@ Only the durable conclusions are here.
   docstring — the reproduction recipe for its conditioning table — and **not** live code. So
   `fit(engine=...)` is the only engine construction site on the fit path and the injection
   seam is genuinely single.
+
+### Task 1 — the config model, `load()`, and the hash wiring (done)
+
+- **`registry_version` WAS IN `FIT_RELEVANT_FIELDS`, WAS REQUIRED BY `_subset`, AND NOTHING
+  HAD DECIDED WHERE IT CAME FROM.** Every caller was a test supplying it by hand, so the
+  question never arose; the plan's Task 1 field table does not mention it. `load()` is the
+  moment it would have come from a user's TOML — a value identifying the installed family
+  registry, supplied by the thing it identifies. Pinning `registry_version = "1"` against a
+  changed registry reuses fits computed by different kernels, every array the right shape,
+  no symptom. **Second instance of the `metamer_version` defect.** `normalize` now stamps it
+  and refuses a config carrying it; **the stamped value equals what the fixtures supplied, so
+  no hash moved — only the source did.**
+- **THE PAYLOAD IS FLAT, AND A NESTED `warm_start` MAPPING WOULD HAVE MADE MEMBERSHIP
+  IMPLICIT.** One allowlisted key holding a mapping means everything inside it is fit
+  identity, so a field added to that block later joins by accident. The boundary that
+  protects is the one §11.1 threatens: read one clause too far, "a stale warm start lands at
+  the wrong optimum" sweeps in the **audit** settings, and then re-running a hysteresis audit
+  at a different subsample size invalidates the store it is auditing. Blocks flatten to
+  `block_field`, the five warm-start settings are five names, and the audit settings are a
+  separate block whose changes are asserted to move neither gate.
+- **THE GOLDENS MOVED AND THE REVERSAL IS NOW A TEST.** Re-derived by hand; deleting the five
+  `warm_start_*` keys reproduces `faf2d107bab48b06 / bb28cb8d4bffa049 / af313190251af95f`
+  exactly. **Task 3 does this again for `geometry_hash` — do not batch the two.** One
+  combined regeneration proves nothing about either.
+- **TWO DEFAULT MECHANISMS, AND ONE IS SILENTLY DEAD ON THE CONFIG PATH.** `normalize`
+  computes `{**CONFIG_DEFAULTS, **config, ...}`, so once pydantic has filled `seed` and
+  `objective` the config always carries them and `CONFIG_DEFAULTS` never applies to anything
+  that came through `load`. If the two disagreed, the hashed value would be pydantic's and the
+  constant would be dead code reading as authoritative. **It is not removable** — it still
+  serves callers holding a payload and no file — **so pin the agreement rather than delete
+  either.**
+- **A MESSAGE THAT QUOTES WHAT YOU TYPED IS NOT A MESSAGE THAT DIAGNOSED IT.**
+  `pytest.raises(ValidationError, match="data_url")` passes under `extra="ignore"`: the extra
+  key is dropped, `data_uri` is then simply missing, and pydantic renders the offered input in
+  its `input_value=` echo, so the typo appears in the message of an error that never saw it.
+  Measured — the mutation left the test green. **Assert on `errors()[i]["type"]` and `loc`,
+  not on message text.**
+- **Second doubled-guard instance in two tasks, and this one needed splitting.**
+  `extra="forbid"` catches the field that is **present** and unrecognized; `hashing._subset`
+  catches the one that is **absent** and required. A single typo trips both, so one test
+  cannot say which fired and neither mutation bites. They now have **a test each**. Both are
+  cross-commented per the corollary.
+- **A RELATION BETWEEN TWO OBSERVATIONS IS NOT A SUBSTITUTE FOR THE OBSERVATIONS.** My own
+  warm-start parametrization asserted `fit_moved == compat_moved`, which `(False, False)`
+  satisfies — so it passed against the dropped-field defect it existed to catch. Expected
+  values are spelled out per case now.
+- **Desugaring is restricted evaluation of an AST, not `eval` and not a tokenizer.**
+  `ast.parse(mode="eval")` then a walk accepting exactly `Name` and `BinOp(Add)`. `eval` with
+  a restricted namespace is a *denylist* of builtins and trips `S307` correctly;
+  `str.split("+")` accepts `"white - matern12"` as one unknown kind and blames the registry
+  for a syntax error.
+- **The config test's golden fit payload is byte-identical to `test_hashing.py`'s**, on
+  purpose: it is the claim that a config off disk, through pydantic and the flattening,
+  produces the same payload as the hand-built mapping. No test comparing configs to other
+  configs could see a divergence there.
+- **No golden for `run_hash` at the config layer.** It carries `metamer_version`, which
+  `hatch-vcs` derives from the git tag and which therefore changes on every commit — measured
+  live here as `0.1.1.dev23+g883c0eb8b`. A golden would fail next commit and be "fixed" by
+  pasting the new value. What it must satisfy is **stability across processes at a fixed
+  tree**, and that is what is asserted.
 
 ### Promoted after Task 0 (2026-08-11)
 

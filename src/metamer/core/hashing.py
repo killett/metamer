@@ -67,6 +67,8 @@ import json
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+from metamer.core.registry import REGISTRY_VERSION
+
 ALGORITHM_VERSION = "1"
 """Identity of the code that computes theta-hat and log_lik. HAND-BUMPED.
 
@@ -117,17 +119,68 @@ identity with a payload that says otherwise, which is the "silent skip in an
 allowlist is a demotion" failure pointed the other way.
 """
 
-FIT_RELEVANT_FIELDS = frozenset(
+REGISTRY_VERSION_KEY = "registry_version"
+"""Payload key under which `normalize` stamps `registry.REGISTRY_VERSION`.
+
+**STAMPED AND RESERVED FOR THE SAME REASON `algorithm_version` IS, AND IT WAS
+NEITHER UNTIL PHASE 2a TASK 1.** It identifies the installed family registry --
+a property of the code -- and it sits in `FIT_RELEVANT_FIELDS`, where `_subset`
+requires it. Until a config file existed, every caller was a test supplying it
+by hand, so nothing had to decide where it came from.
+
+The moment `metamer.config.load` exists, the alternative is that a user's TOML
+supplies it: a value identifying the installed registry, provided by the thing
+it is supposed to identify. Pinning `registry_version = "1"` while running a
+registry that has changed then reuses fits computed by different kernels, with
+every array the right shape and no symptom. **That is `metamer_version` in
+`FIT_RELEVANT_FIELDS` all over again -- a name that gates nothing -- caught here
+before a config could populate it rather than after.**
+
+The stamped value equals what the fixtures used to supply, so no hash moved
+when this changed; only the source did.
+"""
+
+_WARM_START_FIT_FIELDS = frozenset(
     {
-        "data_uri",
-        "variable",
-        "signal_terms",
-        "objective",
-        "engine",
-        "registry_version",
-        ALGORITHM_VERSION_KEY,
-        "seed",
+        "warm_start_enabled",
+        "warm_start_coarse_stride",
+        "warm_start_interpolation_rule",
+        "warm_start_spiral_bound",
+        "warm_start_tie_break",
     }
+)
+"""The warm-start settings that move theta-hat. FLATTENED, one name each.
+
+**NOT a single `warm_start` mapping, deliberately.** Compat relevance is an
+allowlist and *membership is the entire mechanism*; a nested mapping makes
+membership implicit for everything inside it, so a field added to that block
+later becomes fit-relevant by accident and invalidates every store the first
+time someone changes it.
+
+The boundary this protects is narrow and real. §11.1's own words settle why the
+settings below are fit-relevant: a stale warm start produces converged-looking
+fits at the wrong optimum, the worst failure mode in the system. But read
+loosely the same argument sweeps in the **audit** settings, and then re-running
+a hysteresis audit at a different subsample size invalidates the store it is
+auditing. The audit settings live in their own config block, are absent from
+this set, and `tests/test_config.py` asserts that changing one moves neither
+`fit_hash` nor `compat_hash`.
+"""
+
+FIT_RELEVANT_FIELDS = (
+    frozenset(
+        {
+            "data_uri",
+            "variable",
+            "signal_terms",
+            "objective",
+            "engine",
+            REGISTRY_VERSION_KEY,
+            ALGORITHM_VERSION_KEY,
+            "seed",
+        }
+    )
+    | _WARM_START_FIT_FIELDS
 )
 """Fields determining theta-hat and log_lik. Extending this is a deliberate act.
 
@@ -160,6 +213,15 @@ axis: every array keeps its shape, every value is finite, every status reads
 candidates have different free-parameter counts it also shifts every offset on
 the ragged `/noise/` axis, so the corruption lands in two arrays rather than
 one.
+
+**THE WARM-START SETTINGS ENTERED ON 2026-08-11 AND THAT MOVED ALL THREE
+`GOLDEN_*` CONSTANTS.** They were absent because this set predates the feature,
+not because anyone decided they did not belong; §11.1 says a stale warm start
+produces converged-looking fits at the wrong optimum. The **audit** settings
+are the boundary and stay out -- see `_WARM_START_FIT_FIELDS`. A second
+deliberate move is still to come: `data_uri` leaves and `geometry_hash` enters
+at Task 3, which moves the goldens again. **Two separate hand re-derivations,
+each verified by reversal; do not batch them into one.**
 
 Also excludes `metamer_version`, which it held until 2026-08-10. The package
 version is now VCS-derived and therefore changes on every commit; it remains
@@ -278,21 +340,30 @@ def normalize(config: Mapping[str, Any]) -> dict[str, Any]:
         config: The config as supplied.
 
     Returns:
-        A new mapping with every `CONFIG_DEFAULTS` key present and
-        `ALGORITHM_VERSION_KEY` set from `ALGORITHM_VERSION`.
+        A new mapping with every `CONFIG_DEFAULTS` key present,
+        `ALGORITHM_VERSION_KEY` set from `ALGORITHM_VERSION` and
+        `REGISTRY_VERSION_KEY` set from `registry.REGISTRY_VERSION`.
 
     Raises:
-        ValueError: If the config carries `ALGORITHM_VERSION_KEY` itself.
-            Refused rather than overridden -- see that constant's docstring.
+        ValueError: If the config carries either stamped key itself. Refused
+            rather than overridden -- see those constants' docstrings. Both are
+            named in one message: a bare lookup would raise anyway, so the
+            message is the only thing distinguishing a deliberate refusal from
+            an incidental one.
     """
-    if ALGORITHM_VERSION_KEY in config:
+    supplied = sorted({ALGORITHM_VERSION_KEY, REGISTRY_VERSION_KEY} & set(config))
+    if supplied:
         raise ValueError(
-            f"{ALGORITHM_VERSION_KEY!r} is stamped from the installed code and "
-            "must not appear in a config; it is refused rather than overridden "
-            "so a config that tries to pin it fails loudly instead of being "
-            "quietly ignored"
+            f"{supplied} is stamped from the installed code and must not appear "
+            "in a config; it is refused rather than overridden so a config that "
+            "tries to pin it fails loudly instead of being quietly ignored"
         )
-    return {**CONFIG_DEFAULTS, **dict(config), ALGORITHM_VERSION_KEY: ALGORITHM_VERSION}
+    return {
+        **CONFIG_DEFAULTS,
+        **dict(config),
+        ALGORITHM_VERSION_KEY: ALGORITHM_VERSION,
+        REGISTRY_VERSION_KEY: REGISTRY_VERSION,
+    }
 
 
 def _subset(config: Mapping[str, Any], fields: frozenset[str]) -> dict[str, Any]:

@@ -1,0 +1,775 @@
+"""`metamer.config.load`, and the hash boundary it is the only way through.
+
+Every test here loads from a REAL FILE. A `Config` built inline has not been
+through `tomllib`, pydantic or the flattening, so a hash computed from it is
+evidence about the object and not about the config path -- and the config path
+is the whole subject.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import subprocess
+import sys
+import textwrap
+from pathlib import Path
+
+import pytest
+from pydantic import ValidationError
+
+import metamer
+from metamer import config as config_module
+from metamer.core import hashing
+
+# The canonical rendering of `_GOLDEN_TOML` restricted to each allowlist,
+# written out BY HAND: keys sorted, `(",", ":")` separators, no whitespace, list
+# order preserved because a signal-term list is ordered data. These strings are
+# the derivation; the hex below is each one's sha256 prefix, taken with
+# `hashlib` directly so it shares no construction with `canonical_json`.
+#
+# THE FIT STRING IS DELIBERATELY IDENTICAL TO `tests/test_hashing.py`'s
+# GOLDEN_FIT_PAYLOAD, and so is its digest. That is not duplication -- it is the
+# claim this module exists to make: a config that comes off disk through
+# pydantic and the block flattening produces the SAME fit payload as the
+# hand-built mapping the hashing tests use. If the two ever disagree, the config
+# path has introduced a field, dropped one, or renamed one, and no test that
+# only compares configs against other configs could see it.
+_GOLDEN_FIT_PAYLOAD = (
+    '{"algorithm_version":"1","data_uri":"s3://bucket/ssh.zarr","engine":"kalman",'
+    '"objective":"ml","registry_version":"1","seed":0,'
+    '"signal_terms":["constant","trend","annual"],"variable":"sla",'
+    '"warm_start_coarse_stride":8,"warm_start_enabled":true,'
+    '"warm_start_interpolation_rule":"nearest_valid","warm_start_spiral_bound":4,'
+    '"warm_start_tie_break":"lowest_yx"}'
+)
+_GOLDEN_COMPAT_PAYLOAD = (
+    '{"algorithm_version":"1","criteria":["aic","hqic"],'
+    '"data_uri":"s3://bucket/ssh.zarr","engine":"kalman",'
+    '"objective":"ml","registry_version":"1","seed":0,'
+    '"signal_terms":["constant","trend","annual"],"variable":"sla",'
+    '"warm_start_coarse_stride":8,"warm_start_enabled":true,'
+    '"warm_start_interpolation_rule":"nearest_valid","warm_start_spiral_bound":4,'
+    '"warm_start_tie_break":"lowest_yx"}'
+)
+GOLDEN_FIT_HASH = "1de18c706b69c39e"
+GOLDEN_COMPAT_HASH = "a1bb321f995cde95"
+
+# NO GOLDEN FOR `run_hash`, AND THE REASON IS WORTH STATING. `run_hash` carries
+# `metamer_version`, which `hatch-vcs` derives from the git tag, so it changes
+# on every commit -- measured here as `0.1.1.dev23+g883c0eb8b`. A golden for it
+# would fail on the next commit and be "fixed" by pasting the new value, which
+# is precisely the discipline `tests/test_hashing.py` exists to protect. What
+# `run_hash` must satisfy is STABILITY ACROSS PROCESSES at a fixed tree, and
+# that is what the cross-process test asserts for it.
+
+_GOLDEN_TOML = """
+    # A comment, which must not reach any hash.
+    data_uri = "s3://bucket/ssh.zarr"
+    variable = "sla"
+    signal_terms = ["constant", "trend", "annual"]
+    candidates = ["white", "white + matern12"]
+    criteria = ["aic", "hqic"]
+"""
+
+
+def _write(tmp_path: Path, text: str, name: str = "config.toml") -> Path:
+    path = tmp_path / name
+    path.write_text(textwrap.dedent(text))
+    return path
+
+
+def _golden(tmp_path: Path) -> Path:
+    return _write(tmp_path, _GOLDEN_TOML)
+
+
+# --------------------------------------------------------------------------
+# The golden payloads: the absolute anchors
+# --------------------------------------------------------------------------
+
+
+def test_the_config_path_produces_the_hand_derived_payloads(tmp_path):
+    """A config off disk hashes to the hand-written canonical JSON.
+
+    Expected value determined independently: the strings at the top of this
+    module were written by hand from the allowlists and hashed with `hashlib`
+    directly, sharing no construction with `canonical_json`.
+
+    THIS IS THE ONLY ABSOLUTE ASSERTION IN THE MODULE AND EVERY OTHER TEST HERE
+    DEPENDS ON IT. The rest are differential -- "field X moves hash Y" -- and a
+    difference cannot see anything constant across both sides: a flattening that
+    prefixed every key wrongly, a payload that dropped `seed` entirely, or a
+    `load` that returned the same object regardless of its argument would leave
+    every differential test green. That is the cancellation rule, and this test
+    is the cure.
+
+    Bug it catches: the block flattening emitting `warmstart_enabled`,
+    `warm_start.enabled` or a nested mapping. Any of those makes the five
+    warm-start settings invisible to `FIT_RELEVANT_FIELDS` -- `_subset` would
+    raise, which is the loud case -- or, worse, visible under a name the
+    allowlist happens to contain for some other reason.
+    """
+    cfg = config_module.load(_golden(tmp_path))
+    payload = hashing.fit_payload(cfg.to_payload())
+
+    assert json.dumps(payload, sort_keys=True, separators=(",", ":")) == (
+        _GOLDEN_FIT_PAYLOAD
+    )
+    assert cfg.fit_hash() == GOLDEN_FIT_HASH
+    assert (
+        hashlib.sha256(_GOLDEN_FIT_PAYLOAD.encode("utf-8")).hexdigest()[:16]
+        == GOLDEN_FIT_HASH
+    )
+
+    compat = hashing.compat_payload(cfg.to_payload())
+    assert json.dumps(compat, sort_keys=True, separators=(",", ":")) == (
+        _GOLDEN_COMPAT_PAYLOAD
+    )
+    assert cfg.compat_hash() == GOLDEN_COMPAT_HASH
+
+
+# --------------------------------------------------------------------------
+# The model is hashed, not the file
+# --------------------------------------------------------------------------
+
+
+def test_comments_key_order_and_explicit_defaults_do_not_move_a_hash(tmp_path):
+    """Three spellings of one configuration hash identically.
+
+    Expected value determined independently: the hashed object is the validated
+    model, and none of comments, key order or explicit-versus-default survives
+    validation. All three must therefore reach the same payload.
+
+    Bug this catches: hashing the file text or the raw parse. A user who
+    reformats their config, adds a comment explaining a choice, or writes out a
+    default they had been relying on implicitly would invalidate a 10^7-point
+    store and refit it, with no exception, no warning and no symptom but a bill.
+
+    The three spellings vary all three axes at once deliberately: they are the
+    same mechanism -- text that must not reach the payload -- and separating
+    them would triple the test without testing anything more.
+    """
+    plain = config_module.load(_golden(tmp_path))
+    reordered = config_module.load(
+        _write(
+            tmp_path,
+            """
+            criteria = ["aic", "hqic"]
+            variable = "sla"
+            candidates = ["white", "white + matern12"]
+            signal_terms = ["constant", "trend", "annual"]
+            data_uri = "s3://bucket/ssh.zarr"
+            """,
+            "reordered.toml",
+        )
+    )
+    explicit = config_module.load(
+        _write(
+            tmp_path,
+            """
+            data_uri = "s3://bucket/ssh.zarr"   # trailing comment
+            variable = "sla"
+            signal_terms = ["constant", "trend", "annual"]
+            candidates = ["white", "white + matern12"]
+            criteria = ["aic", "hqic"]
+            objective = "ml"
+            seed = 0
+            engine = "kalman"
+
+            [warm_start]
+            enabled = true
+            coarse_stride = 8
+            """,
+            "explicit.toml",
+        )
+    )
+
+    for other in (reordered, explicit):
+        assert other.fit_hash() == plain.fit_hash()
+        assert other.compat_hash() == plain.compat_hash()
+        assert other.run_hash() == plain.run_hash()
+
+
+def test_a_json_config_and_a_toml_config_agree(tmp_path):
+    """`.json` is accepted for machine-generated configs and hashes the same.
+
+    Expected value determined independently: the format is a transport, and the
+    model is what is hashed, so two transports of one configuration cannot
+    differ.
+
+    Bug this catches: the JSON path skipping validation or the flattening --
+    e.g. `Config(**raw)` instead of `model_validate` -- which would let a
+    generated config bypass `extra="forbid"` and carry a typo straight into
+    provenance.
+    """
+    toml = config_module.load(_golden(tmp_path))
+    as_json = _write(
+        tmp_path,
+        json.dumps(
+            {
+                "data_uri": "s3://bucket/ssh.zarr",
+                "variable": "sla",
+                "signal_terms": ["constant", "trend", "annual"],
+                "candidates": ["white", "white + matern12"],
+                "criteria": ["aic", "hqic"],
+            }
+        ),
+        "config.json",
+    )
+    assert config_module.load(as_json).fit_hash() == toml.fit_hash()
+
+
+# --------------------------------------------------------------------------
+# The allowlist partition, with its positive control
+# --------------------------------------------------------------------------
+
+
+def _moved(tmp_path: Path, name: str, body: str) -> tuple[bool, bool, bool]:
+    """Return which of (fit, compat, run) moved when `body` replaces the golden.
+
+    The single mutation helper every partition test below shares, so that
+    `test_a_run_only_field_moves_no_gate`'s negative and the positive controls
+    around it exercise the same wiring. A helper that silently failed to apply
+    its override would otherwise make every negative pass.
+    """
+    base = config_module.load(_golden(tmp_path))
+    changed = config_module.load(_write(tmp_path, body, name))
+    return (
+        changed.fit_hash() != base.fit_hash(),
+        changed.compat_hash() != base.compat_hash(),
+        changed.run_hash() != base.run_hash(),
+    )
+
+
+_WITH = """
+    data_uri = "s3://bucket/ssh.zarr"
+    variable = "sla"
+    signal_terms = ["constant", "trend", "annual"]
+    candidates = ["white", "white + matern12"]
+    criteria = ["aic", "hqic"]
+"""
+
+
+def test_the_warm_start_coarse_stride_moves_fit_hash(tmp_path):
+    """Changing pass 1's stride invalidates every stored fit.
+
+    THIS IS THE (a2) CHECK FOR THE FOURTH ALLOWLIST FINDING, and the point is
+    that it asserts the MOVEMENT rather than the membership. `FIT_RELEVANT_FIELDS`
+    containing `warm_start_coarse_stride` is a name; that a change to the config
+    field reaches the payload under that exact name, survives the flattening and
+    moves the digest is the gate. Phase 1 shipped three fields that passed the
+    first test and failed the second.
+
+    Expected value determined independently: §11.1 -- a stale warm start
+    produces converged-looking fits at the WRONG optimum, so the stride is fit
+    identity, and `COMPAT_RELEVANT_FIELDS` is a strict superset so compat must
+    move too.
+
+    Bug this catches: the warm-start cache keyed on `(fit_hash, spec_hash)`
+    accepting a stale entry after the coarse grid changed underneath it. Every
+    resulting fit converges, reports `ok`, and sits at a different optimum from
+    the one the config asks for.
+    """
+    assert _moved(
+        tmp_path, "stride.toml", _WITH + "\n[warm_start]\ncoarse_stride = 16\n"
+    ) == (True, True, True)
+
+
+@pytest.mark.parametrize(
+    ("block_body", "expected"),
+    [
+        ("[warm_start]\nenabled = false\n", (True, True, True)),
+        ("[warm_start]\nspiral_bound = 7\n", (True, True, True)),
+        ("[warm_start]\ncoarse_stride = 16\n", (True, True, True)),
+        # Setting the only legal value is a no-op, and that is asserted as a
+        # no-op rather than dressed up as coverage -- see the docstring.
+        ("[warm_start]\ntie_break = 'lowest_yx'\n", (False, False, False)),
+    ],
+)
+def test_every_warm_start_setting_reaches_fit_identity(tmp_path, block_body, expected):
+    """Each varyable warm-start setting moves both gates and `run_hash`.
+
+    Parametrized because one field is not evidence about a set -- the same
+    reasoning as `test_a_fit_mismatch_always_forces_a_compat_mismatch`. A
+    flattening that emitted four of the five correctly and dropped one would
+    sail through a single-field test.
+
+    THE EXPECTED TRIPLE IS SPELLED OUT PER CASE, NOT DERIVED. An earlier version
+    of this test asserted `fit_moved == compat_moved`, which is satisfied by
+    `(False, False)` -- i.e. it passed against a flattening that dropped the
+    field entirely, which is the defect it was written to catch. A relation
+    between two observations is not a substitute for the observations.
+
+    `tie_break` is a `Literal` with one member, so it cannot be varied at all;
+    its membership is pinned by the golden payload above, where it appears by
+    name. Asserting it "moves the hash" would require inventing a second
+    interpolation rule to prove a point, so the honest assertion is that setting
+    it explicitly changes nothing -- which is also the
+    explicit-equals-omitted property, checked here for one more field.
+    """
+    assert _moved(tmp_path, "ws.toml", _WITH + "\n" + block_body) == expected
+
+
+def test_the_criterion_set_moves_compat_and_not_fit(tmp_path):
+    """Adding a criterion licenses a recompute, never a refit.
+
+    Expected value determined independently: `COMPAT_RELEVANT_FIELDS` is
+    `FIT_RELEVANT_FIELDS | {"criteria"}`, and §12.8 treats a compat mismatch
+    with a fit match as licence to recompute the derived arrays from stored
+    primitives WITHOUT refitting. If `criteria` moved `fit_hash`, adding HQIC to
+    a finished 10^7-point store would refit all of it.
+
+    Bug this catches: collapsing the two hashes into one, which types
+    identically and reads as a simplification.
+    """
+    assert _moved(
+        tmp_path,
+        "criteria.toml",
+        """
+        data_uri = "s3://bucket/ssh.zarr"
+        variable = "sla"
+        signal_terms = ["constant", "trend", "annual"]
+        candidates = ["white", "white + matern12"]
+        criteria = ["aic", "hqic", "bic"]
+        """,
+    ) == (False, True, True)
+
+
+def test_a_run_only_field_moves_no_gate_and_the_helper_can_still_move_one(tmp_path):
+    """`threads` moves neither gate -- and the same helper does move them.
+
+    **THE SECOND HALF IS THE POSITIVE CONTROL AND IT IS NOT OPTIONAL.** "This
+    change moved nothing" is a pure negative, and a helper that silently failed
+    to apply its override -- a typo in the block name, a file written to a path
+    nobody reads, a `load` that returned a cached object -- produces exactly the
+    same `(False, False, ...)` as the correct behaviour. Without a paired
+    assertion that the identical wiring CAN move a hash, this test is
+    unfalsifiable.
+
+    Expected value determined independently: §11.3's determinism guarantee says
+    thread count cannot change a fitted value. If `threads` moved `fit_hash` the
+    hash boundary would be conceding that the guarantee does not hold -- the two
+    are the same claim stated twice and they must not drift apart. It must still
+    move `run_hash`, which is provenance and records what was actually run.
+
+    Bug this catches: a run-only knob reaching either gate, which makes a run
+    started on the 64-core node unresumable on the mini PC -- the exact
+    workflow the boundary exists to permit.
+    """
+    assert _moved(tmp_path, "threads.toml", _WITH + "\nthreads = 8\n") == (
+        False,
+        False,
+        True,
+    )
+    # The control: same helper, same file mechanics, a fit-relevant field.
+    assert _moved(tmp_path, "control.toml", _WITH + "\nseed = 7\n") == (
+        True,
+        True,
+        True,
+    )
+
+
+def test_the_audit_settings_move_no_gate(tmp_path):
+    """Re-running an audit must not invalidate the store it audits.
+
+    THE BOUNDARY AGAINST `WarmStart`, MADE EXECUTABLE. §11.1's argument -- a
+    stale warm start lands at the wrong optimum -- is correct and, read one
+    clause too far, sweeps in the audit settings as well. It must not: the audit
+    MEASURES a store, and a subsample size is a property of the measurement.
+
+    Bug this catches: someone adding `subsample` to the `warm_start` block, or
+    adding `audit_*` to `FIT_RELEVANT_FIELDS` on the reasoning that it is
+    "warm-start related". Either makes a 10^7-point store unresumable the first
+    time an audit is re-run at a different size, and the run that does it looks
+    innocent.
+
+    The control for this negative is `test_the_warm_start_coarse_stride_moves_fit_hash`
+    immediately above: same helper, adjacent block, and it does move both gates.
+    """
+    assert _moved(
+        tmp_path, "audit.toml", _WITH + "\n[audit]\nsubsample = 500\nstratify = true\n"
+    ) == (False, False, True)
+
+
+def test_the_candidate_set_moves_neither_gate(tmp_path):
+    """Extending the candidate list is not a hash mismatch.
+
+    Expected value determined independently: §12.8 permits resuming with a
+    SUPERSET of the stored candidates, and **a hash can only express equality**,
+    so `candidates` cannot be in either allowlist without forbidding the
+    extension workflow outright.
+
+    Bug this catches: "fixing" the omission by adding `candidates` to
+    `FIT_RELEVANT_FIELDS`. It reads as closing a hole -- the candidate set
+    genuinely IS unprotected by any hash -- and it would forbid the one
+    incremental operation the store is designed for. The protection is Task 11's
+    POSITIONAL comparison of the spec hashes below, not a digest.
+
+    `run_hash` must still move: it is provenance and a run over three candidates
+    is not the run over two.
+    """
+    assert _moved(
+        tmp_path,
+        "candidates.toml",
+        """
+        data_uri = "s3://bucket/ssh.zarr"
+        variable = "sla"
+        signal_terms = ["constant", "trend", "annual"]
+        candidates = ["white", "white + matern12", "matern32"]
+        criteria = ["aic", "hqic"]
+        """,
+    ) == (False, False, True)
+
+
+def test_the_candidate_spec_hashes_are_positional_and_order_sensitive(tmp_path):
+    """Reordering the candidate list changes what Task 11 will compare.
+
+    Expected value determined independently: the model axis is positional, so
+    `stored[i] == requested[i]` is the comparison, and swapping two candidates
+    is a different assignment of models to indices even though the SET is
+    unchanged.
+
+    Bug this catches: `candidate_spec_hashes` sorting or de-duplicating its
+    output. Either makes the swap invisible to Task 11's gate, and a resume then
+    writes candidate B's fits into candidate A's slice -- every array the right
+    shape, every value finite, every status `ok`. With unequal free-parameter
+    counts it also shifts every offset on the ragged `/noise/` axis, so the
+    corruption lands in two arrays.
+    """
+    forward = config_module.load(_golden(tmp_path)).candidate_spec_hashes()
+    swapped = config_module.load(
+        _write(
+            tmp_path,
+            """
+            data_uri = "s3://bucket/ssh.zarr"
+            variable = "sla"
+            signal_terms = ["constant", "trend", "annual"]
+            candidates = ["white + matern12", "white"]
+            criteria = ["aic", "hqic"]
+            """,
+            "swapped.toml",
+        )
+    ).candidate_spec_hashes()
+
+    assert forward == tuple(reversed(swapped))
+    assert forward != swapped
+    assert len(set(forward)) == 2
+
+
+# --------------------------------------------------------------------------
+# Candidate desugaring
+# --------------------------------------------------------------------------
+
+
+def test_the_expression_and_list_candidate_forms_agree(tmp_path):
+    """`"white + matern12"` and `["white", "matern12"]` are one specification.
+
+    Expected value determined independently: the structured list is canonical
+    and the string desugars to it, so the two must produce identical
+    `spec_hash`es -- a value computed by `terms.py` from the term structure and
+    not by this module.
+
+    Bug this catches: the two forms diverging, at which point the config file
+    stops being a faithful description of the run. A user who rewrites
+    `"white + matern12"` as a list to add a comment would get a different
+    `spec_hash`, and Task 11's positional gate would refuse a resume that is
+    scientifically identical.
+    """
+    expression = config_module.parse_candidate("white + matern12")
+    listed = config_module.parse_candidate(["white", "matern12"])
+    assert expression.spec_hash() == listed.spec_hash()
+    # And the sum is order-insensitive, because ProcessSpec canonicalizes.
+    assert config_module.parse_candidate("matern12 + white").spec_hash() == (
+        expression.spec_hash()
+    )
+
+
+@pytest.mark.parametrize(
+    "expression",
+    [
+        "white(3)",
+        "white.matern12",
+        "white - matern12",
+        "white + 3",
+        "white[0]",
+        "__import__('os').system('true')",
+    ],
+)
+def test_a_candidate_expression_that_is_not_a_sum_of_names_is_refused(expression):
+    """Anything but names joined by `+` is refused, naming the node type.
+
+    Expected value determined independently: the grammar is an allowlist of two
+    AST node types, so every other construct is outside it by definition.
+
+    Bug this catches: desugaring with `eval` against a restricted namespace.
+    That executes arbitrary syntax and restricts by denying builtins, which is a
+    denylist -- the last case here is what a denylist has to get right and an
+    allowlist never has to consider. It also catches `str.split("+")`, which
+    accepts `"white - matern12"` as a single unknown kind and blames the
+    registry for a syntax error.
+    """
+    with pytest.raises(ValueError, match="candidate"):
+        config_module.parse_candidate(expression)
+
+
+def test_an_unknown_term_kind_names_what_is_available():
+    """A misspelled kernel is refused by the registry, listing the alternatives.
+
+    Bug this catches: swallowing the registry's `KeyError` and re-raising
+    something vaguer. The available-keys list is the fact a user needs and it
+    exists only at this boundary.
+    """
+    with pytest.raises(KeyError) as raised:
+        config_module.parse_candidate("white + matern1")
+    message = str(raised.value)
+    # `match="matern1"` would be satisfied by the string "matern12" appearing in
+    # the available-keys list, i.e. by a message that never mentions what the
+    # user actually typed. Assert the two halves separately.
+    assert "unknown key 'matern1'" in message
+    assert "matern12" in message and "white" in message
+
+
+# --------------------------------------------------------------------------
+# Refusals
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "key", sorted({hashing.ALGORITHM_VERSION_KEY, hashing.REGISTRY_VERSION_KEY})
+)
+def test_a_config_supplying_a_stamped_key_is_refused_by_name(tmp_path, key):
+    """Code identity comes from the code, and the message names the file.
+
+    Expected value determined independently: both constants describe the
+    installed code, so a config value for either is a claim about code the
+    config cannot see.
+
+    Bug this catches: a user pinning `registry_version = "1"` against a registry
+    that has since changed, then reusing fits computed by different kernels --
+    every array the right shape, every value finite, no symptom at all. Until
+    Task 1 there was no config file, so nothing had to decide where that value
+    came from, and `registry_version` was supplied by every caller by hand.
+
+    Refused in `load` as well as in `normalize` deliberately: by the time
+    `normalize` sees a payload there is no filename left to point at. `normalize`
+    remains the authority, since callers that never touch a file go through it.
+    """
+    path = _write(tmp_path, _WITH + f'\n{key} = "99"\n', "stamped.toml")
+    with pytest.raises(ValueError, match=key) as raised:
+        config_module.load(path)
+    assert str(path) in str(raised.value)
+
+
+def test_an_unrecognized_key_is_refused(tmp_path):
+    """`data_url` for `data_uri` fails loudly instead of demoting the data source.
+
+    Expected value determined independently: the allowlist is the statement
+    "these fields determine theta-hat". A typo makes the real field absent and
+    an unrecognized one present, and the absent half is what `hashing._subset`
+    already refuses.
+
+    THIS IS THE OTHER HALF OF A DELIBERATELY DOUBLED GUARD. `extra="forbid"`
+    catches the field that is PRESENT and unrecognized; `_subset` catches the
+    one that is ABSENT and required. Mutating either alone will not make this
+    test bite, because the other still fires -- that is defence in depth working,
+    not dead code, and `_STRICT`'s docstring says so in both directions so a
+    later simplification sees both.
+
+    Bug this catches: `extra="ignore"`, pydantic's default. The typo would then
+    be silently dropped, `data_uri` would fall back to nothing, and two runs
+    over different data would share a `fit_hash` and reuse each other's fits.
+
+    THE ASSERTION IS ON THE ERROR **TYPE**, NOT ON THE MESSAGE TEXT, AND THE
+    FIRST VERSION OF THIS TEST WAS WRONG ABOUT EXACTLY THAT. `pytest.raises(...,
+    match="data_url")` passes under `extra="ignore"` as well, because the
+    resulting error -- `data_uri` is then simply missing -- renders the offered
+    input in its `input_value=` echo, and the typo appears there. Measured: the
+    mutation to `extra="ignore"` left this test green. A message that quotes
+    what you typed is not a message that diagnosed it.
+    """
+    path = _write(
+        tmp_path,
+        """
+        data_url = "s3://bucket/ssh.zarr"
+        variable = "sla"
+        signal_terms = ["constant"]
+        candidates = ["white"]
+        criteria = ["aic"]
+        """,
+        "typo.toml",
+    )
+    with pytest.raises(ValidationError) as raised:
+        config_module.load(path)
+    assert any(
+        error["type"] == "extra_forbidden" and error["loc"] == ("data_url",)
+        for error in raised.value.errors()
+    ), raised.value.errors()
+
+
+def test_a_missing_required_field_is_refused(tmp_path):
+    """The other half of the doubled guard, tested on its own.
+
+    Expected value determined independently: `data_uri` has no default, because
+    there is no defensible one -- and `hashing._subset` refuses a payload
+    missing an allowlisted field for the same reason.
+
+    THIS IS A SEPARATE TEST FROM THE TYPO CASE ON PURPOSE. One typo trips both
+    guards at once, so a single test cannot say which fired, and mutating either
+    guard alone leaves that test green. Splitting them is what makes each
+    mutation bite somewhere. The corollary from the doubled-guard rule applies:
+    the redundancy is deliberate, it is cross-commented in `_STRICT`, and it must
+    not be simplified away on the grounds that one covers the other.
+    """
+    path = _write(
+        tmp_path,
+        """
+        variable = "sla"
+        signal_terms = ["constant"]
+        candidates = ["white"]
+        criteria = ["aic"]
+        """,
+        "missing.toml",
+    )
+    with pytest.raises(ValidationError) as raised:
+        config_module.load(path)
+    assert any(
+        error["type"] == "missing" and error["loc"] == ("data_uri",)
+        for error in raised.value.errors()
+    ), raised.value.errors()
+
+
+def test_an_unrecognized_suffix_names_both_accepted_forms(tmp_path):
+    """A `.yaml` config is refused with what to do about it.
+
+    Bug this catches: dispatching on content sniffing, or defaulting to TOML for
+    anything unrecognized, which turns a wrong-format file into a parse error
+    that blames the contents.
+    """
+    path = _write(tmp_path, _WITH, "config.yaml")
+    with pytest.raises(ValueError, match=r"\.toml"):
+        config_module.load(path)
+
+
+def test_a_missing_file_is_refused_before_parsing(tmp_path):
+    """A path that does not exist raises `FileNotFoundError`, not a parse error."""
+    with pytest.raises(FileNotFoundError):
+        config_module.load(tmp_path / "absent.toml")
+
+
+# --------------------------------------------------------------------------
+# Two default mechanisms, and they must agree
+# --------------------------------------------------------------------------
+
+
+def test_the_hashing_defaults_agree_with_the_model_defaults(tmp_path):
+    """`CONFIG_DEFAULTS` and the pydantic defaults hold the same values.
+
+    **THIS EXISTS BECAUSE THE TWO ARE NOW REDUNDANT AND THE REDUNDANCY IS
+    SILENT.** `normalize` computes `{**CONFIG_DEFAULTS, **config, ...}`, so the
+    config wins -- and once pydantic has filled `seed` and `objective`, the
+    config ALWAYS carries them and `CONFIG_DEFAULTS` never applies to anything
+    that came through `load`. If the two disagreed, the value that reaches the
+    hash would be pydantic's and the constant would be dead code that reads as
+    authoritative.
+
+    `CONFIG_DEFAULTS` is not therefore removable: it still applies to callers
+    that build a mapping by hand, which is every test in `test_hashing.py` and
+    every future caller that has a payload but no file. So the correct response
+    is to pin the agreement, not to delete either.
+
+    Bug this catches: changing one default and not the other. The symptom would
+    be that a config omitting `seed` hashes differently from one that spells out
+    the documented default -- which is exactly what
+    `test_comments_key_order_and_explicit_defaults_do_not_move_a_hash` promises
+    cannot happen, but only for the fields it happens to name.
+    """
+    defaults = config_module.load(_golden(tmp_path)).to_payload()
+    for key, value in hashing.CONFIG_DEFAULTS.items():
+        assert defaults[key] == value, key
+
+
+def test_the_metamer_version_is_provenance_and_reaches_run_hash_alone(
+    tmp_path, monkeypatch
+):
+    """The package version moves `run_hash` and neither gate.
+
+    Expected value determined independently: under `hatch-vcs` the version is
+    derived from the git tag, so it changes on every commit and again between an
+    installed package and the uninstalled `PYTHONPATH=src` tree. A gate keyed on
+    it stops resuming after any commit at all.
+
+    Bug this catches: `metamer_version=metamer.__version__` reaching
+    `FIT_RELEVANT_FIELDS` -- the reading the field's own name invites, and the
+    one P0 found latent because nothing under `src/` populated it. **Task 1 is
+    the commit that populates it**, so this is the first moment the defect could
+    become live rather than latent.
+
+    The version is varied by patching the attribute `to_payload` reads, which is
+    the mechanism a real version change would use.
+    """
+    cfg = config_module.load(_golden(tmp_path))
+    before = (cfg.fit_hash(), cfg.compat_hash(), cfg.run_hash())
+    monkeypatch.setattr(metamer, "__version__", "99.99.99")
+    after = (cfg.fit_hash(), cfg.compat_hash(), cfg.run_hash())
+
+    assert after[0] == before[0]
+    assert after[1] == before[1]
+    assert after[2] != before[2]
+
+
+# --------------------------------------------------------------------------
+# (k): across processes, not within one
+# --------------------------------------------------------------------------
+
+
+_PROBE = """
+import json, sys
+from metamer import config
+cfg = config.load(sys.argv[1])
+print(json.dumps([cfg.fit_hash(), cfg.compat_hash(), cfg.run_hash()]))
+"""
+
+
+@pytest.mark.slow
+def test_the_same_file_hashes_identically_across_processes(tmp_path):
+    """Three `PYTHONHASHSEED` values, one config file, identical hashes.
+
+    **THE ONLY DEFECT CLASS AN IN-PROCESS SUITE CANNOT REACH**, and this module
+    is one of the two where it has already happened once: Task 16's fence
+    serialized with `json.dumps(..., default=repr)`, under which
+    `{"aic", "bic", "hqic"}` renders as three different strings under three
+    seeds. Every one of its six tests passed. Every resume of a finished
+    10^7-point store would have refit it.
+
+    The config layer reintroduces the exact hazard, because `criteria` and
+    `candidates` are the fields a user most naturally supplies as an unordered
+    collection, and pydantic will happily coerce a `set` if the annotation says
+    so. Both are tuples in the model for that reason.
+
+    Expected values determined independently: `fit_hash` and `compat_hash` are
+    compared against the hand-derived constants at the top of this module, not
+    against this process -- comparing the seeds only to each other would pass
+    against a serializer that is stable and wrong.
+
+    `run_hash` is compared across seeds only, and deliberately: it carries the
+    VCS-derived `metamer_version`, so no constant can be pinned for it without
+    being rewritten on every commit. What it must satisfy is stability at a
+    fixed tree, which is what is asserted.
+    """
+    path = _golden(tmp_path)
+    results = []
+    for seed in ("1", "2", "3"):
+        env = dict(os.environ, PYTHONHASHSEED=seed)
+        completed = subprocess.run(
+            [sys.executable, "-c", _PROBE, str(path)],
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        assert completed.returncode == 0, completed.stderr
+        results.append(json.loads(completed.stdout))
+
+    assert results[0] == results[1] == results[2]
+    assert results[0][0] == GOLDEN_FIT_HASH
+    assert results[0][1] == GOLDEN_COMPAT_HASH

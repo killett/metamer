@@ -193,3 +193,137 @@ prediction to check, not a fact. Phase 1's Task 0 hit the same thing from the ot
 as a transitive dependency. Declaring `threadpoolctl` is still correct: **a package that is
 present only transitively is a dependency nothing guarantees**, and Task 5's whole subject is
 the difference between a limit that is requested and a limit that is observed.
+
+---
+
+## Task 1 — the config model, `load()`, and the hash wiring (audited 2026-08-11)
+
+The brief's own risk is stated in the plan: a hash module is made entirely of comparisons,
+so its tests cancel the thing they are testing. Every finding below is downstream of that.
+
+### (a2) — `registry_version` is in the allowlist, is required, and nothing decided where it comes from
+
+`FIT_RELEVANT_FIELDS` has always carried `registry_version`, and `_subset` **raises** when an
+allowlisted field is absent. **The plan's Task 1 field table does not mention it at all.** It
+was not stamped like `algorithm_version` and not defaulted like `seed`; every caller was a
+test supplying it by hand, so nothing ever had to decide its source.
+
+`metamer.config.load` is the moment that stops being tenable. The reading the field's name
+invites is that the TOML supplies it — a value identifying the installed family registry,
+provided by the thing it is supposed to identify. A user pinning `registry_version = "1"`
+against a registry that has since changed then reuses fits computed by different kernels,
+with every array the right shape, every value finite, and no symptom.
+
+**This is `metamer_version` in `FIT_RELEVANT_FIELDS` a second time**, caught before a config
+could populate it rather than after.
+
+**Changed:** `normalize` stamps `REGISTRY_VERSION_KEY` from `registry.REGISTRY_VERSION` and
+refuses a config carrying it, exactly as it already did for `algorithm_version`. The stamped
+value equals what the fixtures supplied, **so no hash moved — only the source did.** Both
+stamped keys are now covered by parametrized tests deriving the module attribute from the
+payload key, so a third stamped key cannot fall out of both.
+
+### (a2) — a nested `warm_start` mapping would make allowlist membership implicit
+
+The five warm-start settings could enter the allowlist as one `warm_start` key holding a
+mapping. **They must not.** Compat relevance is an allowlist and *membership is the entire
+mechanism*; one nested key makes membership implicit for everything inside it, so a field
+added to that block later becomes fit identity by accident.
+
+The boundary is narrow and real, and it is exactly the one the brief names: §11.1's argument
+— a stale warm start lands at the wrong optimum — read one clause too far sweeps in the
+**audit** settings, and then re-running a hysteresis audit at a different subsample size
+invalidates the store it is auditing.
+
+**Changed:** the payload is flat, blocks flatten to `block_field`, and the five settings are
+five names in `FIT_RELEVANT_FIELDS`. The audit settings are a separate config block so the
+flattening cannot gather them, and `tests/test_config.py` asserts a change to either moves
+neither gate — with the warm-start test immediately above it as the positive control.
+
+### (i2) — "`threads` moves neither hash" is a pure negative
+
+Three of the brief's five tests are negatives: `threads` moves neither, `criteria` does not
+move `fit_hash`, `candidates` moves nothing. **A mutation helper that silently failed to
+apply its override produces exactly the same result as correct behaviour.**
+
+**Changed:** every partition test shares one `_moved` helper, and the `threads` test asserts
+in the same body that the identical wiring **does** move all three when applied to `seed`.
+
+### (a) — the differential tests cannot see the config path itself
+
+A flattening that prefixed every key wrongly, a payload that dropped a field, or a `load`
+returning the same object regardless of its argument leaves every "field X moves hash Y"
+test green.
+
+**Changed:** `tests/test_config.py` carries hand-written canonical-JSON payloads and their
+digests. **Its fit payload is byte-identical to `test_hashing.py`'s golden**, which is the
+claim worth making: a config that comes off disk through pydantic and the flattening produces
+the same payload as the hand-built mapping the hashing tests use.
+
+### The goldens moved, and the reversal is now a test
+
+Adding five fields moved all three `GOLDEN_*` constants. Re-derived by hand from the field
+list and **verified by reversal**: deleting the five `warm_start_*` keys reproduces
+`faf2d107bab48b06 / bb28cb8d4bffa049 / af313190251af95f` exactly, proving the separators, the
+sort rule, the digest and the truncation are unchanged and only the field set moved.
+
+`test_the_goldens_reverse_to_the_previous_constants` keeps that executable rather than leaving
+it in a comment, because Task 3 does the same thing again for `geometry_hash` — and **the two
+must not be batched.** One combined regeneration proves nothing about either.
+
+### (c) — `load`'s exits, enumerated
+
+Missing file; unrecognized suffix; TOML parse error; JSON parse error; JSON top level not a
+mapping; a stamped key supplied; pydantic validation (missing required, unrecognized extra,
+constraint violation); candidate expression malformed; unknown term kind. **Enumerated from
+the source, never counted.**
+
+### (a3) — two regimes declared without their features
+
+- `screening` validates as a block so Task 4's refusal can name the missing engine
+  specifically. The feature is Phase 4; the shape is here so Task 4 does not invent one.
+- `Config.fit_hash()` returns `str | None` although **at Task 1 it is never None** —
+  `data_uri` is still the fit-relevant stand-in for the data. Fixing the optional return now
+  avoids every caller being written against `str` and needing revisiting at exactly the moment
+  the None case starts happening.
+
+### A finding the pre-flight did not predict: two default mechanisms, one of them silently dead
+
+`hashing.CONFIG_DEFAULTS` and the pydantic field defaults now both supply `seed` and
+`objective`. `normalize` computes `{**CONFIG_DEFAULTS, **config, ...}`, so **once pydantic has
+filled them the config always carries them and `CONFIG_DEFAULTS` never applies to anything
+that came through `load`.** If the two disagreed, the hashed value would be pydantic's and the
+constant would be dead code that reads as authoritative.
+
+`CONFIG_DEFAULTS` is not removable — it still applies to callers holding a payload and no
+file, which is every test in `test_hashing.py`. **So the correct response is to pin the
+agreement, not to delete either**, and there is a test that does.
+
+### Bite checks
+
+Five mutations against five different guards, and **one of them exposed a weak assertion in a
+test written minutes earlier**:
+
+| mutation | outcome |
+|---|---|
+| flattening drops the block prefix | 14 failures |
+| `extra="ignore"` | **did not bite** — see below |
+| candidate spec hashes sorted | positional test fails |
+| `metamer_version` added to `FIT_RELEVANT_FIELDS` | 12 failures |
+| `registry_version` no longer stamped | 51 failures |
+
+**`pytest.raises(ValidationError, match="data_url")` PASSES UNDER `extra="ignore"`.** With the
+extra field ignored, `data_uri` is simply missing, and pydantic renders the offered input in
+its `input_value=` echo — so the typo appears in the message of an error that never diagnosed
+it. **A message that quotes what you typed is not a message that diagnosed it.** The assertion
+is now on `errors()[i]["type"] == "extra_forbidden"` and its `loc`.
+
+That mutation also produced the second instance of the doubled-guard rule in as many tasks:
+`extra="forbid"` catches the field that is **present** and unrecognized, `hashing._subset`
+catches the one that is **absent** and required, and a single typo trips both. The two now
+have **a test each**, which is what makes either mutation bite somewhere.
+
+A weak assertion of my own in the same sitting: the warm-start parametrization asserted
+`fit_moved == compat_moved`, which `(False, False)` satisfies — i.e. it passed against the
+dropped-field defect it existed to catch. **A relation between two observations is not a
+substitute for the observations**; the expected triple is now spelled out per case.
