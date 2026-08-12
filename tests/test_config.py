@@ -36,8 +36,19 @@ from metamer.core import hashing
 # hand-built mapping the hashing tests use. If the two ever disagree, the config
 # path has introduced a field, dropped one, or renamed one, and no test that
 # only compares configs against other configs could see it.
+_GEOMETRY = "0123456789abcdef"
+"""A stand-in fingerprint, so the config layer's goldens do not depend on a file.
+
+The REAL derivation -- which components, read from which dataset -- is
+`tests/test_geometry.py`'s subject. Using a literal here keeps the two apart:
+this module asserts that a config off disk assembles the payload correctly, and
+a fingerprint computed from a fixture would make every constant below depend on
+xarray's rounding of a coordinate array.
+"""
+
 _GOLDEN_FIT_PAYLOAD = (
-    '{"algorithm_version":"1","data_uri":"s3://bucket/ssh.zarr","engine":"kalman",'
+    '{"algorithm_version":"1","engine":"kalman",'
+    '"geometry_hash":"0123456789abcdef",'
     '"objective":"ml","registry_version":"1","seed":0,'
     '"signal_terms":["constant","trend","annual"],"variable":"sla",'
     '"warm_start_coarse_stride":8,"warm_start_enabled":true,'
@@ -45,16 +56,16 @@ _GOLDEN_FIT_PAYLOAD = (
     '"warm_start_tie_break":"lowest_yx"}'
 )
 _GOLDEN_COMPAT_PAYLOAD = (
-    '{"algorithm_version":"1","criteria":["aic","hqic"],'
-    '"data_uri":"s3://bucket/ssh.zarr","engine":"kalman",'
+    '{"algorithm_version":"1","criteria":["aic","hqic"],"engine":"kalman",'
+    '"geometry_hash":"0123456789abcdef",'
     '"objective":"ml","registry_version":"1","seed":0,'
     '"signal_terms":["constant","trend","annual"],"variable":"sla",'
     '"warm_start_coarse_stride":8,"warm_start_enabled":true,'
     '"warm_start_interpolation_rule":"nearest_valid","warm_start_spiral_bound":4,'
     '"warm_start_tie_break":"lowest_yx"}'
 )
-GOLDEN_FIT_HASH = "1de18c706b69c39e"
-GOLDEN_COMPAT_HASH = "a1bb321f995cde95"
+GOLDEN_FIT_HASH = "1eb1fd731b4ae8d6"
+GOLDEN_COMPAT_HASH = "8e7c1e4c82d36022"
 
 # NO GOLDEN FOR `run_hash`, AND THE REASON IS WORTH STATING. `run_hash` carries
 # `metamer_version`, which `hatch-vcs` derives from the git tag, so it changes
@@ -111,22 +122,22 @@ def test_the_config_path_produces_the_hand_derived_payloads(tmp_path):
     allowlist happens to contain for some other reason.
     """
     cfg = config_module.load(_golden(tmp_path))
-    payload = hashing.fit_payload(cfg.to_payload())
+    payload = hashing.fit_payload(cfg.to_payload(_GEOMETRY))
 
     assert json.dumps(payload, sort_keys=True, separators=(",", ":")) == (
         _GOLDEN_FIT_PAYLOAD
     )
-    assert cfg.fit_hash() == GOLDEN_FIT_HASH
+    assert cfg.fit_hash(_GEOMETRY) == GOLDEN_FIT_HASH
     assert (
         hashlib.sha256(_GOLDEN_FIT_PAYLOAD.encode("utf-8")).hexdigest()[:16]
         == GOLDEN_FIT_HASH
     )
 
-    compat = hashing.compat_payload(cfg.to_payload())
+    compat = hashing.compat_payload(cfg.to_payload(_GEOMETRY))
     assert json.dumps(compat, sort_keys=True, separators=(",", ":")) == (
         _GOLDEN_COMPAT_PAYLOAD
     )
-    assert cfg.compat_hash() == GOLDEN_COMPAT_HASH
+    assert cfg.compat_hash(_GEOMETRY) == GOLDEN_COMPAT_HASH
 
 
 # --------------------------------------------------------------------------
@@ -186,8 +197,8 @@ def test_comments_key_order_and_explicit_defaults_do_not_move_a_hash(tmp_path):
     )
 
     for other in (reordered, explicit):
-        assert other.fit_hash() == plain.fit_hash()
-        assert other.compat_hash() == plain.compat_hash()
+        assert other.fit_hash(_GEOMETRY) == plain.fit_hash(_GEOMETRY)
+        assert other.compat_hash(_GEOMETRY) == plain.compat_hash(_GEOMETRY)
         assert other.run_hash() == plain.run_hash()
 
 
@@ -217,7 +228,7 @@ def test_a_json_config_and_a_toml_config_agree(tmp_path):
         ),
         "config.json",
     )
-    assert config_module.load(as_json).fit_hash() == toml.fit_hash()
+    assert config_module.load(as_json).fit_hash(_GEOMETRY) == toml.fit_hash(_GEOMETRY)
 
 
 # --------------------------------------------------------------------------
@@ -236,8 +247,8 @@ def _moved(tmp_path: Path, name: str, body: str) -> tuple[bool, bool, bool]:
     base = config_module.load(_golden(tmp_path))
     changed = config_module.load(_write(tmp_path, body, name))
     return (
-        changed.fit_hash() != base.fit_hash(),
-        changed.compat_hash() != base.compat_hash(),
+        changed.fit_hash(_GEOMETRY) != base.fit_hash(_GEOMETRY),
+        changed.compat_hash(_GEOMETRY) != base.compat_hash(_GEOMETRY),
         changed.run_hash() != base.run_hash(),
     )
 
@@ -684,7 +695,7 @@ def test_the_hashing_defaults_agree_with_the_model_defaults(tmp_path):
     `test_comments_key_order_and_explicit_defaults_do_not_move_a_hash` promises
     cannot happen, but only for the fields it happens to name.
     """
-    defaults = config_module.load(_golden(tmp_path)).to_payload()
+    defaults = config_module.load(_golden(tmp_path)).to_payload(_GEOMETRY)
     for key, value in hashing.CONFIG_DEFAULTS.items():
         assert defaults[key] == value, key
 
@@ -709,9 +720,9 @@ def test_the_metamer_version_is_provenance_and_reaches_run_hash_alone(
     the mechanism a real version change would use.
     """
     cfg = config_module.load(_golden(tmp_path))
-    before = (cfg.fit_hash(), cfg.compat_hash(), cfg.run_hash())
+    before = (cfg.fit_hash(_GEOMETRY), cfg.compat_hash(_GEOMETRY), cfg.run_hash())
     monkeypatch.setattr(metamer, "__version__", "99.99.99")
-    after = (cfg.fit_hash(), cfg.compat_hash(), cfg.run_hash())
+    after = (cfg.fit_hash(_GEOMETRY), cfg.compat_hash(_GEOMETRY), cfg.run_hash())
 
     assert after[0] == before[0]
     assert after[1] == before[1]
@@ -727,7 +738,8 @@ _PROBE = """
 import json, sys
 from metamer import config
 cfg = config.load(sys.argv[1])
-print(json.dumps([cfg.fit_hash(), cfg.compat_hash(), cfg.run_hash()]))
+g = "0123456789abcdef"
+print(json.dumps([cfg.fit_hash(g), cfg.compat_hash(g), cfg.run_hash()]))
 """
 
 
@@ -773,3 +785,113 @@ def test_the_same_file_hashes_identically_across_processes(tmp_path):
     assert results[0] == results[1] == results[2]
     assert results[0][0] == GOLDEN_FIT_HASH
     assert results[0][1] == GOLDEN_COMPAT_HASH
+
+
+# --------------------------------------------------------------------------
+# data_uri demoted, and the degraded mode it makes possible
+# --------------------------------------------------------------------------
+
+
+def test_the_data_uri_moves_run_hash_alone(tmp_path):
+    """Moving a store to a new path does not invalidate its fits.
+
+    **THIS IS THE WHOLE POINT OF `geometry_hash`, IN ONE ASSERTION.** `data_uri`
+    was fit-relevant until 2026-08-12 and was wrong in BOTH directions: moving a
+    file invalidated a resume that is scientifically valid, and editing a file in
+    place at a fixed URI permitted one that is scientifically invalid. **A gate
+    wrong in both directions is not a conservative approximation of the right
+    gate -- it is unrelated to it.**
+
+    Expected value determined independently: a URI is a location. The fitted
+    values depend on the data's geometry and content, neither of which changes
+    when a file is copied.
+
+    It must still move `run_hash`: that is provenance, and where the data was
+    read from is a fact about the run worth recording.
+
+    Bug this catches: putting `data_uri` back, which reads as a fix -- "surely
+    the data source is fit-relevant" -- and is the regression this change exists
+    to prevent.
+    """
+    assert _moved(
+        tmp_path,
+        "moved.toml",
+        """
+        data_uri = "s3://other-bucket/ssh.zarr"
+        variable = "sla"
+        signal_terms = ["constant", "trend", "annual"]
+        candidates = ["white", "white + matern12"]
+        criteria = ["aic", "hqic"]
+        """,
+    ) == (False, False, True)
+
+
+def test_the_geometry_hash_moves_both_gates(tmp_path):
+    """A different fingerprint invalidates fits and derived arrays alike.
+
+    **THE POSITIVE CONTROL FOR THE TEST ABOVE.** "`data_uri` moves no gate" is a
+    pure negative, and it is satisfied equally by a correct demotion and by a
+    `fit_hash` that ignores its argument entirely. This is the same call with
+    the geometry varied, and it must move.
+
+    Expected value determined independently: `geometry_hash` is in
+    `FIT_RELEVANT_FIELDS` and `COMPAT_RELEVANT_FIELDS` is a strict superset.
+    """
+    cfg = config_module.load(_golden(tmp_path))
+    other = "fedcba9876543210"
+    assert cfg.fit_hash(other) != cfg.fit_hash(_GEOMETRY)
+    assert cfg.compat_hash(other) != cfg.compat_hash(_GEOMETRY)
+    assert cfg.run_hash(geometry_hash=other) != cfg.run_hash(geometry_hash=_GEOMETRY)
+
+
+def test_the_gates_are_none_before_stage_4a_and_run_hash_still_works(tmp_path):
+    """With no input opened, both gates are None and `run_hash` is a string.
+
+    **§13.4's DEGRADED MODE, AND IT IS A REQUIREMENT RATHER THAN A CONVENIENCE.**
+    `--explain`'s most valuable use is a config with no data staged yet -- sizing
+    a run before moving 25 GB -- so an unreachable input must print compat- and
+    run-relevant content and say `fit_hash: not computed (requires stage 4a)`.
+
+    Expected value determined independently: `geometry_hash` is read from an
+    input, so with no input there is no value; and `run_hash` is provenance over
+    the config, which exists either way.
+
+    Bug this catches: `run_payload` validating the full `FIT_RELEVANT_FIELDS`.
+    It did -- that check exists so a config that cannot be fit-hashed is not
+    called a run -- and once `geometry_hash` joined the allowlist it turned
+    §13.4's degraded mode into a `KeyError`. Measured: every run-hash test in
+    this module failed the moment the allowlist changed. `STAGE_4A_FIELDS` is
+    the exclusion, and it is an exclusion of "not supplied by a config" rather
+    than a loosening of "must be specified".
+
+    The optional return type was declared at Task 1, two tasks before it could
+    happen, so no caller had to be revisited when it started happening.
+    """
+    cfg = config_module.load(_golden(tmp_path))
+    assert cfg.fit_hash() is None
+    assert cfg.compat_hash() is None
+    assert isinstance(cfg.run_hash(), str)
+    assert len(cfg.run_hash()) == 16
+
+
+def test_a_config_cannot_supply_the_geometry_hash(tmp_path):
+    """The fingerprint comes from the data, and a config cannot claim it.
+
+    Expected value determined independently: it is an IDENTITY -- what the input
+    actually is -- so it must be populated by reading that input. A
+    config-supplied value would be self-reported identity, which is the exact
+    defect `data_uri` embodied and the reason it was replaced.
+
+    Bug this catches: adding `geometry_hash` to the pydantic model as a
+    convenience -- "so a user can pin it" -- which would restore the hole under
+    a new name and pass every other test in this module.
+    """
+    path = _write(
+        tmp_path, _WITH + '\ngeometry_hash = "0123456789abcdef"\n', "geo.toml"
+    )
+    with pytest.raises(ValidationError) as raised:
+        config_module.load(path)
+    assert any(
+        error["type"] == "extra_forbidden" and error["loc"] == ("geometry_hash",)
+        for error in raised.value.errors()
+    ), raised.value.errors()

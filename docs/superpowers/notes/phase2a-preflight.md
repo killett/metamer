@@ -494,3 +494,104 @@ it guards "imported but undeclared" and **this case is outside it**. Declared by
 Six mutations, six different guards, all bit: `/365.25`; `units` from `.attrs` only;
 `np.unique(np.diff(t))` without tolerance; `steps < 0` instead of `<= 0`; `_open_zarr` called
 directly instead of through the registry; `.astype(object)` on nanoseconds.
+
+---
+
+## Task 3 — `geometry_hash` (audited 2026-08-12)
+
+Q5 settled the design, so this audit is about the ways a correct design gets built wrong.
+**Two findings came from a mutation that did NOT bite, which is the more useful direction.**
+
+### (g) — `canonical_json` accepts `np.float64` and refuses `np.int64`, which makes the trap asymmetric
+
+Measured. `np.float64` subclasses `float` and passes; `np.ndarray` and `np.int64` are refused
+by name. So **`list(coordinate_array)` works on a float coordinate and raises on an integer
+one** — and `y`/`x` index coordinates are routinely integers. A fingerprint built that way
+passes every test written against a float grid and fails on the first real store.
+`.tolist()` converts uniformly; `list()` and `.tolist()` read as the same thing.
+
+### (a) — every geometry test is differential
+
+"A regrid moves it", "a value edit does not", "these two calendars differ" — all comparisons,
+all blind to a `geometry_hash` that is uniformly wrong. **Changed:** the digest construction is
+pinned against `hashlib` applied directly to `canonical_json`'s output, and the time component's
+representation is asserted to be decimal years in a plausible range rather than merely to differ.
+
+### (i2) — the limit and its control
+
+*"A value edit at fixed geometry does not move the hash"* is the honest documentation of what
+this component covers, and it is a pure negative — satisfied equally by a correct limit and by
+a `geometry_hash` that returns a constant. Its control is the extent-preserving regrid through
+the same components: `linspace(0, 10, 5)` against `[0, 1, 3, 6, 10]`, identical min, max **and
+length**, different hash. That pairing is also the argument against summarizing coordinates.
+
+### MEASURED: a mutation that did not bite, and what it taught
+
+Mutating the time component from decimal years to `[str(v) for v in time.values]` **left every
+test green**, including the two-calendar test written to catch exactly that.
+
+**The reason is that decoding happens in the opener.** By the time `geometry_components` sees
+the coordinate it is already `datetime64` or `cftime`, so *any* representation taken there is
+post-decode and distinguishes calendars. The defect Q5 warns about — inheriting a dependency's
+parsing by fingerprinting the attrs string — is guarded one layer up, by `calendar_of` reading
+the decoded objects, and `tests/test_input.py` already covers it.
+
+**So the reachable defect is a different one, and it needed a different assertion.** Decimal
+years must be the component because:
+
+- they move when the **conversion rule** moves, and the conversion is under
+  `ALGORITHM_VERSION`, so a change to it must invalidate stored fits. A rendering of the
+  timestamps would not move at all.
+- `str()` of a datetime64 or a cftime date is a **repr**, and a repr is a library-version
+  artefact — pre-flight (k), the same hazard that made `default=repr` a drifting hash at Task
+  16.
+
+The assertion that bites pins the representation: every entry is a `float` in `(1990, 2010)`.
+
+**And the fixture had to be rebuilt to say anything at all.** Comparing a `datetime64` store
+against a `cftime` store varies the raw representation as well as the calendar. The honest
+fixture stores **bit-identical numbers** under `calendar="standard"` and `calendar="noleap"`,
+so the raw arrays are indistinguishable and only the decoding differs.
+
+### The run-hash degraded mode, found by the allowlist change breaking it
+
+`run_payload` validated the full `FIT_RELEVANT_FIELDS` — "a config that cannot be fit-hashed is
+not a run". The moment `geometry_hash` joined that set, **every `run_hash` call without an
+opened input raised `KeyError`**, which turns §13.4's degraded mode into an error: `--explain`'s
+most valuable use is a config with **no data staged yet**, sizing a run before moving 25 GB.
+
+`STAGE_4A_FIELDS` is the exclusion, and it is an exclusion of *"not supplied by a config"*
+rather than a loosening of *"must be specified"*. `fit_hash` and `compat_hash` return None
+there; `run_hash` is a string. **The optional return type was declared at Task 1, two tasks
+before it could happen**, so no caller needed revisiting when it started happening.
+
+### When an allowlist changes, its guards must be re-pointed, not just re-run
+
+`test_a_missing_allowlisted_field_is_refused` probed `data_uri`. After the demotion, a config
+omitting `data_uri` hashes perfectly happily — so the test **would have gone on passing while
+checking nothing**, asserting a real refusal about a field that no longer has the property. It
+now probes `geometry_hash`, and asserts as its counterpart that `data_uri` really is optional
+to both gates.
+
+### The reversal is a chain, one hop per change
+
+Two allowlist changes landed a day apart. `_HISTORY` walks them newest-first — undo
+`geometry_hash → data_uri`, check against the 2026-08-11 constants; then drop the warm-start
+fields, check against the 2026-08-10 ones. **Collapsing them into one transform would give two
+ways to be wrong that cancel**, which is the whole thing a reversal exists to rule out.
+
+Verified: `1eb1fd731b4ae8d6 / d368e07b5f99efe9 / 0b82f20c43f2f378` reverse one hop to
+`1de18c706b69c39e / cc099be86aca999b / b89d484190d5d0af`, and those reverse one hop to
+`faf2d107bab48b06 / bb28cb8d4bffa049 / af313190251af95f`.
+
+### The audit's last row is closed
+
+`data_uri` was the final self-reported identity in either allowlist — a value claiming to
+identify the data, supplied by the config. Every component of `geometry_hash` is read from the
+opened dataset. **The allowlist source sweep is now closed with nothing outstanding.**
+
+### Bite checks
+
+Five mutations, four bit immediately: coordinates summarized as min/max/len; `source_dtype`
+constant; `list()` for `.tolist()`; `data_uri` restored to the allowlist. The fifth is the
+non-biting one recorded above, and it is the finding.

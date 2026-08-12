@@ -105,33 +105,71 @@ _GOLDEN_WARM_START = (
     '"warm_start_tie_break":"lowest_yx"'
 )
 GOLDEN_FIT_PAYLOAD = (
-    '{"algorithm_version":"1","data_uri":"s3://bucket/ssh.zarr","engine":"kalman",'
+    '{"algorithm_version":"1","engine":"kalman",'
+    '"geometry_hash":"0123456789abcdef",'
     '"objective":"ml","registry_version":"1","seed":0,'
     '"signal_terms":["constant","trend","annual"],"variable":"sla",'
     f"{_GOLDEN_WARM_START}}}"
 )
 GOLDEN_COMPAT_PAYLOAD = (
-    '{"algorithm_version":"1","criteria":["aic"],"data_uri":"s3://bucket/ssh.zarr",'
-    '"engine":"kalman","objective":"ml","registry_version":"1","seed":0,'
+    '{"algorithm_version":"1","criteria":["aic"],"engine":"kalman",'
+    '"geometry_hash":"0123456789abcdef",'
+    '"objective":"ml","registry_version":"1","seed":0,'
     '"signal_terms":["constant","trend","annual"],"variable":"sla",'
     f"{_GOLDEN_WARM_START}}}"
 )
 GOLDEN_RUN_PAYLOAD = (
     '{"algorithm_version":"1","candidates":["white+matern12"],"criteria":["aic"],'
-    '"data_uri":"s3://bucket/ssh.zarr","engine":"kalman","memory_budget_gb":4.0,'
+    '"data_uri":"s3://bucket/ssh.zarr","engine":"kalman",'
+    '"geometry_hash":"0123456789abcdef","memory_budget_gb":4.0,'
     '"metamer_version":"0.1.0","objective":"ml","output":"out.zarr",'
     '"registry_version":"1","seed":0,'
     '"signal_terms":["constant","trend","annual"],"threads":4,"variable":"sla",'
     f"{_GOLDEN_WARM_START}}}"
 )
-GOLDEN_FIT_HASH = "1de18c706b69c39e"
-GOLDEN_COMPAT_HASH = "cc099be86aca999b"
-GOLDEN_RUN_HASH = "b89d484190d5d0af"
+GOLDEN_FIT_HASH = "1eb1fd731b4ae8d6"
+GOLDEN_COMPAT_HASH = "d368e07b5f99efe9"
+GOLDEN_RUN_HASH = "0b82f20c43f2f378"
 
-# The constants these replaced, kept ONLY so the reversal test can name them.
-PREVIOUS_FIT_HASH = "faf2d107bab48b06"
-PREVIOUS_COMPAT_HASH = "bb28cb8d4bffa049"
-PREVIOUS_RUN_HASH = "af313190251af95f"
+
+def _hop_geometry_to_data_uri(fields: dict[str, object]) -> dict[str, object]:
+    """Undo 2026-08-12: `geometry_hash` out, `data_uri` back in where it was."""
+    fields = dict(fields)
+    del fields["geometry_hash"]
+    fields.setdefault("data_uri", "s3://bucket/ssh.zarr")
+    return fields
+
+
+def _hop_drop_warm_start(fields: dict[str, object]) -> dict[str, object]:
+    """Undo 2026-08-11: the five warm-start settings leave the allowlist."""
+    return {k: v for k, v in fields.items() if not k.startswith("warm_start_")}
+
+
+# THE ALLOWLIST'S HISTORY, ONE HOP PER CHANGE, NEWEST FIRST.
+#
+# Each entry undoes exactly one deliberate allowlist change and names the three
+# constants that shipped before it. **The hops are kept separate rather than
+# collapsed into a single "reverse everything" transform**, because a combined
+# regeneration proves nothing about either change: what makes a reversal
+# evidence is that removing exactly the fields one change added returns exactly
+# the digests that preceded it, and a two-change reversal has two ways to be
+# wrong that cancel.
+#
+# The reference hashes are history. They are hardcoded and derived nowhere,
+# which is what makes them an independent reference rather than a computation
+# this file could get wrong in the same way twice.
+_HISTORY = (
+    (
+        "2026-08-12: data_uri -> geometry_hash",
+        _hop_geometry_to_data_uri,
+        ("1de18c706b69c39e", "cc099be86aca999b", "b89d484190d5d0af"),
+    ),
+    (
+        "2026-08-11: the warm-start settings entered",
+        _hop_drop_warm_start,
+        ("faf2d107bab48b06", "bb28cb8d4bffa049", "af313190251af95f"),
+    ),
+)
 
 
 def _config(**overrides):
@@ -148,6 +186,7 @@ def _config(**overrides):
     and neither of the other two.
     """
     base = {
+        "geometry_hash": "0123456789abcdef",
         "data_uri": "s3://bucket/ssh.zarr",
         "variable": "sla",
         "signal_terms": ["constant", "trend", "annual"],
@@ -454,26 +493,40 @@ def test_a_missing_allowlisted_field_is_refused():
 
     Bug this catches: THE FENCE'S `{key: config[key] for key in fields if key
     in config}`, which drops a missing field silently. Combined with an
-    allowlist that is the whole point of the module, a single typo --
-    `data_url` for `data_uri` -- demotes the data source to provenance-only,
-    and two runs over DIFFERENT DATA then share a `fit_hash` and reuse each
-    other's fits. The typo is in the config, so nothing else in the system is
-    positioned to notice.
+    allowlist that is the whole point of the module, one absent field demotes
+    what it identifies to provenance-only, and two runs over DIFFERENT DATA then
+    share a `fit_hash` and reuse each other's fits.
+
+    **THE PROBE MOVED FROM `data_uri` TO `geometry_hash` ON 2026-08-12**, and
+    the move is itself the finding: `data_uri` is no longer allowlisted, so a
+    config omitting it now hashes perfectly happily. A test still probing it
+    would have gone on passing while checking nothing -- the refusal it asserts
+    is real, and it would have been asserting it about a field that no longer
+    has the property. **When an allowlist changes, its guards must be re-pointed,
+    not just re-run.**
     """
-    del_uri = _config()
-    del del_uri["data_uri"]
-    with pytest.raises(KeyError, match="data_uri"):
-        fit_hash(del_uri)
-    with pytest.raises(KeyError, match="data_uri"):
-        compat_hash(del_uri)
+    absent = _config()
+    del absent["geometry_hash"]
+    with pytest.raises(KeyError, match="geometry_hash"):
+        fit_hash(absent)
+    with pytest.raises(KeyError, match="geometry_hash"):
+        compat_hash(absent)
+
+    # And the field it replaced is now genuinely optional to the two gates.
+    # Asserted rather than assumed, because "data_uri is provenance now" is the
+    # whole of this change and nothing else states it as a behaviour.
+    provenance_only = _config()
+    del provenance_only["data_uri"]
+    assert fit_hash(provenance_only) == GOLDEN_FIT_HASH
+    assert compat_hash(provenance_only) == GOLDEN_COMPAT_HASH
 
     # Every missing field is named at once. A bare `config[key]` lookup also
     # raises KeyError, so the message is the only thing separating a deliberate
     # refusal from an incidental one -- and reporting the first missing field
     # per run turns one broken config into five edit-and-rerun cycles.
     del_two = _config()
-    del del_two["data_uri"], del_two["variable"]
-    with pytest.raises(KeyError, match="data_uri.*variable"):
+    del del_two["geometry_hash"], del_two["variable"]
+    with pytest.raises(KeyError, match="geometry_hash.*variable"):
         fit_hash(del_two)
 
 
@@ -674,7 +727,7 @@ def test_compat_relevance_is_an_allowlist_golden_set():
     """
     assert FIT_RELEVANT_FIELDS == frozenset(
         {
-            "data_uri",
+            "geometry_hash",
             "variable",
             "signal_terms",
             "objective",
@@ -696,6 +749,11 @@ def test_compat_relevance_is_an_allowlist_golden_set():
         "threads",
         "output",
         "candidates",
+        # data_uri was fit-relevant until 2026-08-12 and is provenance now. It
+        # is asserted OUT for the same reason metamer_version is: putting a
+        # location back where an identity belongs is the regression this set
+        # exists to catch, and it reads as a fix.
+        "data_uri",
     }
     assert "metamer_version" not in COMPAT_RELEVANT_FIELDS
     # THE AUDIT SETTINGS ARE THE BOUNDARY, and they are asserted here as well as
@@ -706,40 +764,37 @@ def test_compat_relevance_is_an_allowlist_golden_set():
     assert not COMPAT_RELEVANT_FIELDS & {"audit_subsample", "audit_stratify"}
 
 
-def test_the_goldens_reverse_to_the_previous_constants():
-    """Deleting the warm-start keys reproduces the pre-2026-08-11 hashes exactly.
+def test_the_goldens_reverse_through_the_allowlist_history():
+    """Undoing each allowlist change reproduces the constants it replaced.
 
-    THIS IS THE REVERSAL, AND IT IS THE ONLY THING THAT SAYS THE REGENERATION
-    WAS HONEST. A golden constant edited to match failing output is
+    THIS IS THE REVERSAL, AND IT IS THE ONLY THING THAT SAYS A REGENERATION WAS
+    HONEST. A golden constant edited to match failing output is
     indistinguishable, by every other test in this file, from one derived by
     hand -- both go green. What separates them is that a hand-derived string
-    still contains the previous string as a sub-case, so removing exactly the
-    fields that were added must return exactly the previous digests. A value
-    pasted from a failure has no such property except by coincidence.
+    still contains the previous one as a sub-case, so removing exactly the
+    fields a change added must return exactly the digests that preceded it. A
+    value pasted from a failure has that property only by coincidence.
 
-    Bug this catches: the next allowlist change being closed by running the
-    suite and copying the three new hex strings, which pins whatever the code
-    now produces and turns this file into a mirror of `hashing.py` rather than
-    a check on it. Task 3 does exactly this change again for `geometry_hash`,
-    so the discipline is about to be needed a second time.
+    **ONE HOP AT A TIME, NEWEST FIRST, AND THE HOPS ARE NOT COLLAPSED.** Two
+    allowlist changes landed a day apart; reversing both in a single transform
+    would give two ways to be wrong that cancel. Walking the chain checks each
+    change against the state that actually shipped before it.
 
-    The reference values are the constants that shipped between 2026-08-10 and
-    2026-08-11. They are hardcoded here and derived nowhere -- they are history,
-    not a computation, which is what makes them an independent reference.
+    Bug this catches: closing the next allowlist change by running the suite and
+    pasting the three new hex strings, which pins whatever the code now produces
+    and turns this file into a mirror of `hashing.py` rather than a check on it.
     """
-    for payload, previous in (
-        (GOLDEN_FIT_PAYLOAD, PREVIOUS_FIT_HASH),
-        (GOLDEN_COMPAT_PAYLOAD, PREVIOUS_COMPAT_HASH),
-        (GOLDEN_RUN_PAYLOAD, PREVIOUS_RUN_HASH),
-    ):
-        fields = json.loads(payload)
-        removed = [key for key in fields if key.startswith("warm_start_")]
-        assert len(removed) == 5, removed
-        for key in removed:
-            del fields[key]
-        stripped = json.dumps(fields, sort_keys=True, separators=(",", ":"))
-        digest = hashlib.sha256(stripped.encode("utf-8")).hexdigest()[:16]
-        assert digest == previous
+    payloads = [
+        json.loads(GOLDEN_FIT_PAYLOAD),
+        json.loads(GOLDEN_COMPAT_PAYLOAD),
+        json.loads(GOLDEN_RUN_PAYLOAD),
+    ]
+    for label, hop, expected in _HISTORY:
+        payloads = [hop(fields) for fields in payloads]
+        for fields, want in zip(payloads, expected, strict=True):
+            rendered = json.dumps(fields, sort_keys=True, separators=(",", ":"))
+            got = hashlib.sha256(rendered.encode("utf-8")).hexdigest()[:16]
+            assert got == want, label
 
 
 def test_an_unknown_field_is_provenance_only():

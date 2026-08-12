@@ -26,8 +26,9 @@
   method.
 - **Exit criteria:** **13 met, 3 met with reduced scope, nothing deferred** — the full
   table with reasons is at the end of the Phase 1 plan.
-- **NEXT ACTION: Phase 2a Task 3 — `geometry_hash`: components, allowlist change, golden
-  re-derivation.** Tasks 0–2 are done and committed. Run the (a)–(k) pre-flight against Task 3's brief first and
+- **NEXT ACTION: Phase 2a Task 4 — validation staging 1/2/3/4a, exit codes, `python -m
+  metamer`.** Tasks 0–3 are done and committed. **Task 4 also wires Task 5's observed-thread
+  check into layer 3**, which is stated in both briefs. Run the (a)–(k) pre-flight against Task 4's brief first and
   append the result to
   [`docs/superpowers/notes/phase2a-preflight.md`](docs/superpowers/notes/phase2a-preflight.md),
   as Task 0 did. The plan is
@@ -59,9 +60,9 @@
   MacBook: `--threads 1 --threads 8`, `--out bench/macbook.json`.
   Batch sweep at path B's worst cell (d=3, 1 thread, no gaps) is
   `bench/batch-sweep-d3-1thread-nogaps.json`.
-- **Tests:** **675 collected** (588 at the close of Phase 1; Phase 2a Tasks 0–2 added the
-  batch-skeleton, stub-engine, packaging, config and input modules). Full sweep
-  `pixi run test` (~291 s, measured 2026-08-12). `pixi run test-fast` (~12 s)
+- **Tests:** **692 collected** (588 at the close of Phase 1; Phase 2a Tasks 0–3 added the
+  batch-skeleton, stub-engine, packaging, config, input and geometry modules). Full sweep
+  `pixi run test` (~331 s, measured 2026-08-12). `pixi run test-fast` (~12 s)
   deselects the `slow` marker and is for iteration only — **a green fast run is not evidence
   a task is done.** `pixi run test-ci` reproduces what CI runs (`-m 'not machine'`); it is
   also not evidence on its own, because the `machine` marker covers exactly the tests that
@@ -137,7 +138,7 @@
 | Phase 1 task tracker | `docs/superpowers/plans/2026-08-05-metamer-phase1.md.tasks.json` (native task ids 8–27) |
 | Original build prompt | [`docs/phase1-prompt.md`](docs/phase1-prompt.md) — **superseded** by design doc §2 where they conflict |
 | Phase 2 preliminaries pre-flight | [`docs/superpowers/notes/phase2-preliminaries-preflight.md`](docs/superpowers/notes/phase2-preliminaries-preflight.md) — the (a)–(k) audit of the P0/P1/P2 briefs and what each finding changed |
-| **Phase 2a implementation plan** | [`docs/superpowers/plans/2026-08-11-metamer-phase2a.md`](docs/superpowers/plans/2026-08-11-metamer-phase2a.md) — **Tasks 0–2 done; Task 3 next** |
+| **Phase 2a implementation plan** | [`docs/superpowers/plans/2026-08-11-metamer-phase2a.md`](docs/superpowers/plans/2026-08-11-metamer-phase2a.md) — **Tasks 0–3 done; Task 4 next** |
 | **Phase 2a pre-flight, per task** | [`docs/superpowers/notes/phase2a-preflight.md`](docs/superpowers/notes/phase2a-preflight.md) — the (a)–(k) audit of each 2a task brief and what each finding changed. **Append to it before each task, not after.** |
 
 Phase list is design doc §17. Phase 1 exit criteria are §18. Do not duplicate either here.
@@ -455,6 +456,49 @@ Only the durable conclusions are here.
   docstring — the reproduction recipe for its conditioning table — and **not** live code. So
   `fit(engine=...)` is the only engine construction site on the fit path and the injection
   seam is genuinely single.
+
+### Task 3 — `geometry_hash` (done)
+
+- **`data_uri` IS GONE FROM FIT IDENTITY AND THE ALLOWLIST AUDIT IS CLOSED.** It was the last
+  self-reported identity in either allowlist. Every component of `geometry_hash` is read from
+  the opened dataset. The gate it replaces was wrong in **both** directions — moving a file
+  invalidated a valid resume, editing one in place permitted an invalid one — and **a gate
+  wrong both ways is not a conservative approximation of the right one.**
+- **A MUTATION THAT DID NOT BITE WAS THE MOST USEFUL RESULT.** Changing the time component
+  from decimal years to `str(v)` of the decoded values left every test green, **including the
+  two-calendar test written to catch it** — because decoding happens in the opener, so any
+  representation taken in `geometry_components` is post-decode and distinguishes calendars
+  already. The Q5 hazard (inheriting a dependency's parsing) is guarded one layer up by
+  `calendar_of`. **The reachable defect is different:** decimal years must be the component
+  because they move when the **conversion rule** moves (it is under `ALGORITHM_VERSION`, so it
+  must invalidate fits) and because `str()` of a datetime is a **repr**, i.e. a
+  library-version artefact — (k), the `default=repr` hazard again. The assertion now pins the
+  representation: every entry a `float` in (1990, 2010).
+- **AND THE CALENDAR FIXTURE HAD TO BE REBUILT TO SAY ANYTHING.** Comparing a `datetime64`
+  store against a `cftime` store varies the raw representation as well as the calendar. The
+  honest fixture stores **bit-identical numbers** under `calendar="standard"` and
+  `calendar="noleap"`.
+- **`canonical_json` ACCEPTS `np.float64` AND REFUSES `np.int64`.** `np.float64` subclasses
+  `float`; `np.ndarray` and `np.int64` do not. So **`list(array)` works on a float coordinate
+  and raises on an integer one** — and `y`/`x` index coordinates are routinely integers. A
+  fingerprint built that way passes every test written on a float grid and fails on the first
+  real store. `.tolist()` converts uniformly, and the two read identically.
+- **THE ALLOWLIST CHANGE BROKE §13.4's DEGRADED MODE, WHICH IS HOW IT WAS FOUND.**
+  `run_payload` validated the full `FIT_RELEVANT_FIELDS`, so once `geometry_hash` joined,
+  every `run_hash` without an opened input raised `KeyError` — turning "an unreachable input
+  is a degraded mode" into an error, when `--explain`'s most valuable use is a config with **no
+  data staged yet**. `STAGE_4A_FIELDS` excludes what a config cannot supply; it is not a
+  loosening of "must be specified". The `str | None` return declared at Task 1 meant no caller
+  needed revisiting when None started happening.
+- **WHEN AN ALLOWLIST CHANGES, ITS GUARDS MUST BE RE-POINTED, NOT JUST RE-RUN.**
+  `test_a_missing_allowlisted_field_is_refused` probed `data_uri`; after the demotion a config
+  omitting it hashes happily, so the test **would have gone on passing while checking
+  nothing** — asserting a real refusal about a field that no longer has the property.
+- **THE REVERSAL IS A CHAIN, ONE HOP PER CHANGE.** `_HISTORY` walks the two allowlist changes
+  newest-first. Collapsing them would give two ways to be wrong that cancel. Verified:
+  `1eb1fd731b4ae8d6 / d368e07b5f99efe9 / 0b82f20c43f2f378` → `1de18c706b69c39e /
+  cc099be86aca999b / b89d484190d5d0af` → `faf2d107bab48b06 / bb28cb8d4bffa049 /
+  af313190251af95f`.
 
 ### Task 2 — the opener registry, the zarr opener, and stage 4a (done)
 

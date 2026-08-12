@@ -167,10 +167,30 @@ this set, and `tests/test_config.py` asserts that changing one moves neither
 `fit_hash` nor `compat_hash`.
 """
 
+GEOMETRY_HASH_KEY = "geometry_hash"
+"""Payload key for the input's geometry fingerprint. Stamped by stage 4a.
+
+**IT REPLACED `data_uri` ON 2026-08-12, AND `data_uri` WAS WRONG IN BOTH
+DIRECTIONS AT ONCE.** Moving a file invalidated a resume that is scientifically
+valid; editing a file in place at a fixed URI permitted a resume that is
+scientifically invalid. A gate wrong in both directions is not a conservative
+approximation of the right gate -- it is unrelated to it.
+
+It was also the **last self-reported identity in either allowlist**: a value
+claiming to identify the data, supplied by the config rather than read from the
+data. `metamer.batch.geometry` reads every component from the opened dataset.
+`data_uri` remains in the config as provenance, reaching `run_hash` alone.
+
+**A config cannot supply this and `normalize` does not stamp it**, because it is
+not a property of the installed code -- it is a property of an input that may
+not exist yet. `Config.fit_hash()` therefore returns None until stage 4a has
+run, which is the regime the optional return type was declared for at Task 1.
+"""
+
 FIT_RELEVANT_FIELDS = (
     frozenset(
         {
-            "data_uri",
+            GEOMETRY_HASH_KEY,
             "variable",
             "signal_terms",
             "objective",
@@ -214,14 +234,13 @@ candidates have different free-parameter counts it also shifts every offset on
 the ragged `/noise/` axis, so the corruption lands in two arrays rather than
 one.
 
-**THE WARM-START SETTINGS ENTERED ON 2026-08-11 AND THAT MOVED ALL THREE
-`GOLDEN_*` CONSTANTS.** They were absent because this set predates the feature,
-not because anyone decided they did not belong; §11.1 says a stale warm start
-produces converged-looking fits at the wrong optimum. The **audit** settings
-are the boundary and stay out -- see `_WARM_START_FIT_FIELDS`. A second
-deliberate move is still to come: `data_uri` leaves and `geometry_hash` enters
-at Task 3, which moves the goldens again. **Two separate hand re-derivations,
-each verified by reversal; do not batch them into one.**
+**THIS SET HAS MOVED TWICE IN TWO DAYS AND EACH MOVE WAS REVERSED SEPARATELY.**
+2026-08-11: the five warm-start settings entered, because §11.1 says a stale
+warm start produces converged-looking fits at the wrong optimum; the **audit**
+settings are the boundary and stay out, see `_WARM_START_FIT_FIELDS`.
+2026-08-12: `data_uri` left and `geometry_hash` entered. **Both moved all three
+`GOLDEN_*` constants, and `tests/test_hashing.py` reverses them one hop at a
+time** -- a single combined regeneration would prove nothing about either.
 
 Also excludes `metamer_version`, which it held until 2026-08-10. The package
 version is now VCS-derived and therefore changes on every commit; it remains
@@ -230,6 +249,23 @@ never a gate -- still records it. Algorithm identity is carried by
 `ALGORITHM_VERSION` instead. Design doc section 13.3's table says "metamer
 version"; this is the narrower reading of that entry, and it is the one that
 survives a version string derived from the git tag.
+"""
+
+STAGE_4A_FIELDS = frozenset({GEOMETRY_HASH_KEY})
+"""Fit-relevant fields a CONFIG cannot supply, stamped by stage 4a instead.
+
+**`run_payload` VALIDATES THE FIT FIELDS MINUS THESE, AND THAT IS §13.4's
+DEGRADED MODE RATHER THAN A LOOSENING.** The validation exists to refuse a
+config that is not a runnable config -- "a config that cannot be fit-hashed is
+not a run". `geometry_hash` is not a config field at all: it is read from an
+input, and §13.4 requires that `--explain` work on **a config with no data
+staged yet**, because sizing a run before moving 25 GB is that command's most
+valuable use. Demanding it here would make an unreachable input an error where
+the design says it is a degraded mode.
+
+`run_hash` remains computable in that mode and `fit_hash` returns None, which is
+the split §13.4 specifies: print compat- and run-relevant content always, and
+`fit_hash: not computed (requires stage 4a)` otherwise.
 """
 
 COMPAT_RELEVANT_FIELDS = FIT_RELEVANT_FIELDS | {"criteria"}
@@ -344,8 +380,19 @@ def canonical_json(payload: Mapping[str, Any]) -> str:
     return json.dumps(dict(payload), sort_keys=True, separators=(",", ":"))
 
 
-def _digest(payload: Mapping[str, Any]) -> str:
-    """Return the first 16 hex digits of the payload's canonical SHA-256."""
+def digest(payload: Mapping[str, Any]) -> str:
+    """Return the first 16 hex digits of the payload's canonical SHA-256.
+
+    Public because `metamer.batch.geometry` computes `geometry_hash` with the
+    same construction, and two spellings of "canonical" would eventually be two
+    different canonicals.
+
+    Args:
+        payload: The mapping to digest.
+
+    Returns:
+        The truncated hex digest.
+    """
     return hashlib.sha256(canonical_json(payload).encode("utf-8")).hexdigest()[:16]
 
 
@@ -438,8 +485,11 @@ def run_payload(
         The normalized config with the fingerprint filed under `MACHINE_KEY`.
 
     Raises:
-        KeyError: If an allowlisted field is absent -- `run_hash` is
-            provenance, but a config that cannot be fit-hashed is not a run.
+        KeyError: If a config-supplied allowlisted field is absent -- `run_hash`
+            is provenance, but a config that cannot be fit-hashed is not a run.
+            `STAGE_4A_FIELDS` are excluded from that check: they come from an
+            input rather than from the config, and §13.4 requires this to work
+            with no data staged.
         ValueError: If the config itself carries `MACHINE_KEY`, which would
             collide with the fingerprint slot and silently record the wrong
             machine.
@@ -450,7 +500,7 @@ def run_payload(
             f"{MACHINE_KEY!r} is reserved for the machine fingerprint and must "
             "not appear in a config"
         )
-    _subset(payload, FIT_RELEVANT_FIELDS)
+    _subset(payload, FIT_RELEVANT_FIELDS - STAGE_4A_FIELDS)
     if machine is not None:
         payload[MACHINE_KEY] = machine
     return payload
@@ -462,7 +512,7 @@ def fit_hash(config: Mapping[str, Any]) -> str:
     The warm-start key's first component (section 11.1) and the gate for
     reusing fits.
     """
-    return _digest(fit_payload(config))
+    return digest(fit_payload(config))
 
 
 def compat_hash(config: Mapping[str, Any]) -> str:
@@ -471,7 +521,7 @@ def compat_hash(config: Mapping[str, Any]) -> str:
     The gate for reusing `/selection/`. Differs from `fit_hash` only by the
     criterion set, so a criterion-only change recomputes rather than refits.
     """
-    return _digest(compat_payload(config))
+    return digest(compat_payload(config))
 
 
 def run_hash(config: Mapping[str, Any], machine: str | None = None) -> str:
@@ -483,7 +533,7 @@ def run_hash(config: Mapping[str, Any], machine: str | None = None) -> str:
     determinism guarantee, and the same property that makes a future cloud
     burst a resume rather than a rerun.
     """
-    return _digest(run_payload(config, machine))
+    return digest(run_payload(config, machine))
 
 
 def machine_fingerprint(cpu_model: str, cores: int, total_ram_bytes: int) -> str:
@@ -501,4 +551,4 @@ def machine_fingerprint(cpu_model: str, cores: int, total_ram_bytes: int) -> str
     Returns:
         The fingerprint, a 16-hex-digit digest.
     """
-    return _digest({"cpu": cpu_model, "cores": int(cores), "ram": int(total_ram_bytes)})
+    return digest({"cpu": cpu_model, "cores": int(cores), "ram": int(total_ram_bytes)})

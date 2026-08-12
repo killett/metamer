@@ -256,15 +256,23 @@ class Config(BaseModel):
         """
         return tuple(spec.spec_hash() for spec in self.process_specs())
 
-    def to_payload(self) -> dict[str, Any]:
+    def to_payload(self, geometry_hash: str | None = None) -> dict[str, Any]:
         """Return the flat mapping `hashing.normalize` consumes.
 
         Nested blocks flatten to `block_field`. The two stamped keys are absent:
         `normalize` supplies them from the installed code and refuses a payload
         that carries them.
 
+        Args:
+            geometry_hash: The input's geometry fingerprint, from stage 4a. It
+                is **not** stamped by `normalize` and cannot be, because it is
+                not a property of the installed code -- it is a property of an
+                input that may not exist yet. Omit it and `fit_hash` and
+                `compat_hash` return None.
+
         Returns:
-            The payload.
+            The payload. `data_uri` is present and is **provenance only** since
+            2026-08-12: it reaches `run_hash` and neither gate.
         """
         payload: dict[str, Any] = {
             "data_uri": self.data_uri,
@@ -284,39 +292,65 @@ class Config(BaseModel):
             model: BaseModel = getattr(self, block)
             for name, value in model.model_dump().items():
                 payload[f"{block}_{name}"] = value
+        if geometry_hash is not None:
+            payload[hashing.GEOMETRY_HASH_KEY] = geometry_hash
         return payload
 
-    def fit_hash(self) -> str | None:
+    def fit_hash(self, geometry_hash: str | None = None) -> str | None:
         """Hash the fields determining `theta_hat` and `log_lik`.
 
-        Returns:
-            The hash, or None once Task 3 makes `geometry_hash` a component and
-            no input has been opened. **At Task 1 it is never None**, because
-            `data_uri` is still the fit-relevant stand-in for the data. The
-            optional return type is fixed now rather than widened later: every
-            caller would otherwise be written against `str` and need revisiting
-            at exactly the moment the None case starts happening.
-        """
-        return hashing.fit_hash(self.to_payload())
+        **NONE IS A REAL ANSWER, NOT AN ERROR, AND §13.4 DEPENDS ON IT.**
+        `--explain`'s most valuable use is a config with no data staged yet --
+        sizing a run before moving 25 GB -- so an unreachable input is a
+        DEGRADED MODE rather than a failure. It prints compat- and run-relevant
+        content and says `fit_hash: not computed (requires stage 4a)`.
 
-    def compat_hash(self) -> str | None:
+        The optional return type was declared at Task 1, one task before it
+        could happen, precisely so that callers were not written against `str`
+        and then revisited at the moment the None case started occurring.
+
+        Args:
+            geometry_hash: From stage 4a. Omitted means no input was opened.
+
+        Returns:
+            The hash, or None if `geometry_hash` was not supplied.
+        """
+        if geometry_hash is None:
+            return None
+        return hashing.fit_hash(self.to_payload(geometry_hash))
+
+    def compat_hash(self, geometry_hash: str | None = None) -> str | None:
         """Hash the fields determining the stored derived arrays.
 
-        Returns:
-            The hash, subject to the same Task 3 caveat as `fit_hash`.
-        """
-        return hashing.compat_hash(self.to_payload())
+        Args:
+            geometry_hash: From stage 4a.
 
-    def run_hash(self, machine: str | None = None) -> str:
+        Returns:
+            The hash, or None if `geometry_hash` was not supplied -- the same
+            degraded mode as `fit_hash`, since `COMPAT_RELEVANT_FIELDS` is a
+            strict superset.
+        """
+        if geometry_hash is None:
+            return None
+        return hashing.compat_hash(self.to_payload(geometry_hash))
+
+    def run_hash(
+        self, machine: str | None = None, geometry_hash: str | None = None
+    ) -> str:
         """Hash everything, plus runtime knobs and the machine fingerprint.
+
+        **Computable with no input opened**, unlike the two gates. §13.4 makes an
+        unreachable input a degraded mode rather than an error, because sizing a
+        run before staging 25 GB is `--explain`'s most valuable use.
 
         Args:
             machine: Optional fingerprint from `hashing.machine_fingerprint`.
+            geometry_hash: From stage 4a, when an input has been opened.
 
         Returns:
             The hash. **Provenance only, never a gate.**
         """
-        return hashing.run_hash(self.to_payload(), machine)
+        return hashing.run_hash(self.to_payload(geometry_hash), machine)
 
 
 def _read(path: Path) -> dict[str, Any]:
