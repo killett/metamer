@@ -493,6 +493,64 @@ resolves through another — not by zarr reference, symlink, or a path in attrs 
 follow. Provenance records a source store's hashes; it never depends on that store being
 present. The recompute path therefore **copies** the groups it does not recompute.
 
+**The fit-OK / criterion-undefined test point takes the REML route**, and the test says why
+the other cannot work: under ML `n = n_obs`, so with the four-column design the precheck
+refuses the series before scoring and the point is unreachable. **A test that documents
+which route works AND why the other cannot is worth more than one that silently picks the
+survivor.**
+
+### THE CANDIDATE SET IS COVERED BY NO HASH — a sub-phase 1 requirement, not an open question
+
+**The larger finding of Q3, and the same shape as `metamer_version` sitting in
+`FIT_RELEVANT_FIELDS` with nothing populating it: a gate that reads as present and is not.**
+§12.8's superset rule was enforced by nothing. Nothing stopped a resume with a *different*
+candidate at index 1 from writing candidate B's fits into candidate A's slice of the model
+axis — every array the right shape, every value finite, every status `ok`, and the store
+wrong in a way no invariant catches.
+
+- **The resume gate compares candidate spec hashes positionally** against root attrs:
+  `stored[i] == requested[i]` for every `i < len(stored)`, and
+  `len(requested) >= len(stored)`. A mismatch at any position is refused, naming the index
+  and both hashes.
+- **Deliberately NOT folded into `compat_hash`**, because a superset must be permitted and
+  **a hash can only express equality**. Recorded in `hashing.FIT_RELEVANT_FIELDS`'s own
+  docstring so a later reader does not "fix" the omission by adding `candidates` to the
+  allowlist and thereby forbid the extension workflow.
+- **The wrong-candidate-at-index-1 case is a required test.** It interacts with the M=2
+  unequal-`p` choice usefully: swapping `white` (p=1) with `white + matern12` (p=3) shifts
+  every offset on the ragged axis too, so the failure shows up in two arrays rather than one.
+
+### Q4 — input adapters and the time-axis contract
+
+**Design doc §13.6 added, and §13.2 layer 4 gains stage 4a.**
+
+- **A declared opener set through a named registry**, chosen from the `data_uri` scheme.
+  **zarr only in sub-phase 1**; netCDF is a registration, not a refactor. Two openers do not
+  test the tiling loop twice, they test xarray twice. **The contract is on dataset shape,
+  not file format.**
+- **metamer converts to decimal years; the user never supplies them.** An interface that
+  asks for decimal years invites the most catastrophic input error in the system, and Phase
+  1 measured its consequence: `cond(X)` 3.4e1 → 3.3e32, rank 7/7 → 2/7, `cos(annual)`
+  identically 1.0 — a full-rank-looking design that has lost five columns without a crash.
+  **An interface that cannot be used wrongly beats a validator that catches it.**
+- **Never infer units from magnitude.** Days since 1970 over 50 years is ~2e4 and years
+  since 0 is ~2e3 — ambiguous on exactly the axis it most needs to disambiguate. CF-decodable
+  datetime64, or an explicit declaration; a bare numeric axis with neither is refused.
+- **The conversion rule is `ALGORITHM_VERSION`, and its inputs are fit identity too.** The
+  calendar is the sharp one: `proleptic_gregorian`, `noleap` and `360_day` give **different
+  decimal years for the same timestamp**, so the calendar reaches the hashed payload and not
+  only the attrs. Provenance also records the source units string and the epoch.
+- **Stage 4a is layer 4's first stage, deliberately not a fifth layer** — otherwise it
+  becomes one by accident when pass 1 lands and layer 4 acquires its "runs against pass 1"
+  home.
+- **Strictly increasing, not monotonic.** The strict form catches a duplicate as well as a
+  reversal, and a duplicate gives `Δt = 0` — an identity transition with a zero
+  process-noise covariance, singular, surfacing deep inside the filter rather than at the
+  boundary. Same check catches a single-sample axis.
+- **A non-uniform axis is legal and its unique-Δt count is reported**, by stage 4a and by
+  `--explain`. A nearly-regular axis carrying float noise otherwise yields thousands of
+  unique Δt and an order-of-magnitude slowdown with nothing saying why.
+
 ---
 
 ## Required pre-flight for every remaining task

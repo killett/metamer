@@ -1483,6 +1483,22 @@ exists because §12.5 stores per-candidate primitives, making candidate-set exte
 *scientifically* legitimate incremental operation: existing fits are unaffected, only
 `P_total` and the model axis grow.
 
+**ADDED 2026-08-11: the superset rule is enforced by a positional comparison, and until
+2026-08-11 it was enforced by nothing.** `candidates` is in neither hash allowlist — checked
+against `tests/test_hashing.py`, which asserts its absence — and **a hash can only express
+equality**, so it cannot be added without forbidding the extension this rule exists to
+permit. The gate therefore compares candidate spec hashes against the ones in root attrs
+positionally: `stored[i] == requested[i]` for every `i < len(stored)`, and
+`len(requested) >= len(stored)`; a mismatch at any position is refused, naming the index and
+both hashes.
+
+**This is the same shape as a gate that reads as present and is not.** Without it, resuming
+with a different candidate at index 1 writes candidate B's fits into candidate A's slice of
+the model axis: every array keeps its shape, every value is finite, every status reads `ok`,
+and the store is wrong in a way no invariant catches. Where the candidates differ in free
+parameter count it also shifts every offset on the ragged `/noise/` axis, so the corruption
+appears in two arrays. **The wrong-candidate-at-index-1 case is a required test.**
+
 The middle row is the reason §13.3 splits `fit_hash` out of `compat_hash` at all. Without
 it, adding HQIC to a finished 10⁷-point run would demand a full refit to compute arithmetic
 on numbers already sitting in the store.
@@ -1546,6 +1562,54 @@ job needs to say which layer and why.
 4. **Data-dependent** — only checkable once data is open: epochs inside the record,
    harmonics resolvable by the sampling, regressor alignment, `rank(X)` (§5.2). Runs at
    startup against pass 1, not at parse time.
+   - **Stage 4a, the input-contract check, added 2026-08-11.** Layer 4 nominally runs
+     against pass 1, and pass 1 does not exist in Phase 2's first sub-phase — so the checks
+     that must precede *any* tile are **layer 4's first stage, deliberately not a fifth
+     layer**, which is what it would become by accident once pass 1 lands. It runs at
+     store-open and covers §13.6's contract below.
+
+### 13.6 Input adapters and the time-axis contract
+
+**A declared opener set, not "anything xarray can open".** The opener is chosen from the
+`data_uri` scheme through a **named registry**; zarr (local and fsspec) is registered first
+and netCDF is a registration rather than a refactor. Two openers do not test the tiling loop
+twice, they test xarray twice — so the first sub-phase wires one, and **the contract is on
+dataset *shape*, not on file format**: one named variable, dims mapping to (time, y, x), a
+1-D time coordinate.
+
+**metamer converts the time axis to decimal years; the user never supplies it.** Phase 1
+measured what a wrong axis costs — the same 20-year monthly design goes `cond(X) = 3.4e1` →
+`3.3e32` and rank 7/7 → 2/7 in seconds since 1970, with `cos(annual)` collapsing to
+identically 1.0. **That is a full-rank-looking design that has silently lost five columns,
+and no crash.** An interface that asks for decimal years *invites* that error; an interface
+that converts removes it. **An interface that cannot be used wrongly beats a validator that
+catches it.**
+
+**Never infer the units from magnitude.** Days since 1970 over a 50-year record is ~2e4 and
+years since 0 is ~2e3, so a magnitude heuristic is ambiguous on exactly the axis it most
+needs to disambiguate. Time must be **CF-decodable to datetime64**, or the config must
+**declare** its units; a bare numeric axis with neither is a stage-4a error naming what was
+found and what is required. Refuse, do not infer.
+
+**The conversion is fit identity, and so are its inputs.** Changing how decimal years are
+computed moves every `θ̂`, so the rule lives under `ALGORITHM_VERSION`. Its **inputs** are
+identity too, and the calendar is the sharp one: `proleptic_gregorian`, `noleap` and
+`360_day` give **different decimal years for the same timestamp**. Provenance records the
+calendar, the source units string and the epoch; the calendar reaches the hashed payload,
+not only the attrs.
+
+**Strictly increasing, not merely monotonic.** The strict form catches a duplicated
+timestamp as well as a reversal, and a duplicate produces `Δt = 0`: in a continuous-time
+state space that is an identity transition with a zero process-noise covariance — singular,
+and it surfaces deep inside the filter rather than at the boundary. A single-sample axis is
+caught by the same check.
+
+**A non-uniform axis is legal and must be reported.** Irregular sampling is first-class by
+design, but it changes the unique-Δt set from one element to many, which changes both the
+memory formula and the per-fit cost. Stage 4a **reports the number of unique Δt values** and
+`--explain` prints it — a user who supplies a nearly-regular axis carrying float noise
+otherwise gets thousands of unique Δt and an order-of-magnitude slowdown with no indication
+why.
 
 ### 13.3 Three hashes
 

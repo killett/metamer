@@ -136,6 +136,24 @@ candidate set (candidate-set extension is a legitimate incremental operation,
 and section 11.1 keys warm starts on `(fit_hash, candidate spec_hash)` -- the
 candidate is the other half of that pair).
 
+**DO NOT "FIX" THE CANDIDATE-SET OMISSION BY ADDING IT HERE.** Section 12.8
+permits resuming with a SUPERSET of the stored candidates -- same candidates
+in the same order, possibly more -- and **a hash can only express equality**,
+so putting `candidates` in either allowlist forbids the extension workflow
+outright. The enforcement is a **positional comparison of candidate spec
+hashes** against the ones in the store's root attrs, run by the resume gate:
+`stored[i] == requested[i]` for every `i < len(stored)`, and
+`len(requested) >= len(stored)`. A mismatch at any position is refused, naming
+the index and both hashes.
+
+That comparison is load-bearing and its absence is silent. Nothing else stops
+a resume from writing candidate B's fits into candidate A's slice of the model
+axis: every array keeps its shape, every value is finite, every status reads
+`ok`, and the store is wrong in a way no invariant catches. Where the
+candidates have different free-parameter counts it also shifts every offset on
+the ragged `/noise/` axis, so the corruption lands in two arrays rather than
+one.
+
 Also excludes `metamer_version`, which it held until 2026-08-10. The package
 version is now VCS-derived and therefore changes on every commit; it remains
 in the config as **provenance**, where `run_hash` -- which is provenance and
