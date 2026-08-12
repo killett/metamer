@@ -1752,6 +1752,10 @@ What it covers, and the six constraints on it:
 6. **Root attrs carry the components as well as the rollup**, so a mismatch is diagnosable
    by a human reading the store without rerunning anything — and so point 5 is implementable
    on the resume side, where only the stored store is available.
+7. **EVERY input array, not only the primary variable (added 2026-08-11 with §9.4's
+   regressor regime).** A per-point regressor field — a GIA model — is a **second data
+   source with its own grid**, and a GIA field silently regridded under a fixed URI is this
+   same hole one level out. The fingerprint covers each input array the config names.
 
 **Consequence, accepted rather than worked around: `fit_hash` requires reachable data**, and
 the run's entry contract is therefore ordered (see §13.7).
