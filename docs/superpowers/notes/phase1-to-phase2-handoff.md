@@ -43,28 +43,42 @@ while design doc §12.8 assumes enforcement; `data_uri` standing in for the data
 that moving a file invalidated a valid resume *and* editing one in place permitted an
 invalid one.
 
-> **A field's presence in a hash payload is not evidence that the thing it names is
-> checked.** Verify **four** separate facts: **something populates it**; **it derives from
-> the quantity it claims to identify**; **a change in that quantity actually moves it**; and
-> **the thing that populates it is not the thing being identified.**
+**CLASSIFY BEFORE YOU CHECK. EVERY HASHED FIELD IS ONE OF TWO KINDS, AND THE CHECK APPLIES
+TO ONLY ONE OF THEM:**
 
-The first three failed differently in the three instances above. **The fourth was added
-2026-08-11 after a fifth instance of a new shape**, and it is the sharpest because the field
-passes the first three cleanly: `registry_version` was populated, did derive from the
-registry, and did move when the registry version moved — **and the value came from the
-user's config.** A gate reading correctly for the wrong reason. Self-reported identity is
-not identity.
+> - A **REQUEST** — what the user asked for. Which variable, which objective, which seed,
+>   which criteria. **Self-reported, and self-reporting is correct**: the field *is* the
+>   request, and there is nothing else it could come from.
+> - An **IDENTITY** — what something actually *is*. Installed code, a family registry, a
+>   dataset on disk. **It must be populated by reading that thing, and self-reporting is the
+>   defect.**
+
+Getting this backwards in either direction is a mistake. Demanding an independent source for
+a request is incoherent; accepting a self-reported identity is how `registry_version` sat in
+the allowlist reading correctly for the wrong reason.
+
+**For an identity field, verify four facts:** **something populates it**; **it derives from
+the quantity it claims to identify**; **a change in that quantity actually moves it**; and
+**the thing that populates it is not the thing being identified.**
+
+The first three failed differently in the three instances above. The fourth came from a fifth
+instance of a new shape: `registry_version` passed the first three cleanly — populated,
+derived, moved — **and the value came from the user's config.** Self-reported identity is not
+identity.
+
+**THE AUDIT OF THIS PROJECT'S ALLOWLISTS IS CLOSED. Do not reopen it without a new field.**
+The sort was run over all fourteen fields on 2026-08-11 and found **exactly three
+identities**, all now accounted for: `algorithm_version` and `registry_version` are stamped
+from the installed code, and `data_uri` was replaced by `geometry_hash` at Task 3. Everything
+else is a request. The table is in
+[`phase2a-preflight.md`](phase2a-preflight.md); the rule to apply to a *new* field is the
+classification above, not the table.
 
 The check generalizes past hashes to every gate made of a name — a completion bitmap, a
-calibration cache key, a warm-start cache key.
-
-**THE FOURTH CHECK APPLIES TO IDENTITY FIELDS AND NOT TO REQUESTS, AND THE DISTINCTION IS
-WHAT MAKES A SWEEP FINITE.** A field naming a *user's choice* — which variable, which
-objective, which seed — is definitionally self-reported, and that is correct: the field **is**
-the request. A field claiming to identify something that exists independently of the config —
-installed code, a registry, a dataset on disk — must be populated by reading that thing. Sort
-the allowlist into the two kinds and only the second kind needs auditing; measured on this
-project, that is three fields out of fourteen.
+calibration cache key, a warm-start cache key. **`machine_fingerprint` is the live example
+of a field whose classification changes with its consumer**: self-reported at its own
+boundary, harmless while it reaches `run_hash` alone (provenance, never a gate), and an
+identity the moment the calibration cache key reads it.
 
 ### (a3) DEFER THE FEATURE, DECLARE THE REGIME
 
@@ -188,6 +202,26 @@ it. Measured: the mutation to `extra="ignore"` left the test green.
 The assertion that bites reads the structured error: `errors()[i]["type"] == "extra_forbidden"`
 with `loc == ("data_url",)`. Same principle without structured errors: match a phrase the
 *diagnosis* owns, never one the input supplies.
+
+### (i5) WHEN A FIXTURE CANNOT EXPRESS THE DEFECT, ASK WHETHER THE OBVIOUS REPAIR IS LOCAL
+
+> **If the tempting fix for a failing assertion moves a SHARED CONSTANT, the fixture is not
+> merely weak — it is a trap.** A local test failure then buys a global regression, and the
+> commit that does it looks like a test fix.
+
+(i) asks whether the fixture can express the defect. This asks what happens *when the answer
+is no*, and it is the first instance in this project where the wrong repair is worse than the
+wrong test.
+
+Worked case: the Phase 2a plan asked for a test that the unique-Δt count is "large for an axis
+perturbed by float noise". It is not — `UNIQUE_DT_RTOL = 1e-9` sits decades above float64
+rounding, so the perturbation collapses and the assertion fails. **The obvious repair is to
+lower `UNIQUE_DT_RTOL` until the fixture behaves**, which destroys the `F`/`Q` amortization on
+every axis in the system to satisfy one test — a global performance regression whose commit
+message would say "fix flaky time-axis test".
+
+The check: when an assertion will not go green, name what would have to change. If that thing
+is shared — a module constant, a tolerance, a schema default — stop and fix the fixture.
 
 ### (i2) A PURE NEGATIVE NEEDS A POSITIVE CONTROL
 
@@ -382,6 +416,20 @@ is safe to import.
 ### The other standing rules
 
 - **Oracles must not share a derivation path** — see (j).
+- **A QUANTITY ASSUMED TO CANCEL IN A RATIO MUST BE MEASURED TO CANCEL**, because the
+  assumption is precisely what a ratio cannot reveal. This is the cancellation rule (a)
+  applied to a benchmark rather than to a criterion, and it has now failed twice: the P3
+  iteration fixture (`mean_iterations` was assumed common to both paths — it was, but the
+  *sample* it averaged over had silently narrowed), and the synthetic time axis (open
+  question 14, where `unique_dt = 1` against a real axis's 6 is assumed to affect both paths
+  equally). **Both times the assumption was reasonable and neither was checked.** The
+  measurement is cheap: vary the quantity and confirm the ratio does not move.
+- **A DEPENDENCY REACHED FOR BY ANOTHER LIBRARY IS INVISIBLE TO ANY STATIC IMPORT SCAN.**
+  `tests/test_packaging.py` compares what `src/` imports against what the wheel declares, so
+  it guards "imported but undeclared" and cannot see "needed but never imported here" —
+  `cftime`, which xarray reaches for to decode any non-standard calendar, is the worked case.
+  **The guard has a stated hole rather than an unknown one**, and such dependencies are
+  declared by hand with a comment saying why.
 - **A recorded measurement carries its measurement date**, because a quoted figure drifts
   and a stale one reads exactly like a fresh one. Two instances: `pixi.lock` was quoted at
   645 KB, then 630 KB, and measured 635.6 KB when Phase 2a Task 0 re-checked it; and the
@@ -488,6 +536,11 @@ Every one of these was discovered by building a fixture that could not fail.
   design more post-breakpoint degrees of freedom than the post-breakpoint samples carry.
 - **The time axis is decimal years.** In seconds since 1970 the same 20-year monthly design
   goes from `cond(X) = 3.4e1` to `3.3e32` and rank 7/7 to 2/7.
+- **A REAL MONTHLY AXIS HAS SEVERAL DISTINCT TIMESTEPS, NOT ONE.** Calendar months are 28–31
+  days, so 50 years of month-start timestamps give `unique_dt = 6` (mid-month 8, daily 2).
+  **Only a synthetic `2000 + arange(n)/12` gives 1**, and that is the shape every synthetic
+  fixture and the spike harness use — so any claim resting on "F and Q are built once per
+  series per iteration" is a claim about the fixture, not about the workload.
 - **A quadratic cannot test a step rule**, and **a fixture above a floor cannot test the
   floor.**
 - **HETEROGENEITY MUST COME FROM A PARAMETER THE LIKELIHOOD IS NOT EQUIVARIANT IN** —

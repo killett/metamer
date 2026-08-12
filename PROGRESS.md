@@ -75,6 +75,16 @@
   `tests/test_packaging.py` is the guard and runs in the full sweep — it builds the wheel,
   installs it into a clean virtual environment, and checks the artifact from inside that
   environment. **Its stated limits are in its own docstrings; do not trust it further.**
+- **A QUANTITY ASSUMED TO CANCEL IN A RATIO MUST BE MEASURED TO CANCEL**, because the
+  assumption is exactly what a ratio cannot reveal — the cancellation rule applied to a
+  benchmark rather than a criterion. **Failed twice now**: P3's iteration fixture (the count
+  was common to both paths, but the *sample* it averaged over had narrowed) and the synthetic
+  time axis (open question 14). Both assumptions were reasonable; neither was checked. The
+  measurement is cheap — vary the quantity, confirm the ratio does not move.
+- **A DEPENDENCY REACHED FOR BY ANOTHER LIBRARY IS INVISIBLE TO A STATIC IMPORT SCAN.**
+  `tests/test_packaging.py` guards "imported but undeclared" and cannot see "needed but never
+  imported here" — `cftime` via xarray is the worked case. **A stated hole, not an unknown
+  one**; such dependencies are declared by hand with a comment saying why.
 - **A RECORDED MEASUREMENT CARRIES ITS MEASUREMENT DATE.** A quoted figure drifts and a stale
   one reads exactly like a fresh one. Second instance now: `pixi.lock` was quoted at 645 KB,
   then 630 KB, and measured **635.6 KB on 2026-08-11** before Task 0 and **644 KB after** —
@@ -1194,6 +1204,17 @@ argument — a passing suite is not evidence the brief is right.
   existed, a later simplification removes one because it looks dead — and it is dead only
   because the other is there. Comment both, each naming the other.
 
+- **(i5) WHEN A FIXTURE CANNOT EXPRESS THE DEFECT, ASK WHETHER THE OBVIOUS REPAIR IS LOCAL.**
+
+  > **If the tempting fix for a failing assertion moves a SHARED CONSTANT, the fixture is not
+  > merely weak — it is a trap.** A local test failure buys a global regression, and the
+  > commit that does it reads as a test fix.
+
+  First instance where the wrong repair is worse than the wrong test: the plan's unique-Δt
+  assertion cannot go green, and the obvious repair is lowering `UNIQUE_DT_RTOL` — which
+  destroys the `F`/`Q` amortization on **every** axis to satisfy one fixture. The check: name
+  what would have to change; if it is shared, fix the fixture.
+
 - **(i3) A RELATION BETWEEN OBSERVATIONS IS NOT A SUBSTITUTE FOR THE OBSERVATIONS.**
 
   > **An assertion comparing two derived values passes when both are absent, both are wrong
@@ -1764,23 +1785,38 @@ will do.
   Pin the seed, and never assert `design.condition_number` as a proxy.
 - **A quadratic cannot test a step rule** (third derivative zero), and **a fixture sitting
   above a floor cannot test the floor** (`n_eff = 12` against a floor at 2.0).
+- **A REAL MONTHLY AXIS HAS SEVERAL DISTINCT TIMESTEPS, NOT ONE.** Calendar months are 28–31
+  days, so 50 years of month-start timestamps give `unique_dt = 6` (mid-month 8, daily 2).
+  **Only a synthetic `2000 + arange(n)/12` gives 1**, and that is what every synthetic fixture
+  and the spike harness use — so "F and Q are built once per series per iteration" is a claim
+  about the fixture, not about the workload. See open question 14.
 - **A NAME IS NOT A GATE.** Three instances in three sittings, each reading as a gate and
   being none: `metamer_version` in `FIT_RELEVANT_FIELDS` with nothing in `src/` populating
   it (P0); `candidates` covered by no hash while §12.8 assumes enforcement (Q3);
   `data_uri` standing in for the data it names (Q5).
 
-  > **A field's presence in a hash payload is not evidence that the thing it names is
-  > checked.** Verify **four** separate facts: **something populates it**; **it derives from
-  > the quantity it claims to identify**; **a change in that quantity actually moves it**;
-  > and **the thing that populates it is not the thing being identified.**
+  **CLASSIFY BEFORE YOU CHECK — every hashed field is one of two kinds:**
 
-  **The fourth was added 2026-08-11 after `registry_version`, a fifth instance of a new
-  shape**: it passed the first three cleanly — populated, derived, moved — and the value came
-  from the user's config. A gate reading correctly for the wrong reason. **Self-reported
-  identity is not identity.** The check applies to identity fields and not to requests, which
-  is what makes a sweep finite; the full source sweep of both allowlists is in the Phase 2a
-  pre-flight note, and it found **three identity fields out of fourteen**, two now stamped and
-  one (`data_uri`) scheduled for Task 3.
+  > - A **REQUEST** — what the user asked for (which variable, which seed, which criteria).
+  >   **Self-reported, and self-reporting is correct**: the field *is* the request.
+  > - An **IDENTITY** — what something actually *is* (installed code, a registry, a dataset).
+  >   **Must be populated by reading that thing; self-reporting is the defect.**
+
+  Getting it backwards either way is a mistake: demanding an independent source for a request
+  is incoherent, and accepting a self-reported identity is how `registry_version` sat in the
+  allowlist reading correctly for the wrong reason.
+
+  > **For an IDENTITY field, verify four facts:** something populates it; it derives from the
+  > quantity it claims to identify; a change in that quantity moves it; **and the thing that
+  > populates it is not the thing being identified.**
+
+  **THE AUDIT OF THIS PROJECT'S ALLOWLISTS IS CLOSED — do not reopen it without a new field.**
+  The sort was run over all fourteen on 2026-08-11: **exactly three identities**, all
+  accounted for (`algorithm_version` and `registry_version` stamped; `data_uri` replaced by
+  `geometry_hash` at Task 3). Everything else is a request. Table in the Phase 2a pre-flight
+  note. **`machine_fingerprint` is the live example of a classification that changes with its
+  consumer** — self-reported at its boundary, harmless while it reaches `run_hash` alone, an
+  identity the moment §11.4's calibration cache key reads it. Task 5's brief carries the fix.
 
   All three failed that last clause differently — nothing wrote it, nothing compared it, and
   it identified a location rather than a content. **Expect more of these in Phase 2**, which

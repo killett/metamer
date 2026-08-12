@@ -332,6 +332,13 @@ never assert a count.
   because otherwise this task can be finished before the layer it reports into exists and the
   check ships as a bare exception with no layer attached — which would satisfy exit criterion
   10 with something that is not a layer-3 failure.
+- **`machine_fingerprint`'s ARGUMENTS COME FROM `core.machine`, NEVER FROM THE CONFIG.**
+  It takes `cpu_model`, `cores` and `total_ram_bytes` as parameters, so it is self-reported at
+  its own boundary. That is harmless while it reaches `run_hash` alone — provenance, never a
+  gate — and it becomes an **identity** the moment §11.4's calibration cache key reads it: a
+  config-supplied fingerprint would let one machine's calibration be reused on another, which
+  understates peak against a hard RAM constraint. Wire it from the platform here, before the
+  cache exists, because retrofitting it means invalidating whatever the cache already holds.
 - **Thread counts reach `run_hash` only.** If they moved `fit_hash`, the hash boundary would
   be conceding that §11.3's guarantee does not hold.
 
