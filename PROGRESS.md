@@ -684,6 +684,69 @@ and the calibration tile both behave differently under it.
   its own grid, and a GIA field silently regridded under a fixed URI is the same hole one
   level out.
 
+### Q9 — nearest valid coarse point, and warm-start settings are fit identity
+
+**Design doc §11.1 and §11.3 amended; §13.3 gains the consolidated allowlist finding;
+`hashing.FIT_RELEVANT_FIELDS`'s docstring gains the positive rule.**
+
+**Nearest valid coarse point**, index space, ties broken lowest `y` then lowest `x`, spiral
+outward until a coarse point with an `OK` fit **for that candidate**. Fine→coarse is index
+arithmetic on **dataset** coordinates, so it survives a memory-budget change.
+
+**THE DECISIVE ARGUMENT IS §4.5's EXCHANGEABILITY AND IT IS NOT OBVIOUS** — recorded in full
+in §11.3 because someone reading only the practical arguments concludes bilinear is a strict
+improvement:
+
+> Neighbouring coarse points can converge to **different mirror images of the same optimum**.
+> Bilinear then averages parameter vectors **not in a common labelling**, and the average of
+> two mirror images is a point between them that is **neither**, near the saddle separating
+> them. So bilinear is **worse than either corner**, and it degrades precisely where the
+> likelihood is flat — where warm-starting is supposed to help and where §11.2 says
+> hysteresis concentrates. Nearest-valid is immune: one source point supplies the whole `θ̂`.
+
+Practical arguments agreeing: a bilinear stencil with 1–3 failed corners needs a
+renormalization indexed by **which** corner failed, so the rule becomes a family of rules;
+and a stencil straddling a coastline initializes an ocean point partly from land, **wrong
+scientifically before it is wrong numerically**.
+
+- **The spiral is bounded and exhaustion is reported.** Cap the radius; on exhaustion fall
+  back to the moment-init ladder **with the rung recorded**, so "no warm start here" is a
+  reported fact rather than an invisible degradation, reusing §8.4's existing reporting.
+- **Record the source coarse index per point**, at least across the audit subsample —
+  otherwise diagnosing an audit disagreement means re-running the spiral. It makes the audit
+  **diagnosable** rather than only measurable.
+- **No config flag selects the rule**: it changes `θ̂`, so it is fit identity, so a flag
+  would fragment stores.
+
+**WARM-START SETTINGS ARE FIT-RELEVANT — the fourth allowlist finding.** §11.1's own words
+settle it: a stale warm-start cache produces converged-looking fits at the wrong optimum,
+*the worst failure mode in the system*. **The boundary matters**, because read loosely it
+sweeps in the audit settings and then re-running an audit at a different subsample size
+invalidates the store it is auditing:
+
+| fit-relevant (moves `θ̂`) | not fit-relevant |
+|---|---|
+| warm start enabled/disabled | audit subsample size and stratification |
+| coarse stride | whether the audit ran at all |
+| interpolation rule (fixed, but hashed so a second rule cannot silently share a store) | |
+| spiral bound and tie-break order | |
+
+**Two things to verify rather than assume:** that changing the **coarse stride** moves
+`fit_hash` and the warm-start cache — keyed `(fit_hash, candidate spec_hash)` — therefore
+refuses the stale entry; and the three `GOLDEN_*` constants, **re-derived by hand and
+verified by reversal**.
+
+**FOUR ALLOWLIST FINDINGS FROM FOUR QUESTIONS, ONE CAUSE.** `FIT_RELEVANT_FIELDS` was
+assembled at Task 16 **before the mechanisms that populate it existed**, so membership
+tracked what was known then rather than what determines `θ̂`: `metamer_version` (present,
+unpopulated), `candidates` (absent and unaddable — a hash expresses equality, a superset
+must be permitted), `data_uri` (a location, wrong in both directions), warm-start settings
+(absent, and they can move `θ̂` to a different optimum). **The positive rule now lives in the
+docstring:**
+
+> **A field is fit-relevant if changing it can move `θ̂` or `log_lik` for any input.** The
+> test for a new field is that question, **not precedent.**
+
 ### Q8 — screening, and `NOT_ATTEMPTED` meaning two things
 
 **Design doc §8.6, §11.1, §12.5 and §14.1 amended.** The screening *feature* is deferred

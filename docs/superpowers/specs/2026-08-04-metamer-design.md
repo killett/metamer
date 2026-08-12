@@ -1252,6 +1252,28 @@ Two consequences:
 Warm-starting is **disableable by config**, and whether it was used is recorded in
 provenance, because it changes the meaning of the output.
 
+**THE WARM-START SETTINGS ARE FIT-RELEVANT, AND THE BOUNDARY MATTERS (2026-08-11).** This
+section's own words make the argument: a stale warm-start cache produces converged-looking
+fits at the wrong optimum, *the worst failure mode in the system*. **A setting that can move
+`θ̂` to a different optimum is fit identity by definition.** But read loosely, "warm-starting
+is fit-relevant" sweeps in the audit settings, and then re-running an audit at a different
+subsample size would invalidate the store it is auditing — reintroducing exactly what the
+fit/compat split exists to prevent. So the split is stated:
+
+| fit-relevant — it changes `θ̂` | not fit-relevant — it does not |
+|---|---|
+| warm start enabled / disabled | audit subsample size and stratification |
+| coarse stride (which points are pass 1, hence what every pass-2 point starts from) | whether the audit ran at all |
+| interpolation rule — fixed at nearest-valid, but **the field exists and is hashed**, so a second rule can never silently share a store | |
+| spiral search bound and tie-break order — they select the source point | |
+
+**Two consequences to verify rather than assume**, per the name-is-not-a-gate rule: that
+changing the **coarse stride** moves `fit_hash` and the warm-start cache therefore refuses
+the stale entry — the cache key is `(fit_hash, candidate spec_hash)`, so it is automatically
+correct *if* the settings are really inside `fit_hash`, which is the thing to test rather
+than infer; and that the three `GOLDEN_*` constants move again and are **re-derived by hand
+and verified by reversal**, never regenerated from the failure.
+
 ### 11.3 Reproducibility guarantee, with preconditions
 
 > For a given (data, config, metamer version), output is **bitwise identical** regardless
@@ -1262,9 +1284,50 @@ floating-point reductions to reassociate.** The guarantee is stated *with* its
 preconditions, because an overclaimed determinism guarantee that fails once is worse than
 a precise narrower one:
 
-1. **Coarse-to-fine interpolation in pass 2 must be order-independent** — nearest-coarse-
-   point, or bilinear with a fixed evaluation order. A neighbourhood reduction whose
-   summation order depends on chunking breaks the guarantee. Tested.
+1. **Coarse-to-fine interpolation in pass 2 must be order-independent.** **RESOLVED
+   2026-08-11: NEAREST VALID COARSE POINT**, in index space, ties broken in a stated fixed
+   order (lowest `y`, then lowest `x`), searched outward in a fixed spiral until a coarse
+   point with an `OK` fit **for that candidate** is found. The fine→coarse mapping is index
+   arithmetic on **dataset** coordinates, so it is independent of tiling — which is what
+   makes the guarantee survive a memory-budget change. Tested.
+
+   **The decisive argument against bilinear is §4.5's exchangeability, and it is not
+   obvious — record it in full, because someone seeing only the practical arguments will
+   conclude bilinear is a strict improvement.**
+
+   > Two same-kind terms with a free timescale are exchangeable across the whole searched
+   > space, so **neighbouring coarse points can converge to different mirror images of the
+   > same optimum.** Bilinear then averages parameter vectors that are **not in a common
+   > labelling**, and the average of two mirror images is a point between them that is
+   > **neither** — sitting near the saddle that separates them. Bilinear is therefore not
+   > merely less accurate there; it is **worse than either corner**. And it degrades
+   > precisely where the likelihood is flat, which is where warm-starting is supposed to
+   > help and where §11.2 says hysteresis concentrates.
+
+   **Nearest-valid is immune because one source point supplies the whole `θ̂` vector**, so
+   the start is a converged fit rather than a blend of four.
+
+   The practical arguments point the same way. A bilinear stencil with 1–3 failed corners
+   needs a renormalization whose weights depend on **which** corner failed, so the rule
+   becomes a family of rules indexed by the failure subset. And a stencil straddling a
+   coastline initializes an ocean point partly from land, which is **wrong scientifically
+   before it is wrong numerically**. Nearest-valid has no stencil to straddle anything.
+
+   **The spiral is bounded, and exhaustion is a reported outcome.** Searching until an `OK`
+   coarse fit is found is unbounded when a candidate failed at every coarse point in a
+   region — or globally. **Cap the search radius; on exhaustion fall back to the moment-init
+   ladder with the rung recorded as such**, so "no warm start was available here" is a
+   reported fact rather than an invisible degradation, reusing the ladder-rung reporting
+   that already exists (§8.4).
+
+   **Record the source coarse index per point, at least across the audit subsample.** When
+   §11.2's audit reports a disagreement, the first question is what that point started from,
+   and reconstructing it afterwards means re-running the spiral. Cheap where it matters, and
+   it makes the audit **diagnosable** rather than only measurable.
+
+   **No config flag selects the rule.** The rule changes where the optimizer starts, so it
+   changes `θ̂`, so it is fit identity: a flag would fragment stores and every switch would
+   invalidate a 10⁷-point run.
 2. **Global diagnostic reductions** (mean `n_eff`, aggregate counts) either use a
    deterministic reduction order or are **explicitly excluded** from the claim.
 3. **numba `fastmath` off** (or documented as on with the guarantee weakened to "bitwise
@@ -1835,6 +1898,23 @@ compared it, and it identified a location rather than a content.
 **Hashing the validated, normalized pydantic model rather than the file text** normalizes
 away comments, key order, whitespace, and explicit-vs-default, so adding a comment does not
 invalidate a 10⁷-point store.
+
+**FOUR ALLOWLIST FINDINGS FROM FOUR BRAINSTORM QUESTIONS, AND ONE CAUSE (2026-08-11).**
+`FIT_RELEVANT_FIELDS` was assembled at Task 16, **before the mechanisms that populate it
+existed**, so its membership tracked what was known then rather than what determines `θ̂`:
+
+| field | what was wrong |
+|---|---|
+| `metamer_version` | present, and nothing under `src/` populated it |
+| `candidates` | absent, and §12.8's superset rule was enforced by nothing — and it **cannot** be added, because a hash expresses equality and a superset must be permitted; the gate is a positional comparison |
+| `data_uri` | present, but it names a *location*, so the gate was wrong in both directions at once |
+| warm-start settings | absent, and they can move `θ̂` to a **different optimum** |
+
+**The positive rule, going forward:**
+
+> **A field is fit-relevant if changing it can move `θ̂` or `log_lik` for any input.** The
+> test for a new field is that question, **not precedent** — the existing membership is
+> evidence of what was known in August 2026, not of what belongs.
 
 **Compat-relevance is an allowlist, not a denylist.** Fields are marked compat-relevant by
 explicit annotation. With a denylist, every newly added field silently becomes

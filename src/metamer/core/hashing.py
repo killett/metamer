@@ -131,6 +131,13 @@ FIT_RELEVANT_FIELDS = frozenset(
 )
 """Fields determining theta-hat and log_lik. Extending this is a deliberate act.
 
+THE TEST FOR MEMBERSHIP IS A QUESTION, NOT THIS LIST. **A field is fit-relevant if
+changing it can move `theta_hat` or `log_lik` for any input.** This set was
+assembled at Task 16, before the mechanisms that populate it existed, so it is
+evidence of what was known then and not of what belongs -- four separate omissions
+or errors were found in it during Phase 2 planning. Ask the question about a new
+field; do not reason from what is already here.
+
 Excludes the criterion set (AIC versus BIC does not move the optimum) and the
 candidate set (candidate-set extension is a legitimate incremental operation,
 and section 11.1 keys warm starts on `(fit_hash, candidate spec_hash)` -- the
