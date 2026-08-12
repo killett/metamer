@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(echo \"workspace rc=$?\")",
+      "Read(//tmp/claude-1000/**)",
+      "Bash(echo \"tmp filenames rc=$?\")"
+    ]
+  }
+}

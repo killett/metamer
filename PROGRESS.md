@@ -67,6 +67,20 @@
   also not evidence on its own, because the `machine` marker covers exactly the tests that
   pin the RSS shim's units and the per-core bandwidth claim, and those need a known machine.
 - **Verify a fresh checkout with:** `pixi run test && pixi run typecheck && pixi run lint`
+- **THE DEVELOPMENT ENVIRONMENT CANNOT TEST THE SHIPPED ARTIFACT, AND THAT IS A STANDING
+  REQUIREMENT.** `pixi run` executes off `PYTHONPATH=src` inside an environment that already
+  has everything, so a dependency the package fails to **declare** is invisible to every test
+  run that way — it fails only for users, and it recurs at every task that adds a dependency.
+  Same argument as (k): the property that must hold belongs to a *different* process.
+  `tests/test_packaging.py` is the guard and runs in the full sweep — it builds the wheel,
+  installs it into a clean virtual environment, and checks the artifact from inside that
+  environment. **Its stated limits are in its own docstrings; do not trust it further.**
+- **A RECORDED MEASUREMENT CARRIES ITS MEASUREMENT DATE.** A quoted figure drifts and a stale
+  one reads exactly like a fresh one. Second instance now: `pixi.lock` was quoted at 645 KB,
+  then 630 KB, and measured **635.6 KB on 2026-08-11** before Task 0 and **644 KB after** —
+  the first was the `tile_side` of 171 surviving in notes after the engines were fixed.
+  **Re-check the number, never the note**, and date the number so the next reader knows
+  whether re-checking is due.
 - **Remote:** https://github.com/killett/metamer — public. **`main` is now the working
   branch**: `phase-1` was fast-forwarded into it on 2026-08-07 for the publishing run.
 - **The package is now installable and CI runs.** `pyproject.toml` has a `hatchling` +
@@ -431,6 +445,46 @@ Only the durable conclusions are here.
   docstring — the reproduction recipe for its conditioning table — and **not** live code. So
   `fit(engine=...)` is the only engine construction site on the fit path and the injection
   seam is genuinely single.
+
+### Promoted after Task 0 (2026-08-11)
+
+Three findings were promoted out of Task 0 into standing rules, plus the guard that makes
+the third executable. The pre-flight now reads **(a)–(k) with (a2), (a3) and (i2)**.
+
+- **(i2) a pure negative needs a positive control** — see the pre-flight section below and
+  the handoff for the full statement and three further shapes.
+- **(e) gains the two-independent-guards outcome** as a third named cause of a surviving
+  mutation, with the corollary that doubled guards must be deliberate and cross-commented.
+- **`tests/test_packaging.py`** is the standing guard for "the development environment
+  cannot test the shipped artifact". It builds the wheel, installs it alone into a clean
+  virtual environment, and asks two separate questions: does the wheel **contain** what it
+  claims, and does it **ask for** what it needs. Both present to a user as `ImportError`
+  and have different causes, so they are two tests.
+
+- **THE CLEAN ENVIRONMENT WAS NOT CLEAN, AND ITS OWN CONTROL DID NOT NOTICE — (i2) APPLIED
+  TO THE GUARD ITSELF.** `pixi.toml` sets `PYTHONPATH = "src"` under `[activation.env]` and
+  **a subprocess inherits it**, so the first version's clean interpreter resolved `metamer`
+  out of `/workspace/src` — the development tree, the one thing the test exists to look
+  past — while every assertion still passed. The control checked only that *numpy* was
+  absent, which it genuinely was. **Two independent leaks with different causes**:
+  third-party packages through `system_site_packages=True`, and metamer itself through
+  `PYTHONPATH`. The control now asserts both, and a `metamer` that merely imports is not
+  evidence of anything until its `__file__` is shown to sit inside the environment.
+- **`find_spec` IS NOT A NON-EXECUTING CHECK.** It locates a module without running it and
+  **runs every parent package on the way**, and `metamer.core.__init__` eagerly imports the
+  family registry, which imports numpy. Measured: `ModuleNotFoundError` raised from inside
+  `find_spec`. Module presence in a dependency-free environment is a **filesystem** question,
+  walked outward from `metamer.__file__` — `metamer/__init__.py` touches only `_version`, so
+  it alone is safe to import.
+- **The requirement check is only as live as `src/` is**, and at Task 0 it is not live for
+  any batch dependency: nothing under `src/` imports them yet, so it passes on the core four
+  alone. **It becomes load-bearing the moment Task 1 imports pydantic.** It guards the
+  direction that hurts — imported but undeclared — and deliberately says nothing about
+  declared-but-unimported.
+- Bite-checked three ways, each against a different guard: a wheel built with
+  `packages = ["src/metamer/core"]` fails the ships-everything test; `psutil` removed from
+  `[project.dependencies]` fails the declaration test; restoring the `PYTHONPATH` leak fails
+  the isolation control.
 
 ---
 
@@ -1012,6 +1066,40 @@ argument — a passing suite is not evidence the brief is right.
   **zero** times in a 234-line brief was detectable in one command.
 - **(e) Do the tests bite?** Delete the guard each one protects and confirm it fails. Two of
   Task 9's tests replaced assertions that could not fail at all.
+
+  **A SURVIVING MUTATION HAS THREE CAUSES AND ONLY ONE IS A DEFECT.** Diagnose which before
+  acting; treating either of the other two as a coverage gap leads to deleting a real guard.
+
+  | cause | tell | response |
+  |---|---|---|
+  | no test protects the guard | removing the guard changes nothing observable anywhere | act on it |
+  | the mutated line is unreachable, a guard above fires first | removing that upper guard makes the mutation bite | defence in depth; write the compound mutation |
+  | **two independent guards, either sufficient** | **either alone does not bite; both at once does** | the code is doubly protected and the test is fine |
+
+  **The third is a named outcome with two instances**: Task 16's `_subset`, and Phase 2a
+  Task 0's wholly-masked batch, where `optimize_series`'s merged-precheck return and
+  `objective.evaluate`'s short-circuit each independently keep the engine unreached.
+  **Corollary: doubled guards must be DELIBERATE.** If neither author knew the other's guard
+  existed, a later simplification removes one because it looks dead — and it is dead only
+  because the other is there. Comment both, each naming the other.
+
+- **(i2) A PURE NEGATIVE NEEDS A POSITIVE CONTROL.**
+
+  > **Any assertion of the form "X did not happen" is unfalsifiable unless a paired test
+  > proves X CAN happen through the same wiring.** The control is not scaffolding — it is
+  > the half of the test that can fail.
+
+  Applies wherever the observable is an *absence*: no fit ran, no write occurred, no refit
+  happened, nothing was recompiled. An absence is produced equally well by the thing being
+  correctly suppressed and by the thing never being connected, and **the two are
+  byte-identical in the output.** Worked case: Phase 2a Task 0's raising stub engine, where
+  a stub never reached and a stub never wired are the same green.
+
+  **And the control earns its place by finding wrong beliefs about the code's SHAPE, not
+  just wiring faults** — on its first run it caught that the engine is handed `B = 1`, not
+  the tile's `B`, because `fit` drives `optimize_series` per series. A negative-only test
+  can never surface that: it has no successful path to be wrong about. Full statement and
+  three further shapes in the handoff.
 - **(f) Does the brief contradict a docstring already in the tree?** `objective.py` named
   `design_rank` in two places and the brief still passed `rank_x`.
 - **(g) Does every call the brief makes into an existing module match that module's
@@ -2483,6 +2571,23 @@ Still open. **A new session must not assume these were settled.**
     **Deliberately left open rather than fixed inside P4.** Restating the test means
     pinning the shim's inheritance contract, and pinning a contract in passing, inside a
     task about something else, is the change this project keeps paying for.
+
+13. **THE PACKAGING GUARD CANNOT RESOLVE DEPENDENCIES, SO A WRONG VERSION FLOOR IS
+    UNCAUGHT.** `tests/test_packaging.py` installs the wheel with `--no-deps --no-index`,
+    because there is **no `pip` in the pixi environment** and no network for one. So it
+    catches a requirement declared *nowhere* and cannot catch `numpy>=2.4` against code
+    that needs 2.5 — an unbacked lower bound, which `pyproject.toml`'s own comment says
+    floors must never be.
+
+    **What would close it:** an offline wheelhouse — `pip wheel` the resolved dependency
+    set once, cache it, and install `metamer[batch]` against it with
+    `--no-index --find-links`. That is a real install and would also exercise the extras
+    machinery. It needs pip in the environment (or a `[feature]` that provides one) and a
+    decision about where the wheelhouse lives, neither of which belongs inside a task about
+    something else. **Do not close it by loosening the floors**: an untested lower bound is
+    the thing being guarded, not the obstacle.
+
+12. **WHAT VALUE DOES A CHILD INHERIT AS ITS WATERMARK — continued.**
 
     **What would close it:** a standalone cross-process probe that varies the parent's
     current RSS and the parent's watermark *independently* — allocate, free, then spawn —

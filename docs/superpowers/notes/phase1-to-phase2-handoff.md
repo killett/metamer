@@ -89,11 +89,27 @@ one command. Task 15's brief never mentioned `fixed`, `state_dim` or `white + wh
 Delete the guard each one protects and confirm it fails. Two of Task 9's tests replaced
 assertions that could not fail at all.
 
-**A surviving mutation has two causes and they call for different responses:** no test
-protects the guard (act on it), or *the mutated line is unreachable because a guard above
-it fires first* (defence in depth working). The tell is whether removing that guard makes
-the mutation bite. Task 16's `_subset` is the worked case — reproducing the fence's bug
-required mutating **both halves at once**.
+**A surviving mutation has three causes and they call for different responses.** Diagnose
+which before acting; two of the three are not defects, and treating them as coverage gaps
+leads to deleting a real guard.
+
+| cause | tell | response |
+|---|---|---|
+| **No test protects the guard** | removing the guard changes nothing observable anywhere | act on it — write the test |
+| **The mutated line is unreachable** because a guard *above* it fires first | removing that upper guard makes the mutation bite | defence in depth working; write the compound mutation |
+| **TWO INDEPENDENT GUARDS, EITHER SUFFICIENT** | mutating **either alone** does not bite; mutating **both at once** does | the code is doubly protected and the test is fine |
+
+**The third is now a named outcome with two instances.** Task 16's `_subset` — an explicit
+`if missing: raise` above a comprehension — and Phase 2a Task 0's wholly-masked batch, where
+`optimize.optimize_series`'s merged-precheck return and `objective.evaluate`'s batch-level
+short-circuit each independently keep the engine unreached. **Reproducing the defect honestly
+requires mutating both halves at once.**
+
+> **The corollary, and it is the part that costs something later. Doubled guards are usually
+> good, but they must be DELIBERATE.** If neither author knew the other's guard existed, a
+> later simplification removes one on the grounds that it is dead — and it is dead only
+> because the other is there. **Comment both, each naming the other**, so the redundancy is
+> visible as a decision rather than as an accident waiting to be tidied away.
 
 ### (f) Does the brief contradict a docstring already in the tree?
 
@@ -121,6 +137,37 @@ three-N step-rule test passed against a deliberately broken step rule because it
 Ask what property of the fixture makes the defect visible; if the answer is "none", the
 fixture is wrong before the assertion is. A **quadratic cannot test a step rule** (third
 derivative zero). A fixture at `n_eff = 12` **cannot test a floor at 2.0**.
+
+### (i2) A PURE NEGATIVE NEEDS A POSITIVE CONTROL
+
+> **Any assertion of the form "X did not happen" is unfalsifiable unless a paired test
+> proves X CAN happen through the same wiring.** The control is not scaffolding around the
+> real test — **it is the half of the test that can fail.**
+
+(i) asks whether the fixture can express the defect. This asks something stronger and it
+applies whenever the *observable is an absence*: no fit ran, no write occurred, no refit
+happened, no network call was made, nothing was recompiled. An absence is produced equally
+well by the thing being correctly suppressed and by the thing never being connected, and
+**the two are byte-identical in the test output.**
+
+The worked case is Phase 2a Task 0's raising stub engine. A stub wired into a run and never
+reached is indistinguishable from a stub never wired in at all; every "no fit ran" assertion
+downstream passes for free the moment the injection seam moves. **The pairing that fixes it
+is a test that the stub DOES raise when a fittable batch goes through the same call.**
+
+**The control earns its place by finding wrong beliefs about the code's shape, not just
+wiring faults.** On its first run that one failed — the engine is handed `B = 1`, not the
+tile's `B`, because `fit` drives `optimize_series` once per series. That is exactly the
+class the pre-flight exists for, and **a negative-only test can never surface it**: it has no
+successful path to be wrong about.
+
+Three further shapes this covers, so it is not read as being about stubs:
+
+| the negative | the control it needs |
+|---|---|
+| a completion bit is not set after an injected interruption | the same injection point, not triggered, does set it |
+| a value edit does not move `geometry_hash` | a geometry edit through the same fingerprint call does move it |
+| a resume refits nothing | the same resume with one outstanding tile refits exactly that tile |
 
 ### (j) Does the oracle share a derivation path with the thing it checks?
 
@@ -246,9 +293,34 @@ two populations — converged fits at `3.46e-07 .. 2.30e-05` and fits stopped at
 iterations at `1.45e-04 .. 1.84e-02` — and both bounds are pinned by a test. Its previous
 `1e-5` sat *below* the converged population's maximum.
 
+### The development environment cannot test the shipped artifact
+
+> **`pixi run` executes off `PYTHONPATH=src` inside an environment that already has
+> everything, so a dependency the package fails to DECLARE is invisible to every test run
+> that way.** The property that must hold is a property of a *different process* — one that
+> has only what the distribution asked for — and no amount of testing in this one reaches
+> it. **This is the same argument as (k)**, one layer out from `PYTHONHASHSEED`.
+
+**It fails only for users, never for you**, and it recurs at *every* task that adds a
+dependency, which is what makes it a standing requirement rather than a finding. Phase 2a
+Task 0 is the worked instance: `xarray` and `pydantic` sat in `pixi.toml` while
+`pyproject.toml`'s `dependencies` named neither, and `tests/test_core_isolation.py` had been
+documenting a `[batch]` extra that did not exist since Phase 1.
+
+The guard is `tests/test_packaging.py`, in the full sweep: **build the wheel, install it into
+a clean virtual environment, and check the artifact from inside that environment** — that
+every module the package claims to ship is importable there, and that every third-party
+import under `src/` is named in the *wheel's own* metadata rather than in `pyproject.toml`.
+Its limits are stated in its own docstrings; read them before trusting it further than they go.
+
 ### The other standing rules
 
 - **Oracles must not share a derivation path** — see (j).
+- **A recorded measurement carries its measurement date**, because a quoted figure drifts
+  and a stale one reads exactly like a fresh one. Two instances: `pixi.lock` was quoted at
+  645 KB, then 630 KB, and measured 635.6 KB when Phase 2a Task 0 re-checked it; and the
+  `tile_side` of 171 survived in notes after the engines were fixed. **Re-check the number,
+  never the note** — and date the number so the next reader knows whether re-checking is due.
 - **Heterogeneous batches by default.** A homogeneous batch cannot expose a
   batch-granularity defect. Task 13's only real finding came from the one mutation that
   survived because every fixture had `B = 1`. Task 17's utilization measurement uses a
