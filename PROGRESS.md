@@ -26,7 +26,14 @@
   method.
 - **Exit criteria:** **13 met, 3 met with reduced scope, nothing deferred** — the full
   table with reasons is at the end of the Phase 1 plan.
-- **Next: Phase 2 needs an implementation plan.** Phase 1 is COMPLETE (Tasks 0–18; **Task 19
+- **NEXT ACTION: review the Phase 2a plan at**
+  [`docs/superpowers/plans/2026-08-11-metamer-phase2a.md`](docs/superpowers/plans/2026-08-11-metamer-phase2a.md)
+  **— written 2026-08-11, no code written yet, stopped for review as the brief required.**
+  P3 and P4 are done and pushed; the Phase 2 brainstorm settled all eight of the brief's
+  open questions (Q1–Q11 in the brainstorm section below) and amended design doc §11.1,
+  §11.1.1, §11.3, §12.3, §12.4, §12.5, §12.8, §13.2, §13.3, §13.4, §13.6, §13.7, §14.1
+  and §17 along the way.
+- ~~**Next: Phase 2 needs an implementation plan.**~~ Phase 1 is COMPLETE (Tasks 0–18; **Task 19
   deleted, not deferred** — path B won by ≥3×, so the batched trust-region has no purpose),
   and the three Phase 2 preliminaries **P0, P1 and P2 are done and pushed** — see the
   Phase 2 preliminaries section below. **Nothing is blocking.** Design doc §17 already
