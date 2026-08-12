@@ -658,7 +658,8 @@ early-return in the fit driver, so this is Phase 1.
 | `RANK_DEFICIENT_X` | design matrix exactly singular **for this series** (§5.2) |
 | `ILL_CONDITIONED_X` | design matrix technically full rank for this series but barely identified |
 | `DEGENERATE_HESSIAN` | near-degenerate Hessian at the optimum |
-| `NOT_ATTEMPTED` | candidate skipped — screened out, capability-excluded, or cost-refused |
+| `NOT_ATTEMPTED` | ~~candidate skipped — screened out, capability-excluded, or cost-refused~~ **CORRECTED 2026-08-11: nothing wrote here.** A skip that was DECIDED is `SCREENED_OUT`; see §12.5's grouping table |
+| `SCREENED_OUT` | a decision was taken not to fit this candidate — screened out, capability-excluded, or cost-refused |
 | `CANDIDATE_DROPPED` | candidate abandoned run-wide by the early-abort demotion path (§14.1) |
 | `INSUFFICIENT_DATA` | too few valid samples — land, permanent ice. **A legitimate expected outcome, excluded from every failure-rate denominator.** |
 
@@ -1144,11 +1145,21 @@ calibration-tile RSS measurement (§11.4), the cold reference for the hysteresis
 (§11.2), and the early-abort decision point (§14.1). Four mechanisms collapse into one
 pass.
 
-**Screening caution.** A candidate eliminated by coarse-grid screening is eliminated
-*everywhere*, which is a stronger assumption than per-point elimination — and the whole
-premise is that spectral shape varies spatially. Therefore: either screen **per-point in
-pass 2** (cheap; Whittle is O(N log N)), or require **unanimity across the coarse points**
-rather than an aggregate. Either way, record which candidates were eliminated globally so
+**Screening caution — RESOLVED 2026-08-11: elimination is PER-POINT, in pass 2.** A
+candidate eliminated by coarse-grid screening is eliminated *everywhere*, which is a
+stronger assumption than per-point elimination — and the whole premise is that spectral
+shape varies spatially, so the safer branch is the one that matches the premise. Whittle is
+O(N log N), so per-point is cheap. **If a global mode ever exists it requires unanimity
+across the coarse points, never an aggregate, and records the eliminated set in root
+attrs.**
+
+**The screening FEATURE is deferred and its REGIME is declared** (pre-flight (a3)): no
+Whittle engine exists — §17 places it in Phase 4 — so pass 1 ships without screening, while
+the config's screening block is validated and **refused at layer 3 with a message naming the
+missing engine specifically**: *"screening requires the debiased Whittle engine (Phase 4)"*.
+A refusal that says what would lift it is planning information; one that does not is a wall.
+`--explain` states that enabling screening would make the wall-time projection an upper
+bound (§13.4). A screened-out candidate is `SCREENED_OUT`, never `NOT_ATTEMPTED` (§12.5). Either way, record which candidates were eliminated globally so
 the output is not silently conditioned on a decision the user never saw. Screening scores
 are Whittle-engine scores and **must not be compared against final scores** (§6.2).
 
@@ -1446,6 +1457,53 @@ partial write reads as unattempted rather than as success.
 **Status is per `(point, model)`, not per point.** A candidate can fail where another
 succeeds — that is the near-degeneracy geography of §4.8 — and its spatial pattern is
 itself a diagnostic.
+
+**But in v1 the DESIGN-derived outcomes are constant along the model axis (2026-08-11).**
+`fit.py` computes `design_info(t, mask)` **once**, before the candidate loop, because §12.1's
+structural claim is that the signal spec is fixed and only the noise model is selected. So
+`INSUFFICIENT_DATA` and `RANK_DEFICIENT_X` are properties of `(design, mask)` and are
+identical for every `m`; only the noise fit varies. **Consequence — the cancellation rule
+reaching the store's model axis: a test asserting design-failure behaviour must vary the
+MASK, never the candidate**, or it compares a quantity that is constant across the axis it
+compares along. The axis is still right to exist, because joint signal × noise search (§19)
+fills it.
+
+**THE NON-FIT CODES ARE A GROUP, AND THE GROUPING IS WHAT §14.2's DENOMINATOR READS.**
+The store's status alphabet carries codes that are not fit verdicts, and they divide by
+**whether the store is making a claim**:
+
+| code | the store is saying | eligible? |
+|---|---|---|
+| `NOT_ATTEMPTED` | **nothing wrote here** — the absence of information | n/a, and a finished store should hold none |
+| `SCREENED_OUT` | a decision was taken not to fit this candidate | legitimate non-fit |
+| `CANDIDATE_DROPPED` | this candidate was demoted run-wide after early abort (§14.1) | legitimate non-fit |
+| `NOT_APPLICABLE` | **this location** is out of domain — land, permanent ice | **not eligible; leaves the denominator entirely** |
+| `INSUFFICIENT_DATA` | **this series** has too thin a record to fit | **eligible**; its rate is a real statement about record coverage |
+
+**`NOT_ATTEMPTED` and `SCREENED_OUT` are opposites in the only way that matters** — the
+absence of information against information — which is why §12.5 can initialize to the first
+and §14.1 must not use it to mean the second. §14.1's wording is corrected accordingly.
+
+**`NOT_APPLICABLE` and `INSUFFICIENT_DATA` coincide in the common case and are not
+synonyms.** A land pixel is all-masked and therefore also insufficient, which is what makes
+the synonym tempting; the coincidence is not guaranteed. A shelf pixel with a genuine but
+short record is `INSUFFICIENT_DATA` and emphatically eligible. Collapsing them makes the
+failure rate uninterpretable, which is the failure §14.2 exists to prevent.
+
+**`NOT_APPLICABLE` is UNDERIVABLE today, not merely unreachable.** The mask comes from the
+data, so a land pixel is all-NaN, hence all-masked, hence `INSUFFICIENT_DATA`; nothing can
+distinguish "land" from "every value happens to be NaN". Reaching it requires **a declared
+domain-mask variable in the input contract (§13.6)** — a second data source with its own
+entry in the geometry fingerprint, exactly like a per-point regressor.
+
+**Three members are unreachable in Phase 2's first sub-phase**, and they get one
+consolidated §18-criterion-12 note rather than three scattered exceptions:
+
+| member | what would make it reachable |
+|---|---|
+| `SCREENED_OUT` | the debiased Whittle engine (§17, Phase 4) plus the screening config block |
+| `CANDIDATE_DROPPED` | the early-abort logic of §14.1 |
+| `NOT_APPLICABLE` | a declared domain-mask variable in §13.6's input contract |
 
 **Store the primitives, not just the verdict.** `log_lik[y,x,m]`, `k[y,x,m]`,
 `n_eff_trend[y,x,m]`, `n_eff_bic[y,x,m]` make the store scientifically auditable rather than a
@@ -1912,8 +1970,9 @@ parameterization error.
 
 **Demotion, not only termination.** Dropping a single failing candidate and continuing with
 the rest is often the useful action. A dropped candidate gets the distinct
-`CANDIDATE_DROPPED` status across all remaining points — **not** `NOT_ATTEMPTED`, which
-means "screened out" — so the store records what happened, and the drop is a **headline
+`CANDIDATE_DROPPED` status across all remaining points — **not** `NOT_ATTEMPTED`
+(**corrected 2026-08-11**: that code means *nothing wrote here*; the decided skip is
+`SCREENED_OUT`) — so the store records what happened, and the drop is a **headline
 line in the report**, not a buried counter.
 
 `--no-early-abort` exists for datasets where high failure is genuinely expected.
