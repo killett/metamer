@@ -41,6 +41,7 @@ from typing import Any
 from metamer.batch.geometry import geometry_components, geometry_hash
 from metamer.batch.input import ContractReport, open_input
 from metamer.batch.input import check_contract as check_input_contract
+from metamer.batch.threads import Phase, thread_budget
 from metamer.batch.validation import (
     ValidationError,
     ValidationLayer,
@@ -49,6 +50,7 @@ from metamer.batch.validation import (
     load_config,
 )
 from metamer.config.model import Config
+from metamer.core import machine
 from metamer.core.lint import Finding
 
 
@@ -70,6 +72,11 @@ class RunReport:
         fit_hash: The gate on refitting.
         compat_hash: The gate on recomputing derived arrays.
         run_hash: Provenance, never a gate.
+        machine: This machine's fingerprint, read from the platform.
+        thread_limits: The OBSERVED thread limit per library, not the requested
+            one. Design doc section 11.3's determinism precondition.
+        phase_seconds: Wall-clock seconds per phase, so the ratio that justifies
+            serializing assemble and fit is recorded rather than assumed.
         warnings: Identifiability findings. **Warnings never move the exit
             code**; that is what makes it safe for them to be produced after
             stage 4a.
@@ -84,6 +91,9 @@ class RunReport:
     fit_hash: str | None
     compat_hash: str | None
     run_hash: str
+    machine: str
+    thread_limits: Mapping[str, int]
+    phase_seconds: Mapping[str, float]
     warnings: tuple[Finding, ...]
 
 
@@ -130,9 +140,11 @@ def run(
         store_path: Where the store goes. Echoed today; Task 8 creates it.
         memory_budget_gb: Overrides the config's `memory_budget_gb`. It is
             run-relevant, so the override reaches `run_hash` and neither gate.
-        observed_thread_limits: Observed thread limit per loaded library. Task 5
-            supplies these through `threadpoolctl`; None skips the check, and
-            `check_thread_limits` states what that costs.
+        observed_thread_limits: Observed thread limit per loaded library.
+            **The run observes its own by default** through
+            `batch.threads.thread_budget`; supplying them overrides the
+            observation and exists so a test can construct a mismatch this
+            machine cannot produce.
 
     Returns:
         What the run established.
@@ -145,32 +157,51 @@ def run(
     if memory_budget_gb is not None:
         config = _with_memory_budget(config, memory_budget_gb)
 
-    # LAYER 3 BEFORE THE OPEN. Every check that can fail here is
-    # data-independent, so a config fault is reported as a config fault even
-    # when the data is also unusable.
-    check_semantics(config, observed_thread_limits=observed_thread_limits)
+    # THE BUDGET IS ESTABLISHED BEFORE LAYER 3, because layer 3 is where the
+    # observed-versus-requested check reports, and it can only report on limits
+    # that have been set. Entering it can itself raise a layer-3 error: numba
+    # refuses a request larger than the machine allows.
+    with thread_budget(config.threads) as budget:
+        observed = (
+            budget.observed
+            if observed_thread_limits is None
+            else observed_thread_limits
+        )
 
-    handle = open_input(config.data_uri, config.variable)
-    contract = check_input_contract(handle)
+        # LAYER 3 BEFORE THE OPEN. Every check that can fail here is
+        # data-independent, so a config fault is reported as a config fault even
+        # when the data is also unusable.
+        check_semantics(config, observed_thread_limits=observed)
 
-    # The fingerprint is taken AFTER the contract, never before: section 13.7.
-    components = geometry_components(handle)
-    rollup = geometry_hash(components)
+        with budget.phase(Phase.ASSEMBLE):
+            handle = open_input(config.data_uri, config.variable)
+            contract = check_input_contract(handle)
 
-    # The lint needs a sampling interval, so it cannot run in a data-free layer.
-    # It is a warning and cannot move the exit code, which is what makes running
-    # it here safe -- see `batch.validation`'s module docstring.
-    warnings = identifiability_warnings(config, contract.median_dt)
+            # The fingerprint is taken AFTER the contract, never before: 13.7.
+            components = geometry_components(handle)
+            rollup = geometry_hash(components)
 
-    return RunReport(
-        config=config,
-        config_path=Path(config_path),
-        store_path=Path(store_path),
-        contract=contract,
-        components=components,
-        geometry_hash=rollup,
-        fit_hash=config.fit_hash(rollup),
-        compat_hash=config.compat_hash(rollup),
-        run_hash=config.run_hash(geometry_hash=rollup),
-        warnings=warnings,
-    )
+        # The lint needs a sampling interval, so it cannot run in a data-free
+        # layer. It is a warning and cannot move the exit code, which is what
+        # makes running it here safe -- see `batch.validation`'s docstring.
+        warnings = identifiability_warnings(config, contract.median_dt)
+
+        return RunReport(
+            config=config,
+            config_path=Path(config_path),
+            store_path=Path(store_path),
+            contract=contract,
+            components=components,
+            geometry_hash=rollup,
+            fit_hash=config.fit_hash(rollup),
+            compat_hash=config.compat_hash(rollup),
+            run_hash=config.run_hash(
+                machine=machine.fingerprint(), geometry_hash=rollup
+            ),
+            machine=machine.fingerprint(),
+            thread_limits=dict(observed),
+            phase_seconds={
+                phase.value: seconds for phase, seconds in budget.seconds.items()
+            },
+            warnings=warnings,
+        )

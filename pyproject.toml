@@ -184,6 +184,22 @@ ignore_missing_imports = true
 module = ["cftime.*"]
 ignore_missing_imports = true
 
+# threadpoolctl ships no type stubs. It is the mechanism behind the OBSERVED
+# thread limits (section 11.3), so src/metamer/batch/threads.py imports it
+# directly. Declared centrally, same pattern as scipy and cftime above.
+[[tool.mypy.overrides]]
+module = ["threadpoolctl"]
+ignore_missing_imports = true
+
+# psutil ships no type stubs and is imported from three places in
+# src/metamer/core/machine.py -- the RSS branches and the machine identity.
+# mypy reports an untyped import once per module, so per-import ignores make
+# whichever one it reaches first the only live comment and the rest unused.
+# Declared centrally, same pattern as scipy, cftime and threadpoolctl above.
+[[tool.mypy.overrides]]
+module = ["psutil"]
+ignore_missing_imports = true
+
 [[tool.mypy.overrides]]
 module = ["metamer._version"]
 ignore_missing_imports = true

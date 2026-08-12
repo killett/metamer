@@ -830,3 +830,218 @@ The cold-start summary said **693 collected** and the same file's "Tests:" bulle
 twelve lines apart. Measured: 693 before this task. **A recorded measurement carries its
 measurement date, and two undated copies of one measurement is how the drift starts.** There is
 now one number, and it is dated.
+
+---
+
+## Task 5 — the thread budget (audited 2026-08-12)
+
+Every finding below came from **running the instruments**, not from reading the brief. The
+brief's model of `threadpoolctl` — "it sets and reports, record every library it finds" — is
+right in intent and wrong about what "finds" means at the moment the check runs.
+
+### MEASURED: numba's threading layer is INVISIBLE until something parallel has run
+
+`threadpool_info()` immediately after `import numba` reports **OpenBLAS only**. `libgomp`
+appears only after a `prange` function has actually executed:
+
+    bare                -> []
+    after numpy         -> [openblas 4]
+    after import numba  -> [openblas 4]
+    after a prange call -> [openblas 4, openmp 4]
+
+**The layer-3 check runs at startup, which is exactly when the layer is not there.** So the
+brief's check, implemented literally, would report "every library observes 1" while the
+library the fit phase is about to use had not been loaded — and `threadpool_limits` does not
+retroactively limit a library loaded after it. **Name-is-not-a-gate, in the instrument this
+time**: a determinism precondition confirmed against a table that does not yet contain the
+thing whose determinism is at stake.
+
+**Changed:** the observation calls `numba.get_num_threads()` first, which **launches the
+threading layer as a side effect** — measured: `libgomp` is present in `threadpool_info()`
+immediately afterwards — so the table the check reads covers what the fit phase will use.
+Public API, not `numba.np.ufunc.parallel._launch_threads`.
+
+### MEASURED: `threadpool_limits(1)` does not change `numba.get_num_threads()`
+
+Inside `threadpool_limits(limits=1)`, `threadpool_info()` reports `openblas 1, openmp 1` while
+`numba.get_num_threads()` still reports **4**. They are different quantities: threadpoolctl
+caps the OpenMP runtime's pool, numba's mask is how many slices a `prange` is cut into, and a
+`prange` reduction reassociates over **numba's** count. So a check reading threadpoolctl alone
+certifies a determinism precondition that numba is not subject to.
+
+**Changed:** numba's limit is **set and observed through numba** and carried in the same table
+under its own key, beside the threadpoolctl entries. This is the design doc's "a precondition
+that holds for OpenBLAS while MKL runs multithreaded is not a precondition that holds" —
+occurring *within one process, between two instruments of the same OpenMP layer*, which is
+sharper than the cross-library case it was written for.
+
+### MEASURED: a genuine, unmocked observed-vs-requested mismatch exists, and the two libraries fail differently
+
+Requesting 1000 threads on this 4-core machine:
+
+    numba.set_num_threads(1000)              -> ValueError: The number of threads must be
+                                                between 1 and 4
+    threadpool_limits(limits=1000)           -> openblas 128, openmp 1000
+
+**OpenBLAS silently clamps to its build-time `NUM_THREADS=128`.** So one library refuses
+loudly and the other lies quietly, and **only the second is the dangerous one** — it is
+precisely the shape the check exists to catch, and it needs no mock to construct. That is the
+fixture: (i) is satisfied by a real machine limit rather than by a patched observer.
+
+numba's raise must be **staged as layer 3**, or an over-large `threads` in a config is an
+unhandled `ValueError`, i.e. exit code 1 — the (k2) alias again, one task later.
+
+### (a2) — `machine_fingerprint` is an IDENTITY, and `platform.processor()` returns `''` on Linux
+
+Classified before checking, per the rule. `machine_fingerprint` answers "what machine is this",
+so it is an **identity**: it must be populated by reading the machine. Today nothing in `src/`
+populates it, and its three arguments are supplied by the caller — the same shape as
+`registry_version` before Task 1.
+
+**Measured on this box:** `platform.processor()` is `''`, `platform.machine()` is `'x86_64'`,
+`/proc/cpuinfo`'s model name is `'Intel(R) N95'`, `psutil.cpu_count(logical=False)` is 4,
+`psutil.virtual_memory().total` is 16 535 728 128.
+
+**So the obvious source fails (a2)'s third fact: a change in the thing identified does not move
+the field.** `cpu_model=platform.processor()` gives `''` on *every* Linux box, so every Linux
+machine shares a fingerprint that differs only by core count and RAM. Harmless while the
+fingerprint reaches `run_hash` alone; at §11.4's calibration cache it is a gate, and two
+different CPUs sharing a key means one machine's bytes-per-series is reused on another against
+a hard RAM constraint. **Changed:** `core.machine` reads `/proc/cpuinfo` on Linux and
+`sysctl machdep.cpu.brand_string` on macOS, falls back to `platform.processor()` then
+`platform.machine()`, and **raises rather than returning an empty string** — an identity that
+cannot distinguish anything is worse than an error.
+
+### (d) — the brief does not say how the per-library table is KEYED, and the obvious key loses entries
+
+`{entry["internal_api"]: entry["num_threads"] for entry in threadpool_info()}` silently drops a
+second library with the same `internal_api`, and **numpy's OpenBLAS beside scipy's is the
+ordinary case** on a pip-installed stack. A dropped entry is a library whose limit is never
+checked, in a check whose whole point is per-library coverage.
+
+Measured here: `openblas` (`libopenblas`) and `openmp` (`libgomp`) — one entry each, so the
+collision is **not reachable in this environment**. The keying is still done by a function that
+disambiguates with the library's filename and the table is built from a list, so the guard is
+tested by handing that function a constructed two-OpenBLAS list rather than by waiting for an
+install that has one.
+
+### (a) — the assembly-concurrency clamp only ever LOWERS W, and that is the invariant
+
+`W = clamp(1, assembly_bytes // chunk_bytes, T)`. The upper clamp is a thread count, so read
+carelessly this is "concurrency derived from core count", which §11.1.1 forbids. It is not:
+clamping by `T` only ever reduces `W`, so `W * chunk_bytes <= assembly_bytes` holds regardless
+of `T`, and **peak RAM stays derivable from the budget alone**.
+
+**That is the assertion, not "W equals the expected number".** A test comparing `W` against a
+recomputed clamp shares the implementation's derivation path — (j) — and would pass against a
+formula that multiplied by core count in both places. The test asserts the **bytes** bound
+across a sweep of `T`, which is the property §11.1.1 actually states.
+
+### (c) — "one owner at a time" is prose that nothing enforces
+
+The brief and §11.1.1 both state that assemble and fit never overlap. Nothing in the tree makes
+that false-able, and the phase that would violate it does not exist until Tasks 6 and 9 — so it
+would ship as a sentence, and the first prefetch optimization would silently break it while
+every test stayed green.
+
+**Changed:** the budget hands out phases through a context manager that **raises on overlap**
+and accumulates elapsed seconds per phase. That makes the invariant executable now and makes
+§11.1.1's *"record the ratio, because if it inverts the decision needs revisiting and nothing
+else would show it"* a recorded quantity rather than an instruction to a future author.
+
+### (k) — thread limits and numba's mask are PROCESS-GLOBAL, and a test that sets them leaks
+
+`numba.set_num_threads` has no context-manager form and persists for the process, so a test
+that lowers it changes every later test in the same pytest session — the same class as the
+`run_spike` allocation that raised the session watermark and failed a test in another module.
+The budget restores both on exit, and the tests assert the restoration rather than assuming it.
+
+### (g) — signature binding
+
+`hashing.machine_fingerprint(cpu_model, cores, total_ram_bytes)`,
+`Config.run_hash(machine=None, geometry_hash=None)`,
+`batch.validation.check_thread_limits(requested, observed)` and
+`batch.run.run(..., observed_thread_limits=None)` all bind. The last two are Task 4's, and this
+task's job is to make the second argument non-vacuous.
+
+### Bite checks
+
+**22 mutations, 22 caught** — after **three survivors were diagnosed rather than accepted**, and
+each was a different one of (e)'s causes.
+
+| what was mutated | outcome |
+|---|---|
+| numba's layer never launched before the table is read | 1 failure |
+| numba's mask reported as the OpenMP entry | 1 failure |
+| keying collapses two libraries with the same api | 1 failure |
+| disambiguation applied unconditionally | 1 failure |
+| numba's limit set but threadpoolctl's not | 1 failure |
+| threadpoolctl limited but numba's mask left alone | 1 failure |
+| the budget does not restore numba's mask | **survived first** — see below |
+| numba's over-request `ValueError` escapes unstaged | 1 failure |
+| the phase guard never refuses an overlap | 1 failure |
+| the phase guard is one-shot rather than re-entrant | 1 failure |
+| no phase seconds accumulated | 1 failure |
+| an unmeasured ratio reported as infinity | 1 failure |
+| assembly concurrency taken straight from the core count | 1 failure |
+| the clamp written with `max` where `min` belongs | 1 failure |
+| the floor of one dropped, so a huge chunk gives zero workers | 1 failure |
+| a zero chunk size divided rather than refused | 1 failure |
+| cpu model taken from `platform.processor()` | 1 failure |
+| cpu model dropped from the fingerprint | 1 failure |
+| logical cores reported as physical | **survived first** — see below |
+| the run goes back to passing `None` for the observation | **survived first** — see below |
+| the report carries the request instead of the observation | 1 failure |
+| the machine fingerprint never reaches `run_hash` | 1 failure |
+
+**Survivor 1 — (k), a delta whose baseline is set by history outside the test.** The restore
+test read `before = numba.get_num_threads()`. The mutation makes an *earlier test in the same
+module* leave the mask at 1, so `before` reads 1, the budget sets 1, and nothing moved. Fixed by
+pinning the baseline explicitly: set the mask to 2, run the budget at 1, assert 2 came back.
+**The memory module documents this exact hazard in capitals and it recurred in a different
+subsystem** — documentation does not constrain the next author.
+
+**Survivor 2 — (i), the host cannot express the defect.** `logical=True` is indistinguishable
+from `logical=False` on a box with no SMT, and this one reports 4 and 4. Fixed the way the
+threadpool-keying collision was: the choice moved into `machine.choose_core_count(physical,
+logical)`, a pure function exercised with the inputs an SMT machine would supply. **A guard that
+only a different machine can test belongs in a function that takes the machine's numbers as
+arguments.**
+
+**Survivor 3 — no test protected the guard.** `report.thread_limits` is built from the
+observation whether or not layer 3 was given it, so a run that observes, records, and then hands
+`None` to `check_semantics` produces an identical report. The claim needed a test where the
+check *fires*: `run(..., observed_thread_limits={"openblas": 99})` must raise at layer 3.
+
+### MEASURED after implementation: `bench/` leaks numba's mask, and it silenced a test
+
+`bench/references.py` and `bench/spike.py` call `numba.set_num_threads` and never restore it.
+`test_bench.py` sorts before `test_threads.py`, so by the time the thread tests ran in the full
+sweep **the process mask was already 1** — and a skip guard written as "skip if fewer than two
+threads are available" turned the sharpest test in the module into a silent no-op. It passed in
+isolation every time. **A silent skip in a diagnostic is the worst available failure**, and this
+is the second instance in the project.
+
+**Recorded, not fixed in passing.** The honest fix is for `bench` to acquire its threads through
+`batch.threads.thread_budget`, and it cannot: `bench` sits under `metamer.bench` beside `core`,
+while the budget is batch-layer because `threadpoolctl` is a `[batch]` dependency and
+`metamer.core` must stay importable without it. That is a layering decision, not a two-line
+change, and pinning a contract in passing inside a task about something else is what this
+project keeps paying for.
+
+### MEASURED: observing numba's limit costs about 2.6 s of process start-up
+
+`python -m metamer` over a 24 x 2 x 3 fixture: **21.4 s cold, 6.4 s and 8.4 s warm**, against
+2.4 s for `python -c "import numba; numba.get_num_threads()"` through the same `pixi run`
+wrapper. Breakdown in one process: importing `batch.run` 5.25 s, importing numba 2.59 s,
+launching the threading layer 0.06 s, the first `run()` 9.57 s and every later one 0.03 s — so
+the cost is imports and page cache, and **Task 5's share is numba's import on a path that did
+not previously import it.**
+
+Worth stating rather than absorbing: for a ten-hour fit this is noise; for a validate-only
+invocation it is most of the wall time. It is not deferrable — the check is layer 3 and a
+precondition observed after the work is not a precondition — but Phase 5's `validate --explain`
+should know that its own start-up is dominated by a check it needs.
+
+The full sweep went **298 s to ~500 s**, most of it in `test_runner.py`'s subprocess tests, which
+now pay that start-up per invocation.

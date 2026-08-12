@@ -122,6 +122,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         f"{report.contract.n_x}  calendar={report.contract.calendar}  "
         f"unique_dt={report.contract.unique_dt}"
     )
+    # THE OBSERVED LIMITS, NOT THE REQUESTED ONE. A line reading
+    # "threads: 1" would be a record of what was asked for, and section 11.3's
+    # determinism precondition is a statement about what took effect.
+    observed = "  ".join(
+        f"{library}={limit}" for library, limit in sorted(report.thread_limits.items())
+    )
+    print(f"threads:    requested={report.config.threads}  observed: {observed}")
+    print(f"machine:    {report.machine}")
     print(f"run_hash={report.run_hash}  geometry_hash={report.geometry_hash}")
     print(
         "no store written: the tiling loop, the store schema and the resume "

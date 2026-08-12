@@ -27,7 +27,9 @@ import xarray as xr
 
 from metamer.batch.input import InputContractError
 from metamer.batch.run import run
+from metamer.batch.threads import NUMBA_KEY
 from metamer.batch.validation import ExitCode, ValidationError, ValidationLayer
+from metamer.core import machine
 
 # `to_zarr` warns that consolidated metadata is not in the v3 spec. It is
 # xarray's default and says nothing about this code.
@@ -418,3 +420,123 @@ def test_the_two_unreachable_codes_have_no_producer_in_this_sub_phase(tmp_path):
         _invoke(str(tmp_path / "absent.toml"), str(tmp_path / "out.zarr")).returncode,
     }
     assert reachable == {ExitCode.OK, ExitCode.CONFIG_INVALID}
+
+
+# --------------------------------------------------------------------------
+# The thread budget, wired (Task 5)
+# --------------------------------------------------------------------------
+
+
+def test_the_run_observes_its_own_thread_limits_rather_than_being_told_them(tmp_path):
+    """`run` observes, and the layer-3 check Task 4 wired is no longer vacuous.
+
+    Task 4 landed `check_thread_limits` with `observed=None` skipping it, and
+    pinned that vacuity so it was a recorded state rather than a belief. This is
+    the test that makes it non-vacuous: the run establishes a budget, observes
+    every library, and hands the table to layer 3 without a caller supplying it.
+
+    Bug this catches: `run` continuing to pass None. The check would then exist,
+    be tested in isolation, be called on every run, and never be able to fire --
+    which would satisfy exit criterion 10 with a check that observes nothing.
+    Every entry is asserted equal to the request, so a table containing one
+    library, or numba's mask left unset, fails here.
+    """
+    config = _config(tmp_path, _store(tmp_path), extra="\nthreads = 1\n")
+    report = run(config, tmp_path / "out.zarr")
+
+    assert len(report.thread_limits) >= 2
+    assert set(report.thread_limits.values()) == {1}
+    assert NUMBA_KEY in report.thread_limits
+
+
+def test_the_machine_fingerprint_reaches_the_run_hash(tmp_path):
+    """`run_hash` is computed WITH the platform's fingerprint.
+
+    `machine_fingerprint` is an identity and until this task nothing in `src/`
+    populated it. It is provenance today -- never a gate -- and section 11.4's
+    calibration cache key is where it becomes one, which is why it is wired from
+    the platform now rather than at the moment the cache exists.
+
+    Bug this catches: `run` calling `config.run_hash(geometry_hash=...)` with no
+    machine, which is what it did before this task. The hash is well-formed
+    either way, so the omission is invisible without comparing against the
+    hash the same config produces WITHOUT a fingerprint -- which is the
+    comparison made here.
+    """
+    report = run(_config(tmp_path, _store(tmp_path)), tmp_path / "out.zarr")
+
+    assert report.machine == machine.fingerprint()
+    assert report.run_hash == report.config.run_hash(
+        machine=report.machine, geometry_hash=report.geometry_hash
+    )
+    assert report.run_hash != report.config.run_hash(geometry_hash=report.geometry_hash)
+
+
+def test_thread_counts_stay_out_of_both_gates(tmp_path):
+    """Changing `threads` moves `run_hash` and neither `fit_hash` nor `compat_hash`.
+
+    **The determinism guarantee and the hash boundary are the same claim stated
+    twice** (section 11.3): if thread count moved `fit_hash`, the boundary would
+    be conceding that the guarantee does not hold.
+
+    Bug this catches: `threads` added to either allowlist -- at which point two
+    runs of the same science at different thread counts stop sharing a store and
+    a finished 10^7-point run refits. Each expected value is spelled out rather
+    than asserted as a relation between the two moves, because "both moved" and
+    "neither moved" satisfy an equality equally well.
+    """
+    uri = _store(tmp_path)
+    one = run(
+        _config(tmp_path, uri, extra="\nthreads = 1\n"),
+        tmp_path / "a.zarr",
+    )
+    two = run(
+        _config(tmp_path, uri, extra="\nthreads = 2\n", name="d.toml"),
+        tmp_path / "b.zarr",
+    )
+
+    assert one.fit_hash == two.fit_hash
+    assert one.compat_hash == two.compat_hash
+    assert one.run_hash != two.run_hash
+
+
+def test_asking_for_more_threads_than_the_machine_has_exits_three(tmp_path):
+    """An unhonourable thread request is a layer-3 failure through the process.
+
+    **Measured:** `numba.set_num_threads(1000)` raises on a 4-core box. Staged,
+    that is exit code 3; unstaged it is an unhandled exception and Python
+    reports **exit code 1**, which this taxonomy defines as "completed with
+    failures above threshold" -- a run that finished badly rather than a config
+    that was never runnable.
+
+    Bug this catches: the budget raising a bare `ValueError`. The distinction is
+    invisible in-process, because both look like an exception; it is only the
+    process's exit code that differs, which is why this is a subprocess test.
+    """
+    config = _config(tmp_path, _store(tmp_path), extra="\nthreads = 100000\n")
+    result = _invoke(str(config), str(tmp_path / "out.zarr"))
+
+    assert result.returncode == ExitCode.CONFIG_INVALID
+    assert "layer 3 (semantic)" in result.stderr
+    assert "Traceback" not in result.stderr
+
+
+def test_a_mismatched_observation_reaches_layer_3_through_the_runner(tmp_path):
+    """The observation is what layer 3 checks, not a value the run discarded.
+
+    `report.thread_limits` alone cannot establish this: a run that observes the
+    limits, records them, and hands `None` to layer 3 produces an identical
+    report. **Measured -- that mutation survived** until this test existed.
+
+    Bug this catches: exactly that. The check would then be called on every run,
+    tested in isolation, and unable to fire -- which is exit criterion 10
+    satisfied by a check that observes nothing. The table is supplied here
+    because this machine cannot be made to disagree with itself on demand; the
+    unmocked disagreement lives in `tests/test_threads.py`, where OpenBLAS
+    clamps an over-large request.
+    """
+    config = _config(tmp_path, _store(tmp_path), extra="\nthreads = 1\n")
+    with pytest.raises(ValidationError) as caught:
+        run(config, tmp_path / "out.zarr", observed_thread_limits={"openblas": 99})
+    assert caught.value.layer is ValidationLayer.SEMANTIC
+    assert "openblas" in str(caught.value)

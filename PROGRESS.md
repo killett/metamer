@@ -5,12 +5,14 @@
 - **Branch:** `main`. **Last commit:** `git log --oneline -1`. All Phase 2 work is on `main`;
   `phase-1` is a stale name that never diverged and needs nothing done to it.
 - **DONE: Phase 1 Tasks 0–18 (Task 19 deleted), Phase 2 preliminaries P0–P4, and Phase 2a
-  Tasks 0, 1, 2, 3 and 4.**
-- **NEXT: Phase 2a Task 5 — the thread budget: ownership, `threadpoolctl`, and the
-  observed-limits check.** Read **[WHAT TASK 5 INHERITS](#what-task-5-inherits--read-this-before-the-task-sections-below)**
+  Tasks 0, 1, 2, 3, 4 and 5.**
+- **NEXT: Phase 2a Task 6 — tiling: `tile_side` from the budget, the tile iterator, and read
+  amplification.** Read **[WHAT TASK 6 INHERITS](#what-task-6-inherits--read-this-before-the-task-sections-below)**
   below before the plan; it carries what the plan does not.
-- **Tests: 743 collected (measured 2026-08-12, after Task 4).** `pixi run test` is the full
-  sweep (~298 s, measured 2026-08-12) and is what every end-of-task verification must run.
+- **Tests: 782 collected (measured 2026-08-12, after Task 5).** `pixi run test` is the full
+  sweep (**~500 s, measured 2026-08-12 — it was 298 s before Task 5**; the rise is process
+  start-up in `test_runner.py`'s subprocess tests, which now import numba to observe its thread
+  limit) and is what every end-of-task verification must run.
   `pixi run test-fast` deselects `slow` and is for iteration only — **a green fast run is not
   evidence a task is done.** Verify a fresh checkout with
   `pixi run test && pixi run typecheck && pixi run lint`.
@@ -51,12 +53,12 @@
   MacBook: `--threads 1 --threads 8`, `--out bench/macbook.json`.
   Batch sweep at path B's worst cell (d=3, 1 thread, no gaps) is
   `bench/batch-sweep-d3-1thread-nogaps.json`.
-- **Tests:** **743 collected, measured 2026-08-12** (588 at the close of Phase 1; Phase 2a
-  Tasks 0–4 added the batch-skeleton, stub-engine, packaging, config, input, geometry,
-  validation-staging and runner modules). **This bullet said 692 while the cold-start summary
+- **Tests:** **782 collected, measured 2026-08-12** (588 at the close of Phase 1; Phase 2a
+  Tasks 0–5 added the batch-skeleton, stub-engine, packaging, config, input, geometry,
+  validation-staging, runner, thread-budget and machine-identity modules). **This bullet said 692 while the cold-start summary
   twelve lines above said 693** — two undated copies of one measurement, which is how the drift
   starts. One number now, dated. Full sweep
-  `pixi run test` (~298 s, measured 2026-08-12). `pixi run test-fast` (~12 s)
+  `pixi run test` (~500 s, measured 2026-08-12). `pixi run test-fast` (~12 s)
   deselects the `slow` marker and is for iteration only — **a green fast run is not evidence
   a task is done.** `pixi run test-ci` reproduces what CI runs (`-m 'not machine'`); it is
   also not evidence on its own, because the `machine` marker covers exactly the tests that
@@ -132,7 +134,7 @@
 | Phase 1 task tracker | `docs/superpowers/plans/2026-08-05-metamer-phase1.md.tasks.json` (native task ids 8–27) |
 | Original build prompt | [`docs/phase1-prompt.md`](docs/phase1-prompt.md) — **superseded** by design doc §2 where they conflict |
 | Phase 2 preliminaries pre-flight | [`docs/superpowers/notes/phase2-preliminaries-preflight.md`](docs/superpowers/notes/phase2-preliminaries-preflight.md) — the (a)–(k) audit of the P0/P1/P2 briefs and what each finding changed |
-| **Phase 2a implementation plan** | [`docs/superpowers/plans/2026-08-11-metamer-phase2a.md`](docs/superpowers/plans/2026-08-11-metamer-phase2a.md) — **Tasks 0–4 done; Task 5 next** |
+| **Phase 2a implementation plan** | [`docs/superpowers/plans/2026-08-11-metamer-phase2a.md`](docs/superpowers/plans/2026-08-11-metamer-phase2a.md) — **Tasks 0–5 done; Task 6 next** |
 | **Phase 2a pre-flight, per task** | [`docs/superpowers/notes/phase2a-preflight.md`](docs/superpowers/notes/phase2a-preflight.md) — the (a)–(k) audit of each 2a task brief and what each finding changed. **Append to it before each task, not after.** |
 
 Phase list is design doc §17. Phase 1 exit criteria are §18. Do not duplicate either here.
@@ -386,39 +388,42 @@ Per-task pre-flight audits live in
 [`docs/superpowers/notes/phase2a-preflight.md`](docs/superpowers/notes/phase2a-preflight.md).
 Only the durable conclusions are here.
 
-### WHAT TASK 5 INHERITS — read this before the task sections below
+### WHAT TASK 6 INHERITS — read this before the task sections below
 
-Task 5 is the thread budget: ownership, `threadpoolctl`, and the observed-limits check.
+Task 6 is tiling: `tile_side` from the byte budget, the tile iterator, and read amplification.
 Everything it needs that is **not** in the plan:
 
-**THE LAYER-3 WIRING IS ALREADY THERE AND TASK 5 SUPPLIES THE OBSERVATION INTO IT.**
-`batch.validation.check_thread_limits(requested, observed)` raises a layer-3 `ValidationError`
-naming every library whose observed limit differs, and `check_semantics` calls it;
-`run(..., observed_thread_limits=...)` is the injection point. **`observed=None` skips the
-check, and that vacuity is Task 5's to remove** — it is pinned by a test today so the state is
-visible rather than believed. Task 5 replaces `None` with the `threadpoolctl` table; it must
-not invent a second error type, or exit criterion 10 gets satisfied by something that is not a
-layer-3 failure.
+**THE PHASE MECHANISM EXISTS AND TASK 6 IS ITS FIRST REAL CONSUMER.**
+`batch.threads.ThreadBudget.phase(Phase.ASSEMBLE | Phase.FIT)` **raises on overlap** and
+accumulates seconds per phase, and `run` already opens the input inside an `ASSEMBLE` phase.
+Task 6's tile read goes inside `ASSEMBLE` and Task 9's fit inside `FIT`. **Do not prefetch tile
+`N+1` during tile `N`'s fit** — it doubles the tile term in the memory formula and the guard
+will refuse it, which is the intent.
 
-**Record the observed limit for EVERY library `threadpoolctl` finds** — OpenBLAS, MKL, OpenMP,
-numba's layer. `OMP_NUM_THREADS=1` in provenance records a *request*, and whether it took
-effect depends on import ordering nothing enforces. A precondition that holds for OpenBLAS
-while MKL runs multithreaded is not a precondition that holds.
+**`assembly_concurrency(assembly_bytes, chunk_bytes, max_workers)` is written and unconsumed**,
+because 2a uses `.load()` rather than dask so `W` is 1 in practice. Its invariant is
+`W * chunk_bytes <= assembly_bytes` for every `max_workers` — the clamp only ever lowers `W`, so
+peak stays budget-derived. **The floor of 1 is the one place peak can exceed the assembly budget
+and it is irreducible**, so a memory budget must leave room for at least one input chunk. Task 6
+computes `chunk_bytes` from the input's zarr chunking, which is also what read amplification
+needs.
 
-**`machine_fingerprint`'s arguments come from `core.machine`, never from the config**, and the
-reason is (a2): it is self-reported at its own boundary, harmless while it reaches `run_hash`
-alone, and an **identity** the moment §11.4's calibration cache key reads it. Wire it from the
-platform before the cache exists, because retrofitting means invalidating whatever the cache
-already holds.
+**Budget against `memory.resident_bytes_per_series`, never against `bytes_per_series`.** The
+model and the resident number agree to 0.5% today and that is a measurement, not a guarantee.
+**And a tile side carries its backend**: at §9.4's worked example `NUMBA_BATCHED` gives 338
+shared / 186 per-point and `COMPILED` gives 361 / 189 (measured 2026-08-12) — see
+`batch.validation._WORKED_EXAMPLE_BACKEND`, which already computes both live rather than
+quoting them.
 
-**Thread counts reach `run_hash` only.** If they moved `fit_hash` the hash boundary would be
-conceding that §11.3's determinism guarantee does not hold. The guarantee and the boundary are
-the same claim stated twice.
+**`--explain` reports read amplification (bytes read / bytes used)**, and 2a **measures and
+records** it while Phase 5 prints it: measure in the phase that can, print in the phase that
+shows. zarr reads whole chunks, so a tile straddling chunk boundaries silently reads several
+times what it needs and nothing else would say so. **This replaces the graph-chunk cap** as the
+guard against a pathological input; tile geometry should align with input chunk geometry where
+possible.
 
-**Assemble and fit never overlap, and the RATIO is the thing to record** — at ~5.4 s per series
-against a tile read of order seconds, fit dominates and the idle I/O is free. If that inverts
-(cheaper model, slower store, object storage over a network) the decision needs revisiting and
-nothing else would show it.
+**2a defines no coarse-grid stride.** That is 2c's pass 1, and its five downstream consumers are
+listed in §11.1 rather than left to be rediscovered.
 
 ### What the whole rest of 2a inherits from Task 4
 
@@ -488,6 +493,63 @@ promised in argument form. **Task 9 is the first task that fits and is where it 
 | **12** | Does a child inherit the parent's **watermark** or its **current RSS**? Both instruments are load-bearing for 2b's calibration tile | a standalone cross-process probe varying the two independently — allocate, free, spawn — on Linux and macOS, then state the answer in `machine.py` and restate the test |
 | **13** | The packaging guard installs `--no-deps`, so a **wrong version floor** is uncaught | an offline wheelhouse: `pip wheel` the resolved set once, install `metamer[batch]` with `--no-index --find-links`. **Do not close it by loosening the floors** |
 | **14** | The benchmarks use a synthetic axis with `unique_dt = 1`; real monthly data has **6** | run the spike with a realistic calendar axis beside the synthetic one at the same B and thread count. **"It plausibly cancels in the ratio" is the reasoning that has failed twice** — measure it |
+
+### Task 5 — the thread budget (done)
+
+- **NUMBA'S THREADING LAYER IS INVISIBLE TO `threadpool_info()` UNTIL SOMETHING PARALLEL HAS
+  RUN.** Measured 2026-08-12: after `import numba` the table holds OpenBLAS alone; `libgomp`
+  appears only once a `prange` function has executed. **The layer-3 check runs at startup, which
+  is exactly when the layer is not there** — and `threadpool_limits` does not retroactively limit
+  a library loaded after it, so the check would certify "every library observes 1" about a table
+  missing the library whose determinism is at stake. `observe_thread_limits` calls
+  `numba.get_num_threads()` first, which launches the layer as a side effect of a public call.
+- **`threadpool_limits(1)` DOES NOT CHANGE `numba.get_num_threads()`.** Measured: inside the
+  limit, `threadpool_info()` reports `openblas 1, openmp 1` while numba still reports 4. They are
+  different quantities — threadpoolctl caps the OpenMP runtime's pool, numba's mask is how many
+  slices a `prange` is cut into, and **a `prange` reduction reassociates over numba's count**. So
+  numba's limit is set and observed *through numba*, under its own key beside the threadpoolctl
+  entries. This is §11.3's "a precondition that holds for OpenBLAS while MKL runs multithreaded
+  is not a precondition that holds", occurring **within one process between two instruments of
+  the same OpenMP layer**.
+- **A GENUINE, UNMOCKED OBSERVED-VERSUS-REQUESTED MISMATCH EXISTS, AND THE TWO LIBRARIES FAIL
+  DIFFERENTLY.** Requesting 1000 threads on this 4-core box: `numba.set_num_threads(1000)` raises
+  `ValueError: The number of threads must be between 1 and 4`, while
+  `threadpool_limits(limits=1000)` leaves **OpenBLAS reporting 128** — its build-time
+  `NUM_THREADS` — and OpenMP reporting 1000. **One library refuses loudly and the other lies
+  quietly, and only the second is the dangerous one.** numba's raise is staged as layer 3; an
+  unstaged one is exit code 1.
+- **`platform.processor()` RETURNS `''` ON LINUX, SO THE OBVIOUS CPU SOURCE FAILS (a2)'s THIRD
+  FACT.** A fingerprint built on it is identical on every Linux box, differing only by core count
+  and RAM — an identity that cannot distinguish what it identifies. `core.machine.cpu_model()`
+  reads `/proc/cpuinfo` (measured here: `Intel(R) N95`), then macOS's
+  `machdep.cpu.brand_string`, then the two `platform` fallbacks, and **raises rather than
+  returning `""`**. Harmless while the fingerprint reaches `run_hash` alone; at §11.4's
+  calibration cache it is a gate.
+- **THE OBVIOUS PER-LIBRARY KEY LOSES ENTRIES.** `{entry["internal_api"]: ...}` drops one of two
+  libraries sharing an API, and **numpy's OpenBLAS beside scipy's is the ordinary case** on a
+  pip-installed stack. Not reachable in this environment (one `libopenblas`, one `libgomp`), so
+  `library_table` takes the info list and is tested with a constructed collision — the same
+  pattern as `machine.choose_core_count`.
+- **`bench/` LEAKS NUMBA'S MASK AND IT SILENCED A TEST.** `bench/references.py` and
+  `bench/spike.py` call `numba.set_num_threads` and never restore it; `test_bench.py` sorts
+  before `test_threads.py`, so in the full sweep the mask was already 1 and a skip guard reading
+  the ambient value turned the module's sharpest test into a silent no-op. It passed in isolation
+  every time. **Recorded, not fixed in passing**: the honest fix is for `bench` to take its
+  threads through `batch.threads.thread_budget`, and it cannot — `bench` sits beside `core`,
+  which must stay importable without `threadpoolctl`. **That is a layering decision and it is
+  owed work.** Meanwhile no test may read the ambient mask as a baseline.
+- **THREE MUTATIONS SURVIVED FIRST AND EACH WAS A DIFFERENT CAUSE**: a delta whose baseline is
+  set by history outside the test (the restore test); a host that cannot express the defect (no
+  SMT here, so `logical=True` is indistinguishable — moved into
+  `machine.choose_core_count(physical, logical)`); and a guard no test protected (the run could
+  observe, record, and still hand `None` to layer 3). **22/22 after the diagnoses.**
+- **OBSERVING NUMBA'S LIMIT COSTS ~2.6 s OF PROCESS START-UP.** `python -m metamer` over a tiny
+  fixture: **21.4 s cold, 6.4 s warm**; the full sweep went **298 s to ~500 s**. Not deferrable —
+  a precondition observed after the work is not a precondition — but Phase 5's
+  `validate --explain` should know its start-up is dominated by a check it needs.
+- **The layer-3 thread check is no longer vacuous.** Task 4 shipped it with `observed=None`
+  skipping and pinned that vacuity; `run` now observes its own limits and the pin is a live
+  assertion.
 
 ### Task 4 — validation staging, exit codes, and `python -m metamer` (done)
 
@@ -2609,6 +2671,15 @@ question; compute/bandwidth roofline pair for cross-machine prediction) are in d
   hazard the module's own docstring describes, arriving from a different file** — the
   baseline is the whole session, so any test anywhere can set it.
 - **The RSS shim's inheritance contract is under-specified — see open question 12.**
+- **`bench/references.py` AND `bench/spike.py` SET NUMBA'S THREAD MASK AND NEVER RESTORE IT**
+  (found 2026-08-12 during Task 5). `numba.set_num_threads` has no context-manager form and
+  persists for the process, so **every measurement taken after `bandwidth_reference` runs in the
+  same process is single-threaded** and `test_bench.py` sorting before `test_threads.py` left the
+  mask at 1 for the rest of the sweep. A test in `test_threads.py` that read the ambient mask as
+  its baseline was silently skipped by it and passed in isolation every time. **No test may read
+  the ambient mask as a baseline**, and the owed fix is for `bench` to acquire threads through
+  `batch.threads.thread_budget` — which needs a layering decision, because `bench` sits beside
+  `core` and `core` must stay importable without `threadpoolctl`.
 - Per user global instructions: never do investigative `git checkout <sha>` inside the
   working tree. Use `git show <sha>:<path>`, `git worktree add`, or `git diff <sha>`.
 
@@ -2773,6 +2844,17 @@ Still open. **A new session must not assume these were settled.**
     ballast moving a 991.7 MB watermark by **exactly zero**. **A delta whose baseline is set by
     history outside the test is order-dependent by construction**, and the fix is to pin the
     inheritance contract rather than to retry the test.
+
+    **OBSERVED AGAIN ON 2026-08-12**, at the end of Phase 2a Task 5's verification and **not
+    caused by it**: the full sweep failed on it once (781 passed, 1 failed), and
+    `tests/test_memory.py` alone then passed 16/16 and the single test in true isolation passed
+    — no source change between. Task 4's full sweep had been green on this test the same day.
+    That is the third recorded instance of the same pattern and it adds nothing new: the
+    baseline is the session watermark, so a full sweep that allocated more before reaching
+    `test_memory.py` fails it and one that did not, does not. **Task 5 raised the sweep's
+    allocation profile** — every `run()` now imports numba and launches its threading layer — so
+    the sweep is now more likely to fire it, which is a fact about the baseline rather than about
+    the child measurement.
 
     **Do not "fix" it by loosening the ratio or by reordering the module.** Either hides the
     measurement that would answer the question, and this project has paid for pinning a
