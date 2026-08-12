@@ -48,6 +48,26 @@ test = [
     "pytest>=9",
     "celerite2>=0.3",
 ]
+# The batch layer -- metamer.batch and metamer.config -- and nothing else. These
+# are deliberately NOT in [project.dependencies]: metamer.core must stay usable
+# for a consumer who wants the likelihood spine and not the store, and
+# tests/test_core_isolation.py is what holds that line.
+#
+# THIS EXTRA IS WHY THE EXTRA EXISTS AT ALL. That isolation test was written in
+# Phase 1 and its docstring already referred to "the [batch] extra", which did
+# not exist -- so the packaging contract it describes was enforced by nothing.
+# `pixi run` executes off PYTHONPATH=src inside a complete environment, so an
+# import that would break the published wheel is invisible in development and
+# surfaces only for someone who ran `pip install metamer[batch]`.
+#
+# zarr's floor is a MAJOR-version claim, not a tested-against one: the v2 and v3
+# on-disk layouts are different formats and the store schema needs v3 sharding.
+batch = [
+    "xarray>=2026.7",
+    "zarr>=3,<4",
+    "pydantic>=2.13",
+    "threadpoolctl>=3.6",
+]
 
 [project.urls]
 Homepage = "https://github.com/killett/metamer"

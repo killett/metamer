@@ -106,6 +106,18 @@ h5py = "*"
 cftime = "*"
 cfchecker = "*"
 numba = ">=0.66.0,<0.67"
+# Phase 2a. `xarray` and `pydantic` were already here; `threadpoolctl` was
+# already INSTALLED, transitively and undeclared, which is a dependency nothing
+# guarantees -- and Task 5's whole subject is the difference between a limit
+# that is requested and one that is observed.
+#
+# zarr's major version is pinned rather than left at "*". The v2 and v3 on-disk
+# layouts are different formats, the store schema depends on v3 sharding, and
+# `exclude-newer` makes an unpinned solve a function of wall-clock time: "*"
+# resolves to 3.x today because of which release is current, not because
+# anything says so. `tests/test_batch_skeleton.py` asserts the pin took effect.
+zarr = ">=3,<4"
+threadpoolctl = ">=3.6"
 
 [pypi-dependencies]
 

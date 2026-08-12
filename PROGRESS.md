@@ -26,9 +26,12 @@
   method.
 - **Exit criteria:** **13 met, 3 met with reduced scope, nothing deferred** — the full
   table with reasons is at the end of the Phase 1 plan.
-- **NEXT ACTION: review the Phase 2a plan at**
-  [`docs/superpowers/plans/2026-08-11-metamer-phase2a.md`](docs/superpowers/plans/2026-08-11-metamer-phase2a.md)
-  **— written 2026-08-11, no code written yet, stopped for review as the brief required.**
+- **NEXT ACTION: Phase 2a Task 1 — the config model, `load()`, and the hash wiring.**
+  Task 0 is done and committed. Run the (a)–(k) pre-flight against Task 1's brief first and
+  append the result to
+  [`docs/superpowers/notes/phase2a-preflight.md`](docs/superpowers/notes/phase2a-preflight.md),
+  as Task 0 did. The plan is
+  [`docs/superpowers/plans/2026-08-11-metamer-phase2a.md`](docs/superpowers/plans/2026-08-11-metamer-phase2a.md).
   P3 and P4 are done and pushed; the Phase 2 brainstorm settled all eight of the brief's
   open questions (Q1–Q11 in the brainstorm section below) and amended design doc §11.1,
   §11.1.1, §11.3, §12.3, §12.4, §12.5, §12.8, §13.2, §13.3, §13.4, §13.6, §13.7, §14.1
@@ -56,7 +59,9 @@
   MacBook: `--threads 1 --threads 8`, `--out bench/macbook.json`.
   Batch sweep at path B's worst cell (d=3, 1 thread, no gaps) is
   `bench/batch-sweep-d3-1thread-nogaps.json`.
-- **Tests:** **588 collected.** Full sweep `pixi run test` (~280 s). `pixi run test-fast` (~12 s)
+- **Tests:** **612 collected** (588 at the close of Phase 1; Phase 2a Task 0 added the
+  batch-skeleton and stub-engine modules and one isolation guard). Full sweep
+  `pixi run test` (~240 s). `pixi run test-fast` (~12 s)
   deselects the `slow` marker and is for iteration only — **a green fast run is not evidence
   a task is done.** `pixi run test-ci` reproduces what CI runs (`-m 'not machine'`); it is
   also not evidence on its own, because the `machine` marker covers exactly the tests that
@@ -108,7 +113,8 @@
 | Phase 1 task tracker | `docs/superpowers/plans/2026-08-05-metamer-phase1.md.tasks.json` (native task ids 8–27) |
 | Original build prompt | [`docs/phase1-prompt.md`](docs/phase1-prompt.md) — **superseded** by design doc §2 where they conflict |
 | Phase 2 preliminaries pre-flight | [`docs/superpowers/notes/phase2-preliminaries-preflight.md`](docs/superpowers/notes/phase2-preliminaries-preflight.md) — the (a)–(k) audit of the P0/P1/P2 briefs and what each finding changed |
-| **Phase 2a implementation plan** | [`docs/superpowers/plans/2026-08-11-metamer-phase2a.md`](docs/superpowers/plans/2026-08-11-metamer-phase2a.md) — **awaiting review, no code yet** |
+| **Phase 2a implementation plan** | [`docs/superpowers/plans/2026-08-11-metamer-phase2a.md`](docs/superpowers/plans/2026-08-11-metamer-phase2a.md) — **Task 0 done; Task 1 next** |
+| **Phase 2a pre-flight, per task** | [`docs/superpowers/notes/phase2a-preflight.md`](docs/superpowers/notes/phase2a-preflight.md) — the (a)–(k) audit of each 2a task brief and what each finding changed. **Append to it before each task, not after.** |
 
 Phase list is design doc §17. Phase 1 exit criteria are §18. Do not duplicate either here.
 
@@ -352,6 +358,79 @@ Full record under open question 11. The three things that carry:
   followed from it. The design doc's "why one machine is enough" argument rests on that
   clause and is left standing by P4 — but on the reallocation measurement, not on the
   prediction that failed.
+
+---
+
+## Phase 2a execution (in progress, 2026-08-11)
+
+Per-task pre-flight audits live in
+[`docs/superpowers/notes/phase2a-preflight.md`](docs/superpowers/notes/phase2a-preflight.md).
+Only the durable conclusions are here.
+
+### Task 0 — package skeleton and dependencies (done)
+
+- **TWO INDEPENDENT GUARDS STAND BETWEEN A WHOLLY-MASKED BATCH AND THE ENGINE, AND EITHER
+  ONE IS SUFFICIENT.** `optimize.optimize_series` returns on the merged data-level +
+  design precheck before building anything; `objective.evaluate` returns before
+  `self.engine.score` when no series passes the precheck. **Mutating either alone does not
+  bite; mutating both at once does** — measured, not read off the source. Second instance of
+  Task 16's `_subset` shape, and worth having a second: the single surviving mutation reads
+  exactly like a coverage gap, and chasing it is wasted work. **Diagnose which of the two
+  causes a survivor has before acting on it.**
+- **THE RAISING STUB ENGINE IS A PURE NEGATIVE, SO IT NEEDS AN ABSOLUTE ANCHOR.** A stub
+  wired into a run and never reached, and a stub never wired in at all, produce
+  byte-identical green results — the cancellation rule at the level of a test fixture. It is
+  defined in Task 0 and first consumed in Task 11, so it would otherwise ship untested
+  through four tasks. `tests/test_stub_engine.py` carries the positive control (a fittable
+  batch through `fit()` raises) and the blind spot as an executable limit (a wholly-masked
+  batch does not, and the test says why). **The injection seam is `fit(..., engine=...)`**,
+  which defaults to `KalmanEngine()` — so a later runner that builds its engine internally
+  from the config makes the fixture undeliverable and every downstream "no fit ran"
+  assertion vacuous.
+- **THE ENGINE SEES B = 1 FROM `fit()`, NOT THE TILE'S B.** `fit` is the `(B, N)` driver but
+  it drives `optimize_series` once per series, and that is path A's permanent per-series
+  form. Caught by the positive control on its first run, against an assertion written from
+  the driver's name.
+- **`tests/test_core_isolation.py` HAS NAMED A `[batch]` EXTRA SINCE PHASE 1 AND NOTHING
+  IMPLEMENTED IT.** A packaging contract documented by a test docstring and enforced by
+  nothing — (a2) in the tree rather than in a brief. `pyproject.toml` now carries
+  `[project.optional-dependencies] batch`. Its guard set was `{xarray, dask, zarr}`, i.e.
+  **three of the five imports 2a adds**; `pydantic` and `threadpoolctl` cross the same
+  boundary and now sit in it, verified first to cost nothing (importing `metamer.core` pulls
+  in none of the five). The isolation test also gained its own bite check.
+- **`pixi run` HIDES A BROKEN WHEEL.** It executes off `PYTHONPATH=src` inside a complete
+  environment, so an import that would fail for someone who ran `pip install metamer` is
+  invisible here and surfaces only in CI's installed job or downstream. **A dependency added
+  to `pixi.toml` alone is a dependency the published package does not have.**
+- **Only one of Task 0's four dependencies was actually new.** `xarray` and `pydantic` were
+  already declared; `threadpoolctl` 3.6.0 was already **installed transitively and
+  undeclared**, which is a dependency nothing guarantees — and Task 5's whole subject is the
+  gap between a limit requested and a limit observed. Only `zarr` was absent. Second
+  instance of Phase 1 Task 0's `psutil` finding: **"adding a dependency rewrites the lock"
+  is a prediction, not a fact.**
+- **`zarr = "*"` IS A NAME, NOT A PIN.** It resolves to 3.x today because of which
+  conda-forge release is current and because of `exclude-newer = "7d"` — the solve is a
+  function of wall-clock time. The v2 and v3 on-disk layouts are different formats and Task
+  8 needs v3 sharding, so the manifest pins `>=3,<4` and a test asserts the **installed**
+  major version, because a lock refresh is what would move it silently.
+- **`pixi install` cannot be its own oracle** — it is the solver that wrote the lock and
+  cannot disagree with itself. The independent check is `pixi search --platform` per
+  platform with a known-good control. Run 2026-08-11: **zarr 3.3.0 and threadpoolctl 3.6.0
+  on all four platforms**, numba 0.66.0 as control on all four, so **neither needs
+  `[target.linux-64.dependencies]`.**
+- **`pixi.lock` is 644 KB after Task 0** (635.6 KB before; the plan's note said 630). The
+  `check-added-large-files` limit is 2000 KB. Re-check the number, not the note.
+- **`runtime_checkable` checks method PRESENCE, not signature**, so `isinstance(stub, Engine)`
+  passes against a stub whose `score` takes no arguments at all. `mypy` is the real gate on
+  the stub's shape, and the conformance test asserts the parameter list explicitly rather
+  than treating one check as the other's substitute. Conformance is checked with `isinstance`
+  and never `issubclass` — `engines/protocol.py` says so in capitals, and a `runtime_checkable`
+  protocol with a data member raises `TypeError` from the latter by design.
+- **A (g) seam check that came back clean, recorded because clean results are what make the
+  checks credible:** `objective.py:201`'s `KalmanEngine().score(...)` is inside a module
+  docstring — the reproduction recipe for its conditioning table — and **not** live code. So
+  `fit(engine=...)` is the only engine construction site on the fit path and the injection
+  seam is genuinely single.
 
 ---
 
