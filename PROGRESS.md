@@ -551,6 +551,53 @@ wrong in a way no invariant catches.
   `--explain`. A nearly-regular axis carrying float noise otherwise yields thousands of
   unique Δt and an order-of-magnitude slowdown with nothing saying why.
 
+### Q5 — `data_geometry_fingerprint` replaces `data_uri` in `fit_hash`
+
+**Design doc §13.3 amended; §13.4 gains a degraded mode; §13.7 added.** `data_uri` is
+demoted to provenance in `run_hash`.
+
+**The gate was wrong in both directions at once**, which is not a conservative approximation
+of the right gate — it is unrelated to it. Moving a file invalidated a resume that is
+scientifically valid; editing a file in place at a fixed URI permitted a resume that is
+scientifically invalid. **The fingerprint is the first actual implementation of the check.**
+
+Six constraints, all in §13.3:
+
+1. **Named for what it covers** — geometry, not data. It does not hash the payload array
+   (~25 GB at 10⁷×630 float32), so it catches regridding, re-chunking, axis edits and a
+   dtype change, and **not** a value edit at fixed geometry. **A test asserting a value edit
+   does NOT move it makes the limit executable**, which is the only documentation this
+   project has evidence for.
+2. **Hash the coordinate VALUES**, through `canonical_json` so float formatting is canonical
+   and the result is not platform-dependent — pre-flight (k). Min/max/length collapses an
+   extent-preserving regrid.
+3. **Fingerprint the DECODED calendar, not the attrs string**, or the fingerprint inherits
+   xarray's and cftime's parsing behaviour and an upgrade silently invalidates every store.
+   Units, calendar and epoch strings ride alongside as provenance.
+4. **Source dtype is in it.** The variable *name* needs nothing added — **`variable` is
+   already a separate fit-relevant field**, which is half of this point already satisfied.
+5. **A mismatch is its own message, not "`fit_hash` mismatch"** — name the differing
+   component (shape, time coordinate, spatial coordinate, calendar, dtype). Same reasoning
+   as staged validation naming its layer.
+6. **Root attrs carry the components as well as the rollup**, so a mismatch is diagnosable
+   from the store alone, which is what makes 5 implementable on the resume side.
+
+**§13.4: unreachable data is a degraded mode, not an error.** `--explain`'s most valuable
+use is a config with no data yet — sizing a run before staging 25 GB. It prints
+compat- and run-relevant content always and prints `fit_hash: not computed (…requires stage
+4a)` otherwise.
+
+**§13.7, the entry contract — the ordering is the guard.**
+`open → input contract (4a) → geometry fingerprint → fit_hash → resume gate (hashes, then
+the positional candidate comparison) → tiling`. A later change computing a hash before the
+contract check would compute it from the config alone, which is where `data_uri`-as-proxy
+came from. **Test the order, do not trust it.**
+
+**Plan task:** this is an allowlist change — deliberate by that docstring's own words — and
+it moves all three `GOLDEN_*` constants. Re-derive them **by hand** from the declared inputs
+and verify by reversal (put `data_uri` back, take the fingerprint out, reproduce the current
+constants exactly), as P0 did. Never regenerate them from the failure.
+
 ---
 
 ## Required pre-flight for every remaining task
@@ -1126,6 +1173,20 @@ will do.
   Pin the seed, and never assert `design.condition_number` as a proxy.
 - **A quadratic cannot test a step rule** (third derivative zero), and **a fixture sitting
   above a floor cannot test the floor** (`n_eff = 12` against a floor at 2.0).
+- **A NAME IS NOT A GATE.** Three instances in three sittings, each reading as a gate and
+  being none: `metamer_version` in `FIT_RELEVANT_FIELDS` with nothing in `src/` populating
+  it (P0); `candidates` covered by no hash while §12.8 assumes enforcement (Q3);
+  `data_uri` standing in for the data it names (Q5).
+
+  > **A field's presence in a hash payload is not evidence that the thing it names is
+  > checked.** Verify three separate facts: **something populates it**; **it derives from
+  > the quantity it claims to identify**; and **a change in that quantity actually moves
+  > it.**
+
+  All three failed that last clause differently — nothing wrote it, nothing compared it, and
+  it identified a location rather than a content. **Expect more of these in Phase 2**, which
+  adds a store, a bitmap, a calibration cache and a warm-start cache, each of which is a
+  gate made of a name.
 - **A SCHEMA AXIS OF LENGTH 1 IS THE CANCELLATION RULE APPLIED TO A SCHEMA.** Every
   quantity *defined across* that axis is constant, so every assertion over it passes
   against an implementation that never normalizes, never excludes, and never writes a

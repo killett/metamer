@@ -35,6 +35,21 @@ The cure is always an **absolute value, hand-derived**. Task 16 needed *three* g
 hashes, not one, because each payload builder can drift independently: a `run_payload`
 filing a `None` fingerprint changed every `run_hash` while every comparison stayed green.
 
+### (a2) A NAME IS NOT A GATE
+
+Three instances, each of which reads as a gate and is not one: `metamer_version` in
+`FIT_RELEVANT_FIELDS` with nothing in `src/` populating it; `candidates` covered by no hash
+while design doc §12.8 assumes enforcement; `data_uri` standing in for the data it names, so
+that moving a file invalidated a valid resume *and* editing one in place permitted an
+invalid one.
+
+> **A field's presence in a hash payload is not evidence that the thing it names is
+> checked.** Verify three separate facts: **something populates it**; **it derives from the
+> quantity it claims to identify**; and **a change in that quantity actually moves it.**
+
+All three failed the last clause differently. The check generalizes past hashes to every
+gate made of a name — a completion bitmap, a calibration cache key, a warm-start cache key.
+
 ### (b) Batch vs series
 
 Is any per-series fact computed at batch level, or any per-candidate fact stored per point?

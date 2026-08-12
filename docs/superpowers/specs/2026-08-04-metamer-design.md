@@ -1638,6 +1638,61 @@ would have forbidden exactly that.
 Calibration cache key: `fit_hash` + backend + machine fingerprint (§11.4) — the criterion
 set does not affect bytes-per-series.
 
+**`data_geometry_fingerprint` replaces `data_uri` in `fit_hash` (2026-08-11).** `data_uri`
+is demoted to provenance, where `run_hash` records it.
+
+**The gate was wrong in both directions at once, which is not a conservative approximation
+of the right gate — it is unrelated to it.** Moving a file invalidated a resume that is
+scientifically valid; editing a file in place at a fixed URI permitted a resume that is
+scientifically invalid. The fingerprint is not an improvement on the URI so much as **the
+first actual implementation of the check.**
+
+What it covers, and the six constraints on it:
+
+1. **Named for what it covers.** It is a *geometry* fingerprint, not a data fingerprint: it
+   does **not** hash the payload array (10⁷×630 float32 is ~25 GB), so it catches regridding,
+   re-chunking, axis edits and a dtype change, and **does not** catch a value edit at fixed
+   geometry. **A test asserting that a value edit does NOT move it makes the limit
+   executable rather than advisory**, which is the honest documentation — this project has
+   measured that a docstring does not constrain the next author.
+2. **Hash the coordinate VALUES, not a summary.** Min/max/length is the tempting shortcut and
+   it collapses any regrid that preserves extent. The full value arrays go through
+   `canonical_json`, so float formatting is canonical and the fingerprint is not
+   platform-dependent — pre-flight (k) directly.
+3. **Fingerprint the DECODED calendar, not the attrs string.** Two files can spell
+   `calendar` differently and decode identically, or spell it identically and decode
+   differently under different xarray or cftime versions. The decoded values are what the
+   coordinate hash already covers; the units, calendar and epoch **strings** ride alongside
+   as provenance. Otherwise the fingerprint inherits a dependency's parsing behaviour and a
+   `cftime` upgrade silently invalidates every store.
+4. **Source dtype is in it.** float32 versus float64 on disk changes the conversion at the
+   IO boundary (§15.4). The variable *name* needs no addition — `variable` is already a
+   separate fit-relevant field.
+5. **A fingerprint mismatch is its own refusal message, not "`fit_hash` mismatch".** Report
+   **which component** differs — shape, time coordinate, spatial coordinate, calendar,
+   dtype. "Your data changed, here is how" is actionable; "your hash changed" is not. Same
+   reasoning as staged validation naming its own layer.
+6. **Root attrs carry the components as well as the rollup**, so a mismatch is diagnosable
+   by a human reading the store without rerunning anything — and so point 5 is implementable
+   on the resume side, where only the stored store is available.
+
+**Consequence, accepted rather than worked around: `fit_hash` requires reachable data**, and
+the run's entry contract is therefore ordered (see §13.7).
+
+### The general form — A NAME IS NOT A GATE
+
+Three instances in three sittings, each of which reads as a gate and is not one:
+`metamer_version` sitting in `FIT_RELEVANT_FIELDS` with nothing in `src/` populating it;
+`candidates` covered by no hash while §12.8 assumes enforcement; `data_uri` standing in for
+the data it names.
+
+> **A field's presence in a hash payload is not evidence that the thing it names is
+> checked.** Verify three separate facts: **something populates it**; **it derives from the
+> quantity it claims to identify**; and **a change in that quantity actually moves it.**
+
+All three failed the last clause, in three different ways — nothing wrote it, nothing
+compared it, and it identified a location rather than a content.
+
 **Hashing the validated, normalized pydantic model rather than the file text** normalizes
 away comments, key order, whitespace, and explicit-vs-default, so adding a comment does not
 invalidate a 10⁷-point store.
@@ -1695,6 +1750,34 @@ prediction is always printed with the model's validated error bar (§9.2).
 
 When screening is enabled, the projection is an **upper bound** (screening has not yet run
 and cannot be predicted) and says so.
+
+**Unreachable data is a DEGRADED MODE, not an error (2026-08-11).** `fit_hash` now depends
+on `data_geometry_fingerprint` and therefore on stage 4a, but **`--explain`'s most valuable
+use is exactly the case with a config and no data yet** — sizing a run before staging 25 GB.
+So it always prints the compat-relevant and run-relevant config content, and prints
+`fit_hash` only when stage 4a has run, with a line saying which:
+
+```
+fit_hash: not computed (data at <uri> not reachable; requires stage 4a)
+```
+
+Same discipline as the projection provenance above. **This keeps §13.4's promise honest
+rather than narrowing it**, and an unreachable input stays a *reported state* rather than an
+exit code — a user iterating on a config offline must not be blocked by it.
+
+### 13.7 The run's entry contract
+
+`fit_hash` depends on stage 4a, so the start-of-run sequence is **fixed and written down**:
+
+```
+open  →  input contract (stage 4a)  →  geometry fingerprint  →  fit_hash
+      →  resume gate (hashes, then the positional candidate comparison)  →  tiling
+```
+
+**The ordering is the only thing preventing the hole §13.3 just closed from reopening.** A
+later change that computes a hash before the contract check would compute it from the
+config alone, which is where `data_uri`-as-proxy came from. State it as a contract, and test
+the order rather than trusting it.
 
 ### 13.5 Profiles
 
