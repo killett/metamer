@@ -44,11 +44,27 @@ that moving a file invalidated a valid resume *and* editing one in place permitt
 invalid one.
 
 > **A field's presence in a hash payload is not evidence that the thing it names is
-> checked.** Verify three separate facts: **something populates it**; **it derives from the
-> quantity it claims to identify**; and **a change in that quantity actually moves it.**
+> checked.** Verify **four** separate facts: **something populates it**; **it derives from
+> the quantity it claims to identify**; **a change in that quantity actually moves it**; and
+> **the thing that populates it is not the thing being identified.**
 
-All three failed the last clause differently. The check generalizes past hashes to every
-gate made of a name — a completion bitmap, a calibration cache key, a warm-start cache key.
+The first three failed differently in the three instances above. **The fourth was added
+2026-08-11 after a fifth instance of a new shape**, and it is the sharpest because the field
+passes the first three cleanly: `registry_version` was populated, did derive from the
+registry, and did move when the registry version moved — **and the value came from the
+user's config.** A gate reading correctly for the wrong reason. Self-reported identity is
+not identity.
+
+The check generalizes past hashes to every gate made of a name — a completion bitmap, a
+calibration cache key, a warm-start cache key.
+
+**THE FOURTH CHECK APPLIES TO IDENTITY FIELDS AND NOT TO REQUESTS, AND THE DISTINCTION IS
+WHAT MAKES A SWEEP FINITE.** A field naming a *user's choice* — which variable, which
+objective, which seed — is definitionally self-reported, and that is correct: the field **is**
+the request. A field claiming to identify something that exists independently of the config —
+installed code, a registry, a dataset on disk — must be populated by reading that thing. Sort
+the allowlist into the two kinds and only the second kind needs auditing; measured on this
+project, that is three fields out of fourteen.
 
 ### (a3) DEFER THE FEATURE, DECLARE THE REGIME
 
@@ -137,6 +153,41 @@ three-N step-rule test passed against a deliberately broken step rule because it
 Ask what property of the fixture makes the defect visible; if the answer is "none", the
 fixture is wrong before the assertion is. A **quadratic cannot test a step rule** (third
 derivative zero). A fixture at `n_eff = 12` **cannot test a floor at 2.0**.
+
+### (i3) A RELATION BETWEEN OBSERVATIONS IS NOT A SUBSTITUTE FOR THE OBSERVATIONS
+
+> **An assertion comparing two derived values passes when both are absent, both are wrong in
+> the same direction, or both are degenerate.** Assert each value against its own expected
+> result **first**; assert the relation between them only as an additional check.
+
+**This is the cancellation rule (a) in a new location** — a relation is *constant* across any
+change that moves both sides identically, so it is invisible to exactly the defects that move
+both sides.
+
+The cleanest instance is Phase 2a Task 1's `assert fit_moved == compat_moved`, written to
+check that a warm-start setting reaches fit identity. `(False, False)` satisfies it, so it
+passed against a payload flattening that **dropped the field entirely** — the one defect it
+existed to catch. The fix is one expected triple per case, spelled out.
+
+The shape recurs wherever the natural assertion is an equality, a ratio or an ordering between
+two computed things: `a == b`, `before < after`, `len(x) == len(y)`. Each is satisfied by two
+empties, two zeros, or two identical mistakes.
+
+### (i4) AN ERROR MESSAGE MATCHING THE INPUT IS NOT EVIDENCE THE INPUT WAS DIAGNOSED
+
+> **Any library that quotes user input back in its error text will satisfy a `match=` on that
+> input regardless of which error actually fired.** Assert the error **type** and the specific
+> failure mode, not the presence of the user's own string.
+
+Worked instance: `pytest.raises(ValidationError, match="data_url")`, written to check that a
+misspelled config key is refused as an unrecognized field. Under `extra="ignore"` the typo is
+dropped, the *required* key is then simply missing, and pydantic renders the offered mapping
+in its `input_value=` echo — so `data_url` appears in the message of an error that never saw
+it. Measured: the mutation to `extra="ignore"` left the test green.
+
+The assertion that bites reads the structured error: `errors()[i]["type"] == "extra_forbidden"`
+with `loc == ("data_url",)`. Same principle without structured errors: match a phrase the
+*diagnosis* owns, never one the input supplies.
 
 ### (i2) A PURE NEGATIVE NEEDS A POSITIVE CONTROL
 
@@ -312,6 +363,21 @@ a clean virtual environment, and check the artifact from inside that environment
 every module the package claims to ship is importable there, and that every third-party
 import under `src/` is named in the *wheel's own* metadata rather than in `pyproject.toml`.
 Its limits are stated in its own docstrings; read them before trusting it further than they go.
+
+**Writing that guard produced (i2) applied to itself, which is the strongest demonstration
+the category has.** The clean environment was not clean: `PYTHONPATH=src` is inherited by
+subprocesses, so `metamer` resolved out of the development tree while every assertion passed,
+and the isolation control checked only that *numpy* was absent — which it genuinely was. Two
+independent leaks with different causes, and the control saw one of them. A guard against a
+class of defect is itself a member of that class.
+
+**And a general trap it turned up: `importlib.util.find_spec` IS NOT A NON-EXECUTING CHECK.**
+It locates a module without running it and **runs every parent package on the way**. In a
+dependency-free environment `find_spec("pkg.sub.mod")` raises whatever `pkg/__init__.py` and
+`pkg/sub/__init__.py` raise — measured here as `ModuleNotFoundError: No module named 'numpy'`
+raised from inside `find_spec`. Anywhere module *presence* must be checked without importing
+its dependencies, it is a filesystem question, walked outward from a package `__file__` that
+is safe to import.
 
 ### The other standing rules
 

@@ -327,3 +327,58 @@ A weak assertion of my own in the same sitting: the warm-start parametrization a
 `fit_moved == compat_moved`, which `(False, False)` satisfies — i.e. it passed against the
 dropped-field defect it existed to catch. **A relation between two observations is not a
 substitute for the observations**; the expected triple is now spelled out per case.
+
+---
+
+## The allowlist source sweep (run 2026-08-11, after Task 1)
+
+Five allowlist findings in five questions means `FIT_RELEVANT_FIELDS` was assembled at Task 16
+**before the mechanisms that populate it existed**, so membership tracked what was known then.
+One pass over the whole set is cheaper than five more discoveries.
+
+**The question for each field, per the sharpened (a2):** what populates it, and is that source
+independent of what the field claims to identify?
+
+**The sweep's own finding is the sort.** The allowlist holds two kinds of field, and the
+independence check applies to only one of them:
+
+- **A REQUEST** — which variable, which objective, which seed, which criteria. Self-reported
+  by definition, and that is correct: *the field is the request*. There is nothing else it
+  could come from, and no independent source exists to check it against.
+- **AN IDENTITY** — a claim about something that exists independently of the config: installed
+  code, a registry, a dataset on disk. Self-report here is the defect.
+
+**Only three of fourteen are identities.** That converts "expect a sixth finding" into a
+bounded, enumerated list.
+
+| field | populated by | kind | independent? |
+|---|---|---|---|
+| `variable` | user config | request | n/a |
+| `signal_terms` | user config | request | n/a |
+| `objective` | user config | request | n/a |
+| `engine` | user config | request | n/a |
+| `seed` | user config | request | n/a |
+| `criteria` (compat only) | user config | request | n/a |
+| `warm_start_enabled` | user config | request | n/a |
+| `warm_start_coarse_stride` | user config | request | n/a |
+| `warm_start_interpolation_rule` | user config | request | n/a |
+| `warm_start_spiral_bound` | user config | request | n/a |
+| `warm_start_tie_break` | user config | request | n/a |
+| **`algorithm_version`** | `normalize`, from a hand-bumped constant | **identity** | **yes** — of the installed code, though hand-bumped means it can be forgotten, which its own docstring and `RELEASING.md` both state |
+| **`registry_version`** | `normalize`, from `registry.REGISTRY_VERSION` | **identity** | **yes, since Task 1.** It was the user's config until then |
+| **`data_uri`** | user config | **identity** — it stands in for the data | **NO.** Known-wrong in both directions since Q5; **Task 3 replaces it with `geometry_hash`**, populated by reading the opened dataset, which is independent |
+
+**So the audit is closed except for the one field already scheduled.** `data_uri` is the last
+self-reported identity in either allowlist, and Task 3 is what removes it.
+
+**Two adjacent gates checked in the same pass, both clean and recorded as such:**
+
+- **Per-candidate `spec_hash`** — the value Task 11's positional comparison uses. Computed by
+  `ProcessSpec.spec_hash()` from the term structure, so it identifies a model by *being* a
+  function of that model. Independent.
+- **`machine_fingerprint(cpu_model, cores, total_ram_bytes)`** — takes its inputs as
+  arguments, so it is self-reported *at the function boundary*. It reaches `run_hash` alone,
+  which is **provenance and never a gate**, so a wrong fingerprint misreports and decides
+  nothing. **Task 5 must supply those arguments from `core.machine`, not from the config**;
+  noted here because that is the moment a self-reported machine could enter the calibration
+  cache key, where it WOULD be a gate.

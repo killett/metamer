@@ -1143,6 +1143,30 @@ argument — a passing suite is not evidence the brief is right.
   existed, a later simplification removes one because it looks dead — and it is dead only
   because the other is there. Comment both, each naming the other.
 
+- **(i3) A RELATION BETWEEN OBSERVATIONS IS NOT A SUBSTITUTE FOR THE OBSERVATIONS.**
+
+  > **An assertion comparing two derived values passes when both are absent, both are wrong
+  > in the same direction, or both are degenerate.** Assert each value against its own
+  > expected result **first**; the relation only as an additional check.
+
+  **The cancellation rule (a) in a new location** — a relation is constant across any change
+  that moves both sides identically. Cleanest instance: Task 1's `assert fit_moved ==
+  compat_moved`, which `(False, False)` satisfies, so it passed against a payload flattening
+  that dropped the field entirely — the one defect it existed to catch. Recurs wherever the
+  natural assertion is `a == b`, `before < after` or `len(x) == len(y)`: each is satisfied by
+  two empties, two zeros, or two identical mistakes.
+
+- **(i4) AN ERROR MESSAGE MATCHING THE INPUT IS NOT EVIDENCE THE INPUT WAS DIAGNOSED.**
+
+  > **Any library that quotes user input back in its error text satisfies a `match=` on that
+  > input regardless of which error fired.** Assert the error **type** and the failure mode,
+  > never the presence of the user's own string.
+
+  Worked instance: `pytest.raises(ValidationError, match="data_url")` stayed green under
+  `extra="ignore"`, because the typo was dropped, the required key was then missing, and
+  pydantic echoed the offered mapping in `input_value=`. Match a phrase the **diagnosis**
+  owns, or read the structured error.
+
 - **(i2) A PURE NEGATIVE NEEDS A POSITIVE CONTROL.**
 
   > **Any assertion of the form "X did not happen" is unfalsifiable unless a paired test
@@ -1695,9 +1719,17 @@ will do.
   `data_uri` standing in for the data it names (Q5).
 
   > **A field's presence in a hash payload is not evidence that the thing it names is
-  > checked.** Verify three separate facts: **something populates it**; **it derives from
-  > the quantity it claims to identify**; and **a change in that quantity actually moves
-  > it.**
+  > checked.** Verify **four** separate facts: **something populates it**; **it derives from
+  > the quantity it claims to identify**; **a change in that quantity actually moves it**;
+  > and **the thing that populates it is not the thing being identified.**
+
+  **The fourth was added 2026-08-11 after `registry_version`, a fifth instance of a new
+  shape**: it passed the first three cleanly — populated, derived, moved — and the value came
+  from the user's config. A gate reading correctly for the wrong reason. **Self-reported
+  identity is not identity.** The check applies to identity fields and not to requests, which
+  is what makes a sweep finite; the full source sweep of both allowlists is in the Phase 2a
+  pre-flight note, and it found **three identity fields out of fourteen**, two now stamped and
+  one (`data_uri`) scheduled for Task 3.
 
   All three failed that last clause differently — nothing wrote it, nothing compared it, and
   it identified a location rather than a content. **Expect more of these in Phase 2**, which

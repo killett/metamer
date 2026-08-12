@@ -199,6 +199,14 @@ class Config(BaseModel):
     candidates: tuple[str | tuple[str, ...], ...]
     criteria: tuple[str, ...]
 
+    # `objective` and `seed` are ALSO declared in `hashing.CONFIG_DEFAULTS`, and
+    # the duplication is deliberate. `normalize` lets the config win, so once a
+    # config has been through `load` these defaults are what reach the hash and
+    # that mapping never applies -- which makes it look like dead code from this
+    # side. It is not: it is the only thing that fills these in for a caller
+    # holding a payload and no file. **The two must agree**, and
+    # `test_the_hashing_defaults_agree_with_the_model_defaults` is what holds
+    # them together. Change one, change the other.
     objective: Literal["ml", "reml"] = "ml"
     engine: str = "kalman"
     seed: int = 0

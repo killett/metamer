@@ -242,6 +242,26 @@ Deliberately small. Every entry is a field some hash actually reads, and every
 entry carries section 13.3's sharp edge: changing one of these values in a
 release invalidates every in-progress store, bugfix releases included. Adding
 an entry is the same weight of decision as extending the allowlist.
+
+**THIS IS THE SECOND OF TWO DEFAULT MECHANISMS AND IT LOOKS DEAD FROM ONE SIDE.
+DO NOT DELETE IT.** `metamer.config.Config` declares the same defaults as
+pydantic field defaults, and `normalize` computes `{**CONFIG_DEFAULTS,
+**config, ...}` -- the config wins. So once a config has come through
+`config.load`, it always carries `seed` and `objective` explicitly and **this
+mapping never applies to it.** Reading only that path, the constant is
+unreachable code.
+
+It is not. Every caller holding a payload and no file goes through here and
+nothing else fills these in: that is the whole of `tests/test_hashing.py` today
+and every future caller that builds a payload directly. Removing it would make
+such a payload hash differently from the identical config loaded from disk.
+
+**The two must AGREE, and the agreement is pinned by
+`tests/test_config.py::test_the_hashing_defaults_agree_with_the_model_defaults`,**
+because if they diverged the value reaching the hash would be pydantic's while
+this constant still read as authoritative. Deliberate redundancy, per the
+standing rule that doubled guards must be cross-commented so a later
+simplification sees both -- the pointer back is in `Config`'s field defaults.
 """
 
 MACHINE_KEY = "_machine"
