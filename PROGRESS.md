@@ -598,6 +598,51 @@ it moves all three `GOLDEN_*` constants. Re-derive them **by hand** from the dec
 and verify by reversal (put `data_uri` back, take the fingerprint out, reproduce the current
 constants exactly), as P0 did. Never regenerate them from the failure.
 
+### Q6 — the thread budget, and no dask in sub-phase 1
+
+**Design doc §11.1 corrected, §11.1.1 added, §11.3's preconditions rewritten.**
+
+- **§11.1's "peak RAM is one tile plus one dask chunk" was true at `W = 1` and false
+  otherwise**, and if `W` tracks core count then peak RAM tracks core count — the identical
+  failure the across-tile ban exists to prevent, arriving through the assembly door. **The
+  general form now sits beside it, and it is stronger than the ban, which is one instance
+  of it:**
+
+  > **Peak RAM must be derivable from the memory budget alone.** Any concurrency whose
+  > degree is set by core count, thread count or worker count reintroduces the dependency,
+  > **regardless of which subsystem hosts it.** Concurrency degree is derived from a byte
+  > budget; only the budget is a knob.
+
+- **One owner at a time, never both.** Assemble and fit never overlap, so neither reasons
+  about the other's threads. **The cost is recorded as a decision, not assumed:** each phase
+  idles the other's resource, and at ~5.4 s per series against a tile read of order seconds
+  fit dominates by orders of magnitude, so the idle I/O is free. **Record the ratio** — if it
+  inverts (cheaper model, slower store, object storage over a network) the decision needs
+  revisiting and nothing else would show it.
+- **Prefetching tile `N+1` during tile `N`'s fit is deferred with its cost named: it doubles
+  the tile term in the memory formula.** It arrives with a formula update or not at all.
+- **No dask in sub-phase 1** — `ds[var].isel(y=…, x=…).load()` against zarr. **Dask's value
+  here is unproven and its cost is certain**: it buys graph scheduling of awkward chunk
+  geometries, and costs a second concurrency system whose interaction with `prange` is the
+  open question, plus a graph-chunk guard bounding a thing you would not otherwise have.
+  **Removing it deletes the problem rather than deferring it.** And `.load()`'s peak is
+  analytic where a graph's is emergent — which matters because the calibration tile is the
+  mechanism that turns the memory formula from a model into a measurement.
+- **`--explain` reports read amplification (bytes read / bytes used)**, since zarr reads
+  whole chunks and a tile straddling chunk boundaries silently reads several times what it
+  needs. **This replaces the graph-chunk cap as the guard against a pathological input**, and
+  tile geometry should align with input chunk geometry where possible.
+- **The determinism precondition is OBSERVED, not requested.** `OMP_NUM_THREADS=1` in
+  provenance records a *request*, and whether it took effect depends on import ordering that
+  nothing enforces — set after numpy is imported it does nothing, silently. That is
+  name-is-not-a-gate at its sharpest. **`threadpoolctl` reports the observed limit per loaded
+  library**; record every one it finds (OpenBLAS, MKL, OpenMP, numba's layer), because **a
+  precondition that holds for OpenBLAS while MKL runs multithreaded is not a precondition
+  that holds.** Observed ≠ requested is a **layer-3 validation failure**, not a note.
+- **Thread counts reach `run_hash` only.** If they moved `fit_hash` the hash boundary would
+  be conceding the determinism guarantee does not hold. **The guarantee and the hash boundary
+  are the same claim stated twice**, and they must not drift apart.
+
 ---
 
 ## Required pre-flight for every remaining task

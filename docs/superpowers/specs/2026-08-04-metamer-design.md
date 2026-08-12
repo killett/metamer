@@ -1056,7 +1056,10 @@ Tiling generalizes synesthesia's `timeseries2color.py` pattern:
 - Derive a square spatial tile from a byte budget:
   `tile_side = sqrt(block_bytes / (n_time × itemsize))`.
 - Outer Python loop over tiles; materialize one tile at a time. Peak RAM is one tile plus
-  one dask chunk.
+  ~~one dask chunk~~ **`W` dask chunks, where `W` is the assembly concurrency — corrected
+  2026-08-11.** The original sentence is true at `W = 1` and false otherwise, and **if `W`
+  tracks core count then peak RAM tracks core count**, which is the identical failure the
+  across-tile ban below exists to prevent, arriving through the assembly door.
 - Hard cap on total dask graph chunks as a guard.
 - **The tile is the batch** — no inner loop over pixels; the batched engine advances all
   `tile_side²` series together.
@@ -1066,6 +1069,54 @@ already work this way, but it must be written down, because across-tile parallel
 obvious "optimization" someone adds later — and it **multiplies peak RAM by thread count**,
 silently breaking the 16 GB constraint. Within-tile parallelism is what makes peak RAM
 independent of core count, and hence what lets the same job run on 4 cores and on 64.
+
+**THE GENERAL FORM, added 2026-08-11 — stronger and more portable than the ban above, which
+is one instance of it:**
+
+> **Peak RAM must be derivable from the memory budget alone.** Any concurrency whose degree
+> is set by core count, thread count or worker count reintroduces the dependency,
+> **regardless of which subsystem hosts it.** Concurrency degree is derived from a byte
+> budget; only the budget is a knob.
+
+### 11.1.1 The thread budget, and who owns it
+
+**One owner at a time, never both.** The tile loop alternates two phases that never overlap:
+**assemble** (I/O, decompress, the float32→float64 cast per chunk) and **fit** (numba
+`prange` over the tile's series). Neither phase then has to reason about the other's threads,
+and it is what makes "the tile is the batch" hold.
+
+**The cost of serializing is stated rather than assumed, because it is a decision:** the fit
+phase idles the I/O and the assemble phase idles the cores. At ~5.4 s per series against a
+tile read of order seconds, **fit dominates by orders of magnitude and the idle I/O is
+free.** If that ratio ever inverts — a much cheaper model, a much slower store, object
+storage over a network — the decision needs revisiting, and the recorded ratio is what makes
+that visible.
+
+**Deferred, with its cost named: prefetching tile `N+1` during tile `N`'s fit.** It **doubles
+the tile term in the memory formula**, which is precisely the change that would silently
+break the 16 GB constraint. It arrives with a formula update or it does not arrive.
+
+**No dask in Phase 2's first sub-phase.** The input contract (§13.6) narrows to zarr, so a
+tile is `ds[var].isel(y=…, x=…).load()` and zarr does the chunk reads. Three reasons:
+
+1. **Dask's value here is unproven and its cost is certain.** What it buys is graph-based
+   scheduling of awkward chunk geometries — real, but only when the input's chunking fights
+   the tile geometry. What it costs is a second concurrency system whose interaction with
+   numba `prange` is the open question, plus a graph-chunk guard that exists to bound a
+   thing you would not otherwise have. **Removing it does not defer the problem; it deletes
+   it**, and lets it return only if a real input demands it.
+2. **`.load()` on a zarr selection has a peak you can state analytically and verify by
+   measurement; a dask graph's peak is emergent.** The calibration tile (§11.4) is what turns
+   the memory formula from a model into a measurement, and it works far better against a
+   path whose formula has one term.
+3. It is the §13.6 shape again — one mechanism proven in the slice, the second a
+   registration rather than a refactor.
+
+**Consequence: tile geometry should align with the input's chunk geometry where possible**,
+since zarr reads whole chunks regardless. **`--explain` reports read amplification — bytes
+read over bytes used** — because a tile straddling chunk boundaries silently reads several
+times the data it needs and nothing else would say so. **This replaces the graph-chunk cap
+as the guard watching for a pathological input.**
 
 **The conflict that forces the warm-start design.** Warm-starting from a converged
 *neighbour* requires that neighbour to be finished. Per-series parallelism — path B, which
@@ -1207,7 +1258,26 @@ a precise narrower one:
    deterministic reduction order or are **explicitly excluded** from the claim.
 3. **numba `fastmath` off** (or documented as on with the guarantee weakened to "bitwise
    for fixed thread count"); **BLAS threading fixed or unused.** Both can reassociate.
-4. **Within a platform, not across platforms.** `exp` and `log` differ in the last bit
+
+   **THE PRECONDITION IS OBSERVED, NOT REQUESTED — added 2026-08-11.** `OMP_NUM_THREADS=1`
+   recorded in provenance is a record of a **request**, and whether it took effect depends
+   on import ordering that nothing in the process enforces: set after numpy is imported, it
+   does nothing, silently. That is the name-is-not-a-gate rule at its sharpest — a
+   determinism guarantee resting on a value written down after being ignored.
+
+   **`threadpoolctl` is the mechanism**: it sets limits post-import and **reports the
+   observed limit per loaded library**. Record the observed limit for **every** library it
+   finds — OpenBLAS, MKL, OpenMP, and numba's own threading layer — not one number. They can
+   differ, and **a precondition that holds for OpenBLAS while MKL runs multithreaded is not
+   a precondition that holds.**
+
+   **A startup assertion, not only a record:** observed limits that do not match the
+   requested ones are a **layer-3 validation failure** naming the discrepancy.
+4. **Thread counts reach `run_hash` only, never `fit_hash`.** If thread count moved
+   `fit_hash`, the hash boundary would be conceding that this guarantee does not hold. **The
+   guarantee and the hash boundary are the same claim stated twice**, and they must not be
+   allowed to drift apart.
+5. **Within a platform, not across platforms.** `exp` and `log` differ in the last bit
    between libms, so Linux and macOS will not agree bitwise. This is true today and is not
    a consequence of any Windows decision.
 
