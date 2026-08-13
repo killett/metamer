@@ -1572,6 +1572,12 @@ legend stays as the redundancy, and `/status/outcome` additionally carries CF
 `flag_values` / `flag_meanings`, which its identifier-shaped vocabulary supports and the
 label columns' bracketed, space-bearing labels do not.
 
+**DO NOT FLIP THIS BACK ON THE ORIGINAL REASONING.** The original reasoning was *"variable-
+length strings are the least stable corner of the stack"*, and it was a judgement, not a
+measurement; the measurement above says the opposite. **Re-measure before changing it** —
+`zarr.create_array(..., dtype="S32")` either warns or it does not — and record the date, the
+zarr version and the xarray version with whatever you conclude.
+
 **Acceptance criterion for "self-describing": round-trip through plain `xr.open_zarr` with
 no metamer installed.** This is the kind of thing that works on the author's machine and
 fails for a collaborator.
@@ -1583,6 +1589,22 @@ the reader this criterion has in mind. `zarr.consolidate_metadata` therefore run
 creation — **and consolidated metadata is a COPY of every array's metadata and every attr, so
 anything that later creates an array or writes an attr must re-consolidate.** Nothing after
 creation does: provenance is written once and every later write is chunk data.
+
+**MEASURED, AND THE FAILURE IS SILENT: an array created after consolidation is INVISIBLE.**
+`xr.open_zarr` lists the group without it and emits no warning, and `zarr.open_group` on the
+root does not see it either, because both read the consolidated document. An attr written
+afterwards *is* visible, so the two halves of the obligation are not equally dangerous. The
+guard is a test on the **store's own state** — the consolidated listing equals the listing
+read with `use_consolidated=False` — so it fires for any writer rather than only the ones a
+test calls. **Read both listings through the ROOT**: consolidated metadata lives there, so
+opening a subgroup by its own path bypasses it and the two agree however stale the root is.
+
+**And consolidated metadata is itself outside the v3 specification** — `consolidate_metadata`
+says so in a `ZarrUserWarning`. That is **not** the `S32` situation and the difference is what
+matters: consolidation is **additive**, the per-array `zarr.json` documents remain, so an
+implementation that ignores it reads the store correctly and merely pays for the listing. An
+unsupported *dtype* makes the data unreadable. Do not "consistently" remove consolidation on
+the strength of the `S32` argument.
 
 **STORE INVARIANT, ADDED 2026-08-11: every store is self-contained.** No store resolves
 through another store — not by a zarr reference, not by a symlink, not by a path in attrs

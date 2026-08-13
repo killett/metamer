@@ -636,7 +636,7 @@ Cross-process and cross-store properties no single task can express.
 |---|---|
 | 1 | Kill-and-resume (`kill -9` mid-tile) produces a **byte-identical** store |
 | 2 | Bitwise-identical output across two memory budgets and two thread counts. **The budget half is currently trivial** — no cross-point dependency exists in 2a, every point is cold — and is pinned anyway because it stops being trivial in 2c, which inherits this criterion and must keep it green. **The thread-count half is not trivial even now:** a float64 reduction anywhere inside the `prange` over a tile would break it, and that is what it tests |
-| 3 | The full store round-trips through plain `xr.open_zarr` **with metamer uninstalled** |
+| 3 | The full store round-trips through plain `xr.open_zarr` **with metamer uninstalled**, and **"plain" means WARNING-FREE**: "it opened" and "it opened cleanly" are different acceptance bars and only the second means self-describing. An unconsolidated store opens and warns, telling the reader to pass a keyword |
 | 4 | The status/value invariant holds in both directions across a store containing every **reachable** branch, with one consolidated note for `SCREENED_OUT`, `CANDIDATE_DROPPED` and `NOT_APPLICABLE` naming what would make each reachable |
 | 5 | The resume taxonomy, all five arms: recompute into a new store with no fit; criterion-set change refused; `fit_hash` mismatch refused; `/detail/` change refused; wrong-candidate-at-index-1 refused naming the index and both hashes; **and a source whose bitmap is not fully set refused with exit code 4** |
 | 6 | Measured peak RSS matches the analytic per-backend formula at two or three tile sizes, against the **RSS-vs-B slope in a fresh process** |

@@ -10,11 +10,11 @@
    signal-term parser.** Read **[WHAT TASK 9 INHERITS](#what-task-9-inherits--read-this-before-the-task-sections-below)**
    **before** the plan; it carries what the plan does not. **Task 9 must bump
    `store.SCHEMA_VERSION`** when it adds the two `Outcome` members.
-4. **Tests: 845 passed, measured 2026-08-12 after Task 8.** This is the only statement of the
-   count in this file; do not restate it elsewhere.
-5. **`pixi run test` is the full sweep (302 s, measured 2026-08-12 on the mini PC after Task 8)
-   and is what every end-of-task verification must run.** The timing is provisional — see the
-   note below.
+4. **Tests: 847 passed, measured 2026-08-13 after Task 8's promotions.** This is the only
+   statement of the count in this file; do not restate it elsewhere.
+5. **`pixi run test` is the full sweep and is what every end-of-task verification must run.
+   It takes 302–337 s on the mini PC — three runs, 2026-08-12 and 2026-08-13, at 822, 845 and
+   847 tests.** Quote the range, never one end of it; see the note below.
 6. **`pixi run test-fast` deselects `slow` and is for iteration only — a green fast run is NOT
    evidence a task is done.** `pixi run test-ci` reproduces CI (`-m 'not machine'`) and is not
    evidence either, because `machine` covers exactly the tests that pin the RSS shim's units and
@@ -57,10 +57,22 @@ measurement was taken. Do not read either figure as a per-task cost.
 **THAT IS TWO UNDECOMPOSED STEPS. A THIRD TRIGGERS A PROPER ATTRIBUTION PASS** — per-module
 durations against the previous run — **rather than a third note**: three unexplained steps in
 a row stops being scatter and starts being a trend nobody has looked at. **Task 8 did not
-supply the third and is evidence about the second**: 24 new tests, including two spawning
-subprocesses, and the sweep went **307 → 302 s**, i.e. *down*. So the 271 → 307 step was
-mostly scatter rather than accumulation, and **the run-to-run spread on this figure is at
-least 5 s** — quote it as such.
+supply the third and settles the second**: 24 new tests, including two spawning subprocesses,
+and the sweep went **307 → 302 s**, i.e. *down*. So the 271 → 307 step was scatter rather than
+accumulation.
+
+**AND THEN THE SPREAD FIGURE ITSELF WAS WRONG, FROM A SAMPLE OF TWO — THE EXACT ERROR P4
+DIAGNOSED.** On 2026-08-12 this file recorded "the run-to-run spread is at least 5 s" from the
+307 → 302 pair. The very next run, **2026-08-13, added two tests that take ~2 s and came in at
+337 s**. Three measurements now: **307, 302, 337 s at 822, 845 and 847 tests** — a spread of
+**at least 35 s, more than ten times the estimate**, and the largest jump came with the
+smallest test addition.
+
+**So: quote 302–337 s as a range, and treat a step inside it as scatter.** The estimate was
+wrong the same way the verdict's ±0.15 was wrong — **two points do not bound a spread**, and
+the second point being *lower* made the estimate look conservative when it was not. **The
+attribution-pass trigger stands but is now about the RANGE**: a sweep outside 300–340 s is the
+thing to explain, not a step of tens of seconds inside it.
 More importantly: **Task 5's ~500 s figure
 was measured while `bench/` was leaking numba's mask to 1 thread**, so everything after
 `test_bench.py` ran single-threaded. **Every timing taken in that window is suspect. Do not
@@ -647,6 +659,26 @@ domain-mask variable in §13.6's input contract). **Their codes are 2a's regardl
 stored code meanings are fixed at store creation.
 
 ### What Task 8 established (done — the store schema)
+
+- **PROMOTED 2026-08-13 into the pre-flight as (a0) and (g2)** — the fill-value rule and
+  binding a consumer's signature against the stored field list. **Full statements are in the
+  handoff, not here.** Both now have executable guards: the hand-written fill table, and
+  `test_rank_candidates_inputs_are_a_subset_of_what_the_store_holds`.
+- **A STALE CONSOLIDATION MAKES A LATER-ADDED ARRAY SILENTLY INVISIBLE.** Measured: an array
+  created after `consolidate_metadata` is absent from `xr.open_zarr`'s listing **with no
+  warning**, and from `zarr.open_group` on the root, because both read the consolidated
+  document. An attr written afterwards *is* visible, so the two halves are not equally
+  dangerous. The guard asserts on the **store's state** rather than on a code path, and it
+  must read both listings **through the root** — consolidated metadata lives there, so opening
+  a subgroup by its own path bypasses it and the comparison is vacuous. **That last fact was
+  found by the positive control, not by the assertion**: the first version compared a
+  subgroup's two listings and could not fail.
+- **CONSOLIDATED METADATA IS ITSELF OUTSIDE THE v3 SPEC, AND THAT IS NOT THE `S32` SITUATION.**
+  `consolidate_metadata` warns as much. The difference is that consolidation is **additive** —
+  the per-array `zarr.json` documents remain, so an implementation ignoring it still reads the
+  store — whereas an unsupported dtype makes the data unreadable. **Do not remove consolidation
+  for consistency with the `S32` decision.**
+
 
 - **`OK` IS CODE 0 AND ZARR'S DEFAULT FILL IS 0, SO THE WRONG FILL IS INVISIBLE ON DISK AND
   INVERTS THE STORE'S MEANING.** Zarr writes no chunk equal to the fill value, so a store

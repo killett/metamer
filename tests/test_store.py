@@ -329,6 +329,89 @@ def test_the_stored_primitives_alone_can_rank_a_point(tmp_path):
     assert ranking.ic_best[0] == pytest.approx(205.2717963, rel=1e-9)
 
 
+def test_rank_candidates_inputs_are_a_subset_of_what_the_store_holds(tmp_path):
+    """Every per-cell field `CandidateScores` needs is an array in the store.
+
+    **THIS IS THE PRECONDITION OF 12.8, MADE EXECUTABLE.** The three-hash split
+    only buys anything if `rank_candidates` can run from stored primitives, and
+    that is a property of two lists -- the consumer's fields and the store's
+    arrays -- which nothing compares unless a test does. `n` was missing from
+    12.2's layout and was found exactly this way.
+
+    The map from field to array name is written out rather than derived, so a
+    rename on either side fails here instead of silently pairing the wrong two.
+
+    Catches a future change to either side: a criterion that starts reading a
+    fifth primitive, or a schema edit that drops one. Both leave every existing
+    test green and make the recompute path reopen the input, which is the
+    condition that makes the split worthless.
+    """
+    path, _ = _fixture(tmp_path)
+    stored = set(_open(path, "primitives").data_vars) | set(
+        _open(path, "status").data_vars
+    )
+    field_to_array = {
+        "loglik": "log_lik",
+        "k": "k",
+        "n": "n",
+        "n_eff": "n_eff_bic",
+        "outcome": "outcome",
+    }
+    per_cell = {
+        name
+        for name in CandidateScores.__dataclass_fields__
+        if name not in {"labels", "engines", "objectives"}
+    }
+
+    assert per_cell == set(field_to_array)
+    assert set(field_to_array.values()) <= stored
+
+
+def test_the_consolidated_listing_matches_what_is_on_disk(tmp_path):
+    """The consolidated metadata names exactly the arrays the store really has.
+
+    MEASURED 2026-08-12: an array created after consolidation is **silently
+    invisible** -- `xr.open_zarr` lists the group without it and emits no
+    warning, and `zarr.open_group` does not see it either, because both read the
+    consolidated document. An attr written afterwards *is* visible, so the two
+    halves of the obligation are not equally dangerous.
+
+    Catches a later writer that creates an array and forgets to re-consolidate.
+    The assertion is on the **store's own state**, not on a code path, so it
+    fires for any writer rather than only the ones a test happens to call.
+
+    The control is the half that can fail: today nothing writes after creation,
+    so the comparison would pass against a store with no consolidated metadata
+    at all, or against a comparison that compares a listing with itself. Adding
+    an array without re-consolidating must make the same comparison fail.
+
+    **The control also fixed the comparison.** Consolidated metadata lives at the
+    ROOT, so opening a subgroup by its own path bypasses it and the two listings
+    agree however stale the root is. The comparison has to be made the way a
+    consumer reads -- through the root -- which is what the first version got
+    wrong and what only the control could show.
+    """
+    path, _ = _fixture(tmp_path)
+
+    def listings(group: str) -> tuple[list[str], list[str]]:
+        seen = zarr.open_group(str(path), mode="r")[group]
+        actual = zarr.open_group(str(path), mode="r", use_consolidated=False)[group]
+        assert isinstance(seen, zarr.Group)
+        assert isinstance(actual, zarr.Group)
+        return sorted(seen.array_keys()), sorted(actual.array_keys())
+
+    for group in ("signal", "selection", "primitives", "noise", "status", "completion"):
+        consolidated, direct = listings(group)
+        assert consolidated == direct, group
+
+    late = zarr.open_group(str(path / "status"), mode="r+")
+    late.create_array("added_later", shape=(2,), dtype="uint8", dimension_names=("q",))
+
+    consolidated, direct = listings("status")
+    assert "added_later" in direct
+    assert "added_later" not in consolidated
+
+
 # --------------------------------------------------------------------------
 # The ragged axis, and what is deliberately absent
 # --------------------------------------------------------------------------

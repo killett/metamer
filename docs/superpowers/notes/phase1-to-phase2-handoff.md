@@ -20,6 +20,31 @@ something. A passing suite is not evidence the brief is right.
 
 Every entry below has at least one worked instance from this project.
 
+### (a0) A FILL VALUE A SUCCESSFUL RUN CAN PRODUCE MAKES AN EMPTY STORE READ AS A COMPLETE ONE
+
+> **Any sparse or default-valued storage format elides values equal to its fill.** If the fill
+> is a value the write path can legitimately produce, then **"never written" and "written with
+> that value" are the same bytes** -- and the absence of data reads as data. **Every fill must
+> be a value the writer cannot emit**, and each exception must be labelled with why it is safe.
+
+**This is the most dangerous single defect this project has found, and it is first because it
+generalizes past zarr** -- to any format with a default, a sentinel, a sparse encoding or a
+"missing means" convention.
+
+Worked instance, Phase 2a Task 8, measured. `Outcome.OK` is code **0**; zarr's default
+`fill_value` for an integer array is **0**; zarr **does not write a chunk equal to the fill
+value**. So a store created with the default fill and a correct one are **byte-for-byte
+identical on disk -- both pure metadata, zero chunk files** -- and the defaulted one reads back
+as a complete, wholly successful run over the entire grid. **It defeats precisely the
+invariant that `NOT_ATTEMPTED`-as-initial-value exists to provide**, which is what makes it
+worse than an ordinary plausible-number failure: the guard and the defect are the same
+mechanism.
+
+**The exception is what a good one looks like.** `/primitives/iterations` is uint16 and cannot
+carry NaN; the dtype is fixed at store creation and the array feeds no arithmetic. It is
+therefore **exempt, named, and given a sentinel of 65535 rather than silently left at 0** --
+justified, labelled, and outside the range the writer can emit.
+
 ### (a) Absolute vs differential — THE CANCELLATION RULE
 
 > **Any quantity constant across the comparison axis is invisible to every test that
@@ -249,6 +274,27 @@ requires mutating both halves at once.**
 
 Check the source, not the brief's assumption. The symptom is a plausible number rather than
 an error — `n_eff=float(n)` makes `BIC_NEFF` silently identical to `BIC`.
+
+### (g2) BIND EVERY CONSUMER'S SIGNATURE AGAINST THE STORED FIELD LIST
+
+> **For each consumer a store claims to serve without the original data, bind its signature
+> against the list of fields actually stored.** A precondition of that shape is a property of
+> two lists, not a promise, and nothing checks it unless something compares them.
+
+(g) binds a *call* against a signature. This binds a **schema** against one, and it is the
+only way the gap is found before the task that needs it.
+
+Worked instance, Phase 2a Task 8. Design doc §12.8 licenses recomputing derived arrays from
+stored primitives without refitting, and the handoff states the precondition: *if any future
+change makes `rank_candidates` need the data, §12.8 becomes unimplementable and the three-hash
+split buys nothing.* `criteria.CandidateScores` requires `loglik`, `k`, **`n`** and `n_eff`;
+§12.2's `/primitives/` listed every one of those **but `n`**, which is not derivable from
+anything stored -- it comes from the mask, which is data. Task 12 would have discovered it four
+tasks later, when the schema could no longer change.
+
+**Make it executable rather than documentary.** The check is now a standing test:
+`CandidateScores`'s per-cell field names are a subset of `/primitives/`'s arrays plus
+`/status/`'s. It survives a change to either side, which a docstring does not.
 
 > **A CLEAN (g) MARK IS NOT A PRE-FLIGHT.** (g) clears a brief of **staleness and nothing
 > else**. Task 15 bound cleanly and was wrong five ways; Task 16 bound cleanly and shipped a
