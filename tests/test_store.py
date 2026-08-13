@@ -722,7 +722,7 @@ def test_creating_over_an_existing_store_is_refused(tmp_path):
 @pytest.mark.parametrize(
     ("field", "value", "message"),
     [
-        ("n_beta", 1, "n_beta must be at least 2"),
+        ("n_beta", 0, "n_beta must be at least 1"),
         ("n_y", 0, "n_y must be at least 1"),
         ("tile_side", 0, "tile_side must be at least 1"),
     ],
@@ -730,13 +730,18 @@ def test_creating_over_an_existing_store_is_refused(tmp_path):
 def test_a_degenerate_axis_is_refused(field, value, message):
     """Axis lengths that make assertions vacuous are refused at construction.
 
-    A length-1 axis makes every quantity defined across it constant, so every
-    test over it passes against an implementation that never writes anything --
-    the argument the plan makes for M=2 and C=2, applied to the axis the plan
-    does not mention.
+    A zero-length axis is not a store, it is an absence of one, and every array
+    defined across it would be empty while every shape still checked out.
 
-    Catches a store created with `n_beta = 1`, where `/signal/`'s whole model
-    axis would be exercised at the one width that cannot be wrong.
+    **A length-1 axis is legal and is NOT refused**: fitting one candidate under
+    one criterion against a one-column design is a reasonable thing to ask for,
+    and `delta_ic = 0` with `weight = 1` is the correct answer there. What a
+    length-1 axis cannot do is *test* anything defined across it, so that
+    requirement belongs to the suite's fixtures and not to the format --
+    `create_store` refused it until 2026-08-13, which refused a legitimate
+    single-candidate run.
+
+    Catches a zero-length axis reaching store creation.
     """
     kwargs = {"n_y": 4, "n_x": 6, "n_beta": 4, "tile_side": 2, field: value}
 
@@ -744,33 +749,64 @@ def test_a_degenerate_axis_is_refused(field, value, message):
         store.StoreShape(**kwargs)
 
 
-def test_a_single_criterion_or_candidate_is_refused(tmp_path):
-    """M = 1 and C = 1 are refused at creation, each naming its consequence.
+def test_an_empty_candidate_or_criterion_list_is_refused(tmp_path):
+    """A store with no models or no criteria is refused; one of each is not.
 
-    Catches a store whose `delta_ic` is identically 0 and whose `weight` is
-    identically 1, against which every ranking assertion passes without any
-    normalization, exclusion or sentinel ever being written.
+    **THE M >= 2 REFUSAL WAS REMOVED ON 2026-08-13 AND THIS RECORDS WHY.** Task
+    8 refused fewer than two candidates and fewer than two criteria on the
+    grounds that a length-1 axis makes assertions vacuous. That is true of
+    **tests** and false of the **format**: a user fitting one noise model under
+    one criterion is asking for something coherent, and the full sweep caught it
+    -- an existing runner test with a single candidate began failing inside
+    store creation. A fixture rule was being enforced against users.
+
+    Catches the empty case, which is genuinely broken, and pins that the
+    single-candidate case is not refused.
     """
     path, attrs = _fixture(tmp_path)
     config = load(tmp_path / "c.toml")
     shape = store.StoreShape(n_y=4, n_x=6, n_beta=4, tile_side=2)
 
-    with pytest.raises(ValueError, match="at least 2 criteria"):
+    with pytest.raises(ValueError, match="at least one candidate"):
         store.create_store(
-            tmp_path / "one_c.zarr",
-            specs=config.process_specs(),
-            criteria=("aic",),
-            shape=shape,
-            attrs=attrs,
-        )
-    with pytest.raises(ValueError, match="at least 2 candidates"):
-        store.create_store(
-            tmp_path / "one_m.zarr",
-            specs=config.process_specs()[:1],
+            tmp_path / "none.zarr",
+            specs=(),
             criteria=config.criteria,
             shape=shape,
             attrs=attrs,
         )
+
+    store.create_store(
+        tmp_path / "one.zarr",
+        specs=config.process_specs()[:1],
+        criteria=config.criteria[:1],
+        shape=shape,
+        attrs=attrs,
+    )
+    single = xr.open_zarr(tmp_path / "one.zarr", group="selection")
+    assert single.sizes["m"] == 1
+    assert single.sizes["c"] == 1
+
+
+def test_the_suite_fixture_is_wide_enough_to_be_falsifiable(tmp_path):
+    """The 2a fixture is M=2 with unequal p and C=2, and that is a TEST rule.
+
+    Now that the format permits a length-1 axis, nothing structural stops a
+    later test from using one -- and every assertion over that axis would pass
+    against an implementation that never normalizes, never excludes and never
+    writes a sentinel.
+
+    Catches the shared fixture being narrowed: at M=1, `delta_ic` is identically
+    0, `weight` identically 1, and a one-candidate-fails point is
+    unconstructible; at equal `p` the ragged offsets stop discriminating.
+    """
+    path, _ = _fixture(tmp_path)
+    selection = _open(path, "selection")
+    noise = _open(path, "noise")
+
+    assert selection.sizes["m"] == 2
+    assert selection.sizes["c"] == 2
+    assert list(noise["noise_extent"].values) == [1, 3]
 
 
 def test_a_missing_provenance_key_is_refused(tmp_path):

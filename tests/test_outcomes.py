@@ -78,19 +78,62 @@ def test_iter_cap_small_grad_is_a_failure():
     assert Outcome.ITER_CAP_SMALL_GRAD.is_failure is True
 
 
-def test_outcome_has_twelve_members():
-    """The taxonomy has exactly the twelve members design doc section 8.6 lists.
+def test_the_outcome_vocabulary_and_its_codes_are_enumerated():
+    """Every member and its on-disk code, written out.
 
-    Expected value determined independently by counting the rows of the
-    section 8.6 table by hand: OK, ITER_CAP_SMALL_GRAD, ITER_CAP_LARGE_GRAD,
-    DIAGNOSTIC_LIMIT, TRUST_RADIUS_COLLAPSED, NONFINITE_OBJECTIVE,
-    RANK_DEFICIENT_X, ILL_CONDITIONED_X, DEGENERATE_HESSIAN, NOT_ATTEMPTED,
-    CANDIDATE_DROPPED, INSUFFICIENT_DATA -- twelve rows.
+    **THIS REPLACED A COUNT ON 2026-08-13**, when Task 9 added two members and
+    the count assertion failed in the one way a count can: by being right about
+    the number and blind to everything else. The standing rule is enumerate,
+    never count -- a count cannot see a rename, and cannot see two members
+    swapping codes, which is the defect that silently reinterprets every
+    archived store.
 
-    Bug this catches: a silently dropped or duplicated member, which would
-    shift or collide the on-disk uint8 codes without anyone noticing.
+    Expected values determined independently: design doc section 8.6's table
+    for the first twelve, in the order the codes were assigned, plus the two
+    Task 9 added at the next free codes. `_CODES`'s docstring forbids
+    renumbering, so these literals are permanent.
+
+    Catches a dropped, renamed, duplicated or renumbered member.
     """
-    assert len(Outcome) == 12
+    assert {member.value: member.code for member in Outcome} == {
+        "ok": 0,
+        "iter_cap_small_grad": 1,
+        "iter_cap_large_grad": 2,
+        "diagnostic_limit": 3,
+        "trust_radius_collapsed": 4,
+        "nonfinite_objective": 5,
+        "rank_deficient_x": 6,
+        "degenerate_hessian": 7,
+        "not_attempted": 8,
+        "candidate_dropped": 9,
+        "insufficient_data": 10,
+        "ill_conditioned_x": 11,
+        "screened_out": 12,
+        "not_applicable": 13,
+    }
+
+
+def test_the_two_deferred_outcomes_are_skips_and_not_failures():
+    """`SCREENED_OUT` and `NOT_APPLICABLE` sit outside the failure rate.
+
+    Neither is reachable in 2a -- there is no screening block and no declared
+    domain mask -- so the semantics are decided by the task that owns the
+    denominator rather than by whichever task first emits one.
+
+    `SCREENED_OUT` is a deliberate skip, like `NOT_ATTEMPTED`: the run chose not
+    to fit, so counting it as a failure would make a *cheaper* configuration
+    report a worse failure rate. `NOT_APPLICABLE` is a declared domain mask --
+    land, permanent ice -- so like `INSUFFICIENT_DATA` it is **not eligible**
+    either: it is not a point the failure rate is over.
+
+    Catches either defaulting into the failure set, which is what a new member
+    does if nothing decides otherwise: at 10^7 points a screened-out ocean
+    basin would read as a catastrophic failure map.
+    """
+    assert Outcome.SCREENED_OUT.is_failure is False
+    assert Outcome.SCREENED_OUT.is_eligible is True
+    assert Outcome.NOT_APPLICABLE.is_failure is False
+    assert Outcome.NOT_APPLICABLE.is_eligible is False
 
 
 def test_rank_deficient_and_ill_conditioned_are_distinct_outcomes():

@@ -64,6 +64,8 @@ from typing import Protocol, runtime_checkable
 import numpy as np
 from numpy.typing import NDArray
 
+from metamer.core.registry import signal_registry
+
 X_RANK_RTOL: float = float(np.finfo(np.float64).eps) ** 0.5
 """Relative singular-value tolerance for the numerical rank of X. sqrt(eps).
 
@@ -803,3 +805,161 @@ class SignalSpec:
     def n_beta(self, t: NDArray[np.float64]) -> int:
         """Number of design columns for this time axis."""
         return int(self.design_matrix(t)[0].shape[1])
+
+
+# ---------------------------------------------------------------------------
+# The config vocabulary
+# ---------------------------------------------------------------------------
+#
+# **THE FACTORIES LIVE BESIDE THEIR CLASSES, NOT IN THE PARSER.** Each one owns
+# the knowledge of whether it takes an argument and what that argument means, so
+# adding a parameter to a term cannot leave a table in another module stale.
+#
+# **`Regressor`, `ExpDecay` AND `LogDecay` ARE DELIBERATELY NOT REGISTERED.**
+# `Regressor` needs a numpy column, which is the per-point regressor regime
+# refused at layer 3; `ExpDecay` and `LogDecay` are nonlinear and their
+# `columns()` raises, naming Phase 4. Registering them under a name a config can
+# reach would turn a refusal that belongs at layer 3 into an exception raised
+# inside the design build, inside the tile loop, ten hours in.
+
+
+def _no_argument(kind: str, argument: str | None) -> None:
+    """Refuse an argument for a term that takes none.
+
+    Args:
+        kind: The term's config name.
+        argument: What followed the separator, if anything.
+
+    Raises:
+        ValueError: If an argument was supplied.
+    """
+    if argument is not None:
+        raise ValueError(
+            f"signal term {kind!r} takes no argument, got {argument!r}; "
+            f"write {kind!r} on its own"
+        )
+
+
+def _epoch(kind: str, argument: str | None) -> float:
+    """Read a required epoch in decimal years.
+
+    Args:
+        kind: The term's config name.
+        argument: The text after the separator.
+
+    Returns:
+        The epoch.
+
+    Raises:
+        ValueError: If it is missing or not a number. Breakpoint epochs are
+            user-supplied in v1 and detection is out of scope, so a missing one
+            is a refusal rather than a default.
+    """
+    if argument is None:
+        raise ValueError(
+            f"signal term {kind!r} requires an epoch in decimal years, as "
+            f"'{kind}:2005.5'. Breakpoint epochs are user-supplied in v1; "
+            "detection is out of scope and is not silently approximated"
+        )
+    try:
+        return float(argument)
+    except ValueError as error:
+        raise ValueError(
+            f"signal term {kind!r} epoch {argument!r} is not a number; it is "
+            "a decimal year, e.g. 2005.5"
+        ) from error
+
+
+@signal_registry.register("constant")
+def _constant(argument: str | None = None) -> SignalTerm:
+    """Build an intercept."""
+    _no_argument("constant", argument)
+    return Constant()
+
+
+@signal_registry.register("trend")
+def _trend(argument: str | None = None) -> SignalTerm:
+    """Build a linear rate."""
+    _no_argument("trend", argument)
+    return Trend()
+
+
+@signal_registry.register("accel")
+def _accel(argument: str | None = None) -> SignalTerm:
+    """Build a quadratic acceleration term."""
+    _no_argument("accel", argument)
+    return Accel()
+
+
+@signal_registry.register("annual")
+def _annual(argument: str | None = None) -> SignalTerm:
+    """Build the annual cycle: TWO columns, cos and sin."""
+    _no_argument("annual", argument)
+    return Annual()
+
+
+@signal_registry.register("semiannual")
+def _semiannual(argument: str | None = None) -> SignalTerm:
+    """Build the semiannual cycle: TWO columns, cos and sin."""
+    _no_argument("semiannual", argument)
+    return SemiAnnual()
+
+
+@signal_registry.register("harmonic")
+def _harmonic(argument: str | None = None) -> SignalTerm:
+    """Build a harmonic pair at a stated period in years.
+
+    Raises:
+        ValueError: If the period is missing, unparseable or non-positive. A
+            period of zero divides by zero inside `columns` and produces a
+            design of NaNs with no crash.
+    """
+    period = _epoch("harmonic", argument)
+    if period <= 0.0:
+        raise ValueError(
+            f"signal term 'harmonic' period {period} must be positive; the "
+            "period is in years and divides the time axis"
+        )
+    return Harmonic(period=period)
+
+
+@signal_registry.register("offset")
+def _offset(argument: str | None = None) -> SignalTerm:
+    """Build a unit step at a stated epoch."""
+    return Offset(epoch=_epoch("offset", argument))
+
+
+@signal_registry.register("rate_change")
+def _rate_change(argument: str | None = None) -> SignalTerm:
+    """Build a one-sided ramp from a stated epoch."""
+    return RateChange(epoch=_epoch("rate_change", argument))
+
+
+def k_beta(spec: SignalSpec, t: NDArray[np.float64]) -> int:
+    """Return the design column count for a signal specification.
+
+    **A COLUMN COUNT, NEVER A TERM COUNT.** `Harmonic` contributes two columns,
+    so `["constant", "trend", "annual"]` is **three terms and k_beta = 4** --
+    which is design doc 9.4's worked value. The wrong count is not even
+    self-consistently wrong: it silently changes `tile_side` and every memory
+    figure derived from it.
+
+    Args:
+        spec: The signal specification.
+        t: The **real** time axis in decimal years. Not a synthetic probe: a
+            one-sample axis makes `Trend`'s column identically zero and trips
+            `Regressor`'s length check, so a probe would answer a different
+            question than the one asked.
+
+    Returns:
+        The number of design columns.
+
+    Note:
+        `design_matrix` returns `(matrix, rank)`, and **the rank is not the
+        column count** -- it is the numerical rank of the built design, which is
+        smaller wherever the design is deficient. Taking the second element
+        would give a `k_beta` that shrinks on a degenerate axis and a tile size
+        that grows because of it.
+    """
+    matrix, _rank = spec.design_matrix(t)
+    return int(matrix.shape[-1])

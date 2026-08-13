@@ -15,6 +15,7 @@ from metamer.core.engines.kalman import KalmanEngine
 from metamer.core.engines.protocol import ScoredResult
 from metamer.core.objective import (
     _NEGATIVE_REDUCTION_RTOL,
+    _RANK_TABLE,
     CONDITION_LOG_LIMIT,
     OUTCOME_PRECEDENCE,
     RANK_DEFICIENT_LOG_LIMIT,
@@ -1672,30 +1673,23 @@ def test_a_failed_series_carries_nan_never_minus_inf(case):
     assert np.all(np.isfinite(result.loglik[ok])), f"{case}: OK implies finite"
 
 
-def test_outcome_codes_are_stable():
-    """The on-disk codes are the documented ones and are never renumbered.
+def test_every_outcome_this_module_orders_has_a_stable_round_trip():
+    """`OUTCOME_PRECEDENCE`'s members survive the code round trip.
 
-    The expected mapping is transcribed from the schema comment in
-    `outcomes.py`, not read back from `_CODES`, so a renumbering fails here
-    even though every in-process comparison would still agree with itself.
+    **THE FULL CODE TABLE IS ENUMERATED IN `tests/test_outcomes.py` AND NOWHERE
+    ELSE.** This test used to carry a second copy of it, and on 2026-08-13 Task
+    9 added two members and had to update both -- which is the drift the
+    "state a fact once" rule exists to prevent, and the second copy is what made
+    a two-line change touch two suites.
 
-    Bug this catches: inserting a new member in the middle of the enum, which
-    silently reinterprets every archived uint8 status array.
+    What belongs here is what that suite does not say: **this module's ladder is
+    indexed BY CODE**, through `_RANK_TABLE`, so a member whose code does not
+    round-trip would be ranked as an unlisted outcome and merged wrongly rather
+    than reported.
+
+    Bug this catches: a precedence entry whose code falls outside the rank
+    table, which downgrades a diagnosed cause to "unranked" silently.
     """
-    expected = {
-        "ok": 0,
-        "iter_cap_small_grad": 1,
-        "iter_cap_large_grad": 2,
-        "diagnostic_limit": 3,
-        "trust_radius_collapsed": 4,
-        "nonfinite_objective": 5,
-        "rank_deficient_x": 6,
-        "degenerate_hessian": 7,
-        "not_attempted": 8,
-        "candidate_dropped": 9,
-        "insufficient_data": 10,
-        "ill_conditioned_x": 11,
-    }
-    assert {member.value: member.code for member in Outcome} == expected
-    for value, code in expected.items():
-        assert Outcome.from_code(code) == Outcome(value)
+    for member in OUTCOME_PRECEDENCE:
+        assert Outcome.from_code(member.code) is member
+    assert max(member.code for member in OUTCOME_PRECEDENCE) < _RANK_TABLE.size

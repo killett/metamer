@@ -1718,3 +1718,184 @@ no-chunk-files assertion checked the whole `/status/` group and failed, because 
 coordinates *are* written at creation** — they carry values, not fill. The claim is about the
 data arrays, and the corrected test asserts both halves: the data arrays have no chunk files
 and `noise/m` does.
+
+---
+
+## Task 9 — the tile write path, the signal parser, and the invariant (audited 2026-08-13)
+
+The largest brief in 2a, and **(g2) — promoted the day before out of Task 8 — paid for itself
+immediately on a different pair of lists.**
+
+### (g2) — `FitResult` DOES NOT CARRY `k` OR `n`, SO THE STORE'S PRIMITIVES HAVE NO SOURCE
+
+Task 8 established that `/primitives/` must hold `loglik`, `k`, `n`, `n_eff_*` because
+`rank_candidates` reads them. Binding the **producer** against the same list:
+
+    FitResult: candidates theta theta_err theta_unconstrained beta beta_err loglik
+               outcome init_rung n_iter n_eff_bic n_eff_trend ranking engine
+               objective gradient_mode
+
+**`k` and `n` are absent.** Both are computed inside `fit()` by `counting.penalty_terms` to
+build the `CandidateScores` it ranks with, and then **discarded with the local**. So the write
+path would have had to call `penalty_terms` itself — **a second derivation of a stored
+primitive**, computed from a different call site than the one that produced the stored ΔIC,
+with nothing keeping the two in step. That is the cancellation rule at a module boundary:
+every test comparing a store's `k` against a recomputed `k` would compare one derivation with
+itself.
+
+**And the same object solves the second problem.** `fit()` takes **one** `criterion` and
+returns **one** `Ranking`; the store has **C = 2**. Calling `fit` twice would refit 10⁷ series
+to add a criterion — the exact thing §12.8's split exists to prevent.
+
+**Changed:** `FitResult` gains `scores: CandidateScores` — the object `fit` already built —
+and the write path ranks per criterion from it with `rank_candidates(scores, c)`. One
+derivation, C rankings, no refit. `FitResult.ranking` stays as the single-criterion
+convenience every Phase 1 test uses.
+
+### (d) / (a3) — THE SIGNAL VOCABULARY IS PARAMETERIZED AND THE NOISE ONE IS NOT
+
+The brief says to mirror `kernel_registry`. **The two vocabularies are not the same shape.**
+A noise candidate is a sum of bare names (`"white + matern12"`) and `parse_candidate`'s
+restricted AST **refuses a call, an attribute, a subscript and a literal by name**. Signal
+terms are constructed with arguments: `Offset(epoch)`, `RateChange(epoch)`,
+`Harmonic(period)`, `Regressor(values, name)`.
+
+**The spelling is already half-decided in the tree**, and inventing a second idiom would put
+two syntaxes inside one config field: Task 4 added
+`config.model.PER_POINT_TERM_PREFIX = "regressor_field:"`, **a `kind:argument` spelling that
+already lives inside `signal_terms`**. So a parameterized term is `offset:2005.5`, and the
+parser is per-entry rather than an expression parser — `signal_terms` is a **list**, with no
+`+` in it at all.
+
+**What is shared is `core.registry.Registry`, not the parser.** Sharing the parser would force
+one grammar to grow the other's: the sum-expression walker would have to admit arguments, and
+the colon form would have to admit `+`. The registry is generic and gives the entry-point
+group for free, exactly as `kernel_registry` does.
+
+### (a3) — THREE TERM CLASSES CANNOT BE BUILT FROM A CONFIG STRING, AND EACH FAILS DIFFERENTLY
+
+`Regressor` needs a numpy column — that is the per-point regressor regime, already refused at
+layer 3. `ExpDecay` and `LogDecay` declare `linear = False` and their `columns()` **raises
+`NotImplementedError`, naming Phase 4**. Registering them under names a config can reach would
+turn a refusal that belongs at layer 3 into an exception raised **inside the design build,
+inside the tile loop, ten hours in**. They are therefore not registered, and the parser's
+"unknown term" message names them explicitly as deferred rather than as typos.
+
+### (a) — `k_beta` IS A COLUMN COUNT, NOT A TERM COUNT, AND THE TWO DIFFER ON 2a's OWN CONFIG
+
+`Harmonic` contributes **two** columns (cos and sin). For `["constant", "trend", "annual"]`
+the term count is **3** and `k_beta` is **4** — which is §9.4's worked value, so the wrong one
+is not even self-consistently wrong: it silently changes every tile size and every memory
+figure derived from it.
+
+**`k_beta` is read off the built design**, `design_matrix(t).shape[-1]`, against the **real**
+time axis the runner already has after stage 4a — not off a synthetic one-sample probe, whose
+`Trend` column is identically zero and whose `Regressor` length check would fire.
+
+### (a) — THE MODEL AXIS IS THE CANCELLATION AXIS, AGAIN, AND IT IS WORSE HERE
+
+`fit.py` computes `design_info(t, mask)` **once**, before the candidate loop, so **every
+design-derived outcome is identical for every `m`.** A test that varies the *candidate* to
+produce a design failure varies nothing. **The mask is what varies**, and the two required
+fixture points are both mask constructions.
+
+Beyond the brief's warning: it also means `RANK_DEFICIENT_X` and `INSUFFICIENT_DATA` are
+**constant along `m` by construction in v1**, so the invariant's "non-`OK` has NaN in all
+slots" is exercised by those outcomes at every model at once. The point where **candidate 1
+fails and candidate 2 succeeds** cannot come from the design — it must come from the
+optimizer, which is why the offset-inside-a-gap construction is specified as a *required*
+property rather than an incidental one.
+
+### (c) — THE WRITE PATH'S EXITS, AND THE ONE THAT MUST NOT EXIST
+
+`write_tile`: one return; `ValueError` on a tile whose shape disagrees with the result's `B`,
+on a candidate count disagreeing with the store's model axis, and on a violated status/value
+invariant. **There is deliberately no "skip this tile" exit**: a write path that can decline
+silently makes the completion bitmap's meaning depend on which branch ran, and Task 10 sets
+the bit from the fact that the write returned.
+
+### (a0) — THE INVARIANT IS CHECKED BEFORE THE WRITE, NOT AFTER
+
+A store is not readable-back cheaply mid-run, and a violated invariant that reaches disk is
+already the defect. The check runs on the **arrays about to be written**, so the failure is a
+refusal rather than a corrupted region — and it is the same function Task 13's exit criterion
+4 runs over a finished store, so the two cannot drift.
+
+**`iterations` is exempt and `/selection/` is exempt, for different reasons**: uint16 has no
+NaN, and `outcome` has no `c` axis. Both exemptions are named in the checker rather than
+implied by which arrays it happens to look at.
+
+### (k2) — `SCREENED_OUT` AND `NOT_APPLICABLE` TAKE THE NEXT FREE CODES, AND THE VERSION BUMPS
+
+`outcomes._CODES` currently ends at `ILL_CONDITIONED_X = 11`; the new members take **12** and
+**13**. `_CODES`'s own docstring makes adding a member a `schema_version` bump, so
+`store.SCHEMA_VERSION` goes to **2** — the store's `flag_values` / `flag_meanings` legend is
+written from the enum at creation, so a v1 store and a v2 store disagree about the vocabulary
+even though no 2a run can emit either code.
+
+**Their `is_failure` / `is_eligible` semantics are decided here because this task owns the
+denominator**: `SCREENED_OUT` is a deliberate skip, like `NOT_ATTEMPTED` — not a failure;
+`NOT_APPLICABLE` is a declared domain mask, like `INSUFFICIENT_DATA` — not a failure and
+**not eligible**, because land is not a point the failure rate is over.
+
+### (i2) — THE `engine=` SEAM, AND THE CONTROL IT FINALLY GETS
+
+Task 4 deliberately did not add `engine=` to the runner because no test there could make it
+bite. The write path can: a raising stub proves "no fit ran" only if the seam it is delivered
+through actually reaches the fit. **The positive control is that the same stub, on a tile with
+a fittable series, DOES raise** — Task 0 shipped that control, and this is the first task
+where the runner-level seam exists to be checked.
+
+### THE PRESCRIBED FIXTURE FOR EXIT CRITERION 14 CANNOT WORK, AND THE BRIEF SAYS WHY TWO LINES LATER
+
+`PROGRESS.md` and the plan both specify the one-candidate-fails point as
+**"the offset-inside-a-gap construction, a breakpoint with no support for one candidate's
+design"**. In v1 **the signal spec is fixed and only the noise model is selected**, and
+`fit.py` builds `design_info(t, mask)` **once, before the candidate loop** — a fact the same
+brief states, in its own "Watch" paragraph, as *"a test asserting design-failure behaviour
+must vary the mask, never the candidate"*.
+
+**So a design failure is identical for every `m` and cannot distinguish candidates.** The
+prescribed construction produces `RANK_DEFICIENT_X` at *both* candidates, i.e. `n_valid = 0`,
+which is a different test point entirely.
+
+**The reachable construction is an optimizer-stage failure**, and it arrives for free:
+fitting `white + matern12` to white noise leaves the correlated candidate degenerate —
+measured, `DEGENERATE_HESSIAN` at three of four points — while `white` fits. That is open
+question 9's own fixture defect, used deliberately. The test states the reasoning so the
+recipe is not reinstated.
+
+### Bite checks — 11 mutations, 11 bite
+
+Invariant (4): each direction deleted, the `-inf` check deleted, the trend exemption made
+unconditional. Aggregate (1): a bare `merge_outcomes` with no OK-wins rule. Layout (2): the
+ragged un-pad writing every model at slot 0, the tile/result size guard. Selection (1): one
+ranking reused for every criterion. Vocabulary (2): `k_beta` as the term count, `k_beta` as
+the numerical rank. Seam (1): `engine=` not threaded to `fit`.
+
+**`k_beta` as the term count failed three tests and as the rank failed one**, which is the
+right asymmetry: the term count is wrong for every composition containing a harmonic, and the
+rank is wrong only where the design is degenerate — the case a test has to construct on
+purpose.
+
+### WHAT THE FULL SWEEP CAUGHT THAT THE TASK'S OWN TESTS COULD NOT
+
+Two failures, both in modules Task 9 never opened, and **both are the standing rules
+working**:
+
+- **`test_objective.py` carried a SECOND copy of the outcome code table.** Adding two members
+  meant editing two suites, which is the drift "state a fact once" exists to prevent.
+  `tests/test_outcomes.py` now owns the enumeration; the objective test asserts what only it
+  can — that every `OUTCOME_PRECEDENCE` member's code **round-trips and lands inside
+  `_RANK_TABLE`**, since that ladder is indexed by code and a member outside it is silently
+  demoted to "unranked".
+- **`create_store`'s "at least 2 candidates" refusal was a FIXTURE RULE ENFORCED AGAINST
+  USERS.** A runner test with a single candidate began failing inside store creation. The
+  vacuity argument — a length-1 axis makes every assertion over it pass — is **true of tests
+  and false of the format**: fitting one candidate under one criterion is coherent, and
+  `delta_ic = 0` with `weight = 1` is the correct answer there. The refusal is now "at least
+  one", and the M=2/C=2 requirement is asserted **of the suite's own fixture** instead.
+
+**Generalize: a constraint justified by "otherwise the test is vacuous" belongs on the test,
+not on the product.** The tell is a refusal whose stated reason is about assertions rather
+than about data.

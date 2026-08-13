@@ -5,16 +5,18 @@
 1. **Branch `main`, and everything is on it.** Last commit: `git log --oneline -1`. `phase-1` is
    a stale name that never diverged and needs nothing done to it.
 2. **DONE:** Phase 1 Tasks 0–18 (Task 19 deleted), Phase 2 preliminaries P0–P4, Phase 2a
-   Tasks 0–8, and open questions 1, 4, 9, 11, **12**.
-3. **NEXT: Phase 2a Task 9 — the tile write path, the status/value invariant, and the
-   signal-term parser.** Read **[WHAT TASK 9 INHERITS](#what-task-9-inherits--read-this-before-the-task-sections-below)**
-   **before** the plan; it carries what the plan does not. **Task 9 must bump
-   `store.SCHEMA_VERSION`** when it adds the two `Outcome` members.
-4. **Tests: 847 passed, measured 2026-08-13 after Task 8's promotions.** This is the only
-   statement of the count in this file; do not restate it elsewhere.
+   Tasks 0–9, and open questions 1, 4, 9, 11, **12**. **The signal-term blocker carried since
+   Task 6 is CLOSED**: `config.signal_spec()` builds a `SignalSpec`, `signal.k_beta` gives the
+   column count, and `run()` sizes tiles, fits and writes them.
+3. **NEXT: Phase 2a Task 10 — the completion bitmap, write ordering, and SIGTERM.** Read
+   **[WHAT TASK 10 INHERITS](#what-task-10-inherits--read-this-before-the-task-sections-below)**
+   **before** the plan. **`run()` currently rewrites every tile on every invocation** — the
+   bitmap that would let it skip a completed one is Task 10's.
+4. **Tests: 880 passed, measured 2026-08-13 after Task 9.** This is the only statement of the
+   count in this file; do not restate it elsewhere.
 5. **`pixi run test` is the full sweep and is what every end-of-task verification must run.
-   It takes 302–337 s on the mini PC — three runs, 2026-08-12 and 2026-08-13, at 822, 845 and
-   847 tests.** Quote the range, never one end of it; see the note below.
+   It takes 302–376 s on the mini PC — four runs, 2026-08-12 and 2026-08-13, at 822, 845, 847
+   and 880 tests.** Quote the range, never one end of it; see the note below.
 6. **`pixi run test-fast` deselects `slow` and is for iteration only — a green fast run is NOT
    evidence a task is done.** `pixi run test-ci` reproduces CI (`-m 'not machine'`) and is not
    evidence either, because `machine` covers exactly the tests that pin the RSS shim's units and
@@ -68,7 +70,11 @@ DIAGNOSED.** On 2026-08-12 this file recorded "the run-to-run spread is at least
 **at least 35 s, more than ten times the estimate**, and the largest jump came with the
 smallest test addition.
 
-**So: quote 302–337 s as a range, and treat a step inside it as scatter.** The estimate was
+**Task 9's runs extend it: 376 s with two failures and 365 s green, at 880 tests — and Task 9
+added six tests that each fit real series, which is the first addition with a defensible
+per-test cost.** So the range is now **302–376 s over four runs**.
+
+**So: quote the range, and treat a step inside it as scatter.** The estimate was
 wrong the same way the verdict's ±0.15 was wrong — **two points do not bound a spread**, and
 the second point being *lower* made the estimate look conservative when it was not. **The
 attribution-pass trigger stands but is now about the RANGE**: a sweep outside 300–340 s is the
@@ -152,7 +158,7 @@ was the actual defect the leak exposed.
   the moment one is updated. What belongs here is what the head does not say — which invocation
   means what, and what Phase 2a added: the batch-skeleton, stub-engine, packaging, config,
   input, geometry, validation-staging, runner, thread-budget, machine-identity, tiling,
-  ragged-index and store-schema
+  ragged-index, store-schema, signal-vocabulary and write-path
   modules, on top of Phase 1's 588. `pixi run test-fast` (~12 s)
   deselects the `slow` marker and is for iteration only — **a green fast run is not evidence
   a task is done.** `pixi run test-ci` reproduces what CI runs (`-m 'not machine'`); it is
@@ -229,7 +235,7 @@ was the actual defect the leak exposed.
 | Phase 1 task tracker | `docs/superpowers/plans/2026-08-05-metamer-phase1.md.tasks.json` (native task ids 8–27) |
 | Original build prompt | [`docs/phase1-prompt.md`](docs/phase1-prompt.md) — **superseded** by design doc §2 where they conflict |
 | Phase 2 preliminaries pre-flight | [`docs/superpowers/notes/phase2-preliminaries-preflight.md`](docs/superpowers/notes/phase2-preliminaries-preflight.md) — the (a)–(k) audit of the P0/P1/P2 briefs and what each finding changed |
-| **Phase 2a implementation plan** | [`docs/superpowers/plans/2026-08-11-metamer-phase2a.md`](docs/superpowers/plans/2026-08-11-metamer-phase2a.md) — **Tasks 0–8 done; Task 9 next** |
+| **Phase 2a implementation plan** | [`docs/superpowers/plans/2026-08-11-metamer-phase2a.md`](docs/superpowers/plans/2026-08-11-metamer-phase2a.md) — **Tasks 0–9 done; Task 10 next** |
 | **Phase 2a pre-flight, per task** | [`docs/superpowers/notes/phase2a-preflight.md`](docs/superpowers/notes/phase2a-preflight.md) — the (a)–(k) audit of each 2a task brief and what each finding changed. **Append to it before each task, not after.** |
 
 Phase list is design doc §17. Phase 1 exit criteria are §18. Do not duplicate either here.
@@ -483,7 +489,7 @@ Per-task pre-flight audits live in
 [`docs/superpowers/notes/phase2a-preflight.md`](docs/superpowers/notes/phase2a-preflight.md).
 Only the durable conclusions are here.
 
-### WHAT TASK 9 INHERITS — read this before the task sections below
+### WHAT TASK 10 INHERITS — read this before the task sections below
 
 **Task 9 is the tile write path, the status/value invariant, and the signal-term parser** —
 the last of which is the blocker every task since Task 6 has recorded. Tasks 7 and 8 are
@@ -657,6 +663,64 @@ construction gives it.
 reachable (the Whittle engine plus the screening block; §14.1's early abort; a declared
 domain-mask variable in §13.6's input contract). **Their codes are 2a's regardless**, because
 stored code meanings are fixed at store creation.
+
+### What Task 9 established (done — the write path and the signal vocabulary)
+
+- **THE BLOCKER IS CLOSED.** `core.registry.signal_registry` + `config.signal_terms` map
+  config strings to `core.signal` terms. **The registry is shared machinery with
+  `kernel_registry`; the parser deliberately is not** — a noise candidate is a **sum
+  expression of bare names** and `parse_candidate` refuses calls, attributes, subscripts and
+  literals by name, while a signal term is **constructed with an argument** and `signal_terms`
+  is a **list with no `+` in it**. One grammar admitting both would have to accept arguments
+  inside a sum and `+` inside an argument.
+- **THE SPELLING WAS ALREADY HALF-DECIDED IN THE TREE.** Task 4's
+  `PER_POINT_TERM_PREFIX = "regressor_field:"` is a `kind:argument` form **already inside
+  `signal_terms`**, so a parameterized term is `offset:2005.5`. A second idiom would have put
+  two syntaxes in one config field.
+- **`k_beta` IS A COLUMN COUNT AND THE TERM COUNT IS WRONG ON 2a's OWN CONFIG.** `Harmonic`
+  gives cos **and** sin, so `["constant", "trend", "annual"]` is **3 terms and k_beta = 4** —
+  §9.4's worked value. **And `design_matrix` returns `(matrix, rank)`**, so taking the second
+  element gives a `k_beta` that *shrinks* where the design is degenerate and a tile that grows
+  because of it. Both mutations bite; the term count fails three tests, the rank fails one.
+- **`FitResult` DID NOT CARRY `k` OR `n`, SO `/primitives/` HAD NO PRODUCER.** Both were built
+  inside `fit()` for its `CandidateScores` and **discarded with the local**. The write path
+  would have had to call `penalty_terms` a second time, from a second site, with nothing
+  keeping the derivations in step. `FitResult.scores` now returns that one object — **which is
+  also what ranks the same fits under C criteria without refitting**, i.e. §12.8's claim
+  exercised where the fits are produced rather than only at the recompute path. **Found by
+  (g2), the day after (g2) was promoted, on a different pair of lists.**
+- **§12.2 NEVER DEFINED THE POINT-LEVEL AGGREGATE.** Defined now: **`OK` if any candidate is
+  `OK`, else `merge_outcomes` over the model axis** — the earliest cause under the ladder
+  already declared in `OUTCOME_PRECEDENCE`. The OK-wins half is load-bearing because that
+  ladder ranks `OK` **last**: a bare merge reports a failure for a point that fitted.
+- **A THIRD INVARIANT EXEMPTION: `n_eff_trend` IS NaN BY DESIGN WITH NO TREND COLUMN.** The
+  caller declares whether the design has one, because the write path cannot tell a designed
+  NaN from a defect — and a checker that guessed would excuse a real failure at every point of
+  every run that does have a trend. The non-OK direction still applies to it.
+- **THE PRESCRIBED ONE-CANDIDATE-FAILS FIXTURE CANNOT WORK, AND THE BRIEF SAID SO TWO
+  PARAGRAPHS LATER.** "An offset inside a gap, a breakpoint with no support for one
+  candidate's design" — but in v1 **the design is shared and built once before the candidate
+  loop**, so it fails *both* candidates and gives `n_valid = 0`. The reachable construction is
+  an **optimizer-stage** failure: `white + matern12` on white noise is degenerate at most
+  points while `white` fits (measured: 3 of 4). Open question 9's own fixture defect, used
+  deliberately.
+- **THE INVARIANT IS CHECKED BEFORE THE WRITE**, on the arrays about to be written, so a
+  violation is a refusal rather than a corrupted region — and it is the same function exit
+  criterion 4 runs over a finished store, so the two cannot drift.
+- **MEASURED END TO END:** 4 series, 2 candidates, N=60 — `k_beta` 4, `tile_side` 90 at a
+  0.01 GB budget, one tile, **8.6 s**. `run()` takes `engine=` and the raising stub reaches
+  `fit`, which is the positive control every later "no fit ran" rests on.
+- **THE FULL SWEEP CAUGHT TWO THINGS THE TASK'S OWN TESTS COULD NOT.** `test_objective.py`
+  held a **second copy of the outcome code table**, so adding two members had to touch two
+  suites — the enumeration now lives once, in `test_outcomes.py`, and the objective test
+  asserts only what it alone can (every `OUTCOME_PRECEDENCE` code round-trips and lands inside
+  `_RANK_TABLE`, which is indexed by code). And **Task 8's "at least 2 candidates" refusal was
+  a fixture rule enforced against users**: a single-candidate run is coherent, `delta_ic = 0`
+  and `weight = 1` are the right answers there, and the vacuity argument is about *tests*.
+  Relaxed to "at least one", with M=2/C=2 asserted of the suite's fixture instead.
+  **Generalize: a constraint justified by "otherwise the test is vacuous" belongs on the test,
+  never on the product.**
+- **11/11 mutations bite.**
 
 ### What Task 8 established (done — the store schema)
 

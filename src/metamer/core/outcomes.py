@@ -28,6 +28,8 @@ class Outcome(StrEnum):
     NOT_ATTEMPTED = "not_attempted"
     CANDIDATE_DROPPED = "candidate_dropped"
     INSUFFICIENT_DATA = "insufficient_data"
+    SCREENED_OUT = "screened_out"
+    NOT_APPLICABLE = "not_applicable"
 
     @property
     def is_eligible(self) -> bool:
@@ -36,7 +38,7 @@ class Outcome(StrEnum):
         INSUFFICIENT_DATA is a legitimate expected outcome -- land, permanent
         ice, or too few valid samples -- and is excluded.
         """
-        return self is not Outcome.INSUFFICIENT_DATA
+        return self not in {Outcome.INSUFFICIENT_DATA, Outcome.NOT_APPLICABLE}
 
     @property
     def is_failure(self) -> bool:
@@ -55,6 +57,8 @@ class Outcome(StrEnum):
             Outcome.OK,
             Outcome.NOT_ATTEMPTED,
             Outcome.INSUFFICIENT_DATA,
+            Outcome.SCREENED_OUT,
+            Outcome.NOT_APPLICABLE,
         }
 
     @property
@@ -84,6 +88,8 @@ _CODES: dict[Outcome, int] = {
     Outcome.CANDIDATE_DROPPED: 9,
     Outcome.INSUFFICIENT_DATA: 10,
     Outcome.ILL_CONDITIONED_X: 11,
+    Outcome.SCREENED_OUT: 12,
+    Outcome.NOT_APPLICABLE: 13,
 }
 _BY_CODE: dict[int, Outcome] = {code: member for member, code in _CODES.items()}
 

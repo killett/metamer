@@ -38,10 +38,21 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import numpy as np
+
 from metamer.batch.geometry import geometry_components, geometry_hash
 from metamer.batch.input import ContractReport, open_input
 from metamer.batch.input import check_contract as check_input_contract
+from metamer.batch.ragged import build_ragged_index, noise_extent
+from metamer.batch.store import StoreShape, create_store, provenance_attrs
 from metamer.batch.threads import Phase, thread_budget
+from metamer.batch.tiling import (
+    assemble_tile,
+    read_amplification,
+    tile_grid,
+    tile_side_for,
+)
+from metamer.batch.timeaxis import to_decimal_years
 from metamer.batch.validation import (
     ValidationError,
     ValidationLayer,
@@ -49,9 +60,17 @@ from metamer.batch.validation import (
     identifiability_warnings,
     load_config,
 )
+from metamer.batch.write import write_tile
 from metamer.config.model import Config
 from metamer.core import machine
+from metamer.core.capability import Objective
+from metamer.core.criteria import Criterion
+from metamer.core.engines.protocol import Engine
+from metamer.core.fit import fit
 from metamer.core.lint import Finding
+from metamer.core.memory import Backend
+from metamer.core.signal import k_beta as signal_k_beta
+from metamer.core.statespace import StateSpace
 
 
 @dataclass(frozen=True)
@@ -80,6 +99,14 @@ class RunReport:
         warnings: Identifiability findings. **Warnings never move the exit
             code**; that is what makes it safe for them to be produced after
             stage 4a.
+        k_beta: Design COLUMN count -- not the term count. `Harmonic` gives two
+            columns, so 2a's three signal terms are four columns, which is
+            design doc 9.4's worked value and what every tile figure rests on.
+        tile_side: Points per tile side, from the budget and the per-series
+            resident bytes.
+        tiles_written: How many tiles this run wrote. **Every tile, in 2a**:
+            the completion bitmap that would let a run skip one is Task 10's, so
+            a resumed run currently rewrites what it already has.
     """
 
     config: Config
@@ -95,6 +122,9 @@ class RunReport:
     thread_limits: Mapping[str, int]
     phase_seconds: Mapping[str, float]
     warnings: tuple[Finding, ...]
+    k_beta: int
+    tile_side: int
+    tiles_written: int
 
 
 def _with_memory_budget(config: Config, budget_gb: float) -> Config:
@@ -132,12 +162,13 @@ def run(
     *,
     memory_budget_gb: float | None = None,
     observed_thread_limits: Mapping[str, int] | None = None,
+    engine: Engine | None = None,
 ) -> RunReport:
-    """Validate a configuration against its input and report the hashes.
+    """Validate a configuration, fit every tile, and write the store.
 
     Args:
         config_path: Path to a `.toml` or `.json` config.
-        store_path: Where the store goes. Echoed today; Task 8 creates it.
+        store_path: Where the store goes. Created if absent.
         memory_budget_gb: Overrides the config's `memory_budget_gb`. It is
             run-relevant, so the override reaches `run_hash` and neither gate.
         observed_thread_limits: Observed thread limit per loaded library.
@@ -145,6 +176,13 @@ def run(
             `batch.threads.thread_budget`; supplying them overrides the
             observation and exists so a test can construct a mismatch this
             machine cannot produce.
+        engine: Likelihood engine, passed straight to `fit`. **THE SEAM TASK 4
+            DELIBERATELY DID NOT ADD**, because no test there could make it
+            bite: a runner that builds its engine internally makes every
+            downstream "no fit ran" assertion vacuous, since a stub that is
+            never wired in and a stub that is never reached are byte-identical
+            in the test output. The write path is the first caller that can
+            reach an engine, so the seam lands here.
 
     Returns:
         What the run established.
@@ -186,7 +224,83 @@ def run(
         # makes running it here safe -- see `batch.validation`'s docstring.
         warnings = identifiability_warnings(config, contract.median_dt)
 
+        # The decimal-year axis is what every downstream consumer needs and
+        # `ContractReport` carries only its endpoints, so it is converted once
+        # here rather than per tile -- the conversion is under ALGORITHM_VERSION
+        # and doing it twice would be two derivations of fit identity.
+        years = to_decimal_years(handle.dataset["time"].values)
+        signal = config.signal_spec()
+        columns = signal_k_beta(signal, years)
+        specs = list(config.process_specs())
+        index = build_ragged_index(specs, noise_extent)
+
+        # **d IS THE WIDEST CANDIDATE'S STATE DIMENSION, NOT THE FIRST'S.** The
+        # tile holds whichever candidate is being fitted, so a budget taken from
+        # `white` (d = 0) would size a tile the `white + matern12` pass cannot
+        # hold. Same argument as budgeting against p_max.
+        state_dims = [StateSpace.from_spec(spec).state_dim for spec in specs]
+        side = tile_side_for(
+            budget_bytes=int(config.memory_budget_gb * 1024**3),
+            backend=Backend.NUMPY_BATCHED,
+            d=max(state_dims),
+            k_beta=columns,
+            p=max(index.extents),
+            n_time=contract.n_time,
+            n_models=len(specs),
+        )
+        grid = (contract.n_y, contract.n_x)
+        tiles = list(tile_grid(grid[0], grid[1], side))
+        amplification = read_amplification(handle, tiles[0])
+
+        attrs = provenance_attrs(
+            config,
+            geometry_components=components,
+            thread_limits=dict(observed),
+            read_amplification=amplification,
+            unique_dt_count=contract.unique_dt,
+            tile_sides={"shared": side},
+        )
+        if not Path(store_path).exists():
+            create_store(
+                store_path,
+                specs=specs,
+                criteria=config.criteria,
+                shape=StoreShape(
+                    n_y=grid[0], n_x=grid[1], n_beta=columns, tile_side=side
+                ),
+                attrs=attrs,
+            )
+
+        has_trend = any(type(term).__name__ == "Trend" for term in signal.terms)
+        written = 0
+        for tile in tiles:
+            with budget.phase(Phase.ASSEMBLE):
+                block = assemble_tile(handle, tile)
+            with budget.phase(Phase.FIT):
+                result = fit(
+                    block,
+                    years,
+                    signal,
+                    specs,
+                    Criterion(config.criteria[0]),
+                    mask=np.isfinite(block),
+                    objective=Objective(config.objective),
+                    engine=engine,
+                )
+            write_tile(
+                store_path,
+                tile,
+                result,
+                criteria=config.criteria,
+                index=index,
+                has_trend=has_trend,
+            )
+            written += 1
+
         return RunReport(
+            k_beta=columns,
+            tile_side=side,
+            tiles_written=written,
             config=config,
             config_path=Path(config_path),
             store_path=Path(store_path),

@@ -519,10 +519,14 @@ unreachable members reachable.
 
 **Fixture requirements**, both of which must be *required* properties rather than incidental:
 
-- **A point where candidate 1 fails and candidate 2 succeeds** — the offset-inside-a-gap
-  construction, a breakpoint with no support for one candidate's design. `n_valid = 1` there,
-  and the weight vector renormalizes over one survivor, **which is the case that reads as
-  confident selection and is not.**
+- **A point where candidate 1 fails and candidate 2 succeeds.** `n_valid = 1` there, and the
+  weight vector renormalizes over one survivor, **which is the case that reads as confident
+  selection and is not.** ~~The offset-inside-a-gap construction, a breakpoint with no support
+  for one candidate's design~~ — **CORRECTED 2026-08-13: that cannot work, and the "Watch"
+  paragraph below says why.** In v1 the design is shared and built once before the candidate
+  loop, so a design failure hits every candidate and gives `n_valid = 0`. The reachable
+  construction is an **optimizer-stage** failure: `white + matern12` fitted to white noise is
+  degenerate at most points while `white` fits.
 - **A point where every fit is `OK` and one criterion cannot rank it.** Take the **REML
   route**: `n = n_obs − design_rank`, so `n_obs = 6` against a rank-4 design gives `n = 2` and
   HQIC is undefined while AIC is fine. **State in the test why the ML route cannot work** —

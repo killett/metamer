@@ -97,6 +97,12 @@ class FitResult:
             (B, M). Stored primitive, NaN where the design has no trend column.
             **Never interchangeable with `n_eff_bic`** -- one is a whole-series
             property, the other is term-specific.
+        scores: The one `CandidateScores` these results were ranked from.
+            **The store's `k` and `n` come from here and from nowhere else** --
+            they are per-objective counts from `counting.penalty_terms`, and a
+            second call at a second site is a second derivation of a stored
+            primitive. It is also what ranks the same fits under a second
+            criterion without refitting.
         ranking: ONE `Ranking` spanning the batch, from `rank_candidates`.
         engine: The engine every score came from.
         objective: The objective every score is on.
@@ -117,6 +123,7 @@ class FitResult:
     n_iter: NDArray[np.int64]
     n_eff_bic: NDArray[np.float64]
     n_eff_trend: NDArray[np.float64]
+    scores: CandidateScores
     ranking: Ranking
     engine: EngineId
     objective: Objective
@@ -286,19 +293,24 @@ def fit(
                 ).astype(np.uint8),
             )
 
-    ranking = rank_candidates(
-        CandidateScores(
-            labels=tuple(spec.spec_hash()[:12] for spec in candidates),
-            engines=(engine.engine_id,) * n_cand,
-            objectives=(objective,) * n_cand,
-            loglik=loglik,
-            k=k,
-            n=n,
-            n_eff=eff_bic,
-            outcome=outcome,
-        ),
-        criterion,
+    # ONE `CandidateScores`, RANKED HERE AND RETURNED. It used to be a local,
+    # which meant `k` and `n` were computed, used and discarded -- so the store's
+    # `/primitives/k` and `/primitives/n` had no producer, and a writer would
+    # have had to call `penalty_terms` a second time, from a different call site,
+    # with nothing keeping the two derivations in step. It is also what lets a
+    # caller rank the SAME fits under several criteria without refitting, which
+    # is the whole of design doc 12.8's recompute claim.
+    scores = CandidateScores(
+        labels=tuple(spec.spec_hash()[:12] for spec in candidates),
+        engines=(engine.engine_id,) * n_cand,
+        objectives=(objective,) * n_cand,
+        loglik=loglik,
+        k=k,
+        n=n,
+        n_eff=eff_bic,
+        outcome=outcome,
     )
+    ranking = rank_candidates(scores, criterion)
 
     return FitResult(
         candidates=tuple(candidates),
@@ -313,6 +325,7 @@ def fit(
         n_iter=n_iter,
         n_eff_bic=eff_bic,
         n_eff_trend=eff_trend,
+        scores=scores,
         ranking=ranking,
         engine=engine.engine_id,
         objective=objective,

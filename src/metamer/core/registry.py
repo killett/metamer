@@ -111,3 +111,20 @@ kernel_registry: Registry[Callable[..., Family]] = Registry(
     "kernel_registry", entry_point_group="metamer.kernels"
 )
 recipe_registry: Registry[Callable[..., object]] = Registry("recipe_registry")
+
+
+#: Signal terms, by config name. **The REGISTRY is shared machinery with
+#: `kernel_registry`; the PARSER deliberately is not.** A noise candidate is a sum
+#: of bare names and `config.candidates` refuses a call, an attribute, a subscript
+#: and a literal by name; a signal term is constructed with an argument
+#: (`offset:2005.5`) and `signal_terms` is a list with no `+` in it at all. One
+#: grammar admitting both would have to accept arguments inside a sum expression
+#: and `+` inside an argument, which is how a vocabulary becomes untestable.
+#:
+#: A value is a factory taking the argument text (or None) and returning a
+#: `SignalTerm`, so **the knowledge of which argument a term takes lives beside the
+#: class rather than in a table the parser keeps** -- a table that would drift the
+#: first time a term gained a parameter.
+signal_registry: Registry[Callable[[str | None], object]] = Registry(
+    "signal term", entry_point_group="metamer.signal_terms"
+)

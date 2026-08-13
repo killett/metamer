@@ -34,7 +34,9 @@ from pydantic import BaseModel, ConfigDict, Field
 
 import metamer
 from metamer.config.candidates import parse_candidate
+from metamer.config.signal_terms import parse_signal_terms
 from metamer.core import hashing
+from metamer.core.signal import SignalSpec
 from metamer.core.terms import ProcessSpec
 
 _STAMPED_KEYS = (hashing.ALGORITHM_VERSION_KEY, hashing.REGISTRY_VERSION_KEY)
@@ -295,6 +297,30 @@ class Config(BaseModel):
             candidate list is a different store, not the same one.
         """
         return tuple(parse_candidate(candidate) for candidate in self.candidates)
+
+    def signal_spec(self) -> SignalSpec:
+        """Return `signal_terms` as a `SignalSpec`, in config order.
+
+        **ORDER IS PRESERVED HERE AND CANONICALIZED ON THE NOISE SIDE**, and the
+        asymmetry is the point: a noise composition is a sum whose order carries
+        no information, while a signal spec's order is the design's column order
+        and therefore `beta`'s axis in the store.
+
+        Returns:
+            The signal specification.
+
+        Raises:
+            ValueError: If `signal_terms` is empty or any entry is malformed --
+                including the per-point regressor declaration, which is refused
+                at layer 3 with both tile sizes named.
+        """
+        return parse_signal_terms(
+            [
+                term
+                for term in self.signal_terms
+                if not term.startswith(PER_POINT_TERM_PREFIX)
+            ]
+        )
 
     def candidate_spec_hashes(self) -> tuple[str, ...]:
         """Return each candidate's `spec_hash`, in config order.

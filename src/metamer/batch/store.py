@@ -110,7 +110,12 @@ _GEOMETRY_KEYS = frozenset(
 #: meaning changes** -- including when a member is added to `Outcome`, whose own
 #: docstring carries that rule. **Task 9 adds `SCREENED_OUT` and
 #: `NOT_APPLICABLE`, so Task 9 bumps this.**
-SCHEMA_VERSION = 1
+#:
+#: **v2 (2026-08-13, Task 9): `Outcome` gained `SCREENED_OUT` (12) and
+#: `NOT_APPLICABLE` (13).** No 2a run can emit either, but the `flag_values` /
+#: `flag_meanings` legend written into `/status/` at creation comes from the enum,
+#: so a v1 store and a v2 store disagree about the vocabulary.
+SCHEMA_VERSION = 2
 
 #: Target bytes for one inner chunk, per design doc 12.7's "a few MB".
 CHUNK_TARGET_BYTES = 4_000_000
@@ -174,22 +179,26 @@ class StoreShape:
         """Refuse a degenerate axis.
 
         Raises:
-            ValueError: If any length is below 1, or `n_beta` is below 2. **A
-                length-1 axis makes every quantity defined across it constant**,
-                so every assertion over it passes against an implementation that
-                never writes anything -- the reason the plan fixes M=2 and C=2,
-                applied to the axis the plan does not mention.
+            ValueError: If any length is below 1.
+
+        Note:
+            **A LENGTH-1 AXIS IS LEGAL AND A LENGTH-1 FIXTURE IS NOT.** Fitting
+            one candidate under one criterion against a one-column design is a
+            perfectly good thing to ask for, and `delta_ic = 0` with
+            `weight = 1` is the correct answer there. What a length-1 axis
+            cannot do is *test* anything defined across it, so the requirement
+            is on the **suite's** fixtures (M=2 with unequal p, C=2) and not on
+            the format. **It was a refusal here until 2026-08-13**, where it
+            refused a legitimate single-candidate run: a fixture rule enforced
+            against users, caught by the full sweep.
         """
         for name in ("n_y", "n_x", "tile_side"):
             if getattr(self, name) < 1:
                 raise ValueError(
                     f"{name} must be at least 1, got {getattr(self, name)}"
                 )
-        if self.n_beta < 2:
-            raise ValueError(
-                f"n_beta must be at least 2, got {self.n_beta}; a length-1 signal "
-                "axis makes every quantity defined across it constant"
-            )
+        if self.n_beta < 1:
+            raise ValueError(f"n_beta must be at least 1, got {self.n_beta}")
 
     @property
     def n_tiles_y(self) -> int:
@@ -464,9 +473,11 @@ def create_store(
         FileExistsError: If `path` exists. A store is created once; silently
             overwriting a finished 10^7-point run is unrecoverable, and the
             resume path -- not this function -- is what reopens one.
-        ValueError: If `criteria` has fewer than two entries (a length-1
-            criterion axis makes every ranking assertion vacuous), if `specs` has
-            fewer than two, or if a required provenance key is missing or None.
+        ValueError: If `specs` or `criteria` is empty, or if a required
+            provenance key is missing or None. **A length-1 axis is legal**: see
+            `StoreShape.__post_init__`'s note -- fitting one candidate under one
+            criterion is coherent, and the vacuity argument is about the suite's
+            fixtures rather than about the format.
         NotImplementedError: Propagated from a spec declaring shared parameters.
     """
     destination = Path(path)
@@ -475,16 +486,10 @@ def create_store(
             f"{destination} exists; a store is created once and reopened by the "
             "resume path, never recreated over"
         )
-    if len(specs) < 2:
+    if not specs or not criteria:
         raise ValueError(
-            f"need at least 2 candidates, got {len(specs)}; a length-1 model axis "
-            "makes delta_ic identically 0, weight identically 1 and a "
-            "one-candidate-fails point unconstructible"
-        )
-    if len(criteria) < 2:
-        raise ValueError(
-            f"need at least 2 criteria, got {len(criteria)}; a length-1 criterion "
-            "axis makes every quantity defined across it constant"
+            "a store needs at least one candidate and one criterion, got "
+            f"{len(specs)} and {len(criteria)}"
         )
     missing = sorted(key for key in REQUIRED_ATTRS if attrs.get(key) is None)
     if missing:

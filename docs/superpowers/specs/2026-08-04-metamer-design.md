@@ -1663,9 +1663,33 @@ unaffected — `CandidateScores` carries both as float64 — and `iterations` is
 that feeds no arithmetic, so it keeps uint16 and is **explicitly exempt**, with 65535 for
 "no fit ran".
 
+**THE POINT-LEVEL AGGREGATE'S RULE, ADDED 2026-08-13 BECAUSE THIS DOCUMENT NEVER STATED
+ONE.** §12.2 lists `outcome[y,x]` as "aggregate" and never says aggregate *how*, so the write
+path had to define it: **`OK` if any candidate is `OK`** — the point is usable — **otherwise
+`objective.merge_outcomes` over the per-model codes**, which reports the earliest cause under
+the ladder already declared in `OUTCOME_PRECEDENCE`. The `OK`-wins half must be stated
+because that ladder ranks `OK` **last**: a bare merge reports a failure for a point that
+fitted, and the failure map would show a disaster wherever the harder candidate struggled.
+Reusing the existing ladder is what stops a second, inline precedence being invented.
+
+**A THIRD EXEMPTION, FOUND WHEN THE INVARIANT WAS FIRST WIRED: `n_eff_trend` IS NaN BY
+DESIGN WHERE THE DESIGN HAS NO TREND COLUMN.** That is its documented value, not a defect, so
+the OK-implies-finite direction is excused **for that design only** — the caller states which,
+because the write path cannot tell a designed NaN from a bug without the design, and a
+checker that guessed would excuse a real failure at every point of every run that does have a
+trend. The non-OK direction still applies.
+
 **Status is per `(point, model)`, not per point.** A candidate can fail where another
 succeeds — that is the near-degeneracy geography of §4.8 — and its spatial pattern is
 itself a diagnostic.
+
+**AND THAT MAKES THE PRESCRIBED ONE-CANDIDATE-FAILS FIXTURE UNREACHABLE (2026-08-13).** The
+plan and `PROGRESS.md` both specified an offset inside a gap — "a breakpoint with no support
+for one candidate's design" — for the point where candidate 1 fails and candidate 2 succeeds.
+**In v1 the design is shared**, so that construction fails *both* candidates and gives
+`n_valid = 0`. The reachable construction is an **optimizer-stage** failure: fitting
+`white + matern12` to white noise leaves the correlated candidate degenerate at most points
+while `white` fits, which is open question 9's own fixture defect used deliberately.
 
 **But in v1 the DESIGN-derived outcomes are constant along the model axis (2026-08-11).**
 `fit.py` computes `design_info(t, mask)` **once**, before the candidate loop, because §12.1's
