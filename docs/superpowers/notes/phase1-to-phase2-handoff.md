@@ -126,6 +126,25 @@ correct only in the easy regime is worse than none, because it will be trusted.*
 **A deferral in this project's idiom is a field, a formula branch, and an explicit refusal
 with a test** — not a comment promising a hook.
 
+### (a4) RECOMPUTE EVERY WORKED EXAMPLE BEFORE TRUSTING THE REQUIREMENT IT ILLUSTRATES
+
+> **An example is authored under the same misunderstanding as the text around it, so it
+> CONFIRMS the requirement rather than testing it.** Recompute every worked example in a
+> brief. Where the example is the **only** statement of a quantity, it is load-bearing and
+> must be derived independently.
+
+**This is (a) at the document level:** a wrong constant that agrees with the prose is
+invisible to any reader who reads the two together, because there is nothing to compare
+against. The tell is a number that looks plausible and does not invite checking.
+
+Worked instance, Phase 2a Task 7. Design doc §12.3, the 2a plan and `PROGRESS.md` all state
+the `/detail/` extent as `Σ_m p_m(p_m+1)/2` and all three illustrate it as **`4 + 6 = 10`**
+at p = (1, 3). The per-model sum is `1 + 6 = 7`. **10 is `P_total(P_total+1)/2` — the
+triangle of the flattened total, which is precisely the one-table-reused defect the same
+paragraph exists to prevent**, committed in its own example. (`4 + 6` is not 10 either, and
+that went unread too.) It survived three documents and two prior audits because both 4 and
+10 are plausible sizes for that axis.
+
 ### (b) Batch vs series
 
 Is any per-series fact computed at batch level, or any per-candidate fact stored per point?
@@ -250,6 +269,30 @@ derivative zero). A fixture at `n_eff = 12` **cannot test a floor at 2.0**. And 
 zeros cannot test a read**: zarr does not write a chunk equal to the fill value, so a
 zero-filled store serves every read from the fill value — measured, **0 bytes and 0 keys** for a
 read that returned the right number of correct-looking values (Phase 2a Task 6).
+
+### (i7) A DISCRIMINATING FIXTURE MUST BE PLACED OUTSIDE WHERE THE TWO FUNCTIONS AGREE
+
+> **When a fixture must distinguish two functions, first identify where they AGREE** — fixed
+> points, identity regions, degenerate inputs, saturating ranges — **and place the fixture
+> outside that set deliberately.** Two functions that differ in general can be identical on
+> the values a fixture happens to use.
+
+(i) asks whether the fixture can express the defect at all. This asks the sharper version:
+the fixture *looks* built for the comparison, satisfies a stated and correct-sounding
+condition, and still lands where the comparison is vacuous.
+
+Worked instance, Phase 2a Task 7. The requirement was **"unequal `p`"**, and it is necessary
+and **not sufficient**. `off_0` is 0 under every extent function and `off_1` is the first
+model's extent, and **`p = 0` and `p = 1` are the fixed points of `p ↦ p(p+1)/2`** — so
+`white` (p=1) first gives **`(0, 1)` under both extent functions**, and a builder that
+computes one offset table and reuses it for the other axis passes every offset assertion the
+fixture can make. **The discriminating fixtures, which exit criterion 12 must use:**
+`matern32` (p=2) first gives **`(0, 2)` against `(0, 3)`** at M=2, and
+`white / white + matern12 / matern32` gives **`(0, 1, 4)` against `(0, 1, 7)`**.
+
+**The general failure is specifying a condition without verifying it discriminates.** Ask
+what the two functions do on the fixture's *actual* values, not on the property the fixture
+was chosen for.
 
 ### (i6) WHEN ESTABLISHING A CONTRACT, YOUR INTUITIONS ABOUT IT ARE PRE-CONTRACT
 
@@ -725,6 +768,12 @@ Every one of these was discovered by building a fixture that could not fail.
   series per iteration" is a claim about the fixture, not about the workload.
 - **A quadratic cannot test a step rule**, and **a fixture above a floor cannot test the
   floor.**
+- **NO SHIPPED FAMILY DECLARES A `fixed=True` PARAMETER**, so *declared* and *free* parameter
+  counts are equal on every fixture built from the registry. **Any test of that distinction
+  needs a constructed spec** — measured at Task 7, where replacing the free count with
+  `len(term.params)` failed exactly one test and it was the constructed one. Same shape as
+  `machine.choose_core_count` (no SMT on this host) and `library_table` (one OpenBLAS here):
+  **the environment cannot express the defect, so the fixture must.**
 - **HETEROGENEITY MUST COME FROM A PARAMETER THE LIKELIHOOD IS NOT EQUIVARIANT IN** —
   timescale, mixing ratio, mask pattern, series length. **Varying an equivariant parameter
   produces a fixture that looks diverse and is identical.** Amplitude is the worked case:

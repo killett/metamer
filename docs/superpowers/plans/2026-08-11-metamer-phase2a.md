@@ -6,7 +6,7 @@
 **Read before starting, in this order:**
 
 1. [`docs/superpowers/notes/phase1-to-phase2-handoff.md`](../notes/phase1-to-phase2-handoff.md)
-   — the pre-flight (a)–(k) with (a2), (a3), (c2), (i2)–(i5) and (k2), and the standing rules.
+   — the pre-flight (a)–(k) with (a2)–(a4), (c2), (i2)–(i7) and (k2), and the standing rules.
 2. `PROGRESS.md`, whole file. The brainstorm section carries the reasoning behind every
    decision below; this plan carries only the decisions.
 3. Design doc §9.4, §11.1, §11.1.1, §11.3, §12, §13, §14.3.
@@ -41,8 +41,8 @@ the rest of it.
 
 - **Run the pre-flight against the task brief before writing code.** It lives in exactly one
   place — [`../notes/phase1-to-phase2-handoff.md`](../notes/phase1-to-phase2-handoff.md) §1 —
-  and it has grown past what this plan was written against: **(a)–(k) plus (a2), (a3), (c2),
-  (i2)–(i5) and (k2), and five causes of a surviving mutation.** **Read it there rather than from any
+  and it has grown past what this plan was written against: **(a)–(k) plus (a2)–(a4), (c2),
+  (i2)–(i7) and (k2), and five causes of a surviving mutation.** **Read it there rather than from any
   summary**, including this one; a restatement that drifts is worse than a single stale copy,
   and the two copies of it drifted once already. Append what each audit finds to
   [`../notes/phase2a-preflight.md`](../notes/phase2a-preflight.md).
@@ -624,7 +624,7 @@ Cross-process and cross-store properties no single task can express.
 | 9 | `geometry_hash` moves when the geometry changes and **does not** move on a value edit at fixed geometry |
 | 10 | **Observed** thread limits match requested, **per library**; a mismatch is a layer-3 failure |
 | 11 | The entry contract's ordering is tested, not trusted |
-| 12 | The ragged builder is exercised with **both** extent functions, `p_m` and `p_m(p_m+1)/2` |
+| 12 | The ragged builder is exercised with **both** extent functions, `p_m` and `p_m(p_m+1)/2`, **on a fixture that discriminates them.** The M=2 store fixture does NOT: `p = 0` and `p = 1` are the fixed points of `p ↦ p(p+1)/2`, so `white` first gives `(0, 1)` under both. Use `matern32` first — `(0, 2)` against `(0, 3)` — or M=3 `white / white + matern12 / matern32` — `(0, 1, 4)` against `(0, 1, 7)`. See pre-flight (i7) |
 | 13 | A point where every fit is `OK` and one criterion cannot rank it, carrying NaN ΔIC beside an `OK` status |
 | 14 | A point where candidate 1 fails and candidate 2 succeeds, `n_valid = 1`, weights renormalized over one survivor |
 | 15 | **The recomputed store is self-contained**: it opens with `xr.open_zarr` with the source store deleted |

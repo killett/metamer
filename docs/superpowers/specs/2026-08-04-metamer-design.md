@@ -1467,9 +1467,18 @@ noise parameters, which are secondary diagnostics.
 ### 12.3 The ragged noise axis: flattened with an index
 
 `theta` has one axis of length `P_total = Σ_m p_m`, with coordinate arrays
-`noise_param_model[P]`, `noise_param_name[P]`, `noise_param_unit[P]`,
-`noise_param_transform[P]`. Model *m*'s block is the contiguous slice
+`noise_param_model[P]`, **`noise_param_term[P]`**, `noise_param_name[P]`,
+`noise_param_unit[P]`, `noise_param_transform[P]`. Model *m*'s block is the contiguous slice
 `theta[..., off_m : off_m + p_m]`.
+
+**FIVE COLUMNS, NOT FOUR, AND `term` IS WHY (2026-08-12).** Within **one** model two terms
+can carry a parameter of the same name: `white + matern12` has free parameters
+`matern12[0].sigma`, `matern12[0].rho`, `white[0].sigma`, so **`(model, name)` is not unique
+and `(model, term, name)` is**. With four columns a reader selecting `name == "sigma"` inside
+a model's block gets two values and no way to tell the measurement noise from the correlated
+component — in the group whose entire purpose is to be readable without metamer installed.
+Splitting `term` out keeps each column atomic; qualifying `name` as `"matern12[0].sigma"`
+would put two facts in one column and force the reader to parse it.
 
 Rejected alternatives: **padded** `theta[y,x,m,p_max]` creates an indistinguishable
 padding-NaN vs failure-NaN ambiguity — an ambiguity you would be choosing to create;

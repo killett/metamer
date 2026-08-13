@@ -25,7 +25,7 @@
    — 14 tasks, dependencies, sixteen exit criteria.
 9. **THE METHOD IS THE PRE-FLIGHT AND IT LIVES IN EXACTLY ONE PLACE:**
    [`docs/superpowers/notes/phase1-to-phase2-handoff.md`](docs/superpowers/notes/phase1-to-phase2-handoff.md)
-   §1 — (a)–(k) with (a2), (a3), (c2), (i2)–(i6) and (k2), the **five** causes of a surviving
+   §1 — (a)–(k) with (a2)–(a4), (c2), (i2)–(i7) and (k2), the **five** causes of a surviving
    mutation, the standing rules and the fixture facts. **Run it against Task 7's brief before
    writing code** and append what it finds to
    [`docs/superpowers/notes/phase2a-preflight.md`](docs/superpowers/notes/phase2a-preflight.md),
@@ -53,6 +53,9 @@ figure in the cold-start head (~271 s) was measured after two changes landed tog
 replacement — and **the split was not decomposed**. **Nor is the 271 → 307 s step**: Task 7's
 twenty tests run in **2.4 s standalone**, so they do not account for 36 s, and no further
 measurement was taken. Do not read either figure as a per-task cost.
+**THAT IS TWO UNDECOMPOSED STEPS. A THIRD TRIGGERS A PROPER ATTRIBUTION PASS** — per-module
+durations against the previous run — **rather than a third note**: three unexplained steps in
+a row stops being scatter and starts being a trend nobody has looked at.
 More importantly: **Task 5's ~500 s figure
 was measured while `bench/` was leaking numba's mask to 1 thread**, so everything after
 `test_bench.py` ran single-threaded. **Every timing taken in that window is suspect. Do not
@@ -611,6 +614,11 @@ domain-mask variable in §13.6's input contract). **Their codes are 2a's regardl
 stored code meanings are fixed at store creation.
 
 ### What Task 7 established (done — the ragged builder)
+
+**Two of these were promoted into the pre-flight on 2026-08-12** — **(a4)** recompute every
+worked example, and **(i7)** place a discriminating fixture outside where the two functions
+agree — and the fixed-parameter finding into the handoff's fixture facts. **The full statement
+of each is in the handoff, not here.**
 
 - **THE FIXTURE THREE DOCUMENTS PRESCRIBE TO SEPARATE THE TWO EXTENT FUNCTIONS CANNOT SEE A
   REUSED OFFSET TABLE.** `off_0` is 0 under every extent function and `off_1` is the first
