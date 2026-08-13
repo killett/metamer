@@ -454,6 +454,20 @@ symlink, or a path in attrs a reader must follow.
 
 ## Task 9 — the tile write path and the status/value invariant
 
+
+**TASK 9 OWNS THE SIGNAL-TERM PARSER, ADDED 2026-08-12 AFTER TASK 6 HIT IT.** `signal_terms` is
+a tuple of strings in the config and **nothing in the tree maps them to `core.signal` classes**:
+`config.candidates.parse_candidate` resolves *noise* terms through `kernel_registry`, and
+`core.signal` has the term classes with **no registry and no parser**. The consequence found at
+Task 6 is that `k_beta` — the design column count — is unobtainable, so **no tile can be sized
+and `run()` cannot iterate tiles**. What is needed: a signal-term registry and a parser mapping
+config strings to `core.signal` terms, yielding a `SignalSpec` and hence `k_beta`. **Task 9 is
+where it belongs** because this is the first task that fits and therefore needs the design
+itself, and because deciding the signal vocabulary — which terms exist, how a parameterized one
+(`offset:2005.5`, a rate change, a named regressor) is spelled — inside a task about tiling or
+about a store schema is the worst available place to decide it. Tasks 7 and 8 are unaffected:
+`P_total` and both offset tables come from the **candidate** list, which `Config.process_specs()`
+already resolves.
 **Goal.** One region write per array per tile, with the invariant wired through **every**
 write path.
 

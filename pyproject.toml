@@ -221,8 +221,12 @@ disallow_untyped_calls = false
 addopts = "-v"
 # `slow` marks tests that drive the REAL Kalman filter at production sizes:
 # tests/test_fit.py (five-series batches through the whole driver) and the
-# N=5000 gradient step-rule case. They are the reason the suite runs in ~255 s
-# rather than ~2 s, and they are NOT optional -- exit criterion 9 requires the
+# N=5000 gradient step-rule case. They are the reason the suite runs in minutes
+# rather than seconds, and they are NOT optional -- exit criterion 9 requires the
+# (No figure here on purpose. This comment said "~255 s" against a suite since
+#  measured at 271, 298 and ~500 s; a number in a place nobody re-measures is a
+#  stale number that reads exactly like a fresh one. The current figure, dated
+#  and with its preconditions, is in PROGRESS.md's cold-start head.)
 # three widely separated N, and the standing batched-equals-solo invariant is
 # meaningless on a batch of healthy series.
 #

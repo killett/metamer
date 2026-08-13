@@ -246,7 +246,32 @@ three-N step-rule test passed against a deliberately broken step rule because it
 
 Ask what property of the fixture makes the defect visible; if the answer is "none", the
 fixture is wrong before the assertion is. A **quadratic cannot test a step rule** (third
-derivative zero). A fixture at `n_eff = 12` **cannot test a floor at 2.0**.
+derivative zero). A fixture at `n_eff = 12` **cannot test a floor at 2.0**. And **a fixture of
+zeros cannot test a read**: zarr does not write a chunk equal to the fill value, so a
+zero-filled store serves every read from the fill value — measured, **0 bytes and 0 keys** for a
+read that returned the right number of correct-looking values (Phase 2a Task 6).
+
+### (i6) WHEN ESTABLISHING A CONTRACT, YOUR INTUITIONS ABOUT IT ARE PRE-CONTRACT
+
+> **A test written to establish a contract cannot assume the contract.** Every expectation in
+> it was formed before the measurement existed, so each one is itself a claim to measure —
+> including the ones that feel like restatements of the thing being established.
+
+(i) asks whether the fixture can express the defect. This asks about the **assertions**, in the
+one situation where the usual source of expected values — the documented behaviour — does not
+yet exist.
+
+Worked instance (open question 12's closure). The test establishing that a child inherits the
+parent's high-water mark asserted, among its conditions, `small_child == small_peak`: for a
+parent that allocated nothing, surely the child reads what the parent reads. **It fails.** The
+small parent is itself spawned by pytest and therefore *reports* the session's watermark, while
+its child gets only the 74 MB it generated itself — which is the **non-compounding** rule, the
+very thing the next test was written to establish, appearing inside the test written to
+establish its premise. The assertion is now `small_child == small_current`, with the reason in
+the test.
+
+The tell is a test whose subject is "what does X actually do" and which contains an assertion
+justified by "obviously". Measure that one too.
 
 ### (i3) A RELATION BETWEEN OBSERVATIONS IS NOT A SUBSTITUTE FOR THE OBSERVATIONS
 
@@ -560,6 +585,21 @@ is safe to import.
   **This is the answer to anyone who later proposes dropping the observation because "we set
   the environment variable".** A request is not a result, and the library that ignores you is
   precisely the one that will not say so.
+- **A METRIC WHOSE NEUTRAL VALUE IS ALSO ITS FAILURE VALUE MUST FAIL LOUDLY, NEVER RETURN THE
+  VALUE.** Otherwise **the guard is removed by exactly the condition it exists to detect** —
+  the metric reports "nothing to see" for an input it could not measure at all, and the two are
+  indistinguishable downstream.
+  Worked instance (Phase 2a Task 6): read amplification is 1.0 for a perfectly chunk-aligned
+  tile, and a store that declares no chunking would also read 1.0 if the shape were used as a
+  fallback. **That metric replaced the dask graph-chunk cap as the only guard watching for a
+  pathological input**, so the fallback does not weaken the guard, it deletes it. The store is
+  refused instead.
+  **Two companions from the same measurement.** *Both sides of a ratio must be in the same
+  unit*: the store's bytes are compressed and a tile's are not, which gave **4.05 where the
+  truth is 4**, and on a compressible variable the same ratio falls **below 1** — a value below
+  the neutral one is the tell that the units are crossed. And *a counting oracle over the set of
+  chunks fetched beats measuring bytes*, because it shares no construction with the arithmetic
+  it checks (j).
 - **Heterogeneous batches by default.** A homogeneous batch cannot expose a
   batch-granularity defect. Task 13's only real finding came from the one mutation that
   survived because every fixture had `B = 1`. Task 17's utilization measurement uses a

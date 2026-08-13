@@ -1254,3 +1254,33 @@ to a task about tiling — the same reasoning that made the per-point prefix pro
 
 **It is owed by Task 9 at the latest**, which fits and therefore needs the design itself; Tasks 7
 and 8 need `P_total` and the offsets, which come from the *candidate* list and are unaffected.
+
+---
+
+## The handoff sweep (2026-08-12, at the close of Task 6)
+
+**THE DUPLICATED-MEASUREMENT SWEEP, AND WHAT IT FOUND ABOUT THE PREVIOUS ONE.** Task 4 found
+`PROGRESS.md` carrying **693** and **692** as the test count twelve lines apart, and reconciled
+the values. **That was the wrong fix and this sweep shows why**: by Task 6 the same two places
+held 802 and 802, and the same two places held ~271 s and ~271 s — agreeing, undated in one of
+them, and **guaranteed to drift again the moment one is updated.** Reconciling values treats the
+symptom; **deleting the second copy treats the cause.**
+
+Reduced to one dated, precondition-carrying statement each:
+
+| measurement | was | now |
+|---|---|---|
+| test count | twice in `PROGRESS.md` | cold-start head only, dated |
+| full-sweep timing | twice in `PROGRESS.md`, once in `pyproject.toml` as a stale `~255 s` | cold-start head only, dated, with its machine and the fact that it postdates the `bench/` leak fix; `pyproject.toml` now carries **no figure** and says why |
+| the open-questions table | three copies | one summary plus the full text at the end |
+| Phase 1's `~255 s` | undated, read as current | labelled historical |
+| Task 5's `~500 s` | read as a measurement | **labelled VOID** — measured under the `bench/` thread-mask leak, so everything after `test_bench.py` ran single-threaded |
+
+**A comment in `pyproject.toml` is the worst place to keep a figure**, and it held the oldest
+one: nobody re-measures while editing a marker list, so `~255 s` sat there through 271, 298 and
+~500. It now carries the reasoning and no number.
+
+**THE ~271 s FIGURE IS PROVISIONAL AND SAYS SO.** Two changes landed together — the `bench/`
+restore and open question 12's test replacement — and the split was not decomposed. The
+inference that the leak was the cause is plausible and unmeasured; it is written down as
+plausible and unmeasured.

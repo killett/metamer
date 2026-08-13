@@ -30,18 +30,36 @@ what propagates -- **and freeing the memory first does not help.** So spawning a
 fresh process is not enough to isolate a memory measurement, and the number is
 entirely plausible either way.
 
-**THE INHERITANCE DOES NOT COMPOUND, AND THAT DISTINCTION IS LOAD-BEARING.**
-`peak_rss_bytes()` returns `max(inherited, this process's own high-water)`, and a
-child inherits **only the second term**. Measured across three generations: a
-middle process that allocates nothing still *reports* its grandparent's 493.1 MB
-while its own child reports 74.1 MB. So a measurement two processes down from a
-large ancestor is usable, provided the process that spawns it stayed small --
-which is what makes design doc section 11.4's calibration tile implementable, and
-which is why `tests/test_memory.py` runs its probes behind a bare launcher rather
-than straight from pytest.
+**THE INHERITANCE DOES NOT COMPOUND, AND THAT IS THE LOAD-BEARING HALF.**
+
+> `peak_rss_bytes()` returns `max(inherited, this process's own high-water)`,
+> and a child inherits **only the second term.**
+
+**The measurement that establishes it**, three generations, reproduced twice
+(MB). The middle process **allocates nothing**, so whatever it reports, it
+inherited:
+
+    top (allocates 400 MiB)  reports 493.1
+    middle (allocates none)  reports 493.1   current 74.3
+    grandchild               reports  74.1
+
+If a child inherited the parent's *reported* peak, the grandchild would read
+493. It reads 74 -- the middle process's own high-water -- while the middle
+process still reports 493. **That is the rule, and the number is why it can be
+trusted**: a reader who has only the contract has no way to tell it from the
+plausible alternative.
+
+Two consequences, and neither is obvious from the contract alone. **A
+measurement two processes down from a large ancestor is usable**, provided the
+process that spawns it stayed small -- which is what makes design doc section
+11.4's calibration tile implementable, and why `tests/test_memory.py` runs its
+probes behind a bare launcher rather than straight from pytest. And the
+2026-08-10 observation of a probe reading 454.8 MB whose own child reported the
+probe's *current* 84.6 MB **is this rule rather than a contradiction of it**: the
+probe had allocated nothing, so its own high-water was its current RSS.
 
 Both facts are pinned by tests; open question 12 in `PROGRESS.md` records what
-was believed before them.
+was believed before them, and how long the two readings sat unreconciled.
 
 That is why `current_rss_bytes` exists. Use `peak_rss_bytes` to answer "how
 much did this process ever hold", and `current_rss_bytes` to answer "how much

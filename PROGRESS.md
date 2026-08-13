@@ -2,29 +2,98 @@
 
 ## Start here (cold-start summary)
 
-- **Branch:** `main`. **Last commit:** `git log --oneline -1`. All Phase 2 work is on `main`;
-  `phase-1` is a stale name that never diverged and needs nothing done to it.
-- **DONE: Phase 1 Tasks 0–18 (Task 19 deleted), Phase 2 preliminaries P0–P4, and Phase 2a
-  Tasks 0–6.**
-- **NEXT: Phase 2a Task 7 — the ragged index builder, generic over an extent function.** Read
-  **[WHAT TASK 7 INHERITS](#what-task-7-inherits--read-this-before-the-task-sections-below)**
-  below before the plan; it carries what the plan does not, **including the one thing Task 6
-  could not do: nothing maps `signal_terms` to signal terms, so no tile can be sized yet.**
-- **Tests: 802 collected (measured 2026-08-12, after Task 6).** `pixi run test` is the full
-  sweep (~271 s, measured 2026-08-12) and is what every end-of-task verification must run.
-  `pixi run test-fast` deselects `slow` and is for iteration only — **a green fast run is not
-  evidence a task is done.** Verify a fresh checkout with
-  `pixi run test && pixi run typecheck && pixi run lint`.
-- **The plan:**
-  [`docs/superpowers/plans/2026-08-11-metamer-phase2a.md`](docs/superpowers/plans/2026-08-11-metamer-phase2a.md).
-- **THE METHOD IS THE PRE-FLIGHT, AND IT LIVES IN EXACTLY ONE PLACE:**
-  [`docs/superpowers/notes/phase1-to-phase2-handoff.md`](docs/superpowers/notes/phase1-to-phase2-handoff.md)
-  §1 — (a)–(k) with (a2), (a3), (c2), (i2)–(i5) and (k2), the five causes of a surviving
-  mutation, the standing rules and the fixture facts. **Run it against Task 4's brief before writing code**
-  and append what it finds to
-  [`docs/superpowers/notes/phase2a-preflight.md`](docs/superpowers/notes/phase2a-preflight.md),
-  as Tasks 0–3 did. This file is the running notebook; that one is the method. **Do not
-  restate the pre-flight here** — the two copies drifted once already.
+1. **Branch `main`, and everything is on it.** Last commit: `git log --oneline -1`. `phase-1` is
+   a stale name that never diverged and needs nothing done to it.
+2. **DONE:** Phase 1 Tasks 0–18 (Task 19 deleted), Phase 2 preliminaries P0–P4, Phase 2a
+   Tasks 0–6, and open questions 1, 4, 9, 11, **12**.
+3. **NEXT: Phase 2a Task 7 — the ragged index builder**, then Task 8, the store schema. Read
+   **[WHAT TASK 7 INHERITS](#what-task-7-inherits--read-this-before-the-task-sections-below)**
+   and the store-schema section under it **before** the plan; they carry what the plan does not.
+4. **Tests: 802 collected, measured 2026-08-12 after Task 6.** This is the only statement of the
+   count in this file; do not restate it elsewhere.
+5. **`pixi run test` is the full sweep (~271 s, measured 2026-08-12 on the mini PC, after the
+   `bench/` thread-mask leak was fixed) and is what every end-of-task verification must run.**
+   The timing is provisional — see the note below.
+6. **`pixi run test-fast` deselects `slow` and is for iteration only — a green fast run is NOT
+   evidence a task is done.** `pixi run test-ci` reproduces CI (`-m 'not machine'`) and is not
+   evidence either, because `machine` covers exactly the tests that pin the RSS shim's units and
+   the per-core bandwidth claim.
+7. **Verify a fresh checkout with `pixi run test && pixi run typecheck && pixi run lint`**, plus
+   `pixi run pre-commit run --all-files` before every commit.
+8. **The plan:**
+   [`docs/superpowers/plans/2026-08-11-metamer-phase2a.md`](docs/superpowers/plans/2026-08-11-metamer-phase2a.md)
+   — 14 tasks, dependencies, sixteen exit criteria.
+9. **THE METHOD IS THE PRE-FLIGHT AND IT LIVES IN EXACTLY ONE PLACE:**
+   [`docs/superpowers/notes/phase1-to-phase2-handoff.md`](docs/superpowers/notes/phase1-to-phase2-handoff.md)
+   §1 — (a)–(k) with (a2), (a3), (c2), (i2)–(i6) and (k2), the **five** causes of a surviving
+   mutation, the standing rules and the fixture facts. **Run it against Task 7's brief before
+   writing code** and append what it finds to
+   [`docs/superpowers/notes/phase2a-preflight.md`](docs/superpowers/notes/phase2a-preflight.md),
+   as Tasks 0–6 did. **Do not restate the pre-flight here** — the two copies drifted once already.
+10. **Precedence: the design doc is authoritative on INTENT; a measured, dated number supersedes
+    an unmeasured one wherever it lives, including in the design doc.** Full statement below.
+
+---
+
+## Things a cold session cannot re-derive
+
+**PRECEDENCE, AMENDED 2026-08-12.** The rule carried since Phase 1 was *"if PROGRESS.md and the
+plan disagree, the design doc is authoritative"*. Task 6 produced the first disagreement in the
+other direction: design doc **§11.1** carried the prompt's superseded
+`tile_side = sqrt(block_bytes / (n_time · itemsize))` — **445** — in the very section a tiling
+implementer opens first, while **§9.4** two sections earlier rejects it by measurement (**338**)
+and **§2.5** quotes the 445. The plan's brief was right. §11.1 is now corrected and §2.5
+annotated. **So: the design doc decides what the system is FOR; a measured, dated figure
+supersedes an unmeasured one in any document. The disagreement is a defect to report either
+way** — resolve it in the document rather than carrying it in an implementation.
+
+**THE SWEEP TIMING IS PROVISIONAL, AND ONE EARLIER FIGURE IS VOID.** The figure in the
+cold-start head was measured after two changes landed together — `bench/`'s thread-mask restore and open question 12's test
+replacement — and **the split was not decomposed**. More importantly: **Task 5's ~500 s figure
+was measured while `bench/` was leaking numba's mask to 1 thread**, so everything after
+`test_bench.py` ran single-threaded. **Every timing taken in that window is suspect. Do not
+re-derive anything from ~500 s.** Re-measure before quoting a figure that matters.
+
+**OPEN QUESTION 12 IS CLOSED, AND THE COROLLARY IS THE VALUABLE HALF.** A child inherits the
+parent's **own high-water mark** — measured: a parent that allocated 400 MiB and **freed** it
+reports current 74.3 MB and still hands its child 493.3 MB, so current RSS cannot be what
+propagates. **And the inheritance does not compound:** `peak_rss_bytes()` returns
+`max(inherited, own high-water)` and a child inherits **only the second term** — across three
+generations, a middle process that allocates nothing *reports* 493.1 MB while its own child
+reports 74.1 MB. That reconciles the two readings this project carried since Task 17, and it is
+what turns the **bare launcher** (a spawning process that imports nothing large) from a hope into
+a consequence. Full statement and both measurements in `machine.py`'s module docstring; do not
+restate the contract without the three-generation number, because a reader with only the
+contract cannot tell it from the plausible alternative. **Linux only** — macOS is untested and
+stays under open question 10.
+
+**THE `signal_terms` BLOCKER, AND WHO OWNS IT.** Nothing maps `signal_terms` (config strings) to
+`core.signal` classes: `config.candidates.parse_candidate` resolves *noise* terms through
+`kernel_registry`, and `core.signal` has the term classes with **no registry and no parser**. So
+`k_beta` is unobtainable, **no tile can be sized, and `run()` is deliberately not wired to
+iterate tiles**. What it needs: a signal-term registry and a parser mapping config strings to
+`core.signal` terms, yielding a `SignalSpec` and hence `k_beta`. **Task 9's brief now owns it
+explicitly** — it is the first task that fits and therefore needs the design itself. Tasks 7 and
+8 are unaffected.
+
+**THE `bench/` LAYERING QUESTION IS OWED WORK.** `bench/references.py` and `bench/spike.py` now
+restore numba's thread mask in a `try/finally` — a narrow fix that requires nothing from `core`.
+They do **not** route through `batch.threads.thread_budget`, and they cannot as things stand:
+`bench` sits beside `core`, and `core` must stay importable without `threadpoolctl` (the
+`[batch]` extra, held by `tests/test_core_isolation.py`). Closing it means deciding where the
+thread budget lives relative to that boundary. **Until then, no test may read the ambient thread
+mask as a baseline** — a guard whose condition is set by test ordering is unfalsifiable, and that
+was the actual defect the leak exposed.
+
+**THE OPEN QUESTIONS STILL LIVE**, in full at the end of this file:
+
+| # | question | what closes it |
+|---|---|---|
+| **10** | macOS and Windows support | deciding what RSS accounting *means* there (peak vs current; `ru_maxrss` has no Windows equivalent), then a green run on both. What failed was never the library — it was `test_memory.py`'s RSS assertions and `test_bench.py`'s hard-coded `threads=4` against a 3-core runner |
+| **13** | the packaging guard installs `--no-deps`, so a **wrong version floor** is uncaught | an offline wheelhouse: `pip wheel` the resolved set once, install `metamer[batch]` with `--no-index --find-links`. Needs pip in the environment and a decision about where the wheelhouse lives. **Do not close it by loosening the floors** — an untested lower bound is the thing being guarded |
+| **14** | the benchmarks use a synthetic axis with `unique_dt = 1`; real monthly data has **6** | run the spike with a realistic calendar axis beside the synthetic one at the same B and thread count. **"It plausibly cancels in the ratio" is the reasoning that has failed twice** — measure it. A fixture change, not a harness change |
+
+---
 
 ---
 
@@ -52,12 +121,14 @@
   MacBook: `--threads 1 --threads 8`, `--out bench/macbook.json`.
   Batch sweep at path B's worst cell (d=3, 1 thread, no gaps) is
   `bench/batch-sweep-d3-1thread-nogaps.json`.
-- **Tests:** **802 collected, measured 2026-08-12** (588 at the close of Phase 1; Phase 2a
-  Tasks 0–6 added the batch-skeleton, stub-engine, packaging, config, input, geometry,
-  validation-staging, runner, thread-budget, machine-identity and tiling modules). **This bullet said 692 while the cold-start summary
-  twelve lines above said 693** — two undated copies of one measurement, which is how the drift
-  starts. One number now, dated. Full sweep
-  `pixi run test` (~271 s, measured 2026-08-12). `pixi run test-fast` (~12 s)
+- **Tests: THE COUNT AND THE SWEEP TIMING LIVE IN THE COLD-START HEAD ABOVE AND NOWHERE
+  ELSE.** This bullet carried its own copy of both and they drifted — it said **692** while the
+  head said **693**, twelve lines apart, neither dated. Reconciling the *values* was not the
+  fix; **deleting the second copy is**, because two statements of one measurement drift again
+  the moment one is updated. What belongs here is what the head does not say — which invocation
+  means what, and what Phase 2a added: the batch-skeleton, stub-engine, packaging, config,
+  input, geometry, validation-staging, runner, thread-budget, machine-identity and tiling
+  modules, on top of Phase 1's 588. `pixi run test-fast` (~12 s)
   deselects the `slow` marker and is for iteration only — **a green fast run is not evidence
   a task is done.** `pixi run test-ci` reproduces what CI runs (`-m 'not machine'`); it is
   also not evidence on its own, because the `machine` marker covers exactly the tests that
@@ -389,34 +460,131 @@ Only the durable conclusions are here.
 
 ### WHAT TASK 7 INHERITS — read this before the task sections below
 
-Task 7 is the ragged index builder, generic over an extent function. Everything it needs that
-is **not** in the plan:
+Task 7 is the ragged index builder, generic over an extent function, and **Task 8 immediately
+after it is the store schema — the most consequential remaining work in 2a, because the store's
+layout and its stored code meanings cannot change once data exists.** Everything the two need
+that is not in the plan is here.
 
-**THE BLOCKER TASK 6 HIT, AND TASK 7 DOES NOT: NOTHING MAPS `signal_terms` TO SIGNAL TERMS.**
-`config.candidates.parse_candidate` resolves *noise* terms through `kernel_registry`;
-`core.signal` has the term classes and **no registry and no parser**, and no task in the plan is
-assigned one. So `k_beta` is unobtainable, no tile can be sized, and `run()` is deliberately not
-wired to iterate tiles. **Task 7 is unaffected** — `P_total` and both offset tables come from the
-**candidate** list, which `Config.process_specs()` already resolves. **The parser is owed by
-Task 9 at the latest**, which fits and therefore needs the design itself. Do not invent the
-signal vocabulary in a task that does not build a design.
+**TASK 7 COMES BEFORE TASK 8 DELIBERATELY.** The schema's coordinate arrays — `noise_param_*[P]`
+and both offset tables — **are this builder's output**, and creating the store needs `P_total`
+and the offsets. A table saying the builder depends on the schema leads an implementer to stub
+the offsets in the schema task and fix them in the builder task, and **a stubbed offset table
+written into a store is exactly the class of thing that survives.**
 
 **TWO RAGGED INDICES WITH DIFFERENT EXTENTS, AND ONE REUSED TABLE IS WRONG AT UNEQUAL `p`.**
-`/noise/` is `Σ_m p_m` and a `/detail/` covariance block is `Σ_m p_m(p_m+1)/2` — **4 against 10**
-at the M=2 unequal-`p` fixture. So the builder takes a per-model **extent function**, not a
-parameter count, and **both offset tables are stored as coordinate arrays** rather than derived
-at read time.
+`/noise/` is `Σ_m p_m`; a `/detail/` covariance block is `Σ_m p_m(p_m+1)/2` — **4 against 10** at
+the M=2 fixture (`white`, p=1, beside `white + matern12`, p=3), which is why that fixture has
+unequal `p`. Three consequences, all §12.3's:
 
-**The plausible-number failure here is specific:** a wrongly-unpacked covariance is **still
-symmetric and often still positive definite**, and it reports wrong correlations with no
-symptom. A covariance is stored as the **packed lower triangle with its order in attrs**.
+- the builder takes a per-model **extent function**, not a parameter count — `p_m` for `/noise/`,
+  `p_m(p_m+1)/2` for `/detail/`, same builder, different callable;
+- **both offset tables are stored as coordinate arrays**, never derived at read time, so a
+  no-metamer reader can slice either without knowing the triangular formula;
+- a covariance is stored as the **packed lower triangle with its storage order in attrs**. The
+  plausible-number failure here is specific: a consumer unpacking row-major-lower as
+  column-major-lower gets a matrix that is **still symmetric, often still positive definite**,
+  and reports wrong correlations **with no symptom**.
 
-**Task 7 comes BEFORE Task 8 deliberately, and the plan says why**: the schema's coordinate
-arrays *are* this builder's output, so a table saying the builder depends on the schema leads to
-stubbed offsets written into a store — exactly the class of thing that survives.
+**Exit criterion 12 wants BOTH extent functions exercised**, so build the triangular one now even
+though `/detail/` is not created in 2a.
 
-**Exit criterion 12 wants both extent functions exercised**, `p_m` and `p_m(p_m+1)/2`, so build
-the second now even though `/detail/` is not created in 2a.
+**THE BLOCKER TASK 6 HIT, WHICH TASK 7 DOES NOT SHARE.** Nothing maps `signal_terms` (config
+strings) to `core.signal` classes — `parse_candidate` resolves *noise* terms through
+`kernel_registry`, and `core.signal` has the classes with no registry and no parser. So `k_beta`
+is unobtainable, no tile can be sized, and `run()` is deliberately **not** wired to iterate
+tiles. **Task 9's brief now owns it explicitly** (a signal-term registry and parser yielding a
+`SignalSpec` and hence `k_beta`). Tasks 7 and 8 are unaffected: `P_total` and both offset tables
+come from the **candidate** list, which `Config.process_specs()` already resolves.
+
+### THE STORE SCHEMA — what Task 8 must build, gathered from §12 and the brainstorm
+
+**Group layout (§12.2).** `m` = model axis, `b` = signal-parameter axis, `c` = criterion axis.
+
+    /            attrs: schema_version, fit_hash, compat_hash, run_hash, objective, engine,
+                        registry_version, algorithm_version, metamer_version, profile_name,
+                        candidate spec hashes, warm_start_used, calibration provenance
+    /signal/     dense   beta[y,x,m,b], beta_err[y,x,m,b]
+    /selection/  dense   delta_ic[y,x,m,c], weight[y,x,m,c], ic_best[y,x,c],
+                         selected[y,x,c], n_valid[y,x]
+    /primitives/ dense   log_lik[y,x,m], k[y,x,m], n_eff_trend[y,x,m], n_eff_bic[y,x,m],
+                         iterations[y,x,m]  (uint16)
+    /noise/      ragged  theta[y,x,P_total], theta_err[y,x,P_total]
+    /status/     dense   outcome[y,x,m] (enum), outcome[y,x] (aggregate)
+    /detail/     ragged  full parameter covariances — NOT CREATED in 2a
+    /warmstart/  dense   unconstrained theta-hat — machine state, disposable
+    /completion/ dense   tiles[ty,tx] uint8
+
+**In 2a: M = 2 with unequal `p`, C = 2 (AIC and HQIC), every group written except `/detail/`.**
+An uncreated group is a cleaner deferral than an empty one. **AIC and HQIC rather than AIC and
+BIC**, because HQIC has the wider reachable undefined region (`n ≤ e` against BIC's `n ≤ 1`), so
+the criterion axis carries a real asymmetry rather than two criteria that agree everywhere.
+
+**`/signal/` carries an explicit model axis even in v1** (length M, or length 1 with a documented
+broadcast), so per-candidate `β` is later a shape change rather than a format migration on a
+10⁷-point store.
+
+**Fixed-width coordinate dtypes (§12.4).** `S32`-style fixed-width bytes with an integer-code
+JSON legend in attrs as redundancy. Variable-length strings are the default path and **the least
+stable corner of the stack** (zarr v3 string support and xarray's handling of it) — and this is
+precisely the metadata a consumer without metamer must read. **Acceptance criterion for
+"self-describing": round-trip through plain `xr.open_zarr` with metamer uninstalled.**
+
+**Every store is self-contained (§12.4, added 2026-08-11).** No store resolves through another —
+not by zarr reference, not by symlink, not by a path in attrs a reader must follow. Provenance
+records a source store's path and hashes; it never depends on that store being present. The
+recompute path therefore **copies** the groups it does not recompute.
+
+**Natural units on disk (§12.7).** `theta` and `theta_err` in natural units with §4.1's
+delta-method push-through already applied; the unconstrained θ̂ warm-starting wants lives in the
+separate, deletable `/warmstart/`. **`/warmstart/` is written but unread in 2a and therefore
+needs its own guard** — nothing else will notice if it is written wrong. Assert the round trip:
+the stored unconstrained θ̂ reloads and maps back through the Bijector to the natural parameters
+in `/noise/`.
+
+**Status initialized to `NOT_ATTEMPTED`, never to zero/OK (§12.5)**, so an interrupted or partial
+write reads as unattempted rather than as success. Status is per `(point, model)`.
+
+**The status/value invariant is BIDIRECTIONAL and `/selection/` IS EXEMPT (§12.5, scoped
+2026-08-11).** A NaN value never coexists with `OK`; a non-`OK` status has NaN in **all**
+corresponding value slots. That governs `/signal/`, `/noise/` and `/primitives/`.
+**`/selection/` carries its own criterion-wise validity** — NaN ΔIC excluded from weight
+normalization, `-1` as the no-winner sentinel in `selected[y,x,c]` — so **a NaN in `/selection/`
+beside an `OK` status is legal** and means "this criterion could not rank this point". The reason
+is a shape, not a preference: **`outcome` has no `c` axis**, so folding a criterion-specific
+failure into the outcome ladder would make a criterion-independent array depend on which
+criterion was requested.
+
+**Store ΔIC, not IC (§12.6).** `ic_best[y,x,c]` float64 plus `delta_ic[y,x,m,c]` float32. Raw IC
+is ~10³ with meaningful differences ~1, so float32 IC loses the signal; ΔIC in float32 keeps it
+exactly, and ΔIC is a required first-class output anyway. **Store all M rather than top-k** while
+M ≲ 32.
+
+**Shard = one spatial tile, chunk = a subdivision of the shard (§12.7).** A region write is then
+exactly one shard per array and aligns with the tiling loop by construction; the chunk
+subdivision targets a few MB for reads. Sharding is also what keeps tile-sized writes from
+producing an inode explosion at 10⁷ points. Compression zstd + shuffle.
+
+**Write order is data-then-bitmap, always (§12.7).** The completion bit for a tile is written only
+after every array's region write for that tile has flushed, so an interrupted run can never mark
+incomplete data complete. **`schema_version` is written into root attrs at store creation** and
+checked on resume and on read.
+
+**The candidate set is covered by NO hash, deliberately**, because §12.8 permits resuming with a
+**superset** and a hash can only express equality. The enforcement is Task 11's positional
+comparison of `Config.candidate_spec_hashes()` against root attrs: `stored[i] == requested[i]`
+for every `i < len(stored)`, and `len(requested) >= len(stored)`. **Do not "fix" the omission by
+adding `candidates` to an allowlist** — its absence is what makes extension legal.
+
+**One store point must have candidate 1 failing and candidate 2 succeeding**, as a *required*
+property of the 2a fixture: `n_valid = 1` and a weight vector renormalized over one survivor —
+**the case that reads as confident selection and is not.** Phase 1's offset-inside-a-gap
+construction gives it.
+
+**Three status members are unreachable in 2a** — `SCREENED_OUT`, `CANDIDATE_DROPPED`,
+`NOT_APPLICABLE` — and take **one consolidated criterion-12 note** listing what would make each
+reachable (the Whittle engine plus the screening block; §14.1's early abort; a declared
+domain-mask variable in §13.6's input contract). **Their codes are 2a's regardless**, because
+stored code meanings are fixed at store creation.
 
 ### What Task 6 established (done — read before touching tiling or the memory budget)
 
@@ -517,13 +685,10 @@ promised in argument form. **Task 9 is the first task that fits and is where it 
   demotion a config omitting it hashes happily, so it would have gone on passing while checking
   nothing.
 
-**Open questions carried into Task 4 and beyond** (full text at the end of this file):
-
-| # | question | what closes it |
-|---|---|---|
-| ~~**12**~~ | ~~watermark or current RSS?~~ **CLOSED 2026-08-12: the parent's own high-water mark, and the inheritance does not compound.** In `machine.py`'s docstring | — |
-| **13** | The packaging guard installs `--no-deps`, so a **wrong version floor** is uncaught | an offline wheelhouse: `pip wheel` the resolved set once, install `metamer[batch]` with `--no-index --find-links`. **Do not close it by loosening the floors** |
-| **14** | The benchmarks use a synthetic axis with `unique_dt = 1`; real monthly data has **6** | run the spike with a realistic calendar axis beside the synthetic one at the same B and thread count. **"It plausibly cancels in the ratio" is the reasoning that has failed twice** — measure it |
+**Open questions are summarized ONCE, in
+[Things a cold session cannot re-derive](#things-a-cold-session-cannot-re-derive)**, and in full
+at the end of this file. This section carried a third copy of the same table until 2026-08-12;
+three statements of one list drift exactly as two statements of one measurement do.
 
 ### Task 5 — the thread budget (done)
 
@@ -575,7 +740,10 @@ promised in argument form. **Task 9 is the first task that fits and is where it 
   `machine.choose_core_count(physical, logical)`); and a guard no test protected (the run could
   observe, record, and still hand `None` to layer 3). **22/22 after the diagnoses.**
 - **OBSERVING NUMBA'S LIMIT COSTS ~2.6 s OF PROCESS START-UP.** `python -m metamer` over a tiny
-  fixture: **21.4 s cold, 6.4 s warm**; the full sweep went **298 s to ~500 s**. Not deferrable —
+  fixture: **21.4 s cold, 6.4 s warm**. The full sweep was measured at **~500 s** at the time —
+  **and that figure is VOID: it was taken while `bench/` was leaking numba's thread mask, so
+  everything after `test_bench.py` ran single-threaded. Do not re-derive anything from it.**
+  Not deferrable —
   a precondition observed after the work is not a precondition — but Phase 5's
   `validate --explain` should know its start-up is dominated by a check it needs.
 - **The layer-3 thread check is no longer vacuous.** Task 4 shipped it with `observed=None`
@@ -2646,7 +2814,9 @@ question; compute/bandwidth roofline pair for cross-machine prediction) are in d
   later fences were written against the pre-Task-9 scalar model**, so every remaining fence
   that touches `counting` or `criteria` should be diffed against the committed signatures
   before transcription, not after.
-- **The suite is ~255 s, and the `slow` marker is now in place.** `pixi run test` is the
+- **The suite was ~255 s at the close of Phase 1 — HISTORICAL, and the current figure is in
+  the cold-start head and nowhere else — and the `slow` marker is now in place.**
+  `pixi run test` is the
   full sweep and is what every end-of-task verification must run; `pixi run test-fast`
   (`-m "not slow"`, 552 of 588) is for iteration only. What is marked and why:
   **all of `tests/test_fit.py`** (module-wide — every test drives the real filter through
