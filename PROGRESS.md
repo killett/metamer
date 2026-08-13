@@ -5,13 +5,14 @@
 1. **Branch `main`, and everything is on it.** Last commit: `git log --oneline -1`. `phase-1` is
    a stale name that never diverged and needs nothing done to it.
 2. **DONE:** Phase 1 Tasks 0–18 (Task 19 deleted), Phase 2 preliminaries P0–P4, Phase 2a
-   Tasks 0–7, and open questions 1, 4, 9, 11, **12**.
-3. **NEXT: Phase 2a Task 8 — the store schema**, the most consequential remaining work in 2a.
-   Read **[WHAT TASK 8 INHERITS](#what-task-8-inherits--read-this-before-the-task-sections-below)**
-   and the store-schema section under it **before** the plan; they carry what the plan does not.
-4. **Tests: 822 passed, measured 2026-08-12 after Task 7.** This is the only statement of the
+   Tasks 0–8, and open questions 1, 4, 9, 11, **12**.
+3. **NEXT: Phase 2a Task 9 — the tile write path, the status/value invariant, and the
+   signal-term parser.** Read **[WHAT TASK 9 INHERITS](#what-task-9-inherits--read-this-before-the-task-sections-below)**
+   **before** the plan; it carries what the plan does not. **Task 9 must bump
+   `store.SCHEMA_VERSION`** when it adds the two `Outcome` members.
+4. **Tests: 845 passed, measured 2026-08-12 after Task 8.** This is the only statement of the
    count in this file; do not restate it elsewhere.
-5. **`pixi run test` is the full sweep (307 s, measured 2026-08-12 on the mini PC after Task 7)
+5. **`pixi run test` is the full sweep (302 s, measured 2026-08-12 on the mini PC after Task 8)
    and is what every end-of-task verification must run.** The timing is provisional — see the
    note below.
 6. **`pixi run test-fast` deselects `slow` and is for iteration only — a green fast run is NOT
@@ -55,7 +56,11 @@ twenty tests run in **2.4 s standalone**, so they do not account for 36 s, and n
 measurement was taken. Do not read either figure as a per-task cost.
 **THAT IS TWO UNDECOMPOSED STEPS. A THIRD TRIGGERS A PROPER ATTRIBUTION PASS** — per-module
 durations against the previous run — **rather than a third note**: three unexplained steps in
-a row stops being scatter and starts being a trend nobody has looked at.
+a row stops being scatter and starts being a trend nobody has looked at. **Task 8 did not
+supply the third and is evidence about the second**: 24 new tests, including two spawning
+subprocesses, and the sweep went **307 → 302 s**, i.e. *down*. So the 271 → 307 step was
+mostly scatter rather than accumulation, and **the run-to-run spread on this figure is at
+least 5 s** — quote it as such.
 More importantly: **Task 5's ~500 s figure
 was measured while `bench/` was leaking numba's mask to 1 thread**, so everything after
 `test_bench.py` ran single-threaded. **Every timing taken in that window is suspect. Do not
@@ -134,8 +139,8 @@ was the actual defect the leak exposed.
   fix; **deleting the second copy is**, because two statements of one measurement drift again
   the moment one is updated. What belongs here is what the head does not say — which invocation
   means what, and what Phase 2a added: the batch-skeleton, stub-engine, packaging, config,
-  input, geometry, validation-staging, runner, thread-budget, machine-identity, tiling and
-  ragged-index
+  input, geometry, validation-staging, runner, thread-budget, machine-identity, tiling,
+  ragged-index and store-schema
   modules, on top of Phase 1's 588. `pixi run test-fast` (~12 s)
   deselects the `slow` marker and is for iteration only — **a green fast run is not evidence
   a task is done.** `pixi run test-ci` reproduces what CI runs (`-m 'not machine'`); it is
@@ -212,7 +217,7 @@ was the actual defect the leak exposed.
 | Phase 1 task tracker | `docs/superpowers/plans/2026-08-05-metamer-phase1.md.tasks.json` (native task ids 8–27) |
 | Original build prompt | [`docs/phase1-prompt.md`](docs/phase1-prompt.md) — **superseded** by design doc §2 where they conflict |
 | Phase 2 preliminaries pre-flight | [`docs/superpowers/notes/phase2-preliminaries-preflight.md`](docs/superpowers/notes/phase2-preliminaries-preflight.md) — the (a)–(k) audit of the P0/P1/P2 briefs and what each finding changed |
-| **Phase 2a implementation plan** | [`docs/superpowers/plans/2026-08-11-metamer-phase2a.md`](docs/superpowers/plans/2026-08-11-metamer-phase2a.md) — **Tasks 0–7 done; Task 8 next** |
+| **Phase 2a implementation plan** | [`docs/superpowers/plans/2026-08-11-metamer-phase2a.md`](docs/superpowers/plans/2026-08-11-metamer-phase2a.md) — **Tasks 0–8 done; Task 9 next** |
 | **Phase 2a pre-flight, per task** | [`docs/superpowers/notes/phase2a-preflight.md`](docs/superpowers/notes/phase2a-preflight.md) — the (a)–(k) audit of each 2a task brief and what each finding changed. **Append to it before each task, not after.** |
 
 Phase list is design doc §17. Phase 1 exit criteria are §18. Do not duplicate either here.
@@ -466,19 +471,52 @@ Per-task pre-flight audits live in
 [`docs/superpowers/notes/phase2a-preflight.md`](docs/superpowers/notes/phase2a-preflight.md).
 Only the durable conclusions are here.
 
-### WHAT TASK 8 INHERITS — read this before the task sections below
+### WHAT TASK 9 INHERITS — read this before the task sections below
 
-**Task 8 is the store schema — the most consequential remaining work in 2a, because the store's
-layout and its stored code meanings cannot change once data exists.** Everything it needs that
-is not in the plan is here. Task 7 is **done**; what it produced is below, and its findings are
-in its own section further down.
+**Task 9 is the tile write path, the status/value invariant, and the signal-term parser** —
+the last of which is the blocker every task since Task 6 has recorded. Tasks 7 and 8 are
+**done**; what they produced and what they oblige Task 9 to do is here.
 
-**THE BUILDER IS `metamer.batch.ragged` AND TASK 8 CONSUMES IT — DO NOT STUB AN OFFSET TABLE.**
+**TASK 9 MUST BUMP `store.SCHEMA_VERSION`.** It adds `SCREENED_OUT` and `NOT_APPLICABLE` to
+`Outcome`, which changes the store's stored code meanings and the `flag_values` /
+`flag_meanings` legend written into `/status/` at creation — and `outcomes._CODES`'s own
+docstring already carries that rule. **Task 8 deliberately did not add the members**: their
+`is_failure` and `is_eligible` semantics belong to the task that owns the failure-rate
+denominator, and adding a member without deciding those is a name with no gate.
+
+**`iterations` IS EXEMPT FROM THE STATUS/VALUE INVARIANT, AND IT IS THE ONLY MEMBER THAT CAN
+BE.** A uint16 has no NaN. `k` and `n` are unaffected — `CandidateScores` carries both as
+float64 — and `iterations` feeds no arithmetic, so it keeps uint16 with **65535** for "no fit
+ran". **Name the exemption in the invariant check** rather than rediscovering it.
+
+**`/primitives/` CARRIES `n`, AND THE WRITE PATH MUST POPULATE IT.** §12.2 omitted it and
+`rank_candidates` requires it; without it Task 12 would reopen the input and recount the mask.
+It is per model although v1 makes it constant along `m`.
+
+**`FitResult.theta` IS `(B, M, p_max)` NaN-PADDED AND `/noise/` IS `(y, x, P_total)` RAGGED.**
+The write path is where the padding is removed, using `RaggedIndex.block(m)`. **The
+padding-NaN versus failure-NaN ambiguity §12.3 rejects exists in memory** and must not reach
+the store: a padded slot and a failed fit are both NaN in `theta`, and only the ragged layout
+distinguishes them.
+
+**THE STORE'S API IS `metamer.batch.store`.** `provenance_attrs(config, ...) -> dict` and
+`create_store(path, *, specs, criteria, shape, attrs)`, with `StoreShape(n_y, n_x, n_beta,
+tile_side)`. `create_store` refuses an existing path, a missing provenance key, fewer than two
+candidates or criteria, and geometry components that are not a fingerprint of an opened input.
+`SCHEMA_VERSION`, `ITERATIONS_UNSET`, `N_VALID_UNSET` and `SELECTED_UNSET` are the module's
+constants; **read the fill table from its docstring before writing anything.**
+
+**ANYTHING THAT CREATES AN ARRAY OR WRITES AN ATTR AFTER CREATION MUST RE-CONSOLIDATE.**
+Consolidated metadata is a copy of every array's metadata and every attr. Task 9 and Task 10
+write chunk data only, which is why nothing re-consolidates today — that is an assertion, not
+an assumption.
+
+**THE BUILDER IS `metamer.batch.ragged`, AND ITS COLUMNS ARE STRINGS.**
 `build_ragged_index(specs, extent)` returns `RaggedIndex(extents, offsets, total)` with
 `offsets_array()`, `extents_array()`, `model_index_array()` and `block(m)`;
-`noise_param_coordinates(specs)` returns the index plus **five** fixed-width byte columns and a
-`legend()`. The extent function is **required and has no default**, so each call site names which
-axis it builds.
+`noise_param_coordinates(specs)` returns the index plus **five** string columns and a
+`legend()`. The extent function is **required and has no default**, so each call site names
+which axis it builds.
 
 **IT EMITS FIVE COLUMNS, NOT §12.3's FOUR: `model`, `term`, `name`, `unit`, `transform`.**
 Measured: `white + matern12`'s free parameters are `matern12[0].sigma`, `matern12[0].rho`,
@@ -489,12 +527,14 @@ rather than folding the two into `"matern12[0].sigma"`, keeping each column atom
 **`noise_param_model` IS THE SPEC'S CANONICAL LABEL, NOT THE CONFIG STRING.** The config string
 is a REQUEST, the column is an IDENTITY, and **they differ in order on 2a's own fixture**:
 `"white + matern12"` against `"matern12[0] + white[0]"`. `model_index` is the integer join key to
-the `m` axis; the label is for the no-metamer reader.
+the `m` axis; the label is for the no-metamer reader. `ragged.model_label` is the one
+definition, used by the columns and by every group's `m` coordinate.
 
-**DO NOT WRITE THE COVARIANCE OFFSET TABLE INTO A 2a STORE.** `/detail/` is not created, and an
-offset table describing a group that does not exist is name-is-not-a-gate with a reader on the
-other end — the same argument that made an uncreated group cleaner than an empty one. Both extent
-functions are exercised in `tests/test_ragged.py`; only the `/noise/` table is written.
+**THE COVARIANCE OFFSET TABLE IS NOT IN THE STORE, AND MUST NOT BE ADDED.** `/detail/` is not
+created, and an offset table describing a group that does not exist is name-is-not-a-gate with
+a reader on the other end. Both extent functions are exercised in `tests/test_ragged.py`; only
+the `/noise/` table is written — into `/noise/` **and** `/warmstart/`, which shares the `p`
+axis and would otherwise not be sliceable per model.
 
 **TWO RAGGED INDICES WITH DIFFERENT EXTENTS, AND ONE REUSED TABLE IS WRONG AT UNEQUAL `p`.**
 `/noise/` is `Σ_m p_m`; a `/detail/` covariance block is `Σ_m p_m(p_m+1)/2` — **4 against 7** at
@@ -506,24 +546,10 @@ unequal `p`. Three consequences, all §12.3's:
 - **both offset tables are stored as coordinate arrays**, never derived at read time, so a
   no-metamer reader can slice either without knowing the triangular formula;
 - a covariance is stored as the **packed lower triangle with its storage order in attrs**. The
-  plausible-number failure here is specific: a consumer unpacking row-major-lower as
-  column-major-lower gets a matrix that is **still symmetric, often still positive definite**,
-  and reports wrong correlations **with no symptom**. `ragged.COVARIANCE_STORAGE_ORDER` is the
-  string and `covariance_slot_pairs` is what produces the order, so the declaration has a
-  producer; **write the string into attrs from that constant, never as a literal.**
+### THE STORE SCHEMA — what Task 8 BUILT (done), and what it obliges Tasks 9–12 to do
 
-**Exit criterion 12 wants BOTH extent functions exercised** — done in Task 7's tests, and the
-criterion-13 suite should assert it against the shipped builder rather than re-deriving it.
-
-**THE BLOCKER TASK 6 HIT, WHICH TASKS 7 AND 8 DO NOT SHARE.** Nothing maps `signal_terms` (config
-strings) to `core.signal` classes — `parse_candidate` resolves *noise* terms through
-`kernel_registry`, and `core.signal` has the classes with no registry and no parser. So `k_beta`
-is unobtainable, no tile can be sized, and `run()` is deliberately **not** wired to iterate
-tiles. **Task 9's brief now owns it explicitly** (a signal-term registry and parser yielding a
-`SignalSpec` and hence `k_beta`). Tasks 7 and 8 are unaffected: `P_total` and both offset tables
-come from the **candidate** list, which `Config.process_specs()` already resolves.
-
-### THE STORE SCHEMA — what Task 8 must build, gathered from §12 and the brainstorm
+**`metamer.batch.store` implements this.** The layout below is what exists; the paragraphs
+after it are requirements the later tasks inherit, not work outstanding here.
 
 **Group layout (§12.2).** `m` = model axis, `b` = signal-parameter axis, `c` = criterion axis.
 
@@ -550,11 +576,14 @@ the criterion axis carries a real asymmetry rather than two criteria that agree 
 broadcast), so per-candidate `β` is later a shape change rather than a format migration on a
 10⁷-point store.
 
-**Fixed-width coordinate dtypes (§12.4).** `S32`-style fixed-width bytes with an integer-code
-JSON legend in attrs as redundancy. Variable-length strings are the default path and **the least
-stable corner of the stack** (zarr v3 string support and xarray's handling of it) — and this is
-precisely the metadata a consumer without metamer must read. **Acceptance criterion for
-"self-describing": round-trip through plain `xr.open_zarr` with metamer uninstalled.**
+**Coordinate dtypes (§12.4, AMENDED 2026-08-12 on a measurement).** The v3-specified `string`
+data type, with an integer-code JSON legend in attrs as redundancy. **§12.4's `S32` was the
+unstable option and its rejected alternative was the specified one**: measured with zarr 3.3.0,
+`S32` writes `null_terminated_bytes` and raises `UnstableSpecificationWarning` — "may be
+unreadable by other Zarr libraries … may change without warning" — while `str` writes `string`
+with no warning. Only the dtype moved. **Acceptance criterion for "self-describing":
+round-trip through plain `xr.open_zarr` with metamer uninstalled — and "plain" means
+warning-free, which is why the metadata is consolidated at creation.**
 
 **Every store is self-contained (§12.4, added 2026-08-11).** No store resolves through another —
 not by zarr reference, not by symlink, not by a path in attrs a reader must follow. Provenance
@@ -569,7 +598,11 @@ the stored unconstrained θ̂ reloads and maps back through the Bijector to the 
 in `/noise/`.
 
 **Status initialized to `NOT_ATTEMPTED`, never to zero/OK (§12.5)**, so an interrupted or partial
-write reads as unattempted rather than as success. Status is per `(point, model)`.
+write reads as unattempted rather than as success. Status is per `(point, model)`. **Measured
+2026-08-12: `OK` is code 0, zarr's default integer fill is 0, and zarr writes no chunk equal to
+the fill — so the wrong fill is byte-for-byte identical on disk to the right one and reads back
+as a complete, wholly successful run.** Every array's fill is now a value its write path cannot
+produce; `/completion/tiles` is the one deliberate exception, where 0 truly means incomplete.
 
 **The status/value invariant is BIDIRECTIONAL and `/selection/` IS EXEMPT (§12.5, scoped
 2026-08-11).** A NaN value never coexists with `OK`; a non-`OK` status has NaN in **all**
@@ -612,6 +645,64 @@ construction gives it.
 reachable (the Whittle engine plus the screening block; §14.1's early abort; a declared
 domain-mask variable in §13.6's input contract). **Their codes are 2a's regardless**, because
 stored code meanings are fixed at store creation.
+
+### What Task 8 established (done — the store schema)
+
+- **`OK` IS CODE 0 AND ZARR'S DEFAULT FILL IS 0, SO THE WRONG FILL IS INVISIBLE ON DISK AND
+  INVERTS THE STORE'S MEANING.** Zarr writes no chunk equal to the fill value, so a store
+  created with the default fill and a correct one are **both pure metadata, zero chunk files**
+  — and the defaulted one reads back as a complete, wholly successful run over the whole grid.
+  **Every array's fill is now a value its write path cannot produce**: 65535 for `iterations`,
+  −1 for `n_valid`, −2 for `selected` (−1 already means "no winner"), NaN for every float.
+  **`/completion/tiles` is the one deliberate exception** and is labelled as such, because 0
+  genuinely means incomplete and someone will otherwise "fix" it.
+- **`/primitives/` WAS MISSING `n`, AND WITHOUT IT THE RECOMPUTE PATH CANNOT RUN.**
+  `rank_candidates` consumes `loglik`, `k`, **`n`** and `n_eff`; §12.2 listed every one but
+  `n`, which is **not derivable from what is stored** — under ML it is the per-point
+  valid-sample count and under REML that minus the design rank, and both come from the mask,
+  which is data. Task 12 would have had to reopen the input and recount, i.e. exactly the
+  condition the handoff names as fatal to §12.8. **Found by binding `CandidateScores`'s field
+  list against the layout — (g) applied to a data structure rather than to a call.**
+- **THE STATUS/VALUE INVARIANT CANNOT HOLD FOR `iterations`, AND THE DTYPE IS FIXED AT
+  CREATION.** A uint16 has no NaN. `k` and `n` are unaffected (`CandidateScores` carries both
+  as float64), and `iterations` feeds no arithmetic, so it keeps uint16 and is **explicitly
+  exempt** with 65535 for "no fit ran". A contradiction between an invariant and a dtype has to
+  be resolved by whichever task fixes the dtype.
+- **§12.4 CHOSE THE UNSPECIFIED DTYPE AND REJECTED THE SPECIFIED ONE.** Measured with zarr
+  3.3.0 / xarray 2026.7.0: `S32` writes `null_terminated_bytes` and raises
+  `UnstableSpecificationWarning` — "does not have a Zarr V3 specification … may be unreadable
+  by other Zarr libraries … may change without warning" — while `str` writes `string` with no
+  warning. **The writing library declares the archival choice unstable on disk**, which is the
+  property §12.4 exists to avoid. Only the dtype moved; the legend stays as redundancy.
+  Consequence: `ragged`'s fixed-width encoding, its silent-truncation guard and its ASCII
+  refusal were **deleted with their tests** — guards whose reason has evaporated read as
+  constraints the format imposes.
+- **"PLAIN `xr.open_zarr`" MEANS WARNING-FREE, WHICH MEANS CONSOLIDATED.** An unconsolidated
+  store makes xarray warn and instruct the reader to pass a keyword. **Consolidated metadata is
+  a COPY of every array's metadata and every attr, so anything that later creates an array or
+  writes an attr must re-consolidate** — nothing in 2a does, and that is now an assertion
+  rather than an assumption.
+- **§12.2's LAYOUT HAD NO SPATIAL COORDINATES AT ALL, AND NAMED TWO ARRAYS `outcome`.** A trend
+  field with no `y`/`x` cannot be plotted, regridded or joined, which fails the no-metamer read
+  the whole schema is built around; the values come from the geometry components already in
+  provenance, so there is one source. And two arrays cannot share a name in one group —
+  `outcome[y,x,m]` beside the aggregate `outcome[y,x]` — so the aggregate is `point_outcome`.
+- **EVERY GROUP CARRIES ITS OWN LABEL COORDINATES**, because `xr.open_zarr(group=…)` opens one
+  group and labels in the root never reach it. `/warmstart/` therefore carries the ragged
+  offset table too: it shares the `p` axis and would not otherwise be sliceable per model.
+- **A PRIME TILE SIDE HAS NO USEFUL CHUNK SUBDIVISION.** Zarr requires the shard to be a whole
+  number of chunks, so the choice is over **divisors** of `tile_side`. Recorded for 2b's
+  calibration, which is what picks the tile side: **prefer a composite one.**
+- **THE RECORDED CHUNK AND SHARD BYTES ARE UNCOMPRESSED PRODUCTS, NOT FILE SIZES.** Measured, a
+  913 952-byte float32 shard lands as 790 204 bytes of random data and far less for a smooth
+  field. Task 6's read-amplification units trap in a new place: both sides of a recorded
+  quantity must be in the same unit, and the budget number is the uncompressed one.
+- **`geometry_hash({})` RETURNS A WELL-FORMED HASH OF NOTHING.** A caller that skipped stage 4a
+  would get a store whose `fit_hash` is a valid-looking string matching **every** other store
+  built the same way. Refused at the one place a store is born, which is the reachable form of
+  the `fit_hash: null` hazard — `Config.fit_hash()` takes the geometry hash as an argument, so
+  the None branch is unreachable from here and the empty-components branch is not.
+- **21/21 mutations bite.**
 
 ### What Task 7 established (done — the ragged builder)
 

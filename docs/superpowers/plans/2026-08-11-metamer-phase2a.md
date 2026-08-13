@@ -430,6 +430,16 @@ reaches a store survives.
 `/noise/`, `/status/`, `/warmstart/`, `/completion/`. **`/detail/` is not created** — an
 uncreated group is a cleaner deferral than an empty one.
 
+**AMENDED DURING THE TASK, 2026-08-12.** `/primitives/` also carries **`n`**, which §12.2 and
+this brief both omitted: `rank_candidates` reads `loglik`, `k`, `n` and `n_eff`, and without
+`n` stored, Task 12 must reopen the input and recount the mask — the condition the handoff
+names as fatal to §12.8. Every fill value is a value the write path cannot produce (`OK` is
+code 0 and zarr's default fill is 0, so the default makes an empty store read as a wholly
+successful run, with byte-identical contents); `iterations` is exempt from the status/value
+invariant because a uint16 has no NaN; the label coordinates use the v3-specified `string`
+dtype rather than §12.4's `S32`, which zarr-python declares unstable; and every group carries
+its own label coordinates plus `y`/`x`, because each is opened separately.
+
 **Width: M=2 with unequal `p`, C=2.** Candidates `white` (p=1) and `white + matern12` (p=3),
 so `off_1 = 1` and `P_total = 4`. Criteria **AIC and HQIC** — HQIC has the wider reachable
 undefined region (`n ≤ 2` against BIC's `n ≤ 1`), so the criterion axis carries a real
@@ -477,6 +487,17 @@ about a store schema is the worst available place to decide it. Tasks 7 and 8 ar
 already resolves.
 **Goal.** One region write per array per tile, with the invariant wired through **every**
 write path.
+
+**TASK 9 BUMPS `store.SCHEMA_VERSION`, AND THE COUPLING IS NOT OPTIONAL.** Adding
+`SCREENED_OUT` and `NOT_APPLICABLE` to `Outcome` changes the store's stored code meanings and
+the `flag_values` / `flag_meanings` legend written into `/status/` at creation, and
+`outcomes._CODES`'s own docstring already carries that rule. Task 8 deliberately did **not**
+add the members: their `is_failure` and `is_eligible` semantics belong to the task that owns
+the failure-rate denominator, and adding a member without deciding those is a name with no
+gate.
+
+**AND `iterations` IS EXEMPT FROM THE INVARIANT.** A uint16 has no NaN; its "no fit ran"
+value is 65535. Name the exemption in the invariant check rather than rediscovering it.
 
 **The invariant, scoped.** `/status/outcome[y,x,m]` governs `/signal/`, `/noise/` and
 `/primitives/`: a NaN never coexists with `OK`, and a non-`OK` status has NaN in **all** its

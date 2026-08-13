@@ -1498,3 +1498,223 @@ that fixture as artificial would have dropped the only test of it. It is the sam
 **The cross-process test's control is inside it:** besides the two seeds agreeing, it asserts
 the leading bytes, so it fails if the columns are empty or reordered — which the label-order
 mutation confirmed.
+
+---
+
+## Task 8 — the store schema (audited 2026-08-12)
+
+The most consequential brief in 2a, because every choice it makes is unchangeable once data
+exists. Six findings changed the schema; two of them — a missing primitive and a fill value —
+would each have been discovered at a task that could no longer fix them.
+
+### (d) / (f) — `/primitives/` IS MISSING `n`, AND WITHOUT IT THE RECOMPUTE PATH CANNOT RUN
+
+`criteria.rank_candidates` takes a `CandidateScores`, whose fields are `loglik`, **`k`**,
+**`n`**, `n_eff` and `outcome`. Design doc §12.2's `/primitives/` lists `log_lik`, `k`,
+`n_eff_trend`, `n_eff_bic` and `iterations`. **`n` — the per-objective sample size — is in
+neither §12.2 nor the plan's Task 8 layout, and it is not derivable from what is stored.**
+Under ML it is the per-point valid-sample count and under REML it is that minus the design
+rank; both come from the **mask**, which is data, not a stored primitive.
+
+The consequence is precisely the one the handoff names as fatal:
+
+> If any future change makes `rank_candidates` need the data, §12.8 becomes unimplementable
+> and the three-hash split buys nothing.
+
+Task 12 would have had to re-open the input and recount to "recompute without refitting",
+which is the claim exit criteria 5a, 15 and 16 exist to establish. **Found by binding
+`CandidateScores`'s field list against the layout — (g) applied to a data structure rather
+than to a call.**
+
+**Changed:** `/primitives/` gains `n[y,x,m]`. It is stored **per model even though v1 makes
+it constant along `m`** (the design is built once, before the candidate loop), for the same
+reason §12.3 gives `/signal/` an explicit model axis: a shape change later is a format
+migration on a 10⁷-point store, and `k` beside it genuinely does vary with `p_m`. Design doc
+§12.2 and the plan amended.
+
+### (a2) MEASURED — `OK = 0`, SO A DEFAULT `fill_value` MAKES AN UNWRITTEN STORE READ "ALL OK"
+
+`outcomes._CODES` puts `OK` at **0** and `NOT_ATTEMPTED` at **8**. zarr's default
+`fill_value` for an integer array is **0**, and **zarr does not write a chunk equal to the
+fill value** (Task 6 measured this for reads; it applies to creation with more force). So a
+store created with the default fill is, on disk, byte-for-byte identical to one created with
+the correct fill — **0 chunk files either way** — and reads back as a completed, successful
+run over the whole grid.
+
+Measured here: an array created with `fill_value=8` and never written yields
+`np.unique(...) == [8]` and **zero chunk files**; the same array with the default yields
+`[0]` and zero chunk files. **The defect is invisible in the store's bytes and inverts the
+store's meaning.**
+
+**Changed, and generalized into the rule the whole fill table follows:**
+
+> **Every array's fill value must be a value its write path cannot produce.**
+
+| array | fill | why it is unproducible |
+|---|---|---|
+| `/status/outcome` | `NOT_ATTEMPTED` (8) | nothing in 2a writes that code |
+| every float array | NaN | consistent with the invariant: a non-`OK` slot is NaN anyway |
+| `/primitives/iterations` (uint16) | **65535** | the cap is 200; a fit never reports it |
+| `/selection/n_valid` (int16) | **-1** | a count is never negative |
+| `/selection/selected` (int16) | **-2** | `-1` already means "no winner" |
+| `/completion/tiles` (uint8) | **0** | **the deliberate exception** — an unwritten tile *is* incomplete, so here the neutral value is the true one |
+
+**The exception is stated because otherwise it is "fixed" later.** Every other zero-looking
+fill in this store is a defect; that one is the definition.
+
+### (a) — THE STATUS/VALUE INVARIANT CANNOT HOLD FOR `iterations`, AND THE DTYPE IS THIS TASK'S
+
+The invariant is *"a non-`OK` status has NaN in **all** corresponding value slots"*, and it
+is stated over `/primitives/` — which contains `iterations`, specified as **uint16** in three
+documents. **A uint16 has no NaN.** The dtype is fixed at store creation, so the contradiction
+must be resolved here even though Task 9 wires the invariant.
+
+`k` and `n` are not affected: `CandidateScores` already carries both as **float64**, so they
+take NaN naturally. **`iterations` is the only integral member**, and it is the only one that
+feeds no arithmetic — nothing recomputes from it.
+
+**Changed:** `iterations` keeps uint16 and is **explicitly exempt from the invariant, with
+65535 as its "no fit ran" value**, recorded where the dtype is chosen. Task 9's invariant
+check must name the exemption rather than discover it.
+
+### MEASURED — §12.4's CHOSEN DTYPE IS THE UNSPECIFIED ONE, AND ITS REJECTED ALTERNATIVE IS NOT
+
+§12.4 chose fixed-width bytes (`S32`) over variable-length strings, because *"zarr v3 string
+support and xarray's handling of it are the least stable corner of the stack"*. Measured
+2026-08-12 with **zarr 3.3.0 / xarray 2026.7.0**, that is now backwards:
+
+| dtype | `zarr.json` `data_type` | on creation |
+|---|---|---|
+| `S32` | `null_terminated_bytes` | **`UnstableSpecificationWarning`: "does not have a Zarr V3 specification … may be unreadable by other Zarr libraries … may change without warning"** |
+| `str` | `string` | no warning |
+| `uint8` | `uint8` | core spec |
+
+Both round-trip through `xr.open_zarr` today. But **the writing library declares the chosen
+one unstable on disk**, and §12.4's entire concern is the durability of exactly this metadata
+in an archive meant to outlive the version that wrote it.
+
+**Changed:** the label coordinates use the **v3-specified `string` dtype**, and §12.4's
+integer-code JSON legend in attrs stays exactly as specified, as the redundancy. **Only the
+dtype moves; the structure §12.4 prescribes is unchanged.** Consequence for Task 7:
+`ragged`'s columns become `tuple[str, ...]`, and `COORDINATE_WIDTH` with its truncation and
+ASCII refusals is **deleted along with its two tests** — those guards existed for a
+fixed-width dtype and guard nothing without one. Keeping a refusal whose reason has
+evaporated is worse than deleting it: it reads as a constraint the format imposes.
+
+### MEASURED — "PLAIN `xr.open_zarr`" WARNS UNLESS THE METADATA IS CONSOLIDATED
+
+Opening a store created through the raw zarr API emits a warning telling the reader to
+consolidate, pass `consolidated=False`, or pass `consolidated=True`. **The acceptance
+criterion is a round-trip through *plain* `xr.open_zarr`** — a reader who must first discover
+a keyword is not the reader §12.4 has in mind.
+
+**Changed:** `zarr.consolidate_metadata` runs at the end of store creation. **And the
+coupling is recorded rather than left to be discovered**: consolidated metadata is a *copy*
+of the array metadata and attrs, so **anything that later creates an array or writes an attr
+must re-consolidate.** In 2a nothing does — provenance is written at creation and every later
+write is chunk data — and that is now an assertion, not an assumption. This is the
+duplicated-measurement rule at the level of zarr metadata: the copy drifts the moment one
+side is updated.
+
+Also measured, and it is what makes exit criterion 3 cheap: a subprocess run with
+`PYTHONPATH` unset from a directory outside the tree **has xarray and cannot import
+metamer**, so "with metamer uninstalled" is constructible without touching the environment.
+`xr.open_datatree(engine="zarr")` reads the whole group hierarchy in one call.
+
+### (a2) — THE THREE NEW ATTRS THAT WOULD HAVE BEEN NAMES
+
+- **`schema_version` is an IDENTITY of the writing code**, so it is a module constant stamped
+  by the writer, never a config field — the same argument that moved `algorithm_version` and
+  `registry_version`. **And its bump rule has a producer this sub-phase**: `outcomes._CODES`'s
+  own docstring says adding a member bumps the store's schema version, and **Task 9 adds
+  `SCREENED_OUT` and `NOT_APPLICABLE`.** Recorded as a requirement on Task 9 rather than
+  pre-empted here, because their `is_failure` / `is_eligible` semantics belong to the task
+  that owns the failure-rate denominator, and adding members without deciding those is a name
+  without a gate.
+- **`fit_hash` is `str | None` and a store must never carry the None.** `Config.fit_hash()`
+  returns None when stage 4a has not run, so a store created before the input is opened would
+  write `fit_hash: null` — and Task 11's resume gate comparing `null == null` **matches every
+  such store**. Refused at creation, naming the entry contract's ordering.
+- **`profile_name` has no producer until Phase 5, so it is omitted rather than written
+  empty.** A provenance field that is always empty records nothing — Task 2's CF-attrs
+  finding. **`warm_start_used` is a fact about the RUN, not about the config**: reading it off
+  `config.warm_start.enabled` would write `true` for a 2a run that cannot warm-start, so it is
+  an explicit parameter defaulting to `False`.
+
+### (a) — A LENGTH-1 AXIS AGAIN, AND THIS TIME IT IS `b`
+
+The plan fixes M=2 and C=2 for exactly this reason and says nothing about `b`, the signal
+parameter axis. `k_beta` is unobtainable in 2a (the signal-term parser is Task 9's), so the
+width is a parameter — and a test that passes `n_beta = 1` makes every quantity defined
+across `b` constant, which is the same defect one axis over. **Fixtures use `n_beta >= 2`.**
+
+### (c) — EXITS, ENUMERATED
+
+`create_store`: one return; `FileExistsError` if the path exists (a store is created once,
+and silently overwriting a 10⁷-point run is unrecoverable); `ValueError` for a missing or
+None-valued required provenance key, for a non-positive axis length, for a `tile_side` that
+exceeds the grid, and for a coordinate length that disagrees with the ragged index's total.
+`provenance_attrs`: one return; `ValueError` when `fit_hash` or `compat_hash` is None.
+
+### (i) — A FIXTURE OF FILL VALUES WRITES NOTHING, SO NO TEST MAY ASSERT ON FILES
+
+Task 6 measured that zarr does not write a chunk equal to the fill value. At **creation**
+every array is entirely fill, so the whole store is metadata: measured, four files for two
+arrays. **Any store-creation assertion about bytes written or keys present reads a
+correct-looking zero**, exactly as the brief warns. Every assertion here is on **values read
+back**, and the paired positive control is a region write producing exactly one shard file.
+
+### (j) — THE RECORDED SHARD AND CHUNK BYTES ARE NOT THE FILE SIZES
+
+The brief asks for the actual chunk and shard bytes to be recorded. **Those are
+`prod(shape) * itemsize`, and the file on disk is compressed** — measured, a 913 952-byte
+float32 shard lands as 790 204 bytes of random data and would be far smaller for a smooth
+field. This is Task 6's read-amplification units trap in a new place: **both sides of a
+recorded quantity must be in the same unit**, and the recorded figure is the uncompressed
+budget number, because that is what the memory formula and the "few MB per chunk" target are
+about.
+
+### (g) — SIGNATURES BOUND, AND ONE BLOCKER CONFIRMED
+
+`Config.{fit,compat,run}_hash()`, `candidate_spec_hashes()`, `process_specs()`,
+`hashing.ALGORITHM_VERSION`, `registry.REGISTRY_VERSION`, `geometry.geometry_components` /
+`geometry_hash`, `threads.observe_thread_limits`, `Outcome.code`, and Task 7's
+`build_ragged_index` / `noise_param_coordinates` all bind. **`tile_side` does not**: it needs
+`k_beta`, which needs the signal-term parser Task 9 owns, so **store creation takes the tile
+side as an argument rather than deriving it** — the same accommodation Task 6 made.
+
+### (k) — THE ATTRS ARE JSON AND MUST NOT CARRY PROCESS-LOCAL ORDER
+
+Every legend and every mapping written into attrs is built with sorted keys, and the
+provenance dict is asserted byte-identical across two processes under different
+`PYTHONHASHSEED` values. `json.dumps` of a dict preserves insertion order, so an attrs
+mapping built by iterating a set is stable within a process and unstable between them — the
+one defect class an in-process suite cannot reach, in the one part of the store a resume
+compares.
+
+### Bite checks
+
+Recorded after implementation, below.
+
+### Bite checks — 21 mutations, 21 bite
+
+Fill values (5): outcome left on zarr's default, `iterations` 0, `n_valid` 0, `selected` −1
+colliding with the no-winner sentinel, the completion bitmap filled complete. Shape (3):
+bitmap shaped by points, shard equal to the whole array, noise axis sized `M * p_max`.
+Content (5): `n` dropped from `/primitives/`, spatial coordinates not written, model labels
+omitted, criterion labels omitted, metadata not consolidated. Provenance (5):
+`schema_version` from the config, `warm_start_used` from the config, the geometry-emptiness
+guard, the required-attrs guard, the existing-store refusal. Axes (3): recorded bytes taken as
+a chunk count, the single-criterion guard, the `n_beta = 1` guard.
+
+**Two mutations each failed three tests rather than one**, and both are the store's identity
+rather than its contents: `schema_version` taken from the config, and the noise axis sized
+`M * p_max`. **The fill-value mutations failed one test each**, which is the whole argument
+for the hand-written fill table — no other assertion in the suite can see them, because they
+change nothing about shape, dtype or the store's bytes.
+
+**A test failure during development that was itself a finding:** the first version of the
+no-chunk-files assertion checked the whole `/status/` group and failed, because **the label
+coordinates *are* written at creation** — they carry values, not fill. The claim is about the
+data arrays, and the corrected test asserts both halves: the data arrays have no chunk files
+and `noise/m` does.

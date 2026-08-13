@@ -25,7 +25,6 @@ import pytest
 
 import metamer
 from metamer.batch.ragged import (
-    COORDINATE_WIDTH,
     COVARIANCE_STORAGE_ORDER,
     build_ragged_index,
     covariance_extent,
@@ -263,13 +262,8 @@ def test_slot_order_follows_the_optimizer_vector_and_not_the_config_string() -> 
     """
     coords = noise_param_coordinates(specs(STORE_CANDIDATES))
 
-    assert list(coords.term) == [
-        b"white[0]",
-        b"matern12[0]",
-        b"matern12[0]",
-        b"white[0]",
-    ]
-    assert list(coords.name) == [b"sigma", b"sigma", b"rho", b"sigma"]
+    assert coords.term == ("white[0]", "matern12[0]", "matern12[0]", "white[0]")
+    assert coords.name == ("sigma", "sigma", "rho", "sigma")
 
 
 def test_the_model_column_is_the_canonical_label_not_the_config_string() -> None:
@@ -285,12 +279,12 @@ def test_the_model_column_is_the_canonical_label_not_the_config_string() -> None
     """
     coords = noise_param_coordinates(specs(STORE_CANDIDATES))
 
-    assert list(coords.model) == [
-        b"white[0]",
-        b"matern12[0] + white[0]",
-        b"matern12[0] + white[0]",
-        b"matern12[0] + white[0]",
-    ]
+    assert coords.model == (
+        "white[0]",
+        "matern12[0] + white[0]",
+        "matern12[0] + white[0]",
+        "matern12[0] + white[0]",
+    )
 
 
 def test_model_index_joins_each_slot_to_the_model_axis() -> None:
@@ -321,8 +315,8 @@ def test_unit_and_transform_are_read_from_the_param_spec() -> None:
     """
     coords = noise_param_coordinates(specs(STORE_CANDIDATES))
 
-    assert list(coords.unit) == [b"", b"", b"time", b""]
-    assert list(coords.transform) == [b"Log", b"Log", b"Log", b"Log"]
+    assert coords.unit == ("", "", "time", "")
+    assert coords.transform == ("Log", "Log", "Log", "Log")
 
     constructed = ProcessSpec(
         (
@@ -343,8 +337,8 @@ def test_unit_and_transform_are_read_from_the_param_spec() -> None:
     )
     other = noise_param_coordinates((constructed,))
 
-    assert list(other.unit) == [b"K"]
-    assert list(other.transform) == [b"Identity"]
+    assert other.unit == ("K",)
+    assert other.transform == ("Identity",)
 
 
 def test_a_fixed_parameter_occupies_no_slot() -> None:
@@ -385,19 +379,23 @@ def test_a_fixed_parameter_occupies_no_slot() -> None:
     coords = noise_param_coordinates((spec,))
 
     assert coords.index.extents == (1,)
-    assert list(coords.name) == [b"free"]
+    assert coords.name == ("free",)
 
 
-def test_a_value_wider_than_the_coordinate_width_is_refused() -> None:
-    """An over-wide coordinate value raises instead of being truncated.
+def test_a_long_or_non_ascii_value_survives_intact() -> None:
+    """Coordinate values are plain strings, so neither is truncated or refused.
 
-    MEASURED: `np.array(["x" * 40], dtype="S32")` returns a 32-byte value with no
-    error, and a truncated model label still reads as a label.
+    MEASURED 2026-08-12: `np.array(["x" * 40], dtype="S32")` returns a 32-byte
+    value with no error, and `np.array(["\u00b5m"], dtype="S32")` raises
+    `UnicodeEncodeError`. The store writes the v3-specified `string` dtype rather
+    than fixed-width bytes -- see the module docstring -- so both hazards are
+    gone and this pins their absence.
 
-    Catches exactly that silent truncation, which produces a store whose model
-    column has two identical-looking entries for two different candidates.
+    Catches a fixed-width encoding creeping back in: a 33-character kind would
+    come back truncated to 32, which still reads as a valid label, and a
+    micrometre unit would raise instead of round-tripping.
     """
-    long_kind = "k" * (COORDINATE_WIDTH + 1)
+    long_kind = "k" * 33
     spec = ProcessSpec(
         (
             TermSpec(
@@ -409,50 +407,18 @@ def test_a_value_wider_than_the_coordinate_width_is_refused() -> None:
                         transform=Log(),
                         bounds=(0.0, np.inf),
                         diagnostic_limits=(1e-8, 1e8),
+                        unit="\u00b5m",
                     )
                 },
             ),
         )
     )
 
-    with pytest.raises(ValueError, match="wider than") as excinfo:
-        noise_param_coordinates((spec,))
-    assert long_kind in str(excinfo.value)
+    coords = noise_param_coordinates((spec,))
 
-
-def test_a_non_ascii_coordinate_value_is_refused_naming_its_column() -> None:
-    """A non-ASCII value raises a `ValueError` naming the column and the value.
-
-    MEASURED: `np.array(["µm"], dtype="S32")` raises `UnicodeEncodeError`,
-    whose message names a codec and a character position and neither the column
-    nor the parameter.
-
-    Catches that bare exception reaching a caller: store creation would fail with
-    a message that cannot be acted on, and `UnicodeEncodeError` is a `ValueError`
-    subclass, so a caller staging `ValueError` would file it under the wrong
-    cause with the wrong message.
-    """
-    spec = ProcessSpec(
-        (
-            TermSpec(
-                kind="synthetic",
-                params={
-                    "sigma": ParamSpec(
-                        name="sigma",
-                        default=1.0,
-                        transform=Log(),
-                        bounds=(0.0, np.inf),
-                        diagnostic_limits=(1e-8, 1e8),
-                        unit="µm",
-                    )
-                },
-            ),
-        )
-    )
-
-    with pytest.raises(ValueError, match="not ASCII") as excinfo:
-        noise_param_coordinates((spec,))
-    assert "unit" in str(excinfo.value)
+    assert coords.term == (f"{long_kind}[0]",)
+    assert len(coords.term[0]) == 36
+    assert coords.unit == ("\u00b5m",)
 
 
 def test_a_layout_disagreeing_with_the_count_is_refused(
@@ -518,8 +484,8 @@ def test_the_columns_are_byte_identical_across_processes() -> None:
             tuple(parse_candidate(c) for c in ("white", "white + matern12"))
         )
         print(
-            b"|".join(
-                b",".join(column.tolist())
+            "|".join(
+                ",".join(column)
                 for column in (
                     coords.model,
                     coords.term,
@@ -527,7 +493,7 @@ def test_the_columns_are_byte_identical_across_processes() -> None:
                     coords.unit,
                     coords.transform,
                 )
-            ).decode("ascii")
+            )
         )
         """
     )

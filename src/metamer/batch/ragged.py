@@ -49,11 +49,24 @@ model is), and it must be read from the thing it identifies. They differ in
 order on 2a's own fixture: `"white + matern12"` against
 `"matern12[0] + white[0]"`.
 
-**FIXED-WIDTH BYTES, AND NUMPY TRUNCATES THEM SILENTLY.** Measured:
-`np.array(["x" * 40], dtype="S32")` returns 32 bytes with no error, while
-`np.array(["µm"], dtype="S32")` raises `UnicodeEncodeError` naming a codec and a
-character position. One failure mode is silent and the other is loud and
-unactionable, so both are refused here with the column and the value named.
+**THE COLUMNS ARE PLAIN STRINGS, AND §12.4's FIXED-WIDTH BYTES WERE MEASURED TO
+BE THE UNSTABLE OPTION (2026-08-12, zarr 3.3.0 / xarray 2026.7.0).** §12.4 chose
+`S32` over variable-length strings because zarr v3's string support was judged
+the least stable corner of the stack. It is the other way round:
+
+| dtype | `zarr.json` `data_type` | on creation |
+|---|---|---|
+| `S32` | `null_terminated_bytes` | **`UnstableSpecificationWarning` — no Zarr V3 specification, may be unreadable by other Zarr libraries, may change without warning** |
+| `str` | `string` | no warning |
+
+Both round-trip through `xr.open_zarr` today, but the writing library declares
+the fixed-width one unstable **on disk**, and §12.4's whole concern is metadata
+durability in an archive meant to outlive the version that wrote it. So the
+store writes the v3-specified `string` dtype and §12.4's integer-code legend
+stays as the redundancy — **only the dtype moved.** Fixed-width encoding, its
+silent truncation and its ASCII refusal went with it: those guards existed for
+a dtype nothing uses, and a refusal whose reason has evaporated reads as a
+constraint the format imposes.
 """
 
 from __future__ import annotations
@@ -65,11 +78,6 @@ import numpy as np
 from numpy.typing import NDArray
 
 from metamer.core.terms import ProcessSpec, free_param_index
-
-#: Width of every fixed-width byte coordinate array, per design doc 12.4. A width
-#: derived from the values would differ between stores and between a store and the
-#: run that resumes it, so it is a constant and an over-wide value is refused.
-COORDINATE_WIDTH = 32
 
 #: How a `/detail/` covariance block is packed. **This is the group's
 #: plausible-number failure**: a consumer that unpacks row-major-lower as
@@ -83,6 +91,24 @@ COVARIANCE_STORAGE_ORDER = "row-major-lower"
 ExtentFn = Callable[[ProcessSpec], int]
 
 _COLUMNS = ("model", "term", "name", "unit", "transform")
+
+
+def model_label(spec: ProcessSpec) -> str:
+    """Return a candidate's canonical label, as the store's model axis carries it.
+
+    **AN IDENTITY, NOT THE CONFIG STRING.** The config's `"white + matern12"` is
+    a request; this is what the model *is*, read off the canonically ordered
+    spec, and the two differ in order on exactly that candidate. One definition,
+    used by the `/noise/` columns and by every group's `m` coordinate, so the two
+    cannot disagree.
+
+    Args:
+        spec: One candidate's process specification.
+
+    Returns:
+        Its term labels joined with `" + "`, in canonical order.
+    """
+    return " + ".join(spec.labels())
 
 
 def noise_extent(spec: ProcessSpec) -> int:
@@ -246,11 +272,11 @@ class NoiseParamCoordinates:
     Attributes:
         index: The `/noise/` ragged index these columns describe.
         model_index: Owning model, as the integer join key to the `m` axis.
-        model: Owning model's canonical label, fixed-width bytes.
-        term: Owning term's label within the model, fixed-width bytes. Split out
+        model: Owning model's canonical label.
+        term: Owning term's label within the model. Split out
             from `name` because a composition can carry two parameters with the
             same name -- `white + matern12` has two called `sigma`.
-        name: Parameter name within its term, fixed-width bytes.
+        name: Parameter name within its term.
         unit: Unit string from the `ParamSpec`, empty where none is declared.
         transform: Name of the bijector mapping this parameter between natural
             units (what `/noise/` stores) and the unconstrained coordinates
@@ -260,62 +286,29 @@ class NoiseParamCoordinates:
 
     index: RaggedIndex
     model_index: NDArray[np.int16]
-    model: NDArray[np.bytes_]
-    term: NDArray[np.bytes_]
-    name: NDArray[np.bytes_]
-    unit: NDArray[np.bytes_]
-    transform: NDArray[np.bytes_]
+    model: tuple[str, ...]
+    term: tuple[str, ...]
+    name: tuple[str, ...]
+    unit: tuple[str, ...]
+    transform: tuple[str, ...]
 
     def legend(self) -> dict[str, tuple[str, ...]]:
-        """Return the integer-code legend for the byte columns.
+        """Return the integer-code legend design doc 12.4 carries in attrs.
 
-        Design doc 12.4 carries the legend in attrs **as redundancy** for the
-        fixed-width byte arrays, so it is derived from the columns themselves; a
-        hardcoded vocabulary agrees today and omits the first value a new family
-        introduces.
+        It is derived from the columns themselves; a hardcoded vocabulary agrees
+        today and omits the first value a new family introduces. **With the
+        columns stored as strings this is a VOCABULARY LISTING rather than a
+        decode table for anything on disk** -- it says which values occur, which
+        is what a reader deciding how to interpret a column needs, and it is the
+        redundancy 12.4 asks for.
 
         Returns:
             Column name to its distinct values, sorted. A value's position in
             the tuple is its integer code.
         """
         return {
-            column: tuple(
-                sorted({v.decode("ascii") for v in getattr(self, column).tolist()})
-            )
-            for column in _COLUMNS
+            column: tuple(sorted(set(getattr(self, column)))) for column in _COLUMNS
         }
-
-
-def _encode_column(values: Sequence[str], column: str) -> NDArray[np.bytes_]:
-    """Encode one coordinate column as fixed-width bytes, refusing both traps.
-
-    Args:
-        values: The column's values, one per slot.
-        column: Column name, for the error messages.
-
-    Returns:
-        A `S{COORDINATE_WIDTH}` array.
-
-    Raises:
-        ValueError: If any value is wider than `COORDINATE_WIDTH` bytes -- numpy
-            truncates silently and a truncated label still reads as a label -- or
-            is not ASCII, where numpy's own `UnicodeEncodeError` names a codec
-            and a character position and neither the column nor the value.
-    """
-    for value in values:
-        if not value.isascii():
-            raise ValueError(
-                f"coordinate column {column!r} value {value!r} is not ASCII; "
-                f"fixed-width byte coordinates (design doc 12.4) cannot hold it"
-            )
-        if len(value.encode("ascii")) > COORDINATE_WIDTH:
-            raise ValueError(
-                f"coordinate column {column!r} value {value!r} is "
-                f"{len(value.encode('ascii'))} bytes, wider than the "
-                f"{COORDINATE_WIDTH}-byte coordinate width; numpy would truncate "
-                "it silently and a truncated value still reads as a valid one"
-            )
-    return np.asarray(values, dtype=f"S{COORDINATE_WIDTH}")
 
 
 def noise_param_coordinates(
@@ -330,9 +323,8 @@ def noise_param_coordinates(
         The index and the five columns, one entry per slot.
 
     Raises:
-        ValueError: If `specs` is empty; if a model's parameter layout and its
-            free-parameter count disagree; or if a coordinate value is non-ASCII
-            or wider than `COORDINATE_WIDTH`.
+        ValueError: If `specs` is empty, or if a model's parameter layout and its
+            free-parameter count disagree.
         NotImplementedError: Propagated from a spec declaring shared parameters.
     """
     index = build_ragged_index(specs, noise_extent)
@@ -352,7 +344,7 @@ def noise_param_coordinates(
                 "disagree, so the columns would not describe the axis they label"
             )
         by_label = dict(zip(spec.labels(), spec.terms, strict=True))
-        label = " + ".join(spec.labels())
+        label = model_label(spec)
         for term_label, param_name in layout:
             param = by_label[term_label].params[param_name]
             model_labels.append(label)
@@ -364,9 +356,9 @@ def noise_param_coordinates(
     return NoiseParamCoordinates(
         index=index,
         model_index=index.model_index_array(),
-        model=_encode_column(model_labels, "model"),
-        term=_encode_column(terms, "term"),
-        name=_encode_column(names, "name"),
-        unit=_encode_column(units, "unit"),
-        transform=_encode_column(transforms, "transform"),
+        model=tuple(model_labels),
+        term=tuple(terms),
+        name=tuple(names),
+        unit=tuple(units),
+        transform=tuple(transforms),
     )

@@ -1453,8 +1453,8 @@ noise parameters, which are secondary diagnostics.
 /signal/          dense   beta[y,x,m,b], beta_err[y,x,m,b]      (selected + model-averaged)
 /selection/       dense   delta_ic[y,x,m,c], weight[y,x,m,c], ic_best[y,x,c],
                           selected[y,x,c], n_valid[y,x]
-/primitives/      dense   log_lik[y,x,m], k[y,x,m], n_eff_trend[y,x,m], n_eff_bic[y,x,m],
-                          iterations[y,x,m]
+/primitives/      dense   log_lik[y,x,m], k[y,x,m], n[y,x,m], n_eff_trend[y,x,m],
+                          n_eff_bic[y,x,m], iterations[y,x,m]
 /noise/           ragged  theta[y,x,P_total], theta_err[y,x,P_total]
 /status/          dense   outcome[y,x,m] (enum), outcome[y,x] (aggregate)
 /detail/          ragged  full parameter covariances — subsample / region only
@@ -1463,6 +1463,24 @@ noise parameters, which are secondary diagnostics.
 ```
 
 `m` = model axis, `b` = signal-parameter axis, `c` = criterion axis.
+
+**`n` WAS MISSING UNTIL 2026-08-12, AND WITHOUT IT 12.8 IS UNIMPLEMENTABLE.**
+`criteria.rank_candidates` consumes a `CandidateScores`, whose fields are `loglik`, `k`,
+**`n`** and `n_eff`. This layout listed every one of those but `n` — the per-objective sample
+size — and **it is not derivable from anything else stored**: under ML it is the per-point
+valid-sample count and under REML that minus the design rank, both of which come from the
+**mask**, which is data. So the recompute path would have had to reopen the input and
+recount, which is precisely the condition that makes the three-hash split buy nothing. It is
+stored **per model** although v1 makes it constant along `m`, for the reason given below for
+`/signal/`: a shape change later is a format migration on a 10⁷-point store.
+
+**EVERY GROUP ALSO CARRIES ITS OWN LABEL COORDINATES, AND THE GRID CARRIES `y` AND `x`
+(2026-08-12).** Each group is opened separately — `xr.open_zarr(group=…)` — so labels in the
+root alone never reach the reader of `/selection/`, and a criterion axis with no names is
+positional metadata a consumer cannot use. **And this layout named no spatial coordinates at
+all**: a trend field with no `y`/`x` values cannot be plotted, regridded or joined, which
+fails 12.4's acceptance criterion outright. The values come from the geometry components
+already in provenance, so there is exactly one source.
 
 ### 12.3 The ragged noise axis: flattened with an index
 
@@ -1533,15 +1551,38 @@ restructure. Cost now is near zero; cost later is a format migration on a 10⁷-
 
 ### 12.4 Coordinate dtypes
 
-Coordinate arrays use **fixed-width bytes (e.g. `S32`)**, with an integer-code JSON legend
-in attrs as redundancy. Variable-length strings are the default path and a compatibility
-hazard — zarr v3 string support and xarray's handling of it are the least stable corner of
-the stack, and this is precisely the metadata a consumer without metamer installed must be
-able to read.
+Coordinate arrays use the **zarr v3 `string` data type**, with an integer-code JSON legend
+in attrs as redundancy. This is precisely the metadata a consumer without metamer installed
+must be able to read.
+
+**AMENDED 2026-08-12 ON A MEASUREMENT, AND THE ORIGINAL CHOICE WAS BACKWARDS.** This section
+required **fixed-width bytes (`S32`)** and rejected variable-length strings as "the least
+stable corner of the stack". Measured with zarr 3.3.0 and xarray 2026.7.0:
+
+| dtype | `zarr.json` `data_type` | on creation |
+|---|---|---|
+| `S32` | `null_terminated_bytes` | **`UnstableSpecificationWarning` — "does not have a Zarr V3 specification … may be unreadable by other Zarr libraries … may change without warning"** |
+| `str` | `string` | no warning |
+| integer codes | `uint8` | core spec |
+
+Both round-trip through `xr.open_zarr` today, but **the writing library declares the chosen
+dtype unstable on disk**, which is the exact property this section exists to avoid in an
+archive meant to outlive the version that wrote it. **Only the dtype moved**; the integer-code
+legend stays as the redundancy, and `/status/outcome` additionally carries CF
+`flag_values` / `flag_meanings`, which its identifier-shaped vocabulary supports and the
+label columns' bracketed, space-bearing labels do not.
 
 **Acceptance criterion for "self-describing": round-trip through plain `xr.open_zarr` with
 no metamer installed.** This is the kind of thing that works on the author's machine and
 fails for a collaborator.
+
+**AND "PLAIN" MEANS WARNING-FREE, WHICH REQUIRES CONSOLIDATED METADATA (measured
+2026-08-12).** An unconsolidated store makes xarray warn and instruct the reader to
+consolidate or pass a keyword; a reader who must first discover `consolidated=False` is not
+the reader this criterion has in mind. `zarr.consolidate_metadata` therefore runs at store
+creation — **and consolidated metadata is a COPY of every array's metadata and every attr, so
+anything that later creates an array or writes an attr must re-consolidate.** Nothing after
+creation does: provenance is written once and every later write is chunk data.
 
 **STORE INVARIANT, ADDED 2026-08-11: every store is self-contained.** No store resolves
 through another store — not by a zarr reference, not by a symlink, not by a path in attrs
@@ -1582,6 +1623,23 @@ four-column design the precheck refuses the series first and the point is unreac
 
 **The status array is initialized to `NOT_ATTEMPTED`, not to zero/OK**, so an interrupted or
 partial write reads as unattempted rather than as success.
+
+**MEASURED 2026-08-12, AND THE MECHANISM IS WORSE THAN THIS SENTENCE IMPLIES.** `OK` is code
+**0**, zarr's default integer `fill_value` is **0**, and **zarr does not write a chunk equal
+to the fill value** — so a store created with the default fill is byte-for-byte identical on
+disk to a correct one (both are pure metadata, zero chunk files) and reads back as a
+complete, wholly successful run over the entire grid. **The defect is invisible in the
+bytes and inverts the store's meaning.** The general rule the whole fill table now follows:
+**every array's fill value is a value its write path cannot produce** — 65535 for
+`iterations`, −1 for `n_valid`, −2 for `selected` (−1 already means "no winner"), NaN for
+every float. **`/completion/tiles` is the one deliberate exception**, where 0 genuinely means
+incomplete; it is stated so it is not later "fixed".
+
+**AND `iterations` CANNOT CARRY THE INVARIANT, BECAUSE A uint16 HAS NO NaN.** The
+bidirectional invariant is stated over `/primitives/`, which holds it. `k` and `n` are
+unaffected — `CandidateScores` carries both as float64 — and `iterations` is the only member
+that feeds no arithmetic, so it keeps uint16 and is **explicitly exempt**, with 65535 for
+"no fit ran".
 
 **Status is per `(point, model)`, not per point.** A candidate can fail where another
 succeeds — that is the near-degeneracy geography of §4.8 — and its spatial pattern is
