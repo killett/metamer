@@ -1095,3 +1095,162 @@ in the assertion rather than smoothed over.
 
 macOS is untested and stays under open question 10, which already owns the decision about what
 RSS accounting should mean there.
+
+---
+
+## Task 6 — tiling (audited 2026-08-12)
+
+Two of the brief's own bullets cannot both be satisfied literally, the design doc carries the
+superseded tile formula in the section this task would read, and the read-amplification metric
+has a units trap that would let it report a value below 1.
+
+### (f) — THE DESIGN DOC CARRIES THE SUPERSEDED `tile_side` FORMULA IN §11.1, WHICH IS THE SECTION THIS TASK READS
+
+§11.1's tiling bullet still says:
+
+> Derive a square spatial tile from a byte budget:
+> `tile_side = sqrt(block_bytes / (n_time × itemsize))`.
+
+§9.4 says of exactly that expression: *"The prompt's `tile_side = sqrt(block_bytes / (n_time ·
+itemsize))` counts only the float64 data and therefore **overestimates**"* — 445 against 339
+shared and 186 per-point. §2.5 then quotes `tile_side ≈ 445` from it. **Three sections, two
+answers, and the one an implementer of this task opens first is the wrong one.** Third instance
+of this cascade, after `n_eff_*`'s `[y,x]` versus `[y,x,m]` and the output-slot `+2` versus `+4`.
+
+The plan's Task 6 brief is correct (`resident_bytes_per_series`), so **transcribing the plan
+would have been safe and reading the design doc would not** — which is the reverse of the usual
+direction and worth recording. §11.1 amended; §2.5's 445 annotated rather than rewritten,
+because that section is about chunk arithmetic and its conclusion does not move.
+
+**And `resident_`, never `bytes_per_series`.** The model and the resident figure agree to 0.5%
+today and that is a measurement, not a guarantee. Recomputed 2026-08-12: 8682 model against
+8722 resident, tile side 339 against **338**.
+
+### THE BRIEF'S OWN TWO BULLETS CONFLICT, AND THE NUMBERS SAY WHICH WINS
+
+> - **A tile is `ds[var].isel(y=…, x=…).load()`.**
+> - **float32 → float64 conversion per chunk during assembly**, so both full representations
+>   never coexist.
+
+One `.load()` over the whole tile materializes the **entire** float32 block, and casting it
+afterwards has both full representations alive at once — which the second bullet exists to
+forbid. Measured at §9.4's worked example (`tile_side` 338, N=630): the float32 tile is
+**288 MB** and the float64 tile **575 MB**, so the one-call form peaks at **863 MB against
+575 MB**, a **50% overshoot of the data term** against a budget the design doc calls hard.
+
+**Resolved in favour of the second bullet**, which carries the reason: the tile is assembled by
+`.isel(...).load()` over **chunk-aligned sub-blocks**, cast into a preallocated float64
+destination, so at most one chunk's float32 is alive. Still no dask, still one tile at a time,
+still analytic. Reported as a deviation from the brief's literal first bullet.
+
+### MEASURED: the read-amplification metric has a units trap that can report less than 1
+
+A counting store wrapper on a 16x16 grid with 4x4 chunks (random float32, so barely
+compressible):
+
+    tile y[2:6] x[2:6]  -> 4 chunk fetches, 3112 store bytes, 768 bytes used
+    tile y[0:4] x[0:4]  -> 1 chunk fetch,    778 store bytes, 768 bytes used
+
+The ratios are 4.05 and 1.01 where the true amplifications are 4 and 1. **The store's bytes are
+COMPRESSED and the tile's bytes are DECOMPRESSED**, so dividing one by the other measures
+compression as well as amplification — and on a compressible variable it would report a value
+**below 1**, which is meaningless for a metric defined as bytes read over bytes used.
+
+**Changed:** amplification is computed from chunk geometry in decompressed units on both sides,
+and the counting store is used as an **oracle over the set of chunks fetched** rather than over
+bytes — arithmetic on index ranges against observed store keys, which share no construction (j).
+
+### (i) — MEASURED: A FIXTURE OF ZEROS READS NOTHING AT ALL
+
+The first version of the probe used `np.zeros`. Zarr does not write a chunk equal to the fill
+value, so **every read was served from the fill value and the store was never touched**: 0 bytes
+read, 0 keys fetched, and a correct-looking 768 bytes used. A read-amplification test on a zero
+fixture cannot express its own subject. The fixture is random float32.
+
+**A second instrumentation trap in the same sitting:** subclassing `zarr.storage.LocalStore` and
+passing the instance to `xr.open_zarr(store)` records nothing — the reads do not go through the
+subclass. Patching `LocalStore.get` for the duration of the test does work, and is what the
+oracle does.
+
+### (a2) — nothing this task produces is fit identity, and that is a claim to assert
+
+Classified before checking. `tile_side` derives from `memory_budget_gb`, which is
+**run-relevant only**; read amplification is a **measurement of this run**, so it is provenance
+and belongs in neither allowlist. §11.3's guarantee is that output is bitwise identical
+*regardless of memory budget and tile size*, so **the moment any tiling quantity reached
+`fit_hash` the hash boundary would be conceding the guarantee does not hold** — the same
+argument that keeps thread counts out. Asserted rather than assumed: two runs at different
+budgets must produce the same `fit_hash` and different `run_hash`.
+
+### (c) — tile coverage is the one place an "off by one" is silent
+
+A tile grid that misses a row writes a store with an unwritten seam; one that overlaps writes
+some points twice. Neither raises, both produce a complete-looking store, and the completion
+bitmap is per tile so it cannot see either. **Enumerated rather than counted**: the test
+accumulates every (y, x) the grid yields and compares the multiset against the full grid, so a
+miss and a duplicate are distinguishable — asserting the *number* of tiles would catch neither.
+
+### (a3) — prefetch is deferred with its cost, and the phase guard now enforces it
+
+Prefetching tile `N+1` during tile `N`'s fit **doubles the tile term in the memory formula**.
+Task 5's `ThreadBudget.phase` raises on overlap, so the deferral is enforced rather than
+documented — the first attempt to assemble during a fit fails a test instead of silently
+doubling peak RAM.
+
+### (g) — signature binding
+
+`memory.tile_side(budget_bytes, per_series_bytes)`,
+`memory.resident_bytes_per_series(backend, d, k_beta, p, n_time, n_models, per_point_design)`,
+`batch.threads.ThreadBudget.phase(Phase)`, `batch.input.InputHandle.dataset`,
+`ContractReport.n_y/n_x/n_time`. All bind.
+
+### Bite checks
+
+**10 mutations, 10 caught** — after one survivor which was a genuine coverage gap.
+
+| what was mutated | outcome |
+|---|---|
+| grid misses the ragged edge | 1 failure |
+| grid overlaps by one row | 1 failure |
+| a zero side yields nothing instead of raising | 1 failure |
+| budgeted against the model rather than the resident figure | 1 failure |
+| amplification computed from the request | 1 failure |
+| the edge chunk counted full rather than clipped | 1 failure |
+| chunk shape assumed to be the whole array | 1 failure |
+| a store with no declared chunking is guessed at | **survived first** — see below |
+| assembly loads the whole tile in one span | 1 failure |
+| assembly transposes the tile | 1 failure |
+
+**The survivor was (e)'s first cause — no test protected the guard**, and the condition is
+reachable: an opener returning an in-memory dataset produces a handle whose variable has no
+`encoding["chunks"]`, which is what any non-chunked backend registered later will hand back. The
+test drives it through the opener registry, the same route `tests/test_input.py` uses to prove
+the registry has no zarr-shaped hole. **The defect it guards is the worst available one for this
+metric**: falling back to the array's shape reports amplification 1.0 for every input including
+the pathological ones, and this metric *replaced* the graph-chunk cap as the only guard watching
+for a pathological input — so a silent 1.0 removes the guard rather than weakening it.
+
+### What is NOT asserted, stated rather than implied
+
+**The peak itself.** At test scale the difference between one-call and per-span assembly is
+kilobytes, and RSS cannot resolve it — the instruments that could are the ones this project has
+already paid twice to make honest. What the test asserts is the mechanism the peak rests on: the
+spans are sub-chunk, they partition the tile exactly, and `assemble_tile` consumes exactly them.
+`assembly_spans` is public for that reason.
+
+### BLOCKED, AND NOT WIRED INTO `run()`: NOTHING MAPS `signal_terms` TO SIGNAL TERMS
+
+`tile_side_for` needs `k_beta`, the number of design columns. `k_beta` comes from the design
+matrix, the design comes from `signal_terms`, and **`signal_terms` is a tuple of strings that
+nothing in the tree parses.** `config.candidates.parse_candidate` resolves *noise* terms through
+`kernel_registry`; `core.signal` has the term classes and **no registry and no parser**, and no
+task in the plan is assigned one.
+
+So Task 6 ships its units complete and tested, and `run()` is **not** wired to iterate tiles,
+because it cannot size one. **Recorded rather than closed by inventing the vocabulary**: which
+signal terms exist and how a parameterized one (`offset:2005.5`, a rate change, a named
+regressor) is spelled is a design decision that belongs to the task that builds the design, not
+to a task about tiling — the same reasoning that made the per-point prefix provisional.
+
+**It is owed by Task 9 at the latest**, which fits and therefore needs the design itself; Tasks 7
+and 8 need `P_total` and the offsets, which come from the *candidate* list and are unaffected.

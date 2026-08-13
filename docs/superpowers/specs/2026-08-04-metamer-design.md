@@ -104,7 +104,10 @@ This is the most seductive failure mode in the system and requires a mandatory a
 ### 2.5 Chunk-size arithmetic
 
 An earlier estimate in discussion put a `theta[tile, tile, P_total]` chunk at 150–600 MB.
-The correct figure at `tile_side ≈ 445` (from `sqrt(1 GB / (630 × 8))`), `P_total ≈ 40`,
+The correct figure at `tile_side ≈ 445` (from `sqrt(1 GB / (630 × 8))` — **that tile side is
+superseded; see §9.4 and §11.1, where the full accounting gives 338. The conclusion of this
+section does not move: a smaller tile makes the chunk smaller, and 32 MB was already above the
+read target**), `P_total ≈ 40`,
 float32 is **≈ 32 MB**; at `tile_side = 200` it is 6.4 MB. Still above a few-MB read
 target, so shard/chunk decoupling (§12.6) is retained, but chunking the parameter axis is
 not required. The computed table is in §12.6.
@@ -1055,7 +1058,14 @@ Tiling generalizes synesthesia's `timeseries2color.py` pattern:
   (time chunk × lat tile × lon tile), which on a large archive consumes gigabytes of graph
   state by itself.
 - Derive a square spatial tile from a byte budget:
-  `tile_side = sqrt(block_bytes / (n_time × itemsize))`.
+  `tile_side = sqrt(block_bytes / resident_bytes_per_series)` — **corrected 2026-08-12.** This
+  bullet read `sqrt(block_bytes / (n_time × itemsize))`, which is the prompt's formula that
+  §9.4 explicitly rejects two sections earlier: it counts only the float64 data and
+  **overestimates**, giving 445 against 338. Budget against
+  `memory.resident_bytes_per_series`, never against `bytes_per_series` — the two agree to 0.5%
+  today and that is a measurement, not a guarantee. **And a tile side carries its backend:**
+  measured 2026-08-12 at §9.4's worked example, `NUMPY_BATCHED` gives 338 shared / 186
+  per-point and `COMPILED` gives 361 / 189.
 - Outer Python loop over tiles; materialize one tile at a time. Peak RAM is one tile plus
   ~~one dask chunk~~ **`W` dask chunks, where `W` is the assembly concurrency — corrected
   2026-08-11.** The original sentence is true at `W = 1` and false otherwise, and **if `W`

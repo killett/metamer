@@ -5,14 +5,13 @@
 - **Branch:** `main`. **Last commit:** `git log --oneline -1`. All Phase 2 work is on `main`;
   `phase-1` is a stale name that never diverged and needs nothing done to it.
 - **DONE: Phase 1 Tasks 0–18 (Task 19 deleted), Phase 2 preliminaries P0–P4, and Phase 2a
-  Tasks 0, 1, 2, 3, 4 and 5.**
-- **NEXT: Phase 2a Task 6 — tiling: `tile_side` from the budget, the tile iterator, and read
-  amplification.** Read **[WHAT TASK 6 INHERITS](#what-task-6-inherits--read-this-before-the-task-sections-below)**
-  below before the plan; it carries what the plan does not.
-- **Tests: 782 collected (measured 2026-08-12, after Task 5).** `pixi run test` is the full
-  sweep (**~500 s, measured 2026-08-12 — it was 298 s before Task 5**; the rise is process
-  start-up in `test_runner.py`'s subprocess tests, which now import numba to observe its thread
-  limit) and is what every end-of-task verification must run.
+  Tasks 0–6.**
+- **NEXT: Phase 2a Task 7 — the ragged index builder, generic over an extent function.** Read
+  **[WHAT TASK 7 INHERITS](#what-task-7-inherits--read-this-before-the-task-sections-below)**
+  below before the plan; it carries what the plan does not, **including the one thing Task 6
+  could not do: nothing maps `signal_terms` to signal terms, so no tile can be sized yet.**
+- **Tests: 802 collected (measured 2026-08-12, after Task 6).** `pixi run test` is the full
+  sweep (~271 s, measured 2026-08-12) and is what every end-of-task verification must run.
   `pixi run test-fast` deselects `slow` and is for iteration only — **a green fast run is not
   evidence a task is done.** Verify a fresh checkout with
   `pixi run test && pixi run typecheck && pixi run lint`.
@@ -53,12 +52,12 @@
   MacBook: `--threads 1 --threads 8`, `--out bench/macbook.json`.
   Batch sweep at path B's worst cell (d=3, 1 thread, no gaps) is
   `bench/batch-sweep-d3-1thread-nogaps.json`.
-- **Tests:** **782 collected, measured 2026-08-12** (588 at the close of Phase 1; Phase 2a
-  Tasks 0–5 added the batch-skeleton, stub-engine, packaging, config, input, geometry,
-  validation-staging, runner, thread-budget and machine-identity modules). **This bullet said 692 while the cold-start summary
+- **Tests:** **802 collected, measured 2026-08-12** (588 at the close of Phase 1; Phase 2a
+  Tasks 0–6 added the batch-skeleton, stub-engine, packaging, config, input, geometry,
+  validation-staging, runner, thread-budget, machine-identity and tiling modules). **This bullet said 692 while the cold-start summary
   twelve lines above said 693** — two undated copies of one measurement, which is how the drift
   starts. One number now, dated. Full sweep
-  `pixi run test` (~500 s, measured 2026-08-12). `pixi run test-fast` (~12 s)
+  `pixi run test` (~271 s, measured 2026-08-12). `pixi run test-fast` (~12 s)
   deselects the `slow` marker and is for iteration only — **a green fast run is not evidence
   a task is done.** `pixi run test-ci` reproduces what CI runs (`-m 'not machine'`); it is
   also not evidence on its own, because the `machine` marker covers exactly the tests that
@@ -134,7 +133,7 @@
 | Phase 1 task tracker | `docs/superpowers/plans/2026-08-05-metamer-phase1.md.tasks.json` (native task ids 8–27) |
 | Original build prompt | [`docs/phase1-prompt.md`](docs/phase1-prompt.md) — **superseded** by design doc §2 where they conflict |
 | Phase 2 preliminaries pre-flight | [`docs/superpowers/notes/phase2-preliminaries-preflight.md`](docs/superpowers/notes/phase2-preliminaries-preflight.md) — the (a)–(k) audit of the P0/P1/P2 briefs and what each finding changed |
-| **Phase 2a implementation plan** | [`docs/superpowers/plans/2026-08-11-metamer-phase2a.md`](docs/superpowers/plans/2026-08-11-metamer-phase2a.md) — **Tasks 0–5 done; Task 6 next** |
+| **Phase 2a implementation plan** | [`docs/superpowers/plans/2026-08-11-metamer-phase2a.md`](docs/superpowers/plans/2026-08-11-metamer-phase2a.md) — **Tasks 0–6 done; Task 7 next** |
 | **Phase 2a pre-flight, per task** | [`docs/superpowers/notes/phase2a-preflight.md`](docs/superpowers/notes/phase2a-preflight.md) — the (a)–(k) audit of each 2a task brief and what each finding changed. **Append to it before each task, not after.** |
 
 Phase list is design doc §17. Phase 1 exit criteria are §18. Do not duplicate either here.
@@ -388,42 +387,74 @@ Per-task pre-flight audits live in
 [`docs/superpowers/notes/phase2a-preflight.md`](docs/superpowers/notes/phase2a-preflight.md).
 Only the durable conclusions are here.
 
-### WHAT TASK 6 INHERITS — read this before the task sections below
+### WHAT TASK 7 INHERITS — read this before the task sections below
 
-Task 6 is tiling: `tile_side` from the byte budget, the tile iterator, and read amplification.
-Everything it needs that is **not** in the plan:
+Task 7 is the ragged index builder, generic over an extent function. Everything it needs that
+is **not** in the plan:
 
-**THE PHASE MECHANISM EXISTS AND TASK 6 IS ITS FIRST REAL CONSUMER.**
-`batch.threads.ThreadBudget.phase(Phase.ASSEMBLE | Phase.FIT)` **raises on overlap** and
-accumulates seconds per phase, and `run` already opens the input inside an `ASSEMBLE` phase.
-Task 6's tile read goes inside `ASSEMBLE` and Task 9's fit inside `FIT`. **Do not prefetch tile
-`N+1` during tile `N`'s fit** — it doubles the tile term in the memory formula and the guard
-will refuse it, which is the intent.
+**THE BLOCKER TASK 6 HIT, AND TASK 7 DOES NOT: NOTHING MAPS `signal_terms` TO SIGNAL TERMS.**
+`config.candidates.parse_candidate` resolves *noise* terms through `kernel_registry`;
+`core.signal` has the term classes and **no registry and no parser**, and no task in the plan is
+assigned one. So `k_beta` is unobtainable, no tile can be sized, and `run()` is deliberately not
+wired to iterate tiles. **Task 7 is unaffected** — `P_total` and both offset tables come from the
+**candidate** list, which `Config.process_specs()` already resolves. **The parser is owed by
+Task 9 at the latest**, which fits and therefore needs the design itself. Do not invent the
+signal vocabulary in a task that does not build a design.
 
-**`assembly_concurrency(assembly_bytes, chunk_bytes, max_workers)` is written and unconsumed**,
-because 2a uses `.load()` rather than dask so `W` is 1 in practice. Its invariant is
-`W * chunk_bytes <= assembly_bytes` for every `max_workers` — the clamp only ever lowers `W`, so
-peak stays budget-derived. **The floor of 1 is the one place peak can exceed the assembly budget
-and it is irreducible**, so a memory budget must leave room for at least one input chunk. Task 6
-computes `chunk_bytes` from the input's zarr chunking, which is also what read amplification
-needs.
+**TWO RAGGED INDICES WITH DIFFERENT EXTENTS, AND ONE REUSED TABLE IS WRONG AT UNEQUAL `p`.**
+`/noise/` is `Σ_m p_m` and a `/detail/` covariance block is `Σ_m p_m(p_m+1)/2` — **4 against 10**
+at the M=2 unequal-`p` fixture. So the builder takes a per-model **extent function**, not a
+parameter count, and **both offset tables are stored as coordinate arrays** rather than derived
+at read time.
 
-**Budget against `memory.resident_bytes_per_series`, never against `bytes_per_series`.** The
-model and the resident number agree to 0.5% today and that is a measurement, not a guarantee.
-**And a tile side carries its backend**: at §9.4's worked example `NUMBA_BATCHED` gives 338
-shared / 186 per-point and `COMPILED` gives 361 / 189 (measured 2026-08-12) — see
-`batch.validation._WORKED_EXAMPLE_BACKEND`, which already computes both live rather than
-quoting them.
+**The plausible-number failure here is specific:** a wrongly-unpacked covariance is **still
+symmetric and often still positive definite**, and it reports wrong correlations with no
+symptom. A covariance is stored as the **packed lower triangle with its order in attrs**.
 
-**`--explain` reports read amplification (bytes read / bytes used)**, and 2a **measures and
-records** it while Phase 5 prints it: measure in the phase that can, print in the phase that
-shows. zarr reads whole chunks, so a tile straddling chunk boundaries silently reads several
-times what it needs and nothing else would say so. **This replaces the graph-chunk cap** as the
-guard against a pathological input; tile geometry should align with input chunk geometry where
-possible.
+**Task 7 comes BEFORE Task 8 deliberately, and the plan says why**: the schema's coordinate
+arrays *are* this builder's output, so a table saying the builder depends on the schema leads to
+stubbed offsets written into a store — exactly the class of thing that survives.
 
-**2a defines no coarse-grid stride.** That is 2c's pass 1, and its five downstream consumers are
-listed in §11.1 rather than left to be rediscovered.
+**Exit criterion 12 wants both extent functions exercised**, `p_m` and `p_m(p_m+1)/2`, so build
+the second now even though `/detail/` is not created in 2a.
+
+### What Task 6 established (done — read before touching tiling or the memory budget)
+
+- **THE DESIGN DOC CARRIED THE SUPERSEDED `tile_side` FORMULA IN §11.1**, the section a tiling
+  implementer opens first, while §9.4 two sections earlier explicitly rejects it: the prompt's
+  `sqrt(block_bytes / (n_time · itemsize))` counts only the float64 data and gives **445 against
+  338**. §2.5 then quotes 445. **Third instance of this cascade** after `n_eff_*`'s `[y,x]` and
+  the output-slot `+2`. §11.1 corrected, §2.5 annotated. **The plan's brief was right and the
+  design doc was wrong**, which is the reverse of the usual direction and worth knowing.
+- **THE BRIEF'S OWN TWO BULLETS CONFLICT AND THE NUMBERS DECIDE.** "A tile is
+  `ds[var].isel(...).load()`" and "float32 → float64 per chunk, so both full representations
+  never coexist" cannot both hold: one `.load()` materializes the whole float32 block and casting
+  it has both alive. Measured at §9.4's worked example (`tile_side` 338, N=630): **288 MB float32
+  beside 575 MB float64 — 863 MB against 575 MB, a 50% overshoot of the data term.** Assembly is
+  per chunk-aligned span into a preallocated float64 destination; `assembly_spans` is public so
+  the mechanism is asserted rather than described.
+- **READ AMPLIFICATION HAS A UNITS TRAP THAT CAN REPORT LESS THAN 1.** The store's bytes are
+  **compressed** and a tile's are not: measured, 3112 store bytes for 768 used where the true
+  amplification is 4, and on a compressible variable the same ratio falls **below 1** — meaningless
+  for a metric defined as bytes read over bytes used. Both sides are decompressed point counts,
+  and the counting store is an oracle over the **set of chunks fetched**, never over bytes.
+- **A FIXTURE OF ZEROS READS NOTHING AT ALL.** Zarr does not write a chunk equal to the fill
+  value, so a zero-filled store serves every read from the fill value: measured **0 bytes and 0
+  keys** for a read that returned the right number of correct-looking values. Every fixture here
+  is random float32. **And subclassing `zarr.storage.LocalStore` records nothing** — reads do not
+  go through the subclass when the instance is handed to `xr.open_zarr`; patching `LocalStore.get`
+  for the duration of the test does work.
+- **A STORE THAT DECLARES NO CHUNKING MUST BE REFUSED, NOT GUESSED AT.** Falling back to the
+  array's shape reports amplification 1.0 for every input including the pathological ones — and
+  this metric **replaced the graph-chunk cap as the only guard watching for a pathological
+  input**, so a silent 1.0 removes the guard rather than weakening it. Reachable through the
+  opener registry, which is how it is tested.
+- **THE PEAK ITSELF IS NOT ASSERTED, AND THAT IS STATED RATHER THAN IMPLIED.** At test scale the
+  one-call/per-span difference is kilobytes and RSS cannot resolve it. What is asserted is the
+  mechanism the peak rests on.
+- **Coverage is asserted as a MULTISET, never as a tile count.** A miss leaves a seam of
+  unwritten points in a store whose completion bitmap is per tile and cannot see it; an overlap
+  writes some points twice. A count catches neither, and the two are different defects.
 
 ### What the whole rest of 2a inherits from Task 4
 
