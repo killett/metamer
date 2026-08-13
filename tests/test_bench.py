@@ -456,3 +456,82 @@ def test_every_cell_reports_the_spread_it_measured_and_not_only_a_point():
     assert cell["cell_repeats"] == 3
     for stem in ("a_over_b", "path_a_pass_s_per_series", "path_b_pass_s_per_series"):
         assert cell[f"{stem}_min"] <= cell[stem] <= cell[f"{stem}_max"]
+
+
+# --------------------------------------------------------------------------
+# The process thread mask is borrowed, not taken
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.slow
+def test_the_bandwidth_reference_gives_the_thread_mask_back():
+    """`bandwidth_reference` restores the mask it set.
+
+    **`numba.set_num_threads` has no context-manager form and persists for the
+    whole PROCESS.** Measured 2026-08-12: without this, a `bandwidth_reference`
+    at one thread left a whole pytest session at one thread, and a test in
+    another module whose skip guard read the ambient mask became a **silent
+    no-op that passed in isolation every time.**
+
+    Bug this catches: setting without restoring. It is invisible where it
+    happens and shows up somewhere else entirely, as a test that stops testing
+    rather than as a failure.
+
+    The baseline is set explicitly rather than read, because a test whose
+    baseline is the ambient value cannot see this defect at all -- which is the
+    same mistake, one level up.
+    """
+    import numba
+
+    ceiling = int(numba.config.NUMBA_NUM_THREADS)  # type: ignore[attr-defined]
+    if ceiling < 2:  # pragma: no cover - single-core host
+        pytest.skip("needs a mask value distinguishable from the benchmark's")
+
+    original = numba.get_num_threads()
+    numba.set_num_threads(2)
+    try:
+        bandwidth_reference(threads=1, mib=8, repeats=1)
+        assert numba.get_num_threads() == 2
+    finally:
+        numba.set_num_threads(original)
+
+
+@pytest.mark.slow
+def test_the_spike_sweep_gives_the_thread_mask_back():
+    """`run_spike` restores the mask its per-cell sweep set.
+
+    Setting per cell is correct -- each cell is measured at its own thread
+    count -- and the mask persisting past the sweep is not. Without the restore
+    the process is left at the LAST cell's count, which is why the report's
+    `numba_threads_available` had to stop reading the current mask too: on a
+    second sweep in one process it recorded whatever the first left behind.
+
+    Bug this catches: the same leak from the other of the two sites. They are
+    separate tests because they are separate functions, and a caller may use
+    either without the other.
+    """
+    import numba
+
+    ceiling = int(numba.config.NUMBA_NUM_THREADS)  # type: ignore[attr-defined]
+    if ceiling < 2:  # pragma: no cover - single-core host
+        pytest.skip("needs a mask value distinguishable from the sweep's")
+
+    original = numba.get_num_threads()
+    numba.set_num_threads(2)
+    try:
+        report = run_spike(
+            dims=(1,),
+            batches=(4,),
+            gaps=("none",),
+            threads=(1,),
+            n_time=32,
+            repeats=1,
+            cell_repeats=1,
+            bandwidth_mib=8,
+        )
+        assert numba.get_num_threads() == 2
+        # The ceiling, not the mask that was current when the report was built.
+        machine = cast(dict[str, object], report["machine"])
+        assert machine["numba_threads_available"] == ceiling
+    finally:
+        numba.set_num_threads(original)

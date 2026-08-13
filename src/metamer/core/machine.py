@@ -15,13 +15,33 @@ therefore a statement about the whole process lifetime, not about what is live
 now: two measurements taken in one process cannot be compared unless the second
 allocation exceeds every allocation that preceded it.
 
-**AND IT IS INHERITED ACROSS `fork()`/`exec()`.** Measured on this kernel: a
-child spawned from a parent holding 400 MiB reports a peak of 493.28 MB --
-byte-identical to the parent's -- against 119.95 MB for the same child spawned
-from a small parent. `fork()` copies the parent's `mm->hiwater_rss` and `exec()`
-does not reset it, so **spawning a fresh process is not enough to isolate a
-memory measurement**: the child reports whichever high-water mark is larger,
-and the number is entirely plausible either way.
+**AND IT IS INHERITED ACROSS `fork()`/`exec()` -- THE PARENT'S OWN HIGH-WATER
+MARK, NOT ITS CURRENT RSS AND NOT ITS REPORTED PEAK.** Measured 2026-08-12,
+reproducibly, by varying the two candidate quantities independently (MB):
+
+    parent                      parent_peak  parent_current  child_peak
+    never allocated                    73.9            74.1        73.9
+    allocated 400 MiB, HELD           493.3           493.7       493.3
+    allocated 400 MiB, then FREED     493.3            74.3       493.3
+
+**The child follows the watermark.** `freed` and `held` agree while `freed`'s
+current RSS is indistinguishable from a small parent's, so current RSS cannot be
+what propagates -- **and freeing the memory first does not help.** So spawning a
+fresh process is not enough to isolate a memory measurement, and the number is
+entirely plausible either way.
+
+**THE INHERITANCE DOES NOT COMPOUND, AND THAT DISTINCTION IS LOAD-BEARING.**
+`peak_rss_bytes()` returns `max(inherited, this process's own high-water)`, and a
+child inherits **only the second term**. Measured across three generations: a
+middle process that allocates nothing still *reports* its grandparent's 493.1 MB
+while its own child reports 74.1 MB. So a measurement two processes down from a
+large ancestor is usable, provided the process that spawns it stayed small --
+which is what makes design doc section 11.4's calibration tile implementable, and
+which is why `tests/test_memory.py` runs its probes behind a bare launcher rather
+than straight from pytest.
+
+Both facts are pinned by tests; open question 12 in `PROGRESS.md` records what
+was believed before them.
 
 That is why `current_rss_bytes` exists. Use `peak_rss_bytes` to answer "how
 much did this process ever hold", and `current_rss_bytes` to answer "how much

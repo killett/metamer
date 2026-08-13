@@ -54,6 +54,7 @@ import json
 import platform
 import sys
 import time
+from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -429,6 +430,7 @@ def run_spike(
     Returns:
         The report, ready for `json.dumps`.
     """
+    import numba
     from numba import get_num_threads, set_num_threads
 
     from metamer.bench.references import (
@@ -437,16 +439,7 @@ def run_spike(
         canonical_filter_pass,
         compute_reference,
     )
-    from metamer.core.engines.compiled import CompiledEngine
-    from metamer.core.engines.kalman import KalmanEngine
-    from metamer.core.memory import (
-        Backend,
-        bytes_per_series,
-        resident_bytes_per_series,
-    )
     from metamer.core.signal import Annual, Constant, SemiAnnual, SignalSpec, Trend
-    from metamer.core.statespace import StateSpace
-    from metamer.core.terms import free_param_index
 
     signal = SignalSpec([Constant(), Trend(), Annual(), SemiAnnual()])
     t = np.arange(n_time, dtype=np.float64) / 12.0
@@ -458,7 +451,12 @@ def run_spike(
             "platform": platform.platform(),
             "processor": platform.processor() or platform.machine(),
             "python": sys.version.split()[0],
-            "numba_threads_available": int(get_num_threads()),  # type: ignore[no-untyped-call]
+            # THE CEILING, NOT THE CURRENT MASK. `get_num_threads()` reports
+            # whatever was last set in this process -- including by an earlier
+            # cell of this very sweep -- so reading it here recorded "available"
+            # as a number that was merely current. `NUMBA_NUM_THREADS` is fixed
+            # at import and is what "available" means.
+            "numba_threads_available": int(numba.config.NUMBA_NUM_THREADS),  # type: ignore[attr-defined]
         },
         "core_budget_ms": CORE_BUDGET_MS,
         "canonical_filter_pass": as_dict(canonical),
@@ -478,6 +476,84 @@ def run_spike(
         iterations[f"d{dim}"] = measure_mean_iterations(dim, n_time)
 
     cells: list[dict[str, object]] = report["cells"]  # type: ignore[assignment]
+    # RESTORED AFTER THE SWEEP. The per-cell `set_num_threads` below is correct
+    # -- each cell is measured at its own thread count -- but the mask persists
+    # for the whole PROCESS, so without this the sweep leaves every later caller
+    # running at the last cell's count. Measured 2026-08-12: it left a pytest
+    # session at 1 thread and silently disabled a test in another module.
+    entry_threads = int(get_num_threads())  # type: ignore[no-untyped-call]
+    try:
+        cells.extend(
+            _sweep_cells(
+                dims=dims,
+                batches=batches,
+                gaps=gaps,
+                threads=threads,
+                iterations=iterations,
+                n_time=n_time,
+                t=t,
+                design=design,
+                k_beta=k_beta,
+                repeats=repeats,
+                cell_repeats=cell_repeats,
+                canonical_seconds=canonical.seconds,
+            )
+        )
+    finally:
+        set_num_threads(entry_threads)  # type: ignore[no-untyped-call]
+    return report
+
+
+def _sweep_cells(
+    *,
+    dims: Sequence[int],
+    batches: Sequence[int],
+    gaps: Sequence[str],
+    threads: Sequence[int],
+    iterations: dict[str, dict[str, float]],
+    n_time: int,
+    t: NDArray[np.float64],
+    design: NDArray[np.float64],
+    k_beta: int,
+    repeats: int,
+    cell_repeats: int,
+    canonical_seconds: float,
+) -> list[dict[str, object]]:
+    """Measure every (dim, batch, gap, thread) cell. Extracted from `run_spike`.
+
+    Split out only so `run_spike` can restore the process thread mask around the
+    whole sweep in one `try/finally` rather than around each cell.
+
+    Args:
+        dims: State dimensions to sweep.
+        batches: Batch sizes to sweep.
+        gaps: Gap patterns to sweep.
+        threads: Thread counts to sweep.
+        iterations: Per-dimension iteration statistics, keyed `d{dim}`.
+        n_time: Series length.
+        t: The time axis.
+        design: The design matrix.
+        k_beta: Number of design columns.
+        repeats: Timing repeats within one allocation.
+        cell_repeats: Independent rounds on fresh allocations.
+        canonical_seconds: The canonical filter pass, for the normalized column.
+
+    Returns:
+        One entry per cell.
+    """
+    from numba import set_num_threads
+
+    from metamer.core.engines.compiled import CompiledEngine
+    from metamer.core.engines.kalman import KalmanEngine
+    from metamer.core.memory import (
+        Backend,
+        bytes_per_series,
+        resident_bytes_per_series,
+    )
+    from metamer.core.statespace import StateSpace
+    from metamer.core.terms import free_param_index
+
+    cells: list[dict[str, object]] = []
     for dim in dims:
         spec = build_spec(dim)
         state_space = StateSpace.from_spec(spec)
@@ -550,7 +626,7 @@ def run_spike(
                             "path_b_ms_per_fit": b_fit_ms,
                             "path_a_over_budget": a_fit_ms / CORE_BUDGET_MS,
                             "path_b_over_budget": b_fit_ms / CORE_BUDGET_MS,
-                            "pass_in_canonical_units": a_pass / canonical.seconds,
+                            "pass_in_canonical_units": a_pass / canonical_seconds,
                             "predicted_bytes_per_series_target": bytes_per_series(
                                 Backend.NUMPY_BATCHED,
                                 d=dim,
@@ -571,7 +647,7 @@ def run_spike(
                             ),
                         }
                     )
-    return report
+    return cells
 
 
 def main(argv: list[str] | None = None) -> int:

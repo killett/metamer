@@ -19,6 +19,9 @@ keeps the maximum.
 
 from __future__ import annotations
 
+import subprocess
+import sys
+from pathlib import Path
 from typing import TypedDict
 
 import numpy as np
@@ -27,7 +30,6 @@ import pytest
 from metamer.core.machine import current_rss_bytes, peak_rss_bytes
 from metamer.core.memory import (
     Backend,
-    _measure_child,
     bytes_per_series,
     data_and_workspace_bytes_per_series,
     measure_evaluation_rss_slope,
@@ -134,48 +136,220 @@ def test_current_rss_falls_after_a_release_and_the_watermark_does_not():
     assert peak_rss_bytes() >= watermark
 
 
-@pytest.mark.slow
-@pytest.mark.machine
-def test_a_child_measurement_is_not_contaminated_by_a_large_parent():
-    """A fresh subprocess does NOT isolate a peak-RSS measurement.
+_CHILD = (
+    "import sys; sys.path.insert(0, 'src');"
+    "from metamer.core.machine import peak_rss_bytes;"
+    "print(peak_rss_bytes())"
+)
 
-    Expected value determined independently, and measured: `fork()` copies the
-    parent's `mm->hiwater_rss` and `exec()` does not reset it on this kernel,
-    so a child inherits the parent's high-water mark as a floor. Measured, the
-    same child reports 119.95 MB spawned from a small parent and 493.28 MB --
-    byte-identical to the parent's own peak -- spawned from one holding
-    400 MiB. Resident set size is not a watermark, so it is unaffected.
+_PARENT = """
+import sys, subprocess
+sys.path.insert(0, "src")
+import numpy as np
+from metamer.core.machine import peak_rss_bytes, current_rss_bytes
 
-    Bug this catches: THE ONE THAT ACTUALLY HAPPENED. The batch-size sweep
-    below runs each batch in a fresh subprocess precisely to escape
-    process-local state, and that was not enough: with a 256 MiB allocation
-    earlier in the same pytest session, all three children reported the
-    parent's watermark, the fitted slope collapsed to ~1e-11 B/series, and the
-    number looked like a perfectly flat memory curve rather than an error.
-    Pre-flight (k) again, one layer deeper than the check as written -- the
-    contaminating state is INHERITED, so changing process is not escape.
-    """
-    before = peak_rss_bytes()
-    lean_child = _measure_child(batch=1000)
+mode = sys.argv[1]
+if mode in ("held", "freed"):
     ballast = np.ones(400 * 1024 * 1024 // 8, dtype=np.float64)
     ballast[::4096] = 2.0
-    after = peak_rss_bytes()
-    heavy_child = _measure_child(batch=1000)
-    del ballast
+    if mode == "freed":
+        del ballast
 
-    # Stated against the PARENT's own watermark rather than against absolute
-    # sizes, so the test says what it means and does not depend on what any
-    # earlier test in this session happened to allocate.
-    # The watermark rises only by however much the new peak EXCEEDS the old,
-    # so a 400 MiB ballast need not move it by 400 MiB if this session already
-    # allocated and freed something large. All that is required is that the
-    # two watermarks are far enough apart for the 5% comparisons below to
-    # discriminate between them.
-    assert after >= 1.2 * before
-    assert lean_child["watermark"] == pytest.approx(before, rel=0.05)
-    assert heavy_child["watermark"] == pytest.approx(after, rel=0.05)
-    # ...while the resident-size instrument reports the same child either way.
-    assert heavy_child["peak"] == pytest.approx(lean_child["peak"], rel=0.05)
+out = subprocess.run([sys.executable, "-c", {child!r}], capture_output=True, text=True)
+print(peak_rss_bytes(), current_rss_bytes(), out.stdout.strip())
+"""
+
+
+_LAUNCHER = """
+import sys, subprocess
+# IMPORTS NOTHING LARGE, ON PURPOSE. This process exists to break the
+# inheritance chain: it is spawned by pytest and so inherits the session's
+# watermark, but its OWN high-water is a bare interpreter -- and a child
+# inherits only the parent's own. So the parent below starts from a known
+# floor whatever the session has allocated, which is what makes this test
+# order-independent instead of merely order-independent-today.
+out = subprocess.run([sys.executable, "-c", {parent!r}, sys.argv[1]],
+                     capture_output=True, text=True)
+sys.stdout.write(out.stdout)
+sys.stderr.write(out.stderr)
+"""
+
+
+def _generation(mode):
+    """Run a controlled parent behind a bare launcher, and read it and its child.
+
+    Three processes, and the launcher is load-bearing: see `_LAUNCHER`. Nothing
+    here reads the pytest session's watermark, which is the defect that made the
+    previous version of this test order-dependent.
+
+    Args:
+        mode: `small`, `held`, or `freed`.
+
+    Returns:
+        `(parent_peak, parent_current, child_peak)`, all in bytes.
+    """
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            _LAUNCHER.format(parent=_PARENT.format(child=_CHILD)),
+            mode,
+        ],
+        capture_output=True,
+        text=True,
+        cwd=Path(__file__).resolve().parents[1],
+        check=True,
+    )
+    parent_peak, parent_current, child_peak = result.stdout.split()
+    return float(parent_peak), float(parent_current), float(child_peak)
+
+
+@pytest.mark.slow
+@pytest.mark.machine
+def test_a_child_inherits_the_parents_own_high_water_mark_and_not_its_current_rss():
+    """**OPEN QUESTION 12, CLOSED 2026-08-12.** Which value does a child inherit?
+
+    `machine.py` and this module both said `ru_maxrss` is "inherited across
+    fork/exec" without saying **which value**, and the two candidates -- the
+    parent's watermark and the parent's current RSS -- are different claims.
+    This varies them independently: `freed` allocates 400 MiB and drops it, so
+    its watermark is high while its current RSS is back at the baseline.
+
+    Measured, three runs, reproducible (MB):
+
+        mode    parent_peak  parent_current  child_peak
+        small          73.9            74.1        73.9
+        held          493.3           493.7       493.3
+        freed         493.3            74.3       493.3
+
+    **The child follows the WATERMARK.** `freed` and `held` agree and both are
+    ~6.7x `small`, while `freed`'s current RSS is indistinguishable from
+    `small`'s -- so current RSS cannot be what propagates.
+
+    Bug this catches: the reading this project was one measurement away from
+    making, that spawning a fresh process isolates a peak-RSS measurement
+    whenever the parent has freed its memory. It does not. The batch-size sweep
+    runs each batch in a fresh subprocess for exactly that reason, and a
+    contaminated parent flattens the fitted slope to ~1e-11 B/series -- a
+    perfectly flat memory curve rather than an error.
+
+    **THE BASELINE IS THIS TEST'S OWN**, which is the other half of closing the
+    question. The previous version asserted `after >= 1.2 * before` with
+    `before` read from the pytest session's watermark, so it failed or passed
+    according to what earlier tests in the sweep had allocated -- three
+    recorded instances. Every process here is spawned by the test.
+    """
+    small_peak, small_current, small_child = _generation("small")
+    held_peak, held_current, held_child = _generation("held")
+    freed_peak, freed_current, freed_child = _generation("freed")
+
+    # The three conditions are what the test says they are. Asserted first,
+    # because a `freed` parent that never allocated makes everything below
+    # vacuously true -- the fixture has to be able to fail.
+    assert held_peak > 3 * small_peak
+    assert freed_peak > 3 * small_peak
+    assert freed_current == pytest.approx(small_current, rel=0.15)
+
+    # ...and the child follows the watermark, not the current RSS. `freed` is
+    # the decisive line: its child reports a number the parent NO LONGER HOLDS.
+    assert freed_child == pytest.approx(freed_peak, rel=0.05)
+    assert held_child == pytest.approx(held_peak, rel=0.05)
+    assert freed_child > 3 * freed_current
+    assert freed_child > 3 * small_child
+
+    # THE `small` ROW IS NOT `small_child == small_peak`, AND FINDING THAT OUT
+    # HERE IS WORTH RECORDING. The small parent is itself spawned by pytest, so
+    # it INHERITS pytest's watermark -- measured 99.6 MB against its own 74.2 --
+    # while its child gets only the 74.2 it generated itself. That is the
+    # non-compounding rule below, showing up inside this test, and it is why the
+    # `small` child is compared against the parent's CURRENT RSS: for a process
+    # that allocated nothing beyond its imports, current is its own high-water.
+    assert small_child == pytest.approx(small_current, rel=0.10)
+
+
+_GRANDCHILD = (
+    "import sys; sys.path.insert(0, 'src');"
+    "from metamer.core.machine import peak_rss_bytes;"
+    "print(peak_rss_bytes())"
+)
+
+_MIDDLE = """
+import sys, subprocess
+sys.path.insert(0, "src")
+from metamer.core.machine import peak_rss_bytes
+
+# ALLOCATES NOTHING. Whatever it reports, it inherited.
+out = subprocess.run([sys.executable, "-c", {grandchild!r}], capture_output=True, text=True)
+print(peak_rss_bytes(), out.stdout.strip())
+"""
+
+_LAUNCHER_ONE_ARGLESS = """
+import sys, subprocess
+out = subprocess.run([sys.executable, "-c", {top!r}], capture_output=True, text=True)
+sys.stdout.write(out.stdout)
+sys.stderr.write(out.stderr)
+"""
+
+_TOP = """
+import sys, subprocess
+sys.path.insert(0, "src")
+import numpy as np
+from metamer.core.machine import peak_rss_bytes
+
+ballast = np.ones(400 * 1024 * 1024 // 8, dtype=np.float64)
+ballast[::4096] = 2.0
+out = subprocess.run([sys.executable, "-c", {middle!r}], capture_output=True, text=True)
+print(peak_rss_bytes(), out.stdout.strip())
+"""
+
+
+@pytest.mark.slow
+@pytest.mark.machine
+def test_the_inheritance_does_not_compound_across_a_generation():
+    """What propagates is the parent's OWN high-water, not its REPORTED peak.
+
+    The distinction is the whole reason a plain "the watermark is inherited"
+    sentence is not enough, and it is what reconciles the two measurements this
+    project had on record. A middle process that **allocates nothing** still
+    *reports* its grandparent's 493 MB -- and its own child reports 74 MB.
+
+    Measured, twice, reproducible (MB):
+
+        top reported 493.1 | middle reported 493.1, current 74.3 | grandchild 74.1
+
+    So `peak_rss_bytes()` is `max(inherited, this process's own high-water)`,
+    and a child inherits only the second term. The 2026-08-10 observation
+    recorded in `PROGRESS.md` -- a probe reading 454.8 MB whose own child
+    reported 84.6 MB, the probe's *current* RSS -- is this, not a
+    contradiction: the probe had allocated nothing, so its own high-water was
+    its current RSS.
+
+    Bug this catches: taking the inheritance as transitive and concluding that a
+    measurement two processes down is unusable. It is usable, and knowing that
+    is what makes the calibration tile implementable -- **section 11.4 measures
+    bytes-per-series in a child, so it needs a stated rule rather than a
+    warning.**
+    """
+    # BEHIND THE SAME BARE LAUNCHER as the test above, and for the same reason:
+    # spawned straight from pytest, the top process would inherit the session's
+    # watermark, and if that exceeds its own 400 MiB the first assertion below
+    # compares an inherited number against a generated one.
+    script = _LAUNCHER_ONE_ARGLESS.format(
+        top=_TOP.format(middle=_MIDDLE.format(grandchild=_GRANDCHILD))
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        capture_output=True,
+        text=True,
+        cwd=Path(__file__).resolve().parents[1],
+        check=True,
+    )
+    top_peak, middle_peak, grandchild_peak = (
+        float(value) for value in result.stdout.split()
+    )
+
+    assert middle_peak == pytest.approx(top_peak, rel=0.05)
+    assert grandchild_peak < middle_peak / 3
 
 
 # --------------------------------------------------------------------------

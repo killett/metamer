@@ -191,22 +191,35 @@ def bandwidth_reference(threads: int, mib: int = 256, repeats: int = 5) -> Timin
     Returns:
         A `Timing` in seconds per triad pass, with total and per-core GB/s.
     """
-    from numba import set_num_threads
+    from numba import get_num_threads, set_num_threads
 
     from metamer.bench._kernels import stream_triad
 
-    set_num_threads(threads)  # type: ignore[no-untyped-call]
-    n = mib * 1024 * 1024 // 8
-    b = np.ones(n, dtype=np.float64)
-    c = np.full(n, 2.0, dtype=np.float64)
-    a = np.zeros(n, dtype=np.float64)
+    # RESTORED AFTERWARDS, AND THAT IS NOT TIDINESS. `set_num_threads` has no
+    # context-manager form and persists for the whole PROCESS, so a benchmark
+    # that sets it and walks away leaves every later measurement in that process
+    # running at this thread count. Measured 2026-08-12: it left the mask at 1
+    # for the rest of a pytest session, and a test whose skip guard read the
+    # ambient mask became a silent no-op that passed in isolation every time.
+    # This restores what it changed; it does NOT make bench route through
+    # `batch.threads.thread_budget`, which is a layering question recorded in
+    # PROGRESS.md.
+    previous = int(get_num_threads())  # type: ignore[no-untyped-call]
+    try:
+        set_num_threads(threads)  # type: ignore[no-untyped-call]
+        n = mib * 1024 * 1024 // 8
+        b = np.ones(n, dtype=np.float64)
+        c = np.full(n, 2.0, dtype=np.float64)
+        a = np.zeros(n, dtype=np.float64)
 
-    stream_triad(a[:1024], b[:1024], c[:1024], 3.0)  # compile
+        stream_triad(a[:1024], b[:1024], c[:1024], 3.0)  # compile
 
-    def run() -> None:
-        stream_triad(a, b, c, 3.0)
+        def run() -> None:
+            stream_triad(a, b, c, 3.0)
 
-    seconds = _best_of(run, repeats)
+        seconds = _best_of(run, repeats)
+    finally:
+        set_num_threads(previous)  # type: ignore[no-untyped-call]
     moved = 3.0 * n * 8.0  # read b, read c, write a
     total = moved / seconds / 1e9
     return Timing(

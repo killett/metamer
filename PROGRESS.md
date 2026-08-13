@@ -490,7 +490,7 @@ promised in argument form. **Task 9 is the first task that fits and is where it 
 
 | # | question | what closes it |
 |---|---|---|
-| **12** | Does a child inherit the parent's **watermark** or its **current RSS**? Both instruments are load-bearing for 2b's calibration tile | a standalone cross-process probe varying the two independently — allocate, free, spawn — on Linux and macOS, then state the answer in `machine.py` and restate the test |
+| ~~**12**~~ | ~~watermark or current RSS?~~ **CLOSED 2026-08-12: the parent's own high-water mark, and the inheritance does not compound.** In `machine.py`'s docstring | — |
 | **13** | The packaging guard installs `--no-deps`, so a **wrong version floor** is uncaught | an offline wheelhouse: `pip wheel` the resolved set once, install `metamer[batch]` with `--no-index --find-links`. **Do not close it by loosening the floors** |
 | **14** | The benchmarks use a synthetic axis with `unique_dt = 1`; real monthly data has **6** | run the spike with a realistic calendar axis beside the synthetic one at the same B and thread count. **"It plausibly cancels in the ratio" is the reasoning that has failed twice** — measure it |
 
@@ -2670,7 +2670,11 @@ question; compute/bandwidth roofline pair for cross-machine prediction) are in d
   `bandwidth_mib` and the tests pass 64. **This is the delta-with-an-external-baseline
   hazard the module's own docstring describes, arriving from a different file** — the
   baseline is the whole session, so any test anywhere can set it.
-- **The RSS shim's inheritance contract is under-specified — see open question 12.**
+- **The RSS shim's inheritance contract is PINNED (open question 12, closed 2026-08-12):** a
+  child inherits the parent's **own** high-water mark — not its current RSS, and not the
+  `max(inherited, own)` the parent would report. So the inheritance does not compound, and a
+  probe spawned behind a **bare launcher** (a process importing nothing large) starts from a
+  known floor whatever the session has allocated. Full statement in `machine.py`'s docstring.
 - **`bench/references.py` AND `bench/spike.py` SET NUMBA'S THREAD MASK AND NEVER RESTORE IT**
   (found 2026-08-12 during Task 5). `numba.set_num_threads` has no context-manager form and
   persists for the process, so **every measurement taken after `bandwidth_reference` runs in the
@@ -2819,7 +2823,39 @@ Still open. **A new session must not assume these were settled.**
     *(The recommendation's second half — "keeping the amplitude spread" — was wrong, and
     measuring it is what closed this. See above.)*
 
-12. **WHAT VALUE DOES A CHILD INHERIT AS ITS WATERMARK — THE PARENT'S WATERMARK, OR THE
+12. ~~**WHAT VALUE DOES A CHILD INHERIT AS ITS WATERMARK — THE PARENT'S WATERMARK, OR THE
+    PARENT'S CURRENT RSS AT SPAWN?**~~ **CLOSED 2026-08-12.** **The parent's own high-water
+    mark**, and freeing the memory first does not help. Measured by varying the two
+    independently (MB): a parent that never allocated reports 73.9 and its child 73.9; one
+    holding 400 MiB reports 493.3/493.3; one that allocated 400 MiB **and freed it** reports
+    peak 493.3, current 74.3, **and its child 493.3**. Current RSS cannot be what propagates.
+
+    **AND THE INHERITANCE DOES NOT COMPOUND, which is what reconciles the two readings this
+    file had on record.** `peak_rss_bytes()` returns `max(inherited, own high-water)` and a
+    child inherits **only the second term**: a middle process that allocates nothing *reports*
+    its grandparent's 493.1 MB while its own child reports 74.1 MB. The 2026-08-10 observation
+    below — a probe reading 454.8 MB whose child reported the probe's *current* 84.6 MB — is
+    that rule, not a contradiction: the probe had allocated nothing, so its own high-water was
+    its current RSS.
+
+    **Consequence for 2b:** a measurement two processes down from a large ancestor **is**
+    usable, provided the process that spawns it stayed small. The calibration tile is therefore
+    implementable, and the rule is stated in `machine.py`'s docstring rather than as a warning.
+
+    **The intermittent test is gone rather than loosened.**
+    `test_a_child_measurement_is_not_contaminated_by_a_large_parent` asserted
+    `after >= 1.2 * before` against the **session watermark**, so it failed or passed according
+    to what earlier tests had allocated — three recorded instances. It is replaced by
+    `test_a_child_inherits_the_parents_own_high_water_mark_and_not_its_current_rss` and
+    `test_the_inheritance_does_not_compound_across_a_generation`, which spawn every process
+    they measure **behind a bare launcher** — a process importing nothing large, whose own
+    high-water is a bare interpreter, so the controlled parent starts from a known floor
+    whatever the session has allocated. No ratio was loosened; the baseline stopped being
+    someone else's.
+
+    The original record, kept because the question was live for two days:
+
+    **WHAT VALUE DOES A CHILD INHERIT AS ITS WATERMARK — THE PARENT'S WATERMARK, OR THE
     PARENT'S CURRENT RSS AT SPAWN?** `machine.py` and `test_memory.py` both say
     `ru_maxrss` is *inherited* across `fork()`/`exec()`. Neither says **which value**, and
     the two are different claims. Measured 2026-08-10 while chasing an unrelated failure:
@@ -2895,15 +2931,12 @@ Still open. **A new session must not assume these were settled.**
     something else. **Do not close it by loosening the floors**: an untested lower bound is
     the thing being guarded, not the obstacle.
 
-12. **WHAT VALUE DOES A CHILD INHERIT AS ITS WATERMARK — continued.**
-
-    **What would close it:** a standalone cross-process probe that varies the parent's
-    current RSS and the parent's watermark *independently* — allocate, free, then spawn —
-    and reports which one the child's `ru_maxrss` follows, on Linux and on macOS. Then
-    state the answer in `machine.py`'s docstring, and restate the test against whichever
-    quantity is actually inherited. **Both instruments are load-bearing for Phase 2's
-    calibration tile**, which measures bytes-per-series in a child process, so this closes
-    before the calibration work rather than before the store work.
+12. ~~**WHAT VALUE DOES A CHILD INHERIT AS ITS WATERMARK — continued.**~~ **CLOSED
+    2026-08-12** by exactly the probe specified here — allocate, free, then spawn — run on
+    **Linux only**. macOS is untested and stays under open question 10, which already owns
+    the decision about what RSS accounting should mean there. The answer, the
+    non-compounding corollary and the replacement tests are recorded at the top of this
+    entry.
 
 9. ~~**`optimize.HESSIAN_COND_LIMIT = 1e10` is picked, not derived.**~~ **CLOSED 2026-08-10
    (P1), before Phase 2 planning as it required.** `HESSIAN_COND_LIMIT` is now

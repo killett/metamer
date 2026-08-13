@@ -1045,3 +1045,53 @@ should know that its own start-up is dominated by a check it needs.
 
 The full sweep went **298 s to ~500 s**, most of it in `test_runner.py`'s subprocess tests, which
 now pay that start-up per invocation.
+
+### Post-acceptance: the bench leak fixed, and open question 12 closed
+
+Both were carried out after Task 5 was accepted, on the user's direction, and both are
+recorded here because they changed code rather than only notes.
+
+**The bench leak, narrow fix.** `bench/references.py` and `bench/spike.py` now restore numba's
+thread mask in a `try/finally` around the point where they set it. That requires nothing from
+`core` and no new dependency, and it explicitly does **not** route `bench` through
+`batch.threads.thread_budget` — the layering question (bench sits beside `core`, which must stay
+importable without `threadpoolctl`) is recorded separately as owed work. `run_spike`'s cell sweep
+moved into `_sweep_cells` only so one `try/finally` can wrap the whole sweep instead of each
+cell. **A third defect fell out of the same reading:** the report's `numba_threads_available`
+read `get_num_threads()`, i.e. whatever the process last set — including by an earlier cell of
+the same sweep — so on a second sweep in one process it recorded a number that was merely
+current. It now reads `NUMBA_NUM_THREADS`, the ceiling, which is what "available" means. Three
+guards, **3/3 mutations bite**.
+
+**And the actual defect was the skip guard, not the leak.** A guard whose condition is set by
+test ordering is unfalsifiable: the leak made it skip, but any future leak would too. Both skip
+guards now set an explicit mask and compare against it. **A test that cannot fail is worse than
+a test that does not exist, because it is counted.**
+
+**Open question 12, closed.** The probe specified in `PROGRESS.md` — vary the parent's current
+RSS and its watermark independently, then spawn — gives an unambiguous answer, reproduced three
+times: **the child inherits the parent's watermark**, and a parent that allocated 400 MiB and
+**freed** it still hands its child 493.3 MB while its own current RSS is back at 74.3.
+
+The corollary was not in the question and is what reconciles the project's two conflicting
+readings: **the inheritance does not compound.** `peak_rss_bytes()` returns
+`max(inherited, own high-water)` and a child inherits **only the second term** — measured across
+three generations, a middle process that allocates nothing reports 493.1 MB while its own child
+reports 74.1 MB. The 2026-08-10 observation of a probe reading 454.8 MB whose child reported
+84.6 MB is that rule, not a contradiction.
+
+**The intermittent test is gone rather than loosened.** Its baseline was the pytest session's
+watermark. The replacements spawn every process they measure **behind a bare launcher** — a
+process importing nothing large, whose own high-water is a bare interpreter — so the controlled
+parent starts from a known floor whatever the session allocated. **The launcher is the fix that
+the newly-measured non-compounding rule made available**, which is the useful shape here: the
+contract was not only recorded, it was immediately load-bearing.
+
+Writing it also caught an assumption of my own. The first version asserted
+`small_child == small_peak`; it fails, because the small parent is spawned by pytest and so
+*reports* the session's watermark while its child gets only the 74 MB it generated itself. **The
+non-compounding rule showing up inside the test that was written to establish it** is recorded
+in the assertion rather than smoothed over.
+
+macOS is untested and stays under open question 10, which already owns the decision about what
+RSS accounting should mean there.

@@ -81,6 +81,34 @@ of a field whose classification changes with its consumer**: self-reported at it
 boundary, harmless while it reaches `run_hash` alone (provenance, never a gate), and an
 identity the moment the calibration cache key reads it.
 
+#### THE SAME RULE AT THE INSTRUMENT LEVEL: A COMPLETE-LOOKING TABLE WITH A ROW MISSING
+
+> **An observation that a thing is ABSENT is not the same as reading the thing.** When an
+> instrument's coverage depends on **program state** rather than on what is installed, its
+> output is a self-report: it says what has been loaded, and a check reads it as saying what
+> exists. **Force the load before observing, or the absence is self-reported.**
+
+The tell is the dependence on state. Any check that enumerates **loaded libraries, registered
+plugins, entry points, or available backends** has this shape.
+
+Worked instance, Phase 2a Task 5, measured. `threadpoolctl.threadpool_info()` before anything
+parallel has run returns **OpenBLAS alone** — not an error, not an empty result, a plausible
+table with the decisive library absent. numba's `libgomp` appears only after a `prange`
+function has executed, and the layer-3 determinism check runs at **startup**, which is exactly
+when it is not there. Worse, `threadpool_limits` does not retroactively limit a library loaded
+afterwards, **so the check would certify a state it had neither observed nor could enforce.**
+The fix is to launch the layer first — `numba.get_num_threads()` does it through a public call
+— and only then read the table.
+
+**And its companion: one library must be set and observed through ITS OWN interface.** Measured
+in the same sitting: inside `threadpool_limits(limits=1)`, `threadpool_info()` reports
+`openblas 1, openmp 1` while `numba.get_num_threads()` still reports **4**. They are different
+quantities — threadpoolctl caps the OpenMP runtime's pool, numba's mask is how many slices a
+`prange` is cut into, and a `prange` reduction reassociates over numba's count. So design doc
+§11.3's cross-library rule (*a precondition that holds for OpenBLAS while MKL runs
+multithreaded is not a precondition that holds*) now has an **intra-layer instance**: two
+instruments of the same OpenMP layer disagreeing inside one process.
+
 ### (a3) DEFER THE FEATURE, DECLARE THE REGIME
 
 > **When deferring a feature, ask separately whether its REGIME must be declared.** If any
@@ -521,6 +549,17 @@ is safe to import.
   number, never the note** — date it, and state what it is a measurement *of*. **A
   `tile_side` without its backend is not a number**, and an A:B ratio without its harness, B
   and thread count is the same defect one subsystem over (P4).
+- **ONE LIBRARY REFUSES LOUDLY, THE OTHER LIES QUIETLY — AND ONLY THE SECOND IS DANGEROUS.**
+  The whole argument for **observing** rather than asserting, delivered by measurement rather
+  than by reasoning. Requesting 1000 threads on a 4-core box (Phase 2a Task 5, 2026-08-12):
+  `numba.set_num_threads(1000)` raises `ValueError: The number of threads must be between 1 and
+  4`, while `threadpool_limits(limits=1000)` leaves **OpenBLAS reporting 128** — its build-time
+  `NUM_THREADS` — and OpenMP reporting 1000. The loud refusal costs a staged error message; the
+  quiet clamp writes a number into provenance that was never true, and the determinism
+  guarantee rests on it.
+  **This is the answer to anyone who later proposes dropping the observation because "we set
+  the environment variable".** A request is not a result, and the library that ignores you is
+  precisely the one that will not say so.
 - **Heterogeneous batches by default.** A homogeneous batch cannot expose a
   batch-granularity defect. Task 13's only real finding came from the one mutation that
   survived because every fixture had `B = 1`. Task 17's utilization measurement uses a
