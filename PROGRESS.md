@@ -5,15 +5,15 @@
 1. **Branch `main`, and everything is on it.** Last commit: `git log --oneline -1`. `phase-1` is
    a stale name that never diverged and needs nothing done to it.
 2. **DONE:** Phase 1 Tasks 0–18 (Task 19 deleted), Phase 2 preliminaries P0–P4, Phase 2a
-   Tasks 0–6, and open questions 1, 4, 9, 11, **12**.
-3. **NEXT: Phase 2a Task 7 — the ragged index builder**, then Task 8, the store schema. Read
-   **[WHAT TASK 7 INHERITS](#what-task-7-inherits--read-this-before-the-task-sections-below)**
+   Tasks 0–7, and open questions 1, 4, 9, 11, **12**.
+3. **NEXT: Phase 2a Task 8 — the store schema**, the most consequential remaining work in 2a.
+   Read **[WHAT TASK 8 INHERITS](#what-task-8-inherits--read-this-before-the-task-sections-below)**
    and the store-schema section under it **before** the plan; they carry what the plan does not.
-4. **Tests: 802 collected, measured 2026-08-12 after Task 6.** This is the only statement of the
+4. **Tests: 822 passed, measured 2026-08-12 after Task 7.** This is the only statement of the
    count in this file; do not restate it elsewhere.
-5. **`pixi run test` is the full sweep (~271 s, measured 2026-08-12 on the mini PC, after the
-   `bench/` thread-mask leak was fixed) and is what every end-of-task verification must run.**
-   The timing is provisional — see the note below.
+5. **`pixi run test` is the full sweep (307 s, measured 2026-08-12 on the mini PC after Task 7)
+   and is what every end-of-task verification must run.** The timing is provisional — see the
+   note below.
 6. **`pixi run test-fast` deselects `slow` and is for iteration only — a green fast run is NOT
    evidence a task is done.** `pixi run test-ci` reproduces CI (`-m 'not machine'`) and is not
    evidence either, because `machine` covers exactly the tests that pin the RSS shim's units and
@@ -47,9 +47,13 @@ annotated. **So: the design doc decides what the system is FOR; a measured, date
 supersedes an unmeasured one in any document. The disagreement is a defect to report either
 way** — resolve it in the document rather than carrying it in an implementation.
 
-**THE SWEEP TIMING IS PROVISIONAL, AND ONE EARLIER FIGURE IS VOID.** The figure in the
-cold-start head was measured after two changes landed together — `bench/`'s thread-mask restore and open question 12's test
-replacement — and **the split was not decomposed**. More importantly: **Task 5's ~500 s figure
+**THE SWEEP TIMING IS PROVISIONAL, AND ONE EARLIER FIGURE IS VOID.** The predecessor of the
+figure in the cold-start head (~271 s) was measured after two changes landed together —
+`bench/`'s thread-mask restore and open question 12's test
+replacement — and **the split was not decomposed**. **Nor is the 271 → 307 s step**: Task 7's
+twenty tests run in **2.4 s standalone**, so they do not account for 36 s, and no further
+measurement was taken. Do not read either figure as a per-task cost.
+More importantly: **Task 5's ~500 s figure
 was measured while `bench/` was leaking numba's mask to 1 thread**, so everything after
 `test_bench.py` ran single-threaded. **Every timing taken in that window is suspect. Do not
 re-derive anything from ~500 s.** Re-measure before quoting a figure that matters.
@@ -127,7 +131,8 @@ was the actual defect the leak exposed.
   fix; **deleting the second copy is**, because two statements of one measurement drift again
   the moment one is updated. What belongs here is what the head does not say — which invocation
   means what, and what Phase 2a added: the batch-skeleton, stub-engine, packaging, config,
-  input, geometry, validation-staging, runner, thread-budget, machine-identity and tiling
+  input, geometry, validation-staging, runner, thread-budget, machine-identity, tiling and
+  ragged-index
   modules, on top of Phase 1's 588. `pixi run test-fast` (~12 s)
   deselects the `slow` marker and is for iteration only — **a green fast run is not evidence
   a task is done.** `pixi run test-ci` reproduces what CI runs (`-m 'not machine'`); it is
@@ -204,7 +209,7 @@ was the actual defect the leak exposed.
 | Phase 1 task tracker | `docs/superpowers/plans/2026-08-05-metamer-phase1.md.tasks.json` (native task ids 8–27) |
 | Original build prompt | [`docs/phase1-prompt.md`](docs/phase1-prompt.md) — **superseded** by design doc §2 where they conflict |
 | Phase 2 preliminaries pre-flight | [`docs/superpowers/notes/phase2-preliminaries-preflight.md`](docs/superpowers/notes/phase2-preliminaries-preflight.md) — the (a)–(k) audit of the P0/P1/P2 briefs and what each finding changed |
-| **Phase 2a implementation plan** | [`docs/superpowers/plans/2026-08-11-metamer-phase2a.md`](docs/superpowers/plans/2026-08-11-metamer-phase2a.md) — **Tasks 0–6 done; Task 7 next** |
+| **Phase 2a implementation plan** | [`docs/superpowers/plans/2026-08-11-metamer-phase2a.md`](docs/superpowers/plans/2026-08-11-metamer-phase2a.md) — **Tasks 0–7 done; Task 8 next** |
 | **Phase 2a pre-flight, per task** | [`docs/superpowers/notes/phase2a-preflight.md`](docs/superpowers/notes/phase2a-preflight.md) — the (a)–(k) audit of each 2a task brief and what each finding changed. **Append to it before each task, not after.** |
 
 Phase list is design doc §17. Phase 1 exit criteria are §18. Do not duplicate either here.
@@ -458,21 +463,38 @@ Per-task pre-flight audits live in
 [`docs/superpowers/notes/phase2a-preflight.md`](docs/superpowers/notes/phase2a-preflight.md).
 Only the durable conclusions are here.
 
-### WHAT TASK 7 INHERITS — read this before the task sections below
+### WHAT TASK 8 INHERITS — read this before the task sections below
 
-Task 7 is the ragged index builder, generic over an extent function, and **Task 8 immediately
-after it is the store schema — the most consequential remaining work in 2a, because the store's
-layout and its stored code meanings cannot change once data exists.** Everything the two need
-that is not in the plan is here.
+**Task 8 is the store schema — the most consequential remaining work in 2a, because the store's
+layout and its stored code meanings cannot change once data exists.** Everything it needs that
+is not in the plan is here. Task 7 is **done**; what it produced is below, and its findings are
+in its own section further down.
 
-**TASK 7 COMES BEFORE TASK 8 DELIBERATELY.** The schema's coordinate arrays — `noise_param_*[P]`
-and both offset tables — **are this builder's output**, and creating the store needs `P_total`
-and the offsets. A table saying the builder depends on the schema leads an implementer to stub
-the offsets in the schema task and fix them in the builder task, and **a stubbed offset table
-written into a store is exactly the class of thing that survives.**
+**THE BUILDER IS `metamer.batch.ragged` AND TASK 8 CONSUMES IT — DO NOT STUB AN OFFSET TABLE.**
+`build_ragged_index(specs, extent)` returns `RaggedIndex(extents, offsets, total)` with
+`offsets_array()`, `extents_array()`, `model_index_array()` and `block(m)`;
+`noise_param_coordinates(specs)` returns the index plus **five** fixed-width byte columns and a
+`legend()`. The extent function is **required and has no default**, so each call site names which
+axis it builds.
+
+**IT EMITS FIVE COLUMNS, NOT §12.3's FOUR: `model`, `term`, `name`, `unit`, `transform`.**
+Measured: `white + matern12`'s free parameters are `matern12[0].sigma`, `matern12[0].rho`,
+`white[0].sigma` — **two slots in one model's block are named `sigma`**, so a reader selecting on
+`name` alone cannot tell measurement noise from the correlated component. `term` is split out
+rather than folding the two into `"matern12[0].sigma"`, keeping each column atomic.
+
+**`noise_param_model` IS THE SPEC'S CANONICAL LABEL, NOT THE CONFIG STRING.** The config string
+is a REQUEST, the column is an IDENTITY, and **they differ in order on 2a's own fixture**:
+`"white + matern12"` against `"matern12[0] + white[0]"`. `model_index` is the integer join key to
+the `m` axis; the label is for the no-metamer reader.
+
+**DO NOT WRITE THE COVARIANCE OFFSET TABLE INTO A 2a STORE.** `/detail/` is not created, and an
+offset table describing a group that does not exist is name-is-not-a-gate with a reader on the
+other end — the same argument that made an uncreated group cleaner than an empty one. Both extent
+functions are exercised in `tests/test_ragged.py`; only the `/noise/` table is written.
 
 **TWO RAGGED INDICES WITH DIFFERENT EXTENTS, AND ONE REUSED TABLE IS WRONG AT UNEQUAL `p`.**
-`/noise/` is `Σ_m p_m`; a `/detail/` covariance block is `Σ_m p_m(p_m+1)/2` — **4 against 10** at
+`/noise/` is `Σ_m p_m`; a `/detail/` covariance block is `Σ_m p_m(p_m+1)/2` — **4 against 7** at
 the M=2 fixture (`white`, p=1, beside `white + matern12`, p=3), which is why that fixture has
 unequal `p`. Three consequences, all §12.3's:
 
@@ -483,12 +505,14 @@ unequal `p`. Three consequences, all §12.3's:
 - a covariance is stored as the **packed lower triangle with its storage order in attrs**. The
   plausible-number failure here is specific: a consumer unpacking row-major-lower as
   column-major-lower gets a matrix that is **still symmetric, often still positive definite**,
-  and reports wrong correlations **with no symptom**.
+  and reports wrong correlations **with no symptom**. `ragged.COVARIANCE_STORAGE_ORDER` is the
+  string and `covariance_slot_pairs` is what produces the order, so the declaration has a
+  producer; **write the string into attrs from that constant, never as a literal.**
 
-**Exit criterion 12 wants BOTH extent functions exercised**, so build the triangular one now even
-though `/detail/` is not created in 2a.
+**Exit criterion 12 wants BOTH extent functions exercised** — done in Task 7's tests, and the
+criterion-13 suite should assert it against the shipped builder rather than re-deriving it.
 
-**THE BLOCKER TASK 6 HIT, WHICH TASK 7 DOES NOT SHARE.** Nothing maps `signal_terms` (config
+**THE BLOCKER TASK 6 HIT, WHICH TASKS 7 AND 8 DO NOT SHARE.** Nothing maps `signal_terms` (config
 strings) to `core.signal` classes — `parse_candidate` resolves *noise* terms through
 `kernel_registry`, and `core.signal` has the classes with no registry and no parser. So `k_beta`
 is unobtainable, no tile can be sized, and `run()` is deliberately **not** wired to iterate
@@ -585,6 +609,58 @@ construction gives it.
 reachable (the Whittle engine plus the screening block; §14.1's early abort; a declared
 domain-mask variable in §13.6's input contract). **Their codes are 2a's regardless**, because
 stored code meanings are fixed at store creation.
+
+### What Task 7 established (done — the ragged builder)
+
+- **THE FIXTURE THREE DOCUMENTS PRESCRIBE TO SEPARATE THE TWO EXTENT FUNCTIONS CANNOT SEE A
+  REUSED OFFSET TABLE.** `off_0` is 0 under every extent function and `off_1` is the first
+  model's extent, and **`p = 1` and `p = 0` are the fixed points of `p ↦ p(p+1)/2`** — so at
+  `white` (p=1) first, **both offset tables are `(0, 1)`** and a builder that computes one table
+  and reuses it passes every offset assertion the fixture can make. It shows only in `extents`
+  and `total`, which is what an implementer is least likely to assert per model. **A
+  discriminating fixture puts a model with `p ∉ {0, 1}` first**: `matern32` (p=2) beside `white`
+  gives `(0, 2)` against `(0, 3)` at M=2, and the M=3 fixture gives `(0, 1, 4)` against
+  `(0, 1, 7)`. The M=2 store fixture is still asserted, because Task 8 consumes exactly it — but
+  it is asserted for its values, not relied on to discriminate. **Same shape as a schema axis of
+  length 1**: the fixture was chosen for a property (`unequal p`) that is necessary and not
+  sufficient.
+- **AND THE NUMBER ALL THREE CARRIED WAS THE MISTAKE THE SAME PARAGRAPH WARNS ABOUT.** Design
+  doc §12.3, the 2a plan and this file stated the extent as `Σ_m p_m(p_m+1)/2` and illustrated it
+  as **`4 + 6 = 10`**. The per-model sum is `1 + 6 = 7`; **10 is `P_total(P_total+1)/2`, the
+  triangle of the flattened total — one table reused, in the worked example of the paragraph
+  forbidding it.** (`4 + 6` is also not 10.) All three corrected, each with the derivation beside
+  the number. **Fourth instance of the design-doc cascade** after `n_eff_*`'s `[y,x]`, the
+  output-slot `+2` and §11.1's `tile_side`.
+- **THE COLUMN ORDER IS `free_param_index`'s AND MUST NEVER BE RE-DERIVED.** The slots of a
+  model's `/noise/` block are the entries of the vector the optimizer searches, so a second
+  nested loop labels every stored `theta` with another parameter's name — shapes intact, values
+  finite, nothing raised. The brief's "pure arithmetic over the candidate list" invites exactly
+  that, and `free_param_index`'s own docstring already said it is the single source of truth.
+  **`n_theta()` is a deliberately independent derivation of the same count, so the two are
+  asserted to agree per model rather than collapsed** — the pairing its docstring asks for,
+  turned into a live guard.
+- **`noise_param_name` ALONE IS AMBIGUOUS AT 2a's OWN FIXTURE.** `white + matern12` has two free
+  parameters named `sigma`. Five columns now, with `term` split out; see the Task 8 section.
+- **`S32` TRUNCATES SILENTLY AND REFUSES NON-ASCII LOUDLY, IN ONE CONSTRUCTOR.** Measured:
+  `np.array(["x" * 40], dtype="S32")` returns 32 bytes with no error and a truncated model label
+  still reads as a label; `np.array(["µm"], dtype="S32")` raises `UnicodeEncodeError` naming a
+  codec and a character position and neither the column nor the value. **The quiet one is the
+  dangerous one** — same lesson as OpenBLAS clamping 1000 threads to 128 while numba raises. Both
+  are refused in `_encode_column`, naming the column and the value.
+- **THE COORDINATE WIDTH IS A CONSTANT, NOT DERIVED FROM THE VALUES.** A width fitted to the data
+  differs between a store and the run that resumes it. `COORDINATE_WIDTH = 32`, per §12.4, and an
+  over-wide value is refused rather than accommodated.
+- **M = 0 IS REFUSED.** A store with no models makes every array constant across the axis every
+  downstream assertion compares along. Unreachable through `Config` today, which is an argument
+  for the guard being cheap, not for it being unnecessary.
+- **`NotImplementedError` FROM A SHARED-PARAMETER SPEC IS NOT A `ValueError`**, and Task 4's
+  layer-3 staging catches `ValueError` and `KeyError` — so it would escape as exit code 1.
+  Unreachable today (no family sets `shared_with`, and the config path cannot express it).
+  **Recorded, not built for: the task that implements sharing must stage it.**
+- **13/13 mutations bite.** The one worth naming: replacing the free-parameter count with
+  `len(term.params)` fails **exactly one** test — the constructed fixed-parameter one — because no
+  shipped family declares a fixed parameter. **A defect visible only to a constructed fixture is
+  still visible**, and dropping that fixture as artificial would have dropped the only test of it.
 
 ### What Task 6 established (done — read before touching tiling or the memory budget)
 
@@ -1486,7 +1562,7 @@ because a change to its stride or membership has five downstream consumers and n
 said so. (Screening would be a sixth; deferred with its regime declared.)
 
 **TWO RAGGED INDICES WITH DIFFERENT EXTENTS.** `/noise/` is `Σ_m p_m`, a `/detail/`
-covariance block is `Σ_m p_m(p_m+1)/2` — **4 against 10** at the M=2 unequal-`p` fixture,
+covariance block is `Σ_m p_m(p_m+1)/2` — **4 against 7** at the M=2 unequal-`p` fixture,
 which is the Q2 argument recurring: **one reused table looks correct at equal `p` and is
 wrong at unequal `p`.** So the generic builder takes a per-model **extent function**, not a
 parameter count; **both offset tables are stored as coordinate arrays**, not derived at read

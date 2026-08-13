@@ -1484,16 +1484,39 @@ search makes `β` ragged too.
 MEAN (2026-08-11).** `/noise/` is `Σ_m p_m`; a `/detail/` covariance block is
 `Σ_m p_m(p_m+1)/2`. **A design that reuses one table looks correct at equal `p` and is wrong
 at unequal `p`** — which is exactly why the M=2 fixture uses `white` (p=1) beside
-`white + matern12` (p=3): `P_total = 4` against `4 + 6 = 10`. Three consequences:
+`white + matern12` (p=3): `P_total = 4` against `1 + 6 = 7`.
+
+**CORRECTED 2026-08-12 AT TASK 7, AND THE OLD NUMBER WAS THIS PARAGRAPH'S OWN MISTAKE.**
+This read `4 + 6 = 10` from 2026-08-11 until the builder was written. **10 is
+`P_total(P_total+1)/2` — the triangle of the *flattened* total — which is exactly the
+one-table-reused error the paragraph exists to warn against**, and `4 + 6` is not 10 either.
+The per-model sum is `1 + 6 = 7`. The plan and `PROGRESS.md` carried the same number and are
+corrected with it.
+
+**AND THIS FIXTURE CANNOT DISCRIMINATE THE TWO OFFSET TABLES (measured 2026-08-12).**
+`off_0` is 0 under every extent function and `off_1` is the first model's extent, and
+**`p = 1` and `p = 0` are the fixed points of `p ↦ p(p+1)/2`** — so at `white` first, **both
+offset tables are `(0, 1)`** and a reused table shows only in `extents` and `total`. A
+fixture meant to separate the two must put a model with `p ∉ {0, 1}` **first**: `matern32`
+(p=2) beside `white` gives `(0, 2)` against `(0, 3)`. The M=2 store fixture stays as it is —
+it is the store's width, not the discriminating fixture — and `tests/test_ragged.py` carries
+both.
+
+Three consequences:
 
 - **The generic builder takes a per-model EXTENT FUNCTION, not a per-model parameter count**
   — `p_m` for `/noise/`, `p_m(p_m+1)/2` for `/detail/`. Same builder, different callable.
 - **Both offset tables are stored as coordinate arrays, not derived at read time**, so a
-  no-metamer read can slice either without knowing the triangular formula.
+  no-metamer read can slice either without knowing the triangular formula. **A table is
+  written only for a group that exists**, so 2a writes `/noise/`'s alone — an offset table
+  describing an uncreated `/detail/` is a name with a reader on the other end.
 - **A covariance is stored as the packed lower triangle with its storage order stated in
   attrs.** This is the plausible-number failure of this group: a consumer that unpacks
   row-major-lower as column-major-lower gets a matrix that is **still symmetric**, often
-  still positive definite, and reports wrong correlations **with no symptom.**
+  still positive definite, and reports wrong correlations **with no symptom.** **The
+  declared order needs a producer or it is a name and not a gate**:
+  `batch.ragged.COVARIANCE_STORAGE_ORDER` is the string and `covariance_slot_pairs` emits
+  the order it names, which is also the independent oracle for the extent formula.
 
 **`/signal/` carries an explicit model axis even in v1** (length M, or length 1 with a
 documented broadcast), so adding per-candidate `β` is a shape change rather than a

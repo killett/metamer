@@ -1284,3 +1284,217 @@ one: nobody re-measures while editing a marker list, so `~255 s` sat there throu
 restore and open question 12's test replacement — and the split was not decomposed. The
 inference that the leak was the cause is plausible and unmeasured; it is written down as
 plausible and unmeasured.
+
+---
+
+## Task 7 — the ragged index builder (audited 2026-08-12)
+
+The brief is seventeen lines and its central claim — *a design that reuses one table looks
+correct at equal `p` and is wrong at unequal `p`* — is **true of the mechanism and false of
+the fixture the same paragraph prescribes.** That is this audit's main finding, and four of
+the others follow from reading `free_param_index` rather than the brief.
+
+### (a) — THE M=2 FIXTURE'S TWO OFFSET TABLES ARE IDENTICAL, SO IT CANNOT SEE A REUSED TABLE
+
+The plan, design doc §12.3 and `PROGRESS.md` all prescribe `white` (p=1) beside
+`white + matern12` (p=3) as the fixture that separates the two extent functions. Compute
+both tables on it:
+
+| extent function | extents | **offsets** | total |
+|---|---|---|---|
+| `p_m` (`/noise/`) | (1, 3) | **(0, 1)** | 4 |
+| `p_m(p_m+1)/2` (`/detail/`) | (1, 6) | **(0, 1)** | 7 |
+
+**The offsets coincide, because `off_0` is 0 under every extent function and `off_1` is the
+first model's extent — and `p = 1` is a FIXED POINT of `p ↦ p(p+1)/2`.** So is `p = 0`. A
+builder that computed one offset table and reused it for both axes passes every offset
+assertion this fixture can make, and is caught only by `total` and `extents` — the two
+quantities an implementer is least likely to assert per model.
+
+**Changed:** the offset assertions run on a fixture whose **first** model has `p ∉ {0, 1}`.
+`matern32` (p=2) first gives (0, 2) against (0, 3) at M=2, and the M=3 fixture
+`white / white + matern12 / matern32` gives **(0, 1, 4)** against **(0, 1, 7)**. The M=2
+store fixture is still asserted, because Task 8 consumes exactly it — but it is asserted for
+its values, not relied on to discriminate.
+
+### (a) — AND THE NUMBER THE THREE DOCUMENTS QUOTE IS THE MISTAKE THEY WARN ABOUT
+
+Design doc §12.3, the 2a plan's Task 7, and `PROGRESS.md`'s Task 7 inheritance section all
+state the extent as `Σ_m p_m(p_m+1)/2` and then illustrate it as **`4 + 6 = 10`**. At
+p = (1, 3) that sum is `1 + 6 = 7`. **10 is `P_total(P_total+1)/2 = 4·5/2`** — the triangle
+of the *flattened total*, which is precisely the one-table-reused error the paragraph exists
+to warn against, committed in its own worked example. (`4 + 6` is also not 10.)
+
+The intent is unambiguous from the same section: model *m*'s block is contiguous and
+per-model, and a joint covariance across mutually exclusive candidates is not a quantity.
+**`Σ_m p_m(p_m+1)/2 = 7` is correct and the three copies of `10` are wrong.** Reported rather
+than resolved silently; all three corrected, with the derivation written beside the number.
+
+### (a2) — THE FIVE COORDINATE COLUMNS ARE IDENTITIES, AND ONE OF THEM READS AS A REQUEST
+
+New fields, so the classification is owed. Every column of `noise_param_*[P]` is an
+**IDENTITY**: it says what a stored `theta` slot actually *is*, and it must be populated by
+reading the `ParamSpec` reached through the kernel registry.
+
+The one that fails on the obvious implementation is `noise_param_model`. The tempting source
+is the config's own candidate string — `"white + matern12"` — which is a **REQUEST**. The
+identity is the spec's canonical label, and **the two differ in order on the very fixture 2a
+uses**: `ProcessSpec` sorts `matern12` before `white`, so the identity is
+`"matern12[0] + white[0]"`. A test asserting the config string passes against a builder that
+never looks at a spec.
+
+The four checks for an identity field: something populates it (the builder); it derives from
+the thing it identifies (the `ParamSpec` objects, through `spec.terms`); a change in that
+quantity moves it (a `fixed=True` parameter removes a slot — asserted); and the populator is
+not the thing identified (the config supplies only which candidates, never their layout).
+
+### (f) — THE BRIEF SAYS "PURE ARITHMETIC" AND `free_param_index` SAYS IT IS THE ONLY LAYOUT
+
+`terms.free_param_index`'s docstring, in the tree already:
+
+> THIS IS THE SINGLE SOURCE OF TRUTH for the ordering of the parameter vector the optimizer
+> searches. Everything that packs or unpacks that vector … calls this rather than re-deriving
+> the layout with its own nested loop.
+
+"Pure arithmetic over the candidate list" invites exactly that nested loop. **The slot order
+in `/noise/` IS the order of the optimizer's vector** — the store's columns label the values
+`fit` produces — so a second derivation that agrees today and diverges later mislabels every
+`theta` in a 10⁷-point store with every array the right shape and every value finite.
+
+**Changed:** the name/unit/transform columns come from `free_param_index(spec)`, and the
+extent comes from `spec.n_theta()`. `n_theta`'s own docstring says it is deliberately derived
+*independently* of `free_param_index` so the two stay separate checks on one invariant — so
+the builder **asserts the two agree per model** rather than collapsing them, and that
+assertion is a live guard rather than a tautology.
+
+### (d) — THE VOCABULARY THE BRIEF NEVER USES
+
+Absent from Task 7's brief, and each one changes the answer: **`fixed`** (a fixed parameter
+occupies no slot; `len(term.params)` over-counts, `n_free()` does not), **canonical order**
+(the slot order is the spec's, not the config's), **`free_param_index`**, **`unit`**,
+**`transform`**, **M = 0**, and **the coordinate width**. The four `noise_param_*` column
+names appear in the design doc and `PROGRESS.md` but not in the brief being implemented.
+
+### (i) — `noise_param_name[P]` IS AMBIGUOUS WITHIN A MODEL AT EXACTLY 2a's FIXTURE
+
+Measured: `white + matern12` has free parameters
+`[(matern12[0], sigma), (matern12[0], rho), (white[0], sigma)]`. **Two slots are named
+`sigma`.** A reader selecting `noise_param_name == "sigma"` inside model 1's block gets two
+values and no way to tell the measurement noise from the correlated component — a
+plausible-number failure with no symptom, in the group whose whole purpose is to be readable
+without metamer installed.
+
+**Changed, and reported as a deviation from the design doc's four columns:** the builder
+emits **five** — `model`, `term`, `name`, `unit`, `transform` — keeping each column atomic
+and making `(model, term, name)` unique. Qualifying `name` as `"matern12[0].sigma"` was the
+alternative and was rejected: it puts two facts in one column and forces a reader to parse it.
+
+### (c) — EXITS, ENUMERATED
+
+`build_ragged_index`: one return; `ValueError` on an empty candidate list; `ValueError` on a
+negative or non-integral extent; `NotImplementedError` propagating out of `n_theta()` for a
+shared-parameter spec. `noise_param_coordinates`: one return; the same three, plus
+`ValueError` on a coordinate value wider than the fixed width or outside ASCII.
+
+**M = 0 is refused rather than returning an empty index.** A store with no models makes every
+array constant across the axis every downstream assertion compares along — the cancellation
+rule, applied to an axis length. It is also unreachable through `Config` today, which is an
+argument for the guard being cheap, not for it being unnecessary.
+
+### (c2) — `NotImplementedError` IS NOT A `ValueError`, AND LAYER 3 CATCHES THE SECOND
+
+Task 4's layer-3 staging catches `ValueError` and `KeyError`. A shared-parameter spec raises
+`NotImplementedError` from `n_theta()`, which would escape as an unhandled exception — exit
+code 1, which in 2a means a crash. **Unreachable today**: no family sets `shared_with` and
+nothing in the config path can. Recorded, not built for; it becomes live the moment sharing is
+implemented, and that is the task that must stage it.
+
+### (h) — THE EXTENT FUNCTION MUST NOT HAVE A DEFAULT
+
+A default extent argument means every call site that does not think about it silently builds
+the `/noise/` table, including the one that meant `/detail/`. **The parameter is required**,
+so naming the axis is forced at each call. This is (h) applied to the interface rather than to
+a test: a parameter left at its default is a parameter not exercised.
+
+### (i3) / (j) — THE ORACLE IS A HAND-WRITTEN TUPLE, NEVER A `cumsum`
+
+`offsets[-1] + extents[-1] == total` is a relation two consistently-wrong tables satisfy, and
+`np.cumsum(extents)` is the builder's own construction. Every expected table in the tests is
+written out by hand — `(0, 1, 4)`, `(1, 3, 2)`, `6` — and `covariance_extent` is additionally
+checked against an **enumeration of the (i, j) pairs**, which shares no derivation with
+`p(p+1)/2`.
+
+### (a3) — THE PACKED STORAGE ORDER IS THE DEFERRED GROUP'S REGIME, AND A BARE STRING IS NOT A GATE
+
+§12.3 names the plausible-number failure of `/detail/`: row-major-lower unpacked as
+column-major-lower is **still symmetric, often still positive definite, and wrong with no
+symptom.** The brief asks only for the extent function. An attrs string declaring the order
+with no code that produces it is name-is-not-a-gate in its purest form, so the order ships as
+an **executable enumeration** (`covariance_slot_pairs`) whose length is what checks the extent
+formula. Deviation from the brief, and its reason.
+
+### (k) — THE COLUMNS ARE WRITTEN ONCE INTO A 10⁷-POINT STORE AND NEVER RE-DERIVED
+
+Nothing here iterates a set today, but the failure mode is the one (k) exists for: a
+seed-dependent column order is invisible to every same-process test and to mutation testing,
+and the store is created in one process and resumed in another. A subprocess test pins the
+five columns' bytes under two `PYTHONHASHSEED` values.
+
+**And the trap one module over:** `terms._param_canonical` iterates `sorted(term.params)`
+while `free_param_index` iterates declaration order. Two orders over the same mapping, in the
+same file, both correct for their own purpose. `sorted` is the wrong one here and reads as the
+tidier choice.
+
+### MEASURED — `S32` TRUNCATES SILENTLY AND REFUSES NON-ASCII LOUDLY
+
+`np.array(["x" * 40], dtype="S32")` returns a 32-byte value with **no error**; a truncated
+model label still reads as a label. `np.array(["µm"], dtype="S32")` raises
+`UnicodeEncodeError`. **One library lies quietly and the other refuses loudly**, in one
+constructor. The builder measures every value against the width and refuses, naming the value
+and its length.
+
+### (i5) — WHAT THE TEMPTING REPAIR WOULD MOVE
+
+If the name column's order surprises the author, the repair that makes it "look right" is to
+sort the parameters — which moves `free_param_index`, the optimizer's own vector layout, for
+every fit in the system. **The shared thing is the layout; fix the expectation, never the
+order.**
+
+### A finding for Task 8, recorded here so it is not rediscovered
+
+**Do not write the covariance offset table into a 2a store.** `/detail/` is not created, and
+an offset table describing a group that does not exist is a name-is-not-a-gate hazard with a
+reader on the other end — the same argument that made an uncreated group cleaner than an empty
+one. The builder is exercised with both extent functions in the *tests*; only the `/noise/`
+table is written.
+
+### Bite checks — 13 mutations, 13 bite
+
+Each guard removed or inverted against the finished suite, one at a time:
+
+| mutation | tests that failed |
+|---|---|
+| `covariance_extent` returns `n_theta()` — one table reused for both axes | 4 |
+| `block()` returns `slice(off, p)` | 2 |
+| extent from `len(term.params)` rather than the free count | **1** |
+| columns re-derived by a `sorted(term.params)` nested loop | 3 |
+| model label built from a non-canonical label order | 3 |
+| width check deleted | 1 |
+| ASCII check deleted | 1 |
+| empty-candidate guard deleted | 1 |
+| negative-extent guard deleted | 1 |
+| non-integer-extent guard deleted | 1 |
+| layout-versus-count disagreement guard deleted | 1 |
+| `model_index` off by one | 1 |
+| slot pairs emitted column-major | 1 |
+
+**The third row is the one worth keeping.** Counting declared parameters instead of free ones
+fails **exactly one** test — the constructed fixed-parameter fixture — because **no shipped
+family declares a `fixed=True` parameter**, so every other fixture in the suite gives the same
+answer either way. A defect visible only to a constructed fixture is still visible; dropping
+that fixture as artificial would have dropped the only test of it. It is the same argument as
+`machine.choose_core_count` (no SMT on this host) and `library_table` (one OpenBLAS here).
+
+**The cross-process test's control is inside it:** besides the two seeds agreeing, it asserts
+the leading bytes, so it fails if the columns are empty or reordered — which the label-order
+mutation confirmed.

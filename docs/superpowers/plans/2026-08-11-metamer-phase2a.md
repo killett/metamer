@@ -405,9 +405,16 @@ either without knowing the triangular formula. A covariance, when `/detail/` lan
 **packed lower triangle with its storage order in attrs**.
 
 **Test the builder with BOTH extent functions now, even though `/detail/` is unwritten** —
-`P_total = 4` against `4 + 6 = 10` at the M=2 fixture. **A design that reuses one table looks
+`P_total = 4` against `1 + 6 = 7` at the M=2 fixture. **A design that reuses one table looks
 correct at equal `p` and is wrong at unequal `p`**, which is the reason the fixture has
 unequal `p` at all.
+
+**CORRECTED 2026-08-12 DURING THE TASK, TWICE OVER.** This brief said `4 + 6 = 10`, as did
+design doc §12.3 and `PROGRESS.md`. **10 is `P_total(P_total+1)/2`, the triangle of the
+flattened total — the very error the sentence above warns about.** And the fixture it
+prescribes **cannot see a reused offset table at all**: `p = 1` and `p = 0` are the fixed
+points of `p ↦ p(p+1)/2`, so with `white` first both offset tables are `(0, 1)`. Put a model
+with `p ∉ {0, 1}` first to discriminate.
 
 ---
 
