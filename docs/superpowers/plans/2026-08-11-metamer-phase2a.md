@@ -662,6 +662,23 @@ without refitting.
 - **Copies the groups it does not recompute.** A store that resolves through another fails the
   no-metamer read however the pointer is encoded.
 
+**AMENDED 2026-08-13, ON IMPLEMENTING IT.**
+
+- **The source check is NOT `check_resume`.** That gate refuses a criterion-set change,
+  which is the reason this command exists; reusing it wholesale makes the feature refuse its
+  own primary use. `resume.check_source` shares schema version, `fit_hash` and the positional
+  candidate comparison, adds *bitmap fully set*, and omits `criteria`, `compat_hash` (which
+  is `fit_hash` plus the criterion set) and `/detail/` (2a creates no such group; **the
+  regime is declared** for the task that does).
+- **The new store's tile side is READ BACK from the source**, not re-derived from the budget:
+  byte-identical copied groups need identical shard geometry, and the budget rule bounds a
+  *fit's* resident set. Consequence stated rather than discovered — the new store carries the
+  source's tile side.
+- **The copy is derived from the source's own array listing, by dimensions**, so a schema
+  addition is copied without anyone remembering it.
+- **`write.write_selection` is now shared** by the fit and recompute paths, so `/selection/`
+  has one producer rather than two that were written to agree.
+
 **Tests.**
 
 - *No fit ran*, proved by the **raising stub engine defined in Task 0**, never by timing.

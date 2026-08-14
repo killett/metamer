@@ -55,7 +55,9 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+import zarr
 
+from metamer.batch import reuse
 from metamer.batch.completion import (
     completed_tiles,
     flush_on_sigterm,
@@ -67,7 +69,7 @@ from metamer.batch.geometry import geometry_components, geometry_hash
 from metamer.batch.input import ContractReport, open_input
 from metamer.batch.input import check_contract as check_input_contract
 from metamer.batch.ragged import build_ragged_index, noise_extent
-from metamer.batch.resume import check_resume
+from metamer.batch.resume import check_resume, check_source
 from metamer.batch.store import StoreShape, create_store, provenance_attrs
 from metamer.batch.threads import Phase, thread_budget
 from metamer.batch.tiling import (
@@ -85,7 +87,7 @@ from metamer.batch.validation import (
     identifiability_warnings,
     load_config,
 )
-from metamer.batch.write import write_tile
+from metamer.batch.write import check_status_invariant, write_selection, write_tile
 from metamer.config.model import Config
 from metamer.core import machine
 from metamer.core.capability import Objective
@@ -164,6 +166,57 @@ class RunReport:
     sigterm_armed: bool
 
 
+def _recompute_tile(
+    source_path: Path | str,
+    store_path: Path | str,
+    tile: Tile,
+    *,
+    config: Config,
+) -> None:
+    """Copy one tile's fits and rank them again under the requested criteria.
+
+    **The invariant is checked on the block this path actually consumes**, with
+    the same function the fit path uses, so a corrupted source is a refusal
+    rather than a new store that inherits the corruption and looks freshly
+    computed. It is checked over `log_lik`, `k` and `n` rather than over every
+    copied array: those are what the ranking reads, the rest were checked when
+    the source was written, and exit criterion 4 checks a finished store whole.
+
+    Args:
+        source_path: The store being reused.
+        store_path: The store being written.
+        tile: The spatial block.
+        config: The requested configuration.
+
+    Raises:
+        InvariantError: If the source's primitives violate the status/value
+            invariant.
+    """
+    source = zarr.open_group(str(source_path), mode="r")
+    destination = zarr.open_group(str(store_path), mode="r+")
+    scores = reuse.read_scores(
+        source, tile, engine=config.engine, objective=config.objective
+    )
+    rows = tile.y_stop - tile.y_start
+    columns = tile.x_stop - tile.x_start
+    region = (slice(tile.y_start, tile.y_stop), slice(tile.x_start, tile.x_stop))
+
+    reuse.copy_tile(source, destination, tile)
+    check_status_invariant(
+        scores.outcome,
+        {"log_lik": scores.loglik, "k": scores.k, "n": scores.n},
+    )
+    write_selection(
+        destination,
+        region,
+        scores,
+        config.criteria,
+        rows,
+        columns,
+        len(scores.labels),
+    )
+
+
 def _with_memory_budget(config: Config, budget_gb: float) -> Config:
     """Return `config` with its memory budget replaced, RE-VALIDATED.
 
@@ -201,6 +254,7 @@ def run(
     observed_thread_limits: Mapping[str, int] | None = None,
     engine: Engine | None = None,
     on_tile_written: Callable[[Tile], None] | None = None,
+    reuse_fits_from: Path | str | None = None,
 ) -> RunReport:
     """Validate a configuration, fit every tile, and write the store.
 
@@ -228,6 +282,11 @@ def run(
             interruption arranged by timing is a race whose failure to reproduce
             proves nothing. Same argument as `engine=` -- a seam a test cannot
             reach makes the assertion vacuous.
+        reuse_fits_from: A finished store to recompute from, rather than
+            fitting. **The fit step becomes a read and nothing else about the
+            loop changes.** The new store writes its own provenance with the
+            source's path and hashes recorded, and is self-contained: it opens
+            with the source deleted.
 
     Returns:
         What the run established.
@@ -295,6 +354,18 @@ def run(
             n_models=len(specs),
         )
         grid = (contract.n_y, contract.n_x)
+        # THE SOURCE IS VERIFIED BEFORE ANYTHING IS READ FROM IT, and its tile
+        # side is READ BACK rather than re-derived: the copied groups must be
+        # byte-identical to the source, which needs identical shard geometry,
+        # and the budget's rule bounds a FIT's resident set, which a recompute
+        # does not have. Consequence, stated: the new store carries the source's
+        # tile side, so a later fitting run against it under a smaller budget
+        # refuses -- correctly, because that run would fit.
+        source_attrs: dict[str, Any] | None = None
+        if reuse_fits_from is not None:
+            check_source(reuse_fits_from, config, geometry_hash=rollup)
+            side = reuse.source_tile_side(reuse_fits_from)
+            source_attrs = dict(zarr.open_group(str(reuse_fits_from), mode="r").attrs)
         # THE RESUME GATE, IN THE ENTRY CONTRACT'S ONE POSITION FOR IT: after
         # the hashes, before the tiling. **Identity first, geometry second** -- a
         # store whose fits are unusable says so before it says anything about
@@ -314,6 +385,14 @@ def run(
             read_amplification=amplification,
             unique_dt_count=contract.unique_dt,
             tile_sides={"shared": side},
+            source=None
+            if source_attrs is None
+            else {
+                "path": reuse_fits_from,
+                "fit_hash": source_attrs["fit_hash"],
+                "compat_hash": source_attrs["compat_hash"],
+                "run_hash": source_attrs["run_hash"],
+            },
         )
         if not Path(store_path).exists():
             create_store(
@@ -336,27 +415,34 @@ def run(
                 if done[position]:
                     skipped += 1
                     continue
-                with budget.phase(Phase.ASSEMBLE):
-                    block = assemble_tile(handle, tile)
-                with budget.phase(Phase.FIT):
-                    result = fit(
-                        block,
-                        years,
-                        signal,
-                        specs,
-                        Criterion(config.criteria[0]),
-                        mask=np.isfinite(block),
-                        objective=Objective(config.objective),
-                        engine=engine,
+                if reuse_fits_from is None:
+                    with budget.phase(Phase.ASSEMBLE):
+                        block = assemble_tile(handle, tile)
+                    with budget.phase(Phase.FIT):
+                        result = fit(
+                            block,
+                            years,
+                            signal,
+                            specs,
+                            Criterion(config.criteria[0]),
+                            mask=np.isfinite(block),
+                            objective=Objective(config.objective),
+                            engine=engine,
+                        )
+                    write_tile(
+                        store_path,
+                        tile,
+                        result,
+                        criteria=config.criteria,
+                        index=index,
+                        has_trend=has_trend,
                     )
-                write_tile(
-                    store_path,
-                    tile,
-                    result,
-                    criteria=config.criteria,
-                    index=index,
-                    has_trend=has_trend,
-                )
+                else:
+                    # THE FIT STEP IS REPLACED BY A READ, and nothing else about
+                    # the loop changes -- same write path for /selection/, same
+                    # bitmap, same ordering. `engine` is deliberately unused
+                    # here, which is what the raising stub proves.
+                    _recompute_tile(reuse_fits_from, store_path, tile, config=config)
                 if on_tile_written is not None:
                     on_tile_written(tile)
                 # THE ONE SITE THAT SETS A BIT, AND IT IS REACHED ONLY BY

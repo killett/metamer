@@ -229,6 +229,7 @@ def provenance_attrs(
     unique_dt_count: int,
     tile_sides: Mapping[str, int],
     warm_start_used: bool = False,
+    source: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build the root attrs of a store.
 
@@ -247,6 +248,13 @@ def provenance_attrs(
         warm_start_used: **A fact about the RUN, not about the config.** Reading
             it off `config.warm_start.enabled` would write `true` for a 2a run
             that cannot warm-start at all.
+        source: A `--reuse-fits-from` source's root attrs, or None for an
+            ordinary run. **Recorded, never resolved**: 12.4 requires every
+            store to be self-contained, so the path and the three hashes go in
+            as provenance a reader can *verify* -- the new store's `fit_hash`
+            equals the recorded `source_fit_hash` -- and never as a pointer a
+            reader must follow. The keys are absent for a run that fitted its
+            own primitives, and that absence is itself the fact.
 
     Returns:
         The attrs mapping, JSON-safe and with sorted keys throughout.
@@ -277,7 +285,7 @@ def provenance_attrs(
     if fit is None or compat is None:  # pragma: no cover - unreachable narrowing
         raise ValueError("fit_hash and compat_hash require a geometry hash")
 
-    return {
+    attrs: dict[str, Any] = {
         "algorithm_version": hashing.ALGORITHM_VERSION,
         "candidate_spec_hashes": list(config.candidate_spec_hashes()),
         "compat_hash": compat,
@@ -309,6 +317,16 @@ def provenance_attrs(
         "unique_dt_count": int(unique_dt_count),
         "warm_start_used": bool(warm_start_used),
     }
+    if source is not None:
+        attrs.update(
+            {
+                "source_store": str(source["path"]),
+                "source_fit_hash": str(source["fit_hash"]),
+                "source_compat_hash": str(source["compat_hash"]),
+                "source_run_hash": str(source["run_hash"]),
+            }
+        )
+    return attrs
 
 
 def _chunk_side(tile_side: int, other: int, itemsize: int) -> int:

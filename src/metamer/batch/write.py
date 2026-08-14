@@ -50,7 +50,7 @@ import numpy as np
 import zarr
 from numpy.typing import NDArray
 
-from metamer.core.criteria import Criterion, rank_candidates
+from metamer.core.criteria import CandidateScores, Criterion, rank_candidates
 from metamer.core.objective import merge_outcomes
 from metamer.core.outcomes import Outcome
 
@@ -260,29 +260,37 @@ def write_tile(
     put("status", "outcome", result.outcome, models)
     put("status", "point_outcome", point_outcomes(result.outcome))
 
-    _write_selection(root, region, result, criteria, rows, columns, models)
+    write_selection(root, region, result.scores, criteria, rows, columns, models)
 
 
-def _write_selection(
+def write_selection(
     root: zarr.Group,
     region: tuple[slice, slice],
-    result: FitResult,
+    scores: CandidateScores,
     criteria: Sequence[str],
     rows: int,
     columns: int,
     models: int,
 ) -> None:
-    """Rank the same fits under every criterion and write `/selection/`.
+    """Rank one block of primitives under every criterion and write `/selection/`.
 
     **ONE `CandidateScores`, C RANKINGS, NO REFIT.** This is design doc 12.8's
     claim exercised at the point it is produced rather than only at the recompute
     path: the criteria are arithmetic over primitives, so a second criterion
     costs a ranking and never a fit.
 
+    **AND IT TAKES THE SCORES RATHER THAN THE FIT, SO THERE IS ONE PRODUCER OF
+    `/selection/` AND NOT TWO.** The recompute path (`batch.reuse`) builds the
+    same object out of a store and calls this. A second implementation would be
+    the cancellation rule at a module boundary: every test comparing a
+    recomputed store against a fitted one would compare two derivations written
+    to match, and a difference in weight normalization or in the no-winner
+    sentinel would surface only when a user compared two stores by hand.
+
     Args:
         root: The opened store.
         region: The tile's `(y, x)` slices.
-        result: What `fit` returned.
+        scores: The block of primitives to rank.
         criteria: Criterion names in the store's `c` order.
         rows: Tile rows.
         columns: Tile columns.
@@ -301,7 +309,7 @@ def _write_selection(
     n_valid: NDArray[np.int64] | None = None
 
     for position, name in enumerate(criteria):
-        ranking = rank_candidates(result.scores, Criterion(name))
+        ranking = rank_candidates(scores, Criterion(name))
         delta[..., position] = ranking.delta_ic.reshape(rows, columns, models)
         weight[..., position] = ranking.weights.reshape(rows, columns, models)
         ic_best[..., position] = ranking.ic_best.reshape(rows, columns)

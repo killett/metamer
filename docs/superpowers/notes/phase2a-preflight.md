@@ -2341,3 +2341,164 @@ each naming the other**, and re-point its test at what stays reachable, which is
 whose bitmap does not describe its own grid (a truncated copy, a foreign writer). Without the
 cross-comments the next simplification deletes one on the grounds that the other covers it,
 and deletes the coverage with it.
+
+---
+
+## Task 12 — `--reuse-fits-from`, the recompute path (audited 2026-08-13)
+
+**With Task 11's in-place recompute arm gone, this command is the ONLY consumer of the
+three-hash split** — the sole demonstration that `fit_hash` identifies anything rather than
+merely existing. Its tests are the tests of the split.
+
+### (a5) — THE SOURCE CHECK CANNOT BE `check_resume`, AND THE ARM THAT DIFFERS IS THE POINT
+
+The obvious economy is to run Task 11's gate against the source store: same comparisons,
+different store. **It is wrong on exactly one arm, and it is the arm the feature exists for.**
+`check_resume` refuses a **criterion-set change**, and a criterion-set change is *the* reason
+to run `--reuse-fits-from` at all. Reusing it wholesale would make the command refuse its own
+primary use.
+
+**Changed:** the comparisons are factored so both callers share them per-check rather than in
+one block — schema version, `fit_hash`, the positional candidate comparison — and the source
+check adds *bitmap fully set* while omitting *criteria*, *compat_hash* and *`/detail/`*.
+
+**Two of those omissions are decisions rather than oversights, and both are recorded here:**
+
+- **`compat_hash` is omitted because it is `fit_hash` plus the criterion set**, and the
+  criterion set is licensed to differ. Comparing it would refuse everything the criteria
+  comparison already lets through.
+- **`/detail/` is omitted because 2a creates no `/detail/` group in either store**, so
+  nothing is claimed falsely by a new store recording a different selection. **The regime is
+  declared for the task that creates the group**: a recompute cannot produce `/detail/` (the
+  Hessian is not stored), so once the group exists, a source that lacks the requested
+  selection must be refused here.
+
+**And the shared refusal messages could not be shared verbatim.** Task 11's name "write a new
+store" as the resolution — which is the operation *being performed* in this context. The
+message text takes the resolution from the caller; a refusal that suggests what the user is
+already doing is worse than one that says nothing.
+
+### (a1) — THE NEW STORE'S GEOMETRY IS READ BACK FROM THE SOURCE, NOT RE-DERIVED
+
+(a1) in its sharpened form decides this outright: the tile side is a stored geometry, and the
+recompute has a store to read it from, so it is **read back rather than re-derived from the
+current budget**. Two independent reasons agree:
+
+- **Exit criterion 5a requires `/primitives/`, `/noise/`, `/signal/` and `/status/` to be
+  byte-identical to the source.** Identical bytes need identical chunk and shard geometry,
+  which is `tile_side`. A recompute at a different side could not satisfy the criterion no
+  matter how correct its arithmetic.
+- **The budget rule does not apply, because no fit runs.** `resume_tile_side`'s "stored >
+  derived, refuse" arm exists to stop a *fitting* run exceeding a hard RAM budget; a
+  recompute holds a tile of primitives — `(B, M)` float64 arrays — not a tile of filter
+  state. **Applying it would refuse the cheap operation on precisely the small machine that
+  most wants to run it.**
+
+**The consequence is stated rather than left to be discovered: the new store carries the
+source's tile side**, so a later *fitting* run against it under a smaller budget refuses —
+correctly, because that run would fit.
+
+### (g2) — `CandidateScores` FROM A STORE: FIVE ARRAYS, ONE COORDINATE, TWO ATTRS
+
+The standing test binds the five **per-cell** fields against stored arrays. The other three
+have no test because they are not per-cell, and this is where they come from:
+
+| field | source | why it is sound |
+|---|---|---|
+| `loglik`, `k`, `n`, `n_eff`, `outcome` | `/primitives/` and `/status/` | the standing subset test |
+| `labels` | the `m` coordinate | written at creation from the same candidate list the gate compares positionally |
+| `engines`, `objectives` | root attrs `engine` and `objective` | **both are fit-relevant**, so `fit_hash` equality — verified before anything is read — is what makes the config's values equal the source's. Taking them from the config is not a shortcut; it is the same values by a checked identity |
+
+`EngineId` and `Objective` are `StrEnum`s over exactly those config strings, so the
+conversion is total and needs no table.
+
+### (a) — ONE SELECTION WRITER, OR THE TWO PATHS DISAGREE WHERE NOTHING COMPARES THEM
+
+`/selection/` is produced in two places after this task: the fit path and the recompute path.
+**A second implementation is the cancellation rule at a module boundary** — every test that
+compares a recomputed store against a fitted one would be comparing two derivations that were
+written to match, and a difference in weight normalization or in the no-winner sentinel would
+be invisible until a user compared two stores by hand.
+
+**Changed:** `write._write_selection` takes a `CandidateScores` rather than a `FitResult` and
+becomes public. The fit path passes `result.scores`; the recompute path passes the block it
+read. One derivation, two callers.
+
+### (g2) — THE COPY IS DERIVED FROM THE STORE'S OWN LISTING, NOT FROM A LIST IN THE CODE
+
+Everything outside `/selection/` and `/completion/` is copied. **A hand-written list of
+arrays is the thing that goes stale when the schema grows**, and the failure is silent: the
+new array keeps its fill value in the recomputed store, which for every float array is NaN
+and reads as "this point failed" rather than as "nobody copied this". So the copy walks the
+source's groups and takes every array whose leading dimensions are `(y, x)` — coordinates are
+excluded by that test, and a new data array is included automatically.
+
+**And the test binds the same way**: it asserts equality over the arrays *the store lists*,
+not over a list the test carries, so a schema addition that the copy misses fails here.
+
+### (c) — EXITS AND EXIT CODES, WITH THE ONE THAT IS LAYER 4
+
+`check_source`: one `return`; refusals for **schema version**, **`fit_hash`**, **a candidate
+prefix mismatch**, **a candidate-list length change** — all `ValidationError(SEMANTIC)`, exit
+**3** — and **an incompletely set completion bitmap**, which is `InputContractError`, exit
+**4**.
+
+**The split is not arbitrary and (c2) is why it is safe.** A hash or candidate mismatch is
+the *configuration* disagreeing with a store: layer 3, "resuming will not help". An
+incomplete source is a fact about *data on disk*: layer 4, exactly like the stage-4a
+contract, and it reaches exit 4 through the type `exit_code_for` already dispatches on. **The
+two types are structurally disjoint** — `InputContractError` is not a `ValidationError` —
+so the dispatch cannot fail toward the earlier clause.
+
+### (i2) — "NO FIT RAN" IS THIS TASK'S CENTRAL CLAIM, SO ITS CONTROL IS NAMED TWICE
+
+The raising stub proves the negative; its positive controls already exist and are cited
+rather than re-derived: Task 0's (`fit` with a fittable batch does raise) and Task 10's (the
+same runner seam, a store with one outstanding tile, engine reached). **Without them "no fit
+ran" is satisfied by a recompute that never reached the tiling loop at all** — which is
+precisely what a source-verification bug would produce.
+
+### (i) — THE FIXTURE MUST CARRY THE FIT-OK / CRITERION-UNDEFINED POINT
+
+Q3 item 4: recompute-stage failures live in `/selection/` on the criterion axis, never in
+`/status/`, because `outcome` has no `c` axis. A fixture whose every point ranks cleanly
+under every criterion **cannot express that at all**, so the source store is built with the
+REML route Task 9 established — `n_obs = 6` against a rank-4 design gives `n = 2`, and HQIC
+is undefined while AIC is fine. The recompute must reproduce it **from stored primitives**,
+which is the whole claim: NaN `ic_best`, `-1` in `selected`, and `/status/` untouched.
+
+### (k) — THE SELF-CONTAINMENT TEST MUST DELETE THE SOURCE, IN ANOTHER PROCESS
+
+"The new store is self-contained" is a claim about a reader that does not have metamer or the
+source. Asserting it in-process, with the source still on disk, tests nothing: zarr would
+resolve a reference happily. The test **deletes the source** and opens the new store with
+plain `xr.open_zarr` in a subprocess with `PYTHONPATH` unset, which is the same construction
+`test_write.py` already uses for the no-metamer read.
+
+### Bite checks — 13 mutations, 13 bite, and all three survivors were fixture failures
+
+Source verification (5): the completion bitmap unchecked; `fit_hash` unchecked; the candidate
+comparison dropped; a missing source undiagnosed; **the criterion comparison added** — the
+mutation that proves the omission is deliberate rather than forgotten, since adding it makes
+the command refuse its own primary use. Provenance (2): the source's attrs inherited; the
+source hashes not recorded. Copy (2): only `/primitives/` copied; the dimension test dropped
+so coordinates are copied too. Operation (1): the recompute refitting instead of reading.
+Geometry (1): the tile side re-derived. Reading (1): `n_eff` taken from `n_eff_trend`.
+Checking (1): the invariant not run on the copied block.
+
+**Three survived the first pass and none of them was a weak assertion — all three were
+fixtures that could not express the defect.** That is (i) three times over, and it is worth
+naming because the reflex on a survivor is to strengthen an assertion:
+
+- **The tile side re-derived from the budget.** The fixture ran the recompute at the
+  source's own budget, where the derived side and the stored side are **both 1** — the two
+  functions agree exactly there, which is (i7) at a scalar. The new test runs the recompute
+  at a budget deriving **77** against the source's 1.
+- **`n_eff` read from the wrong array.** `n_eff` is read by **`bic_neff` alone**; under AIC
+  and HQIC the field is never touched, so the wrong array produces byte-identical output. The
+  new test ranks by `bic_neff` and compares against **the fit path's own values for the same
+  criterion** — a different derivation reaching the store by a different route.
+- **The invariant not checked on the copied block.** No fixture had a corrupt source, because
+  every source in the module was written by this code. The new test writes NaN into a
+  `log_lik` cell whose status is `OK` — the state a store handed over by someone else can be
+  in, and the reason the check exists at all.

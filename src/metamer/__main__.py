@@ -50,9 +50,12 @@ class _Parser(argparse.ArgumentParser):
 def _build_parser() -> _Parser:
     """Return the argument parser.
 
-    `--reuse-fits-from` is Task 12's and is deliberately absent: a flag that
-    parses and does nothing is worse than one that does not exist, because it
-    reads as supported.
+    **`--reuse-fits-from` LANDED AT TASK 12, WITH ITS BEHAVIOUR.** It was
+    deliberately absent until then -- a flag that parses and does nothing reads
+    as supported -- and the same rule ran the other way: Task 11's criterion-set
+    refusal named the *operation* rather than this flag until the flag existed.
+    Both halves are the same rule, which is that a diagnostic and a command line
+    must not describe different programs.
 
     Returns:
         The parser.
@@ -77,6 +80,18 @@ def _build_parser() -> _Parser:
             "from this alone, so it is the only knob on concurrency"
         ),
     )
+    parser.add_argument(
+        "--reuse-fits-from",
+        default=None,
+        metavar="STORE",
+        dest="reuse_fits_from",
+        help=(
+            "recompute the derived arrays from a finished store's primitives "
+            "instead of fitting. The new store is self-contained and records "
+            "the source's hashes as provenance; its fit_hash equals the "
+            "source's and its compat_hash and run_hash do not"
+        ),
+    )
     parser.add_argument("--version", action="version", version=f"metamer {__version__}")
     return parser
 
@@ -97,6 +112,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             arguments.config,
             arguments.store,
             memory_budget_gb=arguments.memory_budget,
+            reuse_fits_from=arguments.reuse_fits_from,
         )
     except (ValidationError, InputContractError) as error:
         # LAYER 4's TYPE CARRIES NO LAYER PREFIX OF ITS OWN, so the naming
