@@ -1899,3 +1899,230 @@ working**:
 **Generalize: a constraint justified by "otherwise the test is vacuous" belongs on the test,
 not on the product.** The tell is a refusal whose stated reason is about assertions rather
 than about data.
+
+---
+
+## Task 10 — the completion bitmap, write ordering, and SIGTERM (audited 2026-08-13)
+
+The shortest brief in 2a — three behaviour bullets and one test — and the audit returned the
+largest ratio of findings to brief lines. Two of them are reachable defects in code that is
+already committed; one contradicts a docstring this project wrote itself.
+
+### (d) — `signal` IS ALREADY A LOCAL VARIABLE IN THE FUNCTION THAT MUST INSTALL THE HANDLER
+
+`run()` binds `signal = config.signal_spec()` and reads `signal.terms` at
+`src/metamer/batch/run.py:274`. A module-level `import signal` in that file is therefore
+**shadowed for the whole body of `run`**, so `signal.signal(SIGTERM, ...)` inside the tile
+loop resolves against a `SignalSpec` and raises `AttributeError` — or worse, would be "fixed"
+by renaming the stdlib import, leaving two spellings of one module in one file.
+
+**Changed:** the handler lives in a new module, `batch/completion.py`, which imports the
+stdlib module and never imports `core.signal`. `run()` uses it through a context manager and
+never names the module at all. The grep that found this is (d) exactly as specified: the
+vocabulary the task requires, looked for in the tree before writing any of it.
+
+### (a2) — CLASSIFY THE BIT: IT IS AN IDENTITY, AND THE FOURTH FACT IS THE ONE THAT FAILS
+
+The handoff says the classification generalizes past hashes to *"every gate made of a name — a
+completion bitmap, a calibration cache key, a warm-start cache key"*, so the bit gets the sort
+before it gets a writer.
+
+`/completion/tiles[ty,tx]` claims **what the store contains**, which is an IDENTITY, not a
+REQUEST. Of the four facts an identity must satisfy:
+
+| fact | verdict |
+|---|---|
+| something populates it | yes — `run()`, at exactly one site |
+| it derives from the quantity it identifies | yes — the bit is set from the fact that `write_tile` **returned** |
+| a change in that quantity moves it | yes — a raising write propagates and the bit stays 0 |
+| the populator is not the thing being identified | **NO. The writer reports on itself.** |
+
+**The fourth cannot be satisfied at an acceptable price**, because the only independent
+populator is a reader that re-reads the region it just wrote, at 10⁷ points, per tile. What
+makes the self-report safe is **structural rather than conventional**, and both halves are
+already committed: `write_tile` has **no decline path** (Task 9, deliberately), and the bit is
+set only on its normal return — so "returned" and "every region write for this tile was
+issued" are the same event. **A later "skip this tile" exit in the write path would silently
+turn the bit into a self-report of nothing**, which is the mechanism to watch, and it is why
+Task 9's missing exit is a load-bearing absence rather than an omission.
+
+**Scope stated rather than implied:** the bit certifies that every region write returned, not
+that the bytes survive a power cut. There is no `fsync` — an `fsync` would be a POSIX
+assumption of the kind §15.5 forbids in the store layer, which relies on per-object write
+atomicity alone. Measured: setting one bit at `chunks=(1,1)` creates exactly one object
+(`tiles/c/1/2`), so no other tile's bit is read-modify-written.
+
+### (a2) — SECOND INSTANCE, REACHABLE TODAY: THE BIT'S *INDEX* IS A NAME WHOSE MEANING MOVES
+
+The bit is `[ty, tx]`, and `ty = y_start // tile_side`. **`tile_side` is derived from
+`memory_budget_gb`, which is run-relevant and therefore in neither `fit_hash` nor
+`compat_hash`** — by design (§13.3), so that "run locally, burst to cloud, resume" is a resume
+and not a rerun. So Task 11's gate will **pass** a resume whose budget differs, and a
+different budget gives a different tile side, and bit `(1,0)` then names a different region
+than the one it was set for. Symptoms: none. Every array keeps its shape, some points are
+never written and read back as `NOT_ATTEMPTED`, others are written twice, and the bitmap ends
+fully set.
+
+**Refusing a budget change outright is the wrong repair**, and this is the (i5) shape at the
+level of a product decision: the tempting fix breaks §15.5's headline workflow, where the
+cloud instance that resumes the run is chosen for having *more* RAM than the laptop that
+started it.
+
+**Changed — the rule is over the derived tile side, never over the budget** (two budgets can
+derive the same side, and refusing on the budget would refuse a resume that is geometrically
+identical):
+
+| stored side vs derived | action |
+|---|---|
+| equal | proceed |
+| **stored < derived** | **adopt the stored side.** The shards were fixed at creation and a smaller tile is inside the requested budget, so the resume is both geometry-correct and memory-safe |
+| **stored > derived** | **refuse**, naming both sides, the store's recorded `memory_budget_gb`, and the two resolutions — raise `--memory-budget`, or write a new store. Finishing this store needs tiles the requested budget cannot hold, and writing sub-shard regions instead would make every tile write a read-modify-write of a shard |
+
+**(a4) recomputed, because the brief's one number is load-bearing.** "At 10⁷ points the bitmap
+is of order 100 elements": 10⁷ points is a 3163 × 3163 grid, `ceil(3163 / 338) = 10` per axis,
+**100 bits**. Confirmed.
+
+### (a5) — THE BRIEF'S TWO BEHAVIOURS PRESCRIBE OPPOSITE TREATMENTS OF THE SAME WINDOW
+
+*"An interruption injected between the two writes leaves the bit unset"* and *"SIGTERM flushes
+rather than dying mid-region-write"* both talk about the interval between the data write and
+the bitmap write, and they want opposite things there: the first wants the run to stop inside
+it, the second wants it not to.
+
+**They are consistent only if SIGTERM is never observed inside that window.** So the handler
+**records and returns** — it sets a flag and does nothing else — and the flag is read **after**
+the bit is written, between tiles. A handler that raised (the `KeyboardInterrupt` idiom) would
+land the exception in precisely the window the other requirement forbids, and would do it
+non-deterministically. Stated in the module, because "the handler only sets a flag" reads as a
+style preference and is a correctness requirement.
+
+### (a) — A RESUMED STORE AND A FRESHLY WRITTEN ONE ARE IDENTICAL, SO THE STORE CANNOT WITNESS THE SKIP
+
+§11.3 makes the fits deterministic, so a run that ignores the bitmap and rewrites every tile
+produces **byte-identical contents** to one that skips correctly. The cancellation rule: every
+assertion comparing a resumed store against a complete one is invisible to the defect the task
+exists to fix, and the report's own `tiles_skipped` is the code under test reporting on
+itself.
+
+**Two observables that are not constant across the comparison, both used:** the raising stub
+engine (a fit that runs at all raises), and **a marker written into the store between the two
+runs** — the outstanding tile's `/status/outcome` region set back to `NOT_ATTEMPTED`, a value
+no successful write can produce, so a rewritten region is distinguishable from one that was
+left alone. The second is what pins *which* tiles were rewritten rather than *whether* any
+were.
+
+### (i7) — A SQUARE TILE GRID WITH A DIAGONAL FIXTURE CANNOT SEE A TRANSPOSED INDEX
+
+Where the two candidate index functions `(ty, tx)` and `(tx, ty)` agree: the diagonal, and any
+grid with one tile. The fixture is 2 × 2 grid points at `memory_budget_gb = 5e-6`, which gives
+`tile_side = 1` and a 2 × 2 tile grid — square, so the fixture must clear the bit of an
+**off-diagonal** tile, `(0, 1)`. Measured for the sizing: `resident_bytes_per_series` is
+**1786 B** at `d=3, k_beta=4, p=3, N=60, M=2`, and `floor(sqrt(5368 / 1786)) = 1`;
+`1e-5 GB` gives 2.
+
+### (g) / (i) — `Tile` MUST NOT GAIN A TILE INDEX, BECAUSE NOT EVERY `Tile` IS A GRID TILE
+
+The obvious implementation is to have `tile_grid` stamp `(ty, tx)` onto each `Tile` so the
+consumer cannot mis-derive it. **`tiling.assembly_spans` builds `Tile` objects for
+chunk-aligned sub-spans** (`tiling.py:292`) which are not grid tiles and have no bit —
+so the field would be either wrong or optional on the type that carries it, and an optional
+index defaults to `(0, 0)`, which is a valid-looking bit.
+
+**Changed:** the mapping is a function, `completion.tile_index(tile, side)`, which **refuses a
+tile that is not aligned to the grid** (`y_start % side` or `x_start % side` non-zero). A span
+tile handed to the bitmap raises instead of setting some other tile's bit.
+
+### (c) — EXITS, ENUMERATED
+
+`run()`: one `return`. Raises: `ValidationError` layer 2 (the `--memory-budget` override),
+layer 3 (`check_semantics`, **and the new stored-versus-derived tile-side refusal**),
+`InputContractError` layer 4, and anything `fit` or `write_tile` raises — `InvariantError`,
+`ValueError`, an engine's exception, and the injected fault. **No exit sets a bit**, and the
+bit is set at exactly one site. The loop gains two non-exit branches: `continue` on an
+already-complete tile, and `break` on a recorded SIGTERM after the bit is written.
+
+`completion.mark_complete`: one return, no raise of its own. `tile_index`: one return, one
+`ValueError`. `flush_on_sigterm`: yields once, restores the previous handler in `finally`.
+
+### (k2) — THE FLUSHED-SIGTERM EXIT CODE, AND IT GIVES CODE 2 ITS FIRST PRODUCER
+
+Enumerating what the runtime emits here before choosing: an **unhandled** SIGTERM kills the
+process as 128+15 (`subprocess` reports **−15**); argparse's 2 is already remapped to 3 by
+`_Parser.error`; CPython's 1 on an unhandled exception is the known unfixable alias.
+
+Design doc §14.3 defines **2 = "aborted early — resumable"**, and gives as its rationale that
+*"a script that resumes on failure needs to distinguish 'aborted, resumable' from 'config
+rejected'"*. **A preempted run is exactly that case**, so a flushed SIGTERM exits
+`ExitCode.ABORTED_EARLY`. Exiting 0 is the alternative and it lies: the store is incomplete
+and the caller is told the run finished.
+
+**This contradicts something this project wrote.** `validation.ExitCode`'s docstring and
+`PROGRESS.md` both say codes 1 and 2 *"have no producer until sub-phase 2e"*, on the ground
+that 2 needs the early-abort mechanism. §14.3's definition is broader than 2e's mechanism, and
+the design doc is authoritative on intent — so the docstring is **amended**, not worked
+around, and 2e's early abort becomes the second producer of a code that now has one.
+Re-raising the signal with the default handler to die as −15 was the alternative considered:
+it keeps the taxonomy untouched, and it forfeits the one distinction §14.3 says the taxonomy
+exists to make.
+
+### (a3) — DEFER THE FEATURE, DECLARE THE REGIME: THE HANDLER IS MAIN-THREAD-ONLY
+
+Measured: `signal.signal` off the main thread raises `ValueError: signal only works in main
+thread of the main interpreter`; the default disposition of SIGTERM in a pytest process is
+`SIG_DFL`. A `run()` driven from a worker thread therefore cannot arm the handler.
+
+**Changed:** the regime is declared rather than crashed on or silently swallowed —
+`flush_on_sigterm` reports whether it armed, `RunReport.sigterm_armed` carries it, and the
+context manager **restores the previous handler** on exit. Without the restore the handler
+outlives the run and every later test in the same process inherits it, which is (k): process
+state set by one test deciding another's behaviour.
+
+### (i2) — THREE POSITIVE CONTROLS, ONE PER NEGATIVE
+
+| the negative | its control |
+|---|---|
+| the injected fault leaves the bit unset | the same hook, **not raising**, sets it |
+| a resumed run refits nothing | the same resume with one tile's bit cleared **rewrites exactly that tile's region** |
+| SIGTERM does not lose a tile | the same fixture with no signal completes and exits 0 |
+
+### (j) — THE ORACLE FOR "THIS TILE'S DATA IS THERE" IS NOT THE BITMAP
+
+Reading the bitmap to check the data was written shares its entire derivation with the thing
+under test. The oracle is `/status/outcome` over the tile's region, which is written by a
+different call on a different array, and whose fill (`NOT_ATTEMPTED`) is a value the write path
+cannot produce.
+
+### (g2) — BIND THE BITMAP'S CONSUMERS AGAINST WHAT THE STORE HOLDS
+
+Two consumers exist that are not in this task: Task 11 needs *which tiles are outstanding* and
+Task 12 needs *is the bitmap fully set*. Both need to map a bit back to a region, which needs
+the tile side and the grid. **The store carries both**: `attrs["tile_sides"]["shared"]` and any
+dense array's leading two axes. Checked rather than assumed, because had the side not been in
+attrs the fix would have been a schema change and the schema is frozen at creation.
+
+### Bite checks
+
+Recorded with the implementation below.
+
+### Bite checks — 15 mutations, 15 bite
+
+Ordering (2): the bitmap written before the data; the injection hook moved to
+*after* the bit, which is the mutation that pins where the seam is rather than
+that it exists. Resume (3): the bitmap not consulted; the bit index transposed;
+the alignment guard deleted. Signal (4): the recorded SIGTERM ignored;
+`interrupted` read off the signal rather than off the tile counts; the handler
+raising; the previous handler not restored. Regime (1): `armed` claimed off the
+main thread. Geometry (3): a resume re-tiling from its own budget; a budget too
+small for the stored tile accepted; the bitmap shape unchecked against the grid.
+Bitmap (2): an absent bitmap read as "nothing is complete"; the bit written as
+the fill value.
+
+**Two are worth their reasons.** *The handler raising* is caught by the session
+aborting rather than by an assertion — `KeyboardInterrupt` propagates out of
+`run`, which is exactly the defect — so it is recorded as caught by mechanism
+rather than by a red test. And *`interrupted` off the signal* survived until a
+test was written for it: with four tiles the two formulations agree, and only a
+**one-tile** grid taking the signal on its last tile separates them. That is
+(i7) again — the fixture must be placed outside where the two functions agree —
+and it is the fifth-cause check paying off, since the mutation is a real
+behaviour change and the survivor was a missing test rather than an equivalence.

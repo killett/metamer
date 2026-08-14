@@ -86,10 +86,20 @@ class ExitCode(IntEnum):
     because retrofitting an exit code means revisiting every early return -- the
     argument that made the failure taxonomy a Phase 1 deliverable.
 
-    `COMPLETED_WITH_FAILURES` and `ABORTED_EARLY` have no producer until
-    sub-phase 2e: the first needs a failure-rate threshold and the second needs
-    the early-abort mechanism, and both are 2e's. They are pinned here as an
-    interface rather than tested through a run.
+    **`ABORTED_EARLY` ACQUIRED A PRODUCER AT TASK 10, AHEAD OF THE MECHANISM
+    THIS DOCSTRING ORIGINALLY NAMED.** It said both 1 and 2 waited on sub-phase
+    2e's failure-rate threshold and early-abort criterion. Design doc 14.3
+    defines 2 more broadly than that mechanism -- *"aborted early --
+    resumable"*, whose stated purpose is to let a resuming script tell an
+    abort apart from a rejected config -- and **a run flushed by SIGTERM is
+    exactly that case**: its completed tiles are on disk with their bits set and
+    the same command finishes them. Exiting 0 there would report a store as
+    complete when it is not. 2e's early abort becomes the second producer.
+
+    `COMPLETED_WITH_FAILURES` still has none: it needs the failure-rate
+    threshold, which is 2e's. It is pinned as an interface rather than tested
+    through a run, and while it has no producer, an observed 1 is CPython's
+    unhandled-exception code -- the collision named in `__main__`.
     """
 
     OK = 0

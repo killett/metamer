@@ -8,15 +8,17 @@
    Tasks 0–9, and open questions 1, 4, 9, 11, **12**. **The signal-term blocker carried since
    Task 6 is CLOSED**: `config.signal_spec()` builds a `SignalSpec`, `signal.k_beta` gives the
    column count, and `run()` sizes tiles, fits and writes them.
-3. **NEXT: Phase 2a Task 10 — the completion bitmap, write ordering, and SIGTERM.** Read
-   **[WHAT TASK 10 INHERITS](#what-task-10-inherits--read-this-before-the-task-sections-below)**
-   **before** the plan. **`run()` currently rewrites every tile on every invocation** — the
-   bitmap that would let it skip a completed one is Task 10's.
-4. **Tests: 880 passed, measured 2026-08-13 after Task 9.** This is the only statement of the
+3. **NEXT: Phase 2a Task 11 — the resume gate and its three outcomes.** Read
+   **[WHAT TASK 11 INHERITS](#what-task-11-inherits--read-this-before-the-task-sections-below)**
+   **before** the plan. **`run()` now skips a tile whose completion bit is set** and stops
+   after the tile in flight on SIGTERM; what Task 11 adds is the *hash* half of the gate,
+   beside the tile-geometry half Task 10 had to build.
+4. **Tests: 897 passed, measured 2026-08-13 after Task 10.** This is the only statement of the
    count in this file; do not restate it elsewhere.
 5. **`pixi run test` is the full sweep and is what every end-of-task verification must run.
-   It takes 302–376 s on the mini PC — four runs, 2026-08-12 and 2026-08-13, at 822, 845, 847
-   and 880 tests.** Quote the range, never one end of it; see the note below.
+   It takes 302–427 s on the mini PC — six runs, 2026-08-12 and 2026-08-13, at 822, 845, 847,
+   880, 880 and 897 tests.** Quote the range, never one end of it; see the note below, which
+   now includes **two runs of the identical tree 38 s apart**.
 6. **`pixi run test-fast` deselects `slow` and is for iteration only — a green fast run is NOT
    evidence a task is done.** `pixi run test-ci` reproduces CI (`-m 'not machine'`) and is not
    evidence either, because `machine` covers exactly the tests that pin the RSS shim's units and
@@ -72,13 +74,24 @@ smallest test addition.
 
 **Task 9's runs extend it: 376 s with two failures and 365 s green, at 880 tests — and Task 9
 added six tests that each fit real series, which is the first addition with a defensible
-per-test cost.** So the range is now **302–376 s over four runs**.
+per-test cost.**
 
-**So: quote the range, and treat a step inside it as scatter.** The estimate was
-wrong the same way the verdict's ±0.15 was wrong — **two points do not bound a spread**, and
-the second point being *lower* made the estimate look conservative when it was not. **The
-attribution-pass trigger stands but is now about the RANGE**: a sweep outside 300–340 s is the
-thing to explain, not a step of tens of seconds inside it.
+**AND THEN THE ATTRIBUTION QUESTION ANSWERED ITSELF, ON A TREE THAT HAD NOT CHANGED.** Task
+10 opened by re-running the sweep at **the same commit (`4df3bd9`) and the same 880 tests** as
+that 365 s green run, as the standing "recompute every measurement, including your own"
+rule requires. It came in at **403.6 s** — **38 s above the previous run of byte-identical
+code**, and outside the 300–340 s band this file had just declared the thing to explain.
+There is nothing to attribute: **the machine is the variable**, and a per-task attribution
+pass would have been measuring noise with a finer ruler. Task 10 then added 17 tests and the
+sweep took **427.4 s**, i.e. **+24 s for 17 tests against a +38 s step for none.**
+
+**So: quote the range — 302–427 s over six runs — and treat a step inside it as scatter.**
+The estimate was wrong the same way the verdict's ±0.15 was wrong — **two points do not bound
+a spread**, and the second point being *lower* made the estimate look conservative when it was
+not. **THE ATTRIBUTION-PASS TRIGGER IS RETIRED AS A TIME BAND**, because the band was set from
+runs that turn out to differ by more than the band is wide. What replaces it: a step is worth
+explaining only when **the same tree** measured twice disagrees by more than the 38 s already
+observed, or when a task's own tests standalone account for the step (Task 10's are 40 s).
 More importantly: **Task 5's ~500 s figure
 was measured while `bench/` was leaking numba's mask to 1 thread**, so everything after
 `test_bench.py` ran single-threaded. **Every timing taken in that window is suspect. Do not
@@ -158,7 +171,7 @@ was the actual defect the leak exposed.
   the moment one is updated. What belongs here is what the head does not say — which invocation
   means what, and what Phase 2a added: the batch-skeleton, stub-engine, packaging, config,
   input, geometry, validation-staging, runner, thread-budget, machine-identity, tiling,
-  ragged-index, store-schema, signal-vocabulary and write-path
+  ragged-index, store-schema, signal-vocabulary, write-path and completion-bitmap
   modules, on top of Phase 1's 588. `pixi run test-fast` (~12 s)
   deselects the `slow` marker and is for iteration only — **a green fast run is not evidence
   a task is done.** `pixi run test-ci` reproduces what CI runs (`-m 'not machine'`); it is
@@ -235,7 +248,7 @@ was the actual defect the leak exposed.
 | Phase 1 task tracker | `docs/superpowers/plans/2026-08-05-metamer-phase1.md.tasks.json` (native task ids 8–27) |
 | Original build prompt | [`docs/phase1-prompt.md`](docs/phase1-prompt.md) — **superseded** by design doc §2 where they conflict |
 | Phase 2 preliminaries pre-flight | [`docs/superpowers/notes/phase2-preliminaries-preflight.md`](docs/superpowers/notes/phase2-preliminaries-preflight.md) — the (a)–(k) audit of the P0/P1/P2 briefs and what each finding changed |
-| **Phase 2a implementation plan** | [`docs/superpowers/plans/2026-08-11-metamer-phase2a.md`](docs/superpowers/plans/2026-08-11-metamer-phase2a.md) — **Tasks 0–9 done; Task 10 next** |
+| **Phase 2a implementation plan** | [`docs/superpowers/plans/2026-08-11-metamer-phase2a.md`](docs/superpowers/plans/2026-08-11-metamer-phase2a.md) — **Tasks 0–10 done; Task 11 next** |
 | **Phase 2a pre-flight, per task** | [`docs/superpowers/notes/phase2a-preflight.md`](docs/superpowers/notes/phase2a-preflight.md) — the (a)–(k) audit of each 2a task brief and what each finding changed. **Append to it before each task, not after.** |
 
 Phase list is design doc §17. Phase 1 exit criteria are §18. Do not duplicate either here.
@@ -489,27 +502,30 @@ Per-task pre-flight audits live in
 [`docs/superpowers/notes/phase2a-preflight.md`](docs/superpowers/notes/phase2a-preflight.md).
 Only the durable conclusions are here.
 
-### WHAT TASK 10 INHERITS — read this before the task sections below
+### WHAT TASK 11 INHERITS — read this before the task sections below
 
-**Tasks 10–13 are the resumability core** — the completion bitmap, the resume gate,
-`--reuse-fits-from`, and the exit-criteria suite. Tasks 0–9 are done. Everything below is what
-a cold session cannot re-derive from the code.
+**Tasks 11–13 are what is left of the resumability core** — the resume gate's hash half,
+`--reuse-fits-from`, and the exit-criteria suite. Tasks 0–10 are done. Everything below is
+what a cold session cannot re-derive from the code.
 
-#### The state Task 10 starts from
+#### The state Task 11 starts from
 
-- **`run()` REWRITES EVERY TILE ON EVERY INVOCATION.** It sizes tiles, fits and writes them,
-  and nothing consults `/completion/tiles`. **That is what Task 10 fixes**, and until it does,
-  "resume" means "redo".
+- **`run()` SKIPS A TILE WHOSE BIT IS SET**, sets each bit from the fact that `write_tile`
+  returned, and stops after the tile in flight when SIGTERM has been recorded. What it does
+  **not** do is compare any hash against the store's — that is Task 11's whole subject.
+- **THE GATE ALREADY HAS A POSITION AND A TENANT.** `run()` calls
+  `completion.resume_tile_side` between the hashes and the tiling, which is where the entry
+  contract puts the resume gate. Task 11's comparisons go beside it, not somewhere else.
 - **`metamer.batch.write.write_tile(store_path, tile, result, *, criteria, index, has_trend)`**
   is the one write path: one region write per array per tile, and **no way to decline.** There
-  is deliberately no "skip this tile" exit, because **Task 10 sets the bit from the fact that
-  the write returned** — a path that could decline silently would make the bit's meaning depend
-  on which branch ran.
+  is deliberately no "skip this tile" exit, because **the bit is set from the fact that the
+  write returned** — a path that could decline silently would make the bit a self-report of
+  nothing. That absence is load-bearing; do not add one.
 - **The invariant is checked BEFORE the write**, on the arrays about to be written, by
   `write.check_status_invariant`. **The same function is what exit criterion 4 must run over a
   finished store**, so the two cannot drift.
 
-#### The fill-value rule, which Task 10 writes into directly
+#### The fill-value rule, which Task 10 wrote into directly
 
 **Every array's fill value is a value its write path cannot produce** — see (a0), the first
 pre-flight line. `OK` is code **0**, zarr's default integer fill is **0**, and zarr writes no
@@ -524,14 +540,13 @@ tile's data has flushed, so grouping the bits into one object would make every t
 read-modify-write of every other tile's bit. At 10⁷ points the bitmap is of order 100
 elements, so the object count is not a concern.
 
-#### What Tasks 10–13 must honour
+#### What Tasks 11–13 must honour
 
-**Task 10 — ordering.** **Data then bitmap, always**: a tile's bit is set only after every
-array's region write for that tile has flushed, so an interrupted run can never mark
-incomplete data complete. **No POSIX assumptions** — no file locking, no rename-based
-atomicity, no directory-listing-as-truth; only per-object write atomicity. **SIGTERM flushes
-rather than dying mid-region-write**, so preemption is just resumption. The test is a
-**fault injected between the two writes**, never a timing race.
+**Task 10 — ordering — is DONE**; what it built and what it found are in
+[What Task 10 established](#what-task-10-established-done--the-completion-bitmap-write-ordering-and-sigterm)
+below. The properties it must keep: **data then bitmap, always**; **no POSIX assumptions** —
+no file locking, no rename-based atomicity, no directory-listing-as-truth, only per-object
+write atomicity; and **SIGTERM flushes rather than dying mid-region-write**.
 
 **Task 11 — the resume gate.** The entry contract's ordering is the guard and must be
 **tested, not trusted**: `open → input contract (4a) → geometry fingerprint → fit_hash →
@@ -591,11 +606,13 @@ cross-store properties no single task's tests can express.
   the second element shrinks where the design is degenerate.
 - **`FitResult.scores` IS THE ONLY SOURCE OF `k` AND `n`**, and is what ranks one set of fits
   under C criteria without refitting.
-- **SWEEP TIMING: 302–376 s over four runs** (2026-08-12 and 2026-08-13, at 822, 845, 847 and
-  880 tests). **Quote the range.** The "at least 5 s" spread recorded from a sample of two was
-  wrong by more than tenfold. **Task 9 is the first addition with a defensible per-test cost**
-  — six of its tests fit real series. **Task 5's ~500 s figure remains VOID**: it was measured
-  while `bench/` leaked numba's thread mask.
+- **SWEEP TIMING: 302–427 s over six runs** (2026-08-12 and 2026-08-13). **Quote the range.**
+  The "at least 5 s" spread recorded from a sample of two was wrong by more than tenfold, and
+  **two runs of the identical tree came in 38 s apart** — which is what retired the
+  attribution-pass time band; the full statement is in
+  [Things a cold session cannot re-derive](#things-a-cold-session-cannot-re-derive).
+  **Task 5's ~500 s figure remains VOID**: it was measured while `bench/` leaked numba's
+  thread mask.
 - **OPEN QUESTIONS 10, 13 AND 14 REMAIN OPEN**, with their closers in the table above: macOS
   and Windows RSS semantics; the packaging guard's `--no-deps` install, which cannot catch a
   wrong version floor (**do not close it by loosening the floors**); and the benchmarks'
@@ -705,6 +722,59 @@ construction gives it.
 reachable (the Whittle engine plus the screening block; §14.1's early abort; a declared
 domain-mask variable in §13.6's input contract). **Their codes are 2a's regardless**, because
 stored code meanings are fixed at store creation.
+
+### What Task 10 established (done — the completion bitmap, write ordering, and SIGTERM)
+
+- **THE BIT IS AN IDENTITY WHOSE FOURTH IDENTITY FACT CANNOT BE SATISFIED, AND THAT IS WHY
+  `write_tile` HAS NO DECLINE PATH.** `/completion/tiles[ty,tx]` claims what the store
+  *contains*, so it is an identity, not a request — and the only independent populator is one
+  that re-reads every region it just wrote, per tile, at 10⁷ points. **The writer therefore
+  reports on itself**, and what makes that safe is structural: "the write returned" and "every
+  region write for this tile was issued" are the same event only because there is no branch in
+  which `write_tile` returns having written less. **A "skip this tile" exit added later turns
+  the bit into a self-report of nothing.**
+- **AND THE BIT'S *INDEX* IS A SECOND NAME, REACHABLE TODAY.** `ty = y_start // tile_side`,
+  and `tile_side` derives from `memory_budget_gb`, which is run-relevant and therefore in
+  **neither gate** — deliberately, so §15.5's "run locally, burst to cloud, resume" is a resume
+  rather than a rerun. So a resume at a different budget passes every hash Task 11 will check
+  and then re-tiles the grid: some points never written, others twice, **and the bitmap fully
+  set at the end**. Refusing a budget change outright was the wrong repair, because it breaks
+  the workflow the exclusion exists for. **The rule is over the derived side, never the
+  budget**: equal — proceed; **stored < derived — adopt the stored side** (its shards were
+  fixed at creation and a smaller tile is inside the budget); **stored > derived — refuse**,
+  naming both sides, the store's recorded budget, and the two resolutions.
+  `completion.resume_tile_side` is the guard and it sits exactly where Task 11's comparisons go.
+- **SIGTERM RECORDS AND RETURNS. IT MUST NOT RAISE, AND THE TWO REQUIREMENTS SAY SO
+  TOGETHER.** The brief asks that a fault between the data write and the bit leave the bit
+  unset, *and* that SIGTERM flush rather than dying mid-region-write. Both talk about the same
+  window and want opposite things there, so they are consistent only if the signal is never
+  observed inside it: the handler sets a flag, and the flag is read **after** the bit, between
+  tiles. Measured: `signal.signal` off the main thread raises `ValueError`, so the handler is
+  main-thread-only and `RunReport.sigterm_armed` declares the regime rather than claiming a
+  protection that is not there.
+- **`interrupted` IS READ OFF THE TILE COUNTS, NOT OFF THE SIGNAL** — a SIGTERM arriving
+  during the last tile leaves nothing outstanding, and a run that wrote every tile finished.
+  **The mutation survived until a one-tile fixture was written for it**: with four tiles the
+  two formulations agree everywhere, which is (i7) at a boolean.
+- **EXIT CODE 2 NOW HAS A PRODUCER, AHEAD OF THE MECHANISM ITS OWN DOCSTRING NAMED.** §14.3
+  defines 2 as *"aborted early — resumable"* so a resuming script can tell an abort from a
+  rejected config, and **a flushed SIGTERM is exactly that case**; exiting 0 would report a
+  store as complete when it is not. `validation.ExitCode`'s docstring and the runner test that
+  asserted "no producer until 2e" are **amended and re-pointed** rather than worked around.
+  Code **1 still has none**.
+- **A RESUMED STORE AND A REWRITTEN ONE ARE BYTE-IDENTICAL**, because the fits are
+  deterministic (§11.3) — so no comparison of store contents can witness a skip. The two
+  observables that work: the raising stub engine, and **`NOT_ATTEMPTED` written back over a
+  tile's `/status/outcome` between the two runs**, which is the only way to pin *which* tiles a
+  resume touched.
+- **`Tile` DELIBERATELY GAINED NO TILE INDEX**: `tiling.assembly_spans` builds `Tile` objects
+  for chunk-aligned sub-spans, so not every `Tile` is a grid tile and the field would be
+  optional — defaulting to a valid-looking `(0, 0)`. `completion.tile_index` refuses a tile
+  that does not start on a tile boundary instead.
+- **The fault-injection seam is `run(..., on_tile_written=)`**, called between the data write
+  and the bit. Exit criterion 8 has no other demonstration: an interruption arranged by timing
+  is a race whose failure to reproduce proves nothing.
+- **15/15 mutations bite.**
 
 ### What Task 9 established (done — the write path and the signal vocabulary)
 

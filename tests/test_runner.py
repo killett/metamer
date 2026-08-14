@@ -395,21 +395,22 @@ def test_a_usage_error_exits_three_and_not_argparses_own_two():
     assert result.returncode != ExitCode.ABORTED_EARLY
 
 
-def test_the_two_unreachable_codes_have_no_producer_in_this_sub_phase(tmp_path):
-    """Codes 1 and 2 are declared and unreachable here, and that is recorded.
+def test_code_one_has_no_producer_and_code_two_now_does(tmp_path):
+    """Re-pointed at Task 10, because code 2's status changed.
 
-    `COMPLETED_WITH_FAILURES` needs a failure-rate threshold and
-    `ABORTED_EARLY` needs the early-abort mechanism; both are sub-phase 2e's.
-    They land now as an interface because retrofitting an exit code means
-    revisiting every early return.
+    **This test used to say both 1 and 2 were unreachable**, and its own
+    docstring required it to be re-pointed the moment one of them acquired a
+    producer rather than to be re-run. Task 10 gave 2 one: a run flushed by
+    SIGTERM exits `ABORTED_EARLY`, which is design doc 14.3's "aborted early --
+    resumable". That producer is tested where the signal is,
+    `tests/test_completion.py`, across a process boundary.
 
-    **The note is executable rather than prose**: the reachable set is asserted
-    to be exactly the three this sub-phase can produce, so the moment 2e wires a
-    producer this test fails and has to be re-pointed rather than quietly
-    outliving its subject.
+    What is still true and is what this asserts: **neither code arises from an
+    ordinary run or from a rejected config**, so 1 remains without a producer
+    and 2 is not reachable by accident.
 
     Bug this catches: a member deleted on the grounds that nothing produces it,
-    which is the retrofit the taxonomy exists to avoid.
+    and an ordinary clean run drifting onto a nonzero code.
     """
     assert ExitCode.COMPLETED_WITH_FAILURES.value == 1
     assert ExitCode.ABORTED_EARLY.value == 2

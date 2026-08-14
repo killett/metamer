@@ -18,10 +18,21 @@ where `data_uri`-as-proxy came from. And every layer-3 check that can *fail*
 sits above the open, so a run whose config is wrong AND whose data is wrong
 reports the config -- the two send a user to different places.
 
-**WHAT THIS DOES NOT DO YET.** The resume gate is Task 11, the tiling loop is
-Task 6 and the store is Task 8, so a clean run today validates, fingerprints and
-reports, and writes nothing. It says so on stdout rather than leaving a user to
-infer it from an absent directory.
+**WHAT THIS DOES NOT DO YET.** The hash comparisons of the resume gate are Task
+11's. What is here is the part the completion bitmap needs: a resume adopts the
+store's tile side, refuses a budget that cannot hold it, and fits only the tiles
+whose bit is clear.
+
+**DATA THEN BITMAP, AND THE BIT IS SET FROM THE FACT THAT THE WRITE RETURNED.**
+`write.write_tile` has no way to decline, so there is no branch in which the bit
+means something else; `completion` carries the rest of the argument. The loop
+stops after a tile whose bit is written when SIGTERM has been recorded, which is
+why a preemption costs at most the tile in flight.
+
+**AND `interrupted` IS COMPUTED FROM THE TILE COUNTS, NOT FROM THE SIGNAL.** A
+SIGTERM arriving during the last tile leaves nothing outstanding, and a run that
+wrote every tile is a run that finished whatever else happened to the process.
+The signal is a request; the store's state is the fact.
 
 **THE ENGINE MUST STAY INJECTABLE, AND THAT LANDS AT TASK 9.** `fit(engine=...)`
 is the seam the raising stub fixture is delivered through, and a runner that
@@ -33,13 +44,20 @@ first task that fits and is where it must arrive.**
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 
+from metamer.batch.completion import (
+    completed_tiles,
+    flush_on_sigterm,
+    mark_complete,
+    resume_tile_side,
+    tile_index,
+)
 from metamer.batch.geometry import geometry_components, geometry_hash
 from metamer.batch.input import ContractReport, open_input
 from metamer.batch.input import check_contract as check_input_contract
@@ -47,6 +65,7 @@ from metamer.batch.ragged import build_ragged_index, noise_extent
 from metamer.batch.store import StoreShape, create_store, provenance_attrs
 from metamer.batch.threads import Phase, thread_budget
 from metamer.batch.tiling import (
+    Tile,
     assemble_tile,
     read_amplification,
     tile_grid,
@@ -102,11 +121,19 @@ class RunReport:
         k_beta: Design COLUMN count -- not the term count. `Harmonic` gives two
             columns, so 2a's three signal terms are four columns, which is
             design doc 9.4's worked value and what every tile figure rests on.
-        tile_side: Points per tile side, from the budget and the per-series
-            resident bytes.
-        tiles_written: How many tiles this run wrote. **Every tile, in 2a**:
-            the completion bitmap that would let a run skip one is Task 10's, so
-            a resumed run currently rewrites what it already has.
+        tile_side: Points per tile side. From the budget and the per-series
+            resident bytes on a fresh store, and **from the store itself on a
+            resume**, whose shards were fixed when it was created.
+        tiles_total: Tiles in the grid, whoever wrote them.
+        tiles_written: How many tiles this run fitted and wrote.
+        tiles_skipped: How many the completion bitmap already held.
+        interrupted: Whether tiles remain outstanding -- **read off the counts
+            rather than off the signal**, because a SIGTERM during the last tile
+            leaves a finished store and a run that wrote everything finished.
+        sigterm_armed: Whether the SIGTERM handler was installed. False for a
+            run driven off the main thread, where `signal.signal` cannot be
+            called at all; the alternative to reporting it is claiming a
+            protection that is not there.
     """
 
     config: Config
@@ -124,7 +151,11 @@ class RunReport:
     warnings: tuple[Finding, ...]
     k_beta: int
     tile_side: int
+    tiles_total: int
     tiles_written: int
+    tiles_skipped: int
+    interrupted: bool
+    sigterm_armed: bool
 
 
 def _with_memory_budget(config: Config, budget_gb: float) -> Config:
@@ -163,6 +194,7 @@ def run(
     memory_budget_gb: float | None = None,
     observed_thread_limits: Mapping[str, int] | None = None,
     engine: Engine | None = None,
+    on_tile_written: Callable[[Tile], None] | None = None,
 ) -> RunReport:
     """Validate a configuration, fit every tile, and write the store.
 
@@ -183,12 +215,20 @@ def run(
             never wired in and a stub that is never reached are byte-identical
             in the test output. The write path is the first caller that can
             reach an engine, so the seam lands here.
+        on_tile_written: Called between a tile's data write and its completion
+            bit. **THE FAULT-INJECTION SEAM, AND IT IS THE ONLY WAY EXIT
+            CRITERION 8 CAN BE DEMONSTRATED**: the property is that an
+            interruption in that window leaves the bit unset, and an
+            interruption arranged by timing is a race whose failure to reproduce
+            proves nothing. Same argument as `engine=` -- a seam a test cannot
+            reach makes the assertion vacuous.
 
     Returns:
         What the run established.
 
     Raises:
-        ValidationError: Layers 1-3 -- the config. Exit code 3.
+        ValidationError: Layers 1-3 -- the config, and a resume whose stored
+            tile side this run's budget cannot hold. Exit code 3.
         InputContractError: Layer 4 -- the data. Exit code 4.
     """
     config = load_config(config_path)
@@ -249,6 +289,12 @@ def run(
             n_models=len(specs),
         )
         grid = (contract.n_y, contract.n_x)
+        # THE RESUME GATE'S POSITION IN THE ENTRY CONTRACT: after the hashes,
+        # before the tiling. Task 11's hash comparisons land here beside it. A
+        # store's shards -- and therefore what its completion bits index -- were
+        # fixed when it was created, so its tile side is what a resume must use.
+        if Path(store_path).exists():
+            side = resume_tile_side(store_path, derived_side=side, grid=grid)
         tiles = list(tile_grid(grid[0], grid[1], side))
         amplification = read_amplification(handle, tiles[0])
 
@@ -272,35 +318,57 @@ def run(
             )
 
         has_trend = any(type(term).__name__ == "Trend" for term in signal.terms)
+        done = completed_tiles(store_path)
         written = 0
-        for tile in tiles:
-            with budget.phase(Phase.ASSEMBLE):
-                block = assemble_tile(handle, tile)
-            with budget.phase(Phase.FIT):
-                result = fit(
-                    block,
-                    years,
-                    signal,
-                    specs,
-                    Criterion(config.criteria[0]),
-                    mask=np.isfinite(block),
-                    objective=Objective(config.objective),
-                    engine=engine,
+        skipped = 0
+        with flush_on_sigterm() as termination:
+            for tile in tiles:
+                position = tile_index(tile, side)
+                if done[position]:
+                    skipped += 1
+                    continue
+                with budget.phase(Phase.ASSEMBLE):
+                    block = assemble_tile(handle, tile)
+                with budget.phase(Phase.FIT):
+                    result = fit(
+                        block,
+                        years,
+                        signal,
+                        specs,
+                        Criterion(config.criteria[0]),
+                        mask=np.isfinite(block),
+                        objective=Objective(config.objective),
+                        engine=engine,
+                    )
+                write_tile(
+                    store_path,
+                    tile,
+                    result,
+                    criteria=config.criteria,
+                    index=index,
+                    has_trend=has_trend,
                 )
-            write_tile(
-                store_path,
-                tile,
-                result,
-                criteria=config.criteria,
-                index=index,
-                has_trend=has_trend,
-            )
-            written += 1
+                if on_tile_written is not None:
+                    on_tile_written(tile)
+                # THE ONE SITE THAT SETS A BIT, AND IT IS REACHED ONLY BY
+                # `write_tile` RETURNING. There is no branch above it that
+                # writes some of a tile and arrives here.
+                mark_complete(store_path, position)
+                written += 1
+                # AFTER THE BIT, NEVER BETWEEN THE TWO WRITES. The handler
+                # records and returns, so this is the first moment a recorded
+                # SIGTERM can act, and acting here loses no tile.
+                if termination.received:
+                    break
 
         return RunReport(
             k_beta=columns,
             tile_side=side,
+            tiles_total=len(tiles),
             tiles_written=written,
+            tiles_skipped=skipped,
+            interrupted=written + skipped < len(tiles),
+            sigterm_armed=termination.armed,
             config=config,
             config_path=Path(config_path),
             store_path=Path(store_path),

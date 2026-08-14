@@ -132,13 +132,24 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(f"machine:    {report.machine}")
     print(f"run_hash={report.run_hash}  geometry_hash={report.geometry_hash}")
     print(
-        "no store written: the tiling loop, the store schema and the resume "
-        "gate are Tasks 6-11 of this sub-phase"
+        f"tiles:      side={report.tile_side}  written={report.tiles_written}  "
+        f"skipped={report.tiles_skipped}  of {report.tiles_total}"
     )
     print(
         f"fit_hash={report.fit_hash}  compat_hash={report.compat_hash}  "
         f"store={report.store_path}"
     )
+    if report.interrupted:
+        # EXIT 2 IS SECTION 14.3's "ABORTED EARLY -- RESUMABLE", and a preempted
+        # run is exactly that: the completed tiles are on disk with their bits
+        # set, and the same command finishes the job. Exiting 0 would tell a
+        # resuming script the store is complete when it is not.
+        print(
+            f"aborted early: {report.tiles_total - report.tiles_written - report.tiles_skipped}"
+            " tiles outstanding after SIGTERM; the same command resumes",
+            file=sys.stderr,
+        )
+        return ExitCode.ABORTED_EARLY
     return ExitCode.OK
 
 

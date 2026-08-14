@@ -563,6 +563,25 @@ wrong underneath a feature that has its own bugs.
 **Test.** *An interruption injected between the two writes leaves the bit unset*, demonstrated
 by a fault-injection hook rather than by timing.
 
+**AMENDED 2026-08-13, ON IMPLEMENTING IT. Three things this brief did not say, and Task 11
+inherits all three.**
+
+- **The bit's *index* is a gate made of a name, and it is reachable today.** `ty` is
+  `y_start // tile_side`, and `tile_side` comes from `memory_budget_gb` — run-relevant, so in
+  **neither** gate, deliberately, so that §15.5's burst-to-cloud resume works. A resume at a
+  different budget therefore re-tiles the grid and every bit names a different region.
+  Refusing a budget change breaks the workflow the exclusion exists for, so the rule is over
+  the **derived side**: equal, proceed; **stored < derived, adopt the stored side**; **stored >
+  derived, refuse** naming both sides and the store's recorded budget.
+  `completion.resume_tile_side` sits between the hashes and the tiling — **the resume gate's
+  position, which Task 11's comparisons now join rather than establish.**
+- **The two behaviours above prescribe opposite treatments of the same window**, and are
+  consistent only because the handler *records and returns*: the flag is read after the bit,
+  between tiles. A raising handler would land in the window the fault-injection test protects.
+- **A flushed SIGTERM exits `ABORTED_EARLY` (2)**, which is §14.3's "aborted early —
+  resumable". That gives code 2 its first producer, ahead of 2e's early-abort mechanism;
+  `validation.ExitCode`'s docstring said it had none and is amended.
+
 ---
 
 ## Task 11 — the resume gate
