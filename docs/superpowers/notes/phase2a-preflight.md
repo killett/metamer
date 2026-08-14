@@ -2126,3 +2126,37 @@ test was written for it: with four tiles the two formulations agree, and only a
 (i7) again — the fixture must be placed outside where the two functions agree —
 and it is the fifth-cause check paying off, since the mutation is a real
 behaviour change and the survivor was a missing test rather than an equivalence.
+
+### THE (a1) SWEEP — every stored geometry, and what derives it (run 2026-08-13)
+
+(a1) was promoted out of Task 10 on the ground that one instance implies others, so the
+sweep is over **everything in this store whose shape or index says WHERE data goes**, asking
+of each: is it re-derived at resume, and from an input any hash covers?
+
+| stored geometry | derived from | in a hash? | verdict |
+|---|---|---|---|
+| `y`/`x` extents, spatial coordinates | the input's grid | `geometry_hash`, fit-relevant | covered — a change refuses at the `fit_hash` gate |
+| `b` axis (`k_beta`) | `signal_terms` against the real time axis | both fit-relevant (`signal_terms`, `geometry_hash`) | covered |
+| `c` axis | `criteria` | compat-relevant | covered — and it is the refusal §12.8 already narrowed, because growing `c` is a whole-store rewrite |
+| shard shape, chunk shape, `/completion/tiles` shape | `tile_side` from `memory_budget_gb` | **neither** | **the Task 10 instance**, now guarded by `completion.resume_tile_side` |
+| **`m` axis, `P_total`, and both ragged offset tables** | **`candidates`** | **neither, deliberately** | **A SECOND LIVE INSTANCE — Task 11's** |
+
+**The negative result is worth as much as the positive one, and it is a distinction to
+carry: a geometry READ BACK from the store is not an instance.** The chunk subdivision
+depends on `CHUNK_TARGET_BYTES`, a code constant in no hash — but chunking is used only at
+creation, and every later write goes through the stored array's own chunk grid. **The hazard
+is a geometry RE-DERIVED at resume from inputs the gate does not cover**, not one that merely
+has an unhashed ancestor.
+
+**The second live instance, stated so Task 11 inherits it rather than discovers it.** The
+candidate list fixes three things at creation — the length of the `m` axis, `P_total`, and
+the per-model offsets into `/noise/` — and it is in **no hash by design**, because §12.8
+permits resuming with a **superset** and a hash can only express equality. So the exclusion
+that makes extension legal is exactly what removes every gate from three stored geometries,
+which is (a1) word for word.
+
+Today's behaviour, measured against the code: a **prefix** mismatch (a different candidate at
+index 1, same length) is **silent** — every array keeps its shape and the store is wrong;
+a **longer** list fails on a shape mismatch inside `write_tile`, **after a full tile of fits**
+and with a message about array shapes rather than about candidates. Both are Task 11's, and
+the gate must run **before the tiling loop**.

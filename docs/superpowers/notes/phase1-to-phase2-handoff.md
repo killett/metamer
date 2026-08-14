@@ -45,6 +45,42 @@ carry NaN; the dtype is fixed at store creation and the array feeds no arithmeti
 therefore **exempt, named, and given a sentinel of 65535 rather than silently left at 0** --
 justified, labelled, and outside the range the writer can emit.
 
+### (a1) A DERIVED INDEX IS A GATE, AND NO HASH GOVERNS IT
+
+> **Any value that names WHERE data goes — an array index, a key, a shard coordinate, a
+> partition — is an identity claim, and it must be checked on resume even when the inputs
+> that derive it are deliberately excluded from every hash.** A hash gate governs **whether**
+> work is reused; an index governs **where it lands**. They are different questions, and
+> excluding a field from the first says nothing about the second.
+
+**This sits beside (a0) rather than under (a2), and the difference is what makes it its own
+line.** (a2) asks whether a *named* gate is populated by the thing it claims to identify.
+This asks about a value nobody declared a gate at all — one computed on the fly, from inputs
+that were **correctly** left out of the hashes, and then used to address storage.
+
+Worked instance, Phase 2a Task 10. The completion bit is `[ty, tx]` with
+`ty = y_start // tile_side`, and `tile_side` derives from **`memory_budget_gb`, which is
+run-relevant and therefore in neither `fit_hash` nor `compat_hash` — deliberately, so that a
+burst-to-cloud resume is a resume rather than a rerun** (§13.3, §15.5). **That exclusion is
+exactly what lets the grid re-tile silently under a fully-set bitmap**: every hash matches,
+the gate passes, the tiles move, some points are never written and others twice, and the
+store reports itself complete.
+
+**The repair's asymmetry is the part to record, because "refuse any change" is the tempting
+rule and it is wrong.** Refusing a budget change would break the very workflow the exclusion
+exists for, so the rule is over the **derived** quantity, not the input:
+
+| stored vs derived | action | why |
+|---|---|---|
+| equal | proceed | — |
+| **stored < derived** | **adopt the stored side** | a smaller tile subdivides the fixed shards safely and is inside the requested budget |
+| **stored > derived** | **refuse**, naming both sides and the store's recorded budget | the shards were fixed at creation; adopting the larger tile would silently exceed the budget, and writing sub-shard regions would make every write a read-modify-write |
+
+**One instance implies others: sweep for stored geometry derived from a non-hashed input.**
+Done for this store on 2026-08-13 — chunk and shard shapes, the coordinate extents, the `b`
+axis and the `m`/`p` axes; the results are in
+[`phase2a-preflight.md`](phase2a-preflight.md), and one of them is load-bearing for Task 11.
+
 ### (a) Absolute vs differential — THE CANCELLATION RULE
 
 > **Any quantity constant across the comparison axis is invisible to every test that
@@ -194,6 +230,27 @@ entirely.
 signal x noise search lands** -- design-stage outcomes are constant across the model axis by
 construction. Fitting `white + matern12` to white noise leaves the correlated candidate
 degenerate at most points while `white` fits (measured: 3 of 4).
+
+#### THE SAME RULE WITHOUT A CONFLICT: TWO BEHAVIOURS OVER ONE CRITICAL SECTION
+
+> **When a brief states two behaviours governing the same critical section, derive the
+> implementation constraint their CONJUNCTION imposes and state it explicitly.** Neither
+> behaviour alone implies it, so an implementer satisfying them one at a time will not find
+> it — and the code that satisfies both by accident is indistinguishable, until the accident
+> is tidied away.
+
+The first half of (a5) is about requirements that **contradict**; this is about requirements
+that are jointly satisfiable **only under a constraint neither one states.** The tell is the
+same: two paragraphs, both correct, talking about one window.
+
+Worked instance, Phase 2a Task 10. *"An interruption injected between the two writes leaves
+the bit unset"* and *"SIGTERM flushes rather than dying mid-region-write"* both govern the
+interval between a tile's data write and its completion bit, and they want opposite things
+there. The constraint their conjunction imposes: **the SIGTERM handler must not raise.** It
+records, returns, and the flag is read *after* the bit is written — so the signal is never
+observed inside the window at all. A raising handler (the `KeyboardInterrupt` idiom, and the
+first thing a reader reaches for) satisfies "stop promptly" and lands its exception in
+precisely the window the other requirement protects, at a point no test can choose.
 
 ### (b) Batch vs series
 
