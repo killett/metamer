@@ -30,7 +30,7 @@
    — 14 tasks, dependencies, sixteen exit criteria.
 9. **THE METHOD IS THE PRE-FLIGHT AND IT LIVES IN EXACTLY ONE PLACE:**
    [`docs/superpowers/notes/phase1-to-phase2-handoff.md`](docs/superpowers/notes/phase1-to-phase2-handoff.md)
-   §1 — **(a0), (a1), (a)–(k) with (a2)–(a5), (c2), (g2), (i2)–(i7) and (k2)**, the **five** causes of
+   §1 — **(a0), (a1), (a)–(k) with (a2)–(a5), (c2), (c3), (g2), (i2)–(i8) and (k2)**, the **five** causes of
    a surviving mutation, the standing rules and the fixture facts. **Run it against Task 10's
    brief before writing code** and append what it finds to
    [`docs/superpowers/notes/phase2a-preflight.md`](docs/superpowers/notes/phase2a-preflight.md),

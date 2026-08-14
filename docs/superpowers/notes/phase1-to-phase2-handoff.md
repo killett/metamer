@@ -331,6 +331,36 @@ Two responses, and they are not equivalent. Ordering the clauses correctly is ne
 — `config.model.StampedKeyError` — makes the disjointness **structural**. Prefer the second
 wherever you own one side of the boundary.
 
+### (c3) BEFORE REUSING A VALIDATOR, ENUMERATE WHAT IT REFUSES AND CHECK EACH REFUSAL AGAINST THE NEW CALLER'S PURPOSE
+
+> **A gate is defined by what it REJECTS, and a rejection that is correct for one caller can
+> be the defining feature of another.** Enumerate a validator's refusals before reusing it,
+> and check each one against what the new caller is *for* — the incompatibility lives in the
+> intent, not in the implementation, so nothing about the code will look wrong.
+>
+> **And shared refusals must take their resolution phrasing from the caller.** "Write a new
+> store" is right for a resume and absurd for the command whose whole job is writing one; a
+> resolution that names the operation the user is already performing is worse than none.
+
+(c) enumerates a function's exits. (c2) asks whether a handler can tell two exits apart.
+This asks whether a refusal *should fire at all* for a caller that was not there when it was
+written — and it is the one the other two cannot reach, because the code is correct in both
+places and only the purposes differ.
+
+Worked instance, Phase 2a Task 12. `resume.check_resume` is a correct resume gate, and one
+of its six refusals is **a criterion-set change** — which is the entire reason to run
+`--reuse-fits-from`. Reusing it for the source store looked obviously right: same fields,
+same store type, same comparisons. It would have made the feature refuse its own primary use.
+The source check now shares three of the comparisons and omits three, each omission recorded
+with its reason.
+
+**A DELIBERATE ABSENCE NEEDS A TEST THAT FAILS WHEN SOMEONE ADDS THE MISSING CHECK.**
+Otherwise the next reader restores it as an oversight — the gap looks exactly like a
+forgotten line. The mutation that pins it is "the source check also compares criteria", and
+it bites. **Same discipline as cross-commenting a doubled guard, applied to a gap rather than
+to a duplicate**: the redundancy and the omission are both decisions, and both are invisible
+unless something fails when they are undone.
+
 ### (d) Grep for the vocabulary the task requires
 
 "mask", "n_used", "realized" appearing **zero** times in a 234-line brief was detectable in
@@ -465,6 +495,31 @@ fixture can make. **The discriminating fixtures, which exit criterion 12 must us
 **The general failure is specifying a condition without verifying it discriminates.** Ask
 what the two functions do on the fixture's *actual* values, not on the property the fixture
 was chosen for.
+
+### (i8) THREE SHAPES OF A FIXTURE THAT CANNOT EXPRESS THE DEFECT
+
+> **When a mutation survives, the first question is not "is the assertion weak" but "can this
+> fixture produce the defect at all".** Three shapes recur, they are distinguishable, and each
+> has its own repair.
+
+Measured in one sitting, Phase 2a Task 12: **three survivors, all three of them fixtures**,
+none of them a weak assertion.
+
+| shape | tell | repair |
+|---|---|---|
+| **The parameter under test is at a fixed point** | the mutated and original expressions agree *on this input* | move the fixture off the fixed point — (i7) at a scalar. *Both* tile sides were 1, so "read back" and "re-derive" returned the same number |
+| **The wrong value is read only by a consumer the fixture does not exercise** | output is byte-identical, and the mutated line is genuinely reached | exercise that consumer. `n_eff` is read by `bic_neff` **alone**, so under AIC and HQIC the wrong array changes nothing |
+| **THE FAULT CLASS DOES NOT OCCUR ANYWHERE IN THE MODULE** | the guard's input state is never constructed by any fixture | construct it. Every source store in the module was written by this code, so the corrupt-source check had nothing to catch |
+
+**The third deserves its own name: a guard against a condition your fixtures never construct
+is untested however many tests run.** It is the most comfortable of the three, because the
+suite is green *and* the code is defensive, and the guard's own reason for existing — a store
+handed over by someone else — is precisely what a self-generated fixture cannot be.
+
+**And the repair for the second one carries a bonus worth taking: prefer a second production
+path to a hand-computed constant.** The `bic_neff` test asserts the recomputed ranking equals
+**the fit path's own values for that criterion** — a different derivation reaching the store
+by a different route, which is (j) satisfied with something stronger than a literal.
 
 ### (i6) WHEN ESTABLISHING A CONTRACT, YOUR INTUITIONS ABOUT IT ARE PRE-CONTRACT
 
