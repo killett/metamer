@@ -4,21 +4,23 @@
 
 1. **Branch `main`, and everything is on it.** Last commit: `git log --oneline -1`. `phase-1` is
    a stale name that never diverged and needs nothing done to it.
-2. **DONE:** Phase 1 Tasks 0–18 (Task 19 deleted), Phase 2 preliminaries P0–P4, Phase 2a
-   Tasks 0–9, and open questions 1, 4, 9, 11, **12**. **The signal-term blocker carried since
+2. **DONE:** Phase 1 Tasks 0–18 (Task 19 deleted), Phase 2 preliminaries P0–P4, **Phase 2a
+   Tasks 0–13 — the whole sub-phase**, and open questions 1, 4, 9, 11, **12**. **The signal-term blocker carried since
    Task 6 is CLOSED**: `config.signal_spec()` builds a `SignalSpec`, `signal.k_beta` gives the
    column count, and `run()` sizes tiles, fits and writes them.
-3. **NEXT: Phase 2a Task 13 — the exit-criteria suite, which closes 2a.** Read
-   **[WHAT TASK 13 INHERITS](#what-task-13-inherits--read-this-before-the-task-sections-below)**
-   **before** the plan. **Six of the sixteen criteria are cross-process or cross-store
-   properties no single task's tests can express**, which is why the suite is a task and not
-   a formality.
-4. **Tests: 924 passed, measured 2026-08-13 after Task 12.** This is the only statement of the
+3. **PHASE 2a IS COMPLETE. NEXT: sub-phase 2b — the calibration tile and `--memory-budget`
+   defaulting.** Read
+   **[WHAT SUB-PHASE 2b INHERITS](#what-sub-phase-2b-inherits--read-this-before-the-task-sections-below)**
+   **before** anything else; **there is no 2b plan yet**, so the next session's first job is
+   the brainstorm that produces one. All sixteen 2a exit criteria are met, two with reduced
+   scope; the table is at the end of the 2a plan.
+4. **Tests: 940 passed, measured 2026-08-14 after Task 13.** This is the only statement of the
    count in this file; do not restate it elsewhere.
 5. **`pixi run test` is the full sweep and is what every end-of-task verification must run.
-   It takes 302–451 s on the mini PC — eight runs, 2026-08-12 and 2026-08-13, at 822, 845,
-   847, 880, 880, 897, 910 and 924 tests.** Quote the range, never one end of it; see the
-   note below, which includes **two runs of the identical tree 38 s apart**.
+   It takes 302–606 s on the mini PC — nine runs, 2026-08-12 to 2026-08-14, at 822, 845,
+   847, 880, 880, 897, 910, 924 and 940 tests.** Quote the range, never one end of it; see
+   the note below, which includes **two runs of the identical tree 38 s apart** and one step
+   that is only two-thirds attributed.
 6. **`pixi run test-fast` deselects `slow` and is for iteration only — a green fast run is NOT
    evidence a task is done.** `pixi run test-ci` reproduces CI (`-m 'not machine'`) and is not
    evidence either, because `machine` covers exactly the tests that pin the RSS shim's units and
@@ -86,6 +88,11 @@ pass would have been measuring noise with a finer ruler. Task 10 then added 17 t
 sweep took **427.4 s**, i.e. **+24 s for 17 tests against a +38 s step for none** — and Task
 11 added 13 more, every one of them a gate check rather than a fit, for **425.4 s**, which is
 **2 s down**. Task 12 added 14, of which two fit a fresh source store, for **450.6 s**.
+**Task 13's step is the one that is only partly attributed**: 16 tests, **606.1 s**, a step
+of 155 s of which the suite's **91.8 s standalone** accounts for two-thirds. The residual is
+plausibly the suite's ten subprocesses — each importing numpy, xarray and zarr — costing more
+under a loaded sweep than alone, and it is **recorded as unattributed rather than explained
+away**. The trigger stands: the next same-tree run decides whether it was scatter.
 
 **So: quote the range — 302–427 s over six runs — and treat a step inside it as scatter.**
 The estimate was wrong the same way the verdict's ±0.15 was wrong — **two points do not bound
@@ -250,7 +257,7 @@ was the actual defect the leak exposed.
 | Phase 1 task tracker | `docs/superpowers/plans/2026-08-05-metamer-phase1.md.tasks.json` (native task ids 8–27) |
 | Original build prompt | [`docs/phase1-prompt.md`](docs/phase1-prompt.md) — **superseded** by design doc §2 where they conflict |
 | Phase 2 preliminaries pre-flight | [`docs/superpowers/notes/phase2-preliminaries-preflight.md`](docs/superpowers/notes/phase2-preliminaries-preflight.md) — the (a)–(k) audit of the P0/P1/P2 briefs and what each finding changed |
-| **Phase 2a implementation plan** | [`docs/superpowers/plans/2026-08-11-metamer-phase2a.md`](docs/superpowers/plans/2026-08-11-metamer-phase2a.md) — **Tasks 0–12 done; Task 13 next** |
+| **Phase 2a implementation plan** | [`docs/superpowers/plans/2026-08-11-metamer-phase2a.md`](docs/superpowers/plans/2026-08-11-metamer-phase2a.md) — **COMPLETE: Tasks 0–13, all sixteen exit criteria met** |
 | **Phase 2a pre-flight, per task** | [`docs/superpowers/notes/phase2a-preflight.md`](docs/superpowers/notes/phase2a-preflight.md) — the (a)–(k) audit of each 2a task brief and what each finding changed. **Append to it before each task, not after.** |
 
 Phase list is design doc §17. Phase 1 exit criteria are §18. Do not duplicate either here.
@@ -498,18 +505,38 @@ Full record under open question 11. The three things that carry:
 
 ---
 
-## Phase 2a execution (in progress, 2026-08-11)
+## Phase 2a execution (COMPLETE, 2026-08-11 to 2026-08-14)
 
 Per-task pre-flight audits live in
 [`docs/superpowers/notes/phase2a-preflight.md`](docs/superpowers/notes/phase2a-preflight.md).
 Only the durable conclusions are here.
 
-### WHAT TASK 13 INHERITS — read this before the task sections below
+### WHAT SUB-PHASE 2b INHERITS — read this before the task sections below
 
-**Task 13 is all that is left of 2a** — the exit-criteria suite. Tasks 0–12 are done.
-Everything below is what a cold session cannot re-derive from the code.
+**PHASE 2a IS COMPLETE.** Tasks 0–13 are done and all sixteen exit criteria are met, two of
+them with reduced scope — the closing table is at the end of the 2a plan, with what would
+close the two. Everything below is what a cold session cannot re-derive from the code.
 
-#### The state Task 13 starts from
+#### What 2b starts from, and what it is for
+
+- **2b IS THE CALIBRATION TILE AND `--memory-budget` DEFAULTING, AND ITS GATE IS LIFTED.**
+  This file recorded 2b as *"gated by open question 12"*; **question 12 is closed** (the
+  child-inherits-the-parent's-high-water-mark measurement), so nothing blocks it.
+- **IT INHERITS A MEASURED FORMULA AND A REAL STORE TO SIZE AGAINST**, which is what 2a did
+  not have: `memory.resident_bytes_per_series` is validated against the RSS-vs-B slope in a
+  fresh process, `tile_side_for` derives the side from it, and a finished store now exists
+  whose shards are that side.
+- **IT IS ALSO THE NATURAL CLOSER FOR EXIT CRITERIA 6 AND 7**, which are met with reduced
+  scope because this suite fits four series and peak RSS at that scale is the interpreter.
+  **One run at 10⁶–10⁷ points, with the slope measured in a fresh process, closes both.**
+- **PREFER A COMPOSITE TILE SIDE.** Zarr requires the shard to be a whole number of chunks,
+  so the inner-chunk choice is over **divisors** of `tile_side` — a prime side has none worth
+  having. The calibration is what picks the side, so the constraint belongs to it.
+- **A CALIBRATED SIDE CHANGES NEW STORES ONLY.** A resume reads the side back out of the
+  store it is resuming (pre-flight (a1)), and refuses only when the stored side exceeds what
+  the requested budget can hold. So a recalibration cannot invalidate an in-progress run.
+
+#### The state 2b starts from
 
 - **`run()` SKIPS A TILE WHOSE BIT IS SET**, sets each bit from the fact that `write_tile`
   returned, and stops after the tile in flight when SIGTERM has been recorded.
@@ -550,7 +577,7 @@ tile's data has flushed, so grouping the bits into one object would make every t
 read-modify-write of every other tile's bit. At 10⁷ points the bitmap is of order 100
 elements, so the object count is not a concern.
 
-#### What Task 13 must honour
+#### What 2b–2e inherit from 2a's tasks
 
 **Task 10 — ordering — is DONE**; what it built and what it found are in
 [What Task 10 established](#what-task-10-established-done--the-completion-bitmap-write-ordering-and-sigterm)
@@ -575,6 +602,29 @@ recomputing from partial primitives yields a complete-looking store with no symp
 new store is **self-contained** and opens with the source deleted. (5) **`fit_hash` equality is
 asserted directly across the two stores** — that equality is the entire claim the three-hash
 split makes; do not infer it from the recompute succeeding.
+
+**WHAT EACH LATER SUB-PHASE INHERITS, IN ONE PLACE (2026-08-14).**
+
+- **2b — calibration and budget defaulting.** Gate lifted (question 12 closed). Inherits a
+  measured per-series formula, a real store to size against, the composite-tile-side
+  constraint, and **exit criteria 6 and 7 to close at scale**.
+- **2c — the two-pass warm start.** Inherits **criterion 2's budget half**, which is trivial
+  today and becomes a real claim the moment a point's result depends on its neighbours — keep
+  it green. Also the coarse-grid stride, which 2a deliberately does not define, and whose five
+  consumers are listed in Task 6's forward note.
+- **2d — the hysteresis audit.** Inherits §11.2's label-switching confound: do not measure
+  hysteresis on a lint-flagged candidate set and quote the number as hysteresis.
+- **2e — run-level reporting, early abort, `CANDIDATE_DROPPED`.** Inherits the **exit-code
+  collision**: CPython exits 1 on an unhandled exception and 1 means "completed with failures
+  above threshold". Harmless only while 1 has no producer; **2e gives it one**, and the honest
+  fix then is a distinct `INTERNAL_ERROR` code rather than a convention about tracebacks.
+  It also inherits the three unreachable `Outcome` members and what would make each reachable.
+
+**STILL OWED, AND NOT OWNED BY ANY SUB-PHASE YET:** the `bench/` layering question — `bench`
+sits beside `core`, `core` must stay importable without `threadpoolctl`, and `bench` therefore
+cannot route through `batch.threads.thread_budget`. **Until it is closed, no test may read the
+ambient thread mask as a baseline.** Open questions **10, 13 and 14** also remain open with
+their closers in the table near the top of this file.
 
 **The raising stub engine** (`tests/conftest.RaisingStubEngine`) proves the negatives, and
 **timing never can**. Three consumers: Task 12's "no fit ran", Task 11's "a resumed run did
@@ -729,6 +779,35 @@ construction gives it.
 reachable (the Whittle engine plus the screening block; §14.1's early abort; a declared
 domain-mask variable in §13.6's input contract). **Their codes are 2a's regardless**, because
 stored code meanings are fixed at store creation.
+
+### What Task 13 established (done — the exit-criteria suite, and the close of 2a)
+
+- **ALL SIXTEEN CRITERIA ARE MET; TWO WITH REDUCED SCOPE AND NOTHING DEFERRED.** The table
+  lives at the end of the 2a plan and is the artifact 2b reads first.
+- **THE STORE IS BYTE-IDENTICAL ACROSS A `kill -9` AND A RESUME.** Measured: every file's
+  SHA-256 equal to an uninterrupted run's. **Nothing nondeterministic reaches the store
+  today** — no timestamp, no path, no ordering-dependent structure — and the criterion is
+  what will catch the first thing that does. **The fixture shares one input and one config
+  file between the two runs**, because two inputs at different paths give different
+  `data_uri`, hence `run_hash`, hence different attrs bytes: a failure that would read as
+  nondeterminism in the write path and is nothing of the kind.
+- **CRITERIA 6 AND 7 CANNOT BE FULLY EXPRESSED AT TEST SCALE, AND SAY SO.** Peak RSS of any
+  process that has imported numpy, xarray and zarr is hundreds of MB before a tile exists,
+  so "peak at or below the budget" is satisfied by the interpreter alone. What is asserted
+  instead: peak RSS **in a fresh process** does not track the grid — four one-point tiles and
+  one four-point tile land within 64 MB of each other. **The closer is 2b's calibration run.**
+- **CRITERION 2's BUDGET HALF IS TRIVIAL TODAY AND IS PINNED ANYWAY.** No cross-point
+  dependency exists in 2a, so bitwise equality across two budgets is a statement about
+  float64 arithmetic. **It stops being trivial in 2c**, where a warm start makes a point's
+  result depend on its neighbours and therefore on which tile it landed in. The thread half
+  is live now: a float64 reduction inside a `prange` would break it.
+- **THE SUITE IS DRIVEN FROM OUTSIDE WHEREVER AN OUTSIDE EXISTS** — a killed subprocess, a
+  store read back from disk, a plain `xr.open_zarr` with `PYTHONPATH` stripped and warnings
+  promoted to errors. A criterion checked by calling the helper its own task's test called
+  verifies nothing new, which is (j) at the level of a suite.
+- **5/5 suite mutations bite**, and the one worth keeping is a provenance value that varies
+  per run: nothing in the tree writes one today, so criterion 1 has no producer to catch
+  until a later task adds one — which is exactly when it will look harmless.
 
 ### What Task 12 established (done — `--reuse-fits-from`, the recompute path)
 

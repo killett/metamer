@@ -2502,3 +2502,94 @@ naming because the reflex on a survivor is to strengthen an assertion:
   every source in the module was written by this code. The new test writes NaN into a
   `log_lik` cell whose status is `OK` — the state a store handed over by someone else can be
   in, and the reason the check exists at all.
+
+---
+
+## Task 13 — the exit-criteria suite (audited 2026-08-14)
+
+**The suite's own failure mode is being a roll-up**, and (j) names it exactly: if a criterion
+is checked by calling the helper the implementing task's test called, the oracle shares its
+whole derivation with the subject and the criterion is asserted rather than verified. So the
+audit is mostly about *where each check is driven from*.
+
+### (j) — WHAT "INDEPENDENT" MEANS PER CRITERION, DECIDED BEFORE WRITING ANY OF THEM
+
+| criterion | the task-level test | what the suite does instead |
+|---|---|---|
+| 1 kill-and-resume | none — no task could kill a process | `kill -9` a subprocess mid-run, resume, **compare file bytes** against an uninterrupted run |
+| 3 plain `xr.open_zarr` | Task 8/9 opened groups in-process | subprocess, `PYTHONPATH` stripped, **warnings promoted to errors** |
+| 4 the invariant | `write.check_status_invariant` on arrays about to be written | the **same function over a finished store read back from disk**, which is what the criterion says and is a different input |
+| 5 the resume taxonomy | each arm at its own task | all five arms plus the exit-4 source, from a **finished store this suite fitted** |
+| 8 bitmap never ahead | fault injection through `on_tile_written` | the property checked **over a killed run's store**: every set bit has data |
+| 16 the recomputed hashes | Task 12 asserted them | re-read from disk in the suite's own fixture, plus the source deleted |
+
+**Where the honest answer is "the task's test is already the independent one", the criterion
+table says so rather than the suite duplicating it** — criterion 12's ragged fixtures are pure
+arithmetic and there is no second construction to invent.
+
+### (k) — CRITERION 3's ENVIRONMENT TRAP IS THE ONE THIS PROJECT HAS ALREADY PAID FOR
+
+`PYTHONPATH=src` is inherited by subprocesses, so a "clean" child imports `metamer` out of the
+development tree and every assertion passes for the wrong reason. Task 0's packaging guard
+found this **about itself**. The suite strips `PYTHONPATH`, runs from `/`, and asserts
+`importlib.util.find_spec("metamer") is None` as a control **inside** the child.
+
+**And "warning-free" needs the warning to be made fatal**, not merely absent from stdout:
+`xr.open_zarr` warns about unconsolidated metadata through the `warnings` module, which is
+invisible to a subprocess whose stderr nobody asserts on.
+
+### (a) / (k) — CRITERION 1 IS BYTE-IDENTICAL, SO EVERYTHING NONDETERMINISTIC MUST BE ABSENT
+
+Checked before writing the test, because a false start here reads as a real failure:
+`provenance_attrs` carries **no timestamp, no path and no ordering-dependent structure** —
+every mapping is sorted at construction, and `run_hash` is a function of the config, the
+machine fingerprint and the geometry. **So two runs of the same config against the same input
+differ in nothing**, and the store paths differ without reaching any attr.
+
+**The fixture must therefore share one input and one config file between the two runs.** Two
+inputs at different paths would give different `data_uri`, hence different `run_hash`, hence
+different attrs bytes — a failure that would look like nondeterminism in the write path and
+is nothing of the kind.
+
+### (a3) — CRITERION 2 IS TWO CLAIMS AND ONE OF THEM IS CURRENTLY TRIVIAL
+
+The **budget half** is trivial today and must be recorded as trivial: no cross-point
+dependency exists in 2a, every point is cold, so bitwise equality across two budgets is a
+statement about `float64` arithmetic being deterministic. **It stops being trivial in 2c**,
+where warm starts make a point's result depend on its neighbours and therefore on the tiling.
+Pinning it now is what makes 2c's regression visible.
+
+The **thread half is live now**: a `float64` reduction inside a `prange` over a tile
+reassociates with the thread count, and nothing else in the suite would catch it.
+
+### (i) — CRITERIA 6 AND 7 CANNOT BE FULLY EXPRESSED AT TEST SCALE, AND THAT IS DECLARED
+
+Peak RSS of any process that has imported numpy, xarray and zarr is **hundreds of MB before
+any tile exists**, so "peak RSS at or below the budget" is satisfied by the interpreter alone
+at any budget above that baseline, and violated by it at any budget below. **The criterion is
+about a 10⁷-point run and the suite runs four series.** What is measurable here, and what the
+tests assert: peak RSS **in a fresh process** does not scale with the grid, and the difference
+between two tile sizes is consistent with the per-series formula. Both are marked `machine`,
+and both criteria are reported as **met with reduced scope** with the reason stated rather
+than as met.
+
+### (c) — THE SUITE'S OWN EXITS
+
+Sixteen criteria, each one test or a stated pointer to the test that already checks it
+independently. **No criterion is reported met by a test that does not exist**, and the
+closing table carries met / met-with-reduced-scope / deferred with what would close each
+deferral — which is the artifact 2b reads first.
+
+### Bite checks — 5 mutations against the suite, 5 bite
+
+The suite's own tests are checked by breaking the **properties**, not the helpers: a
+provenance value that varies per run (criterion 1 fails on bytes), consolidation removed
+(criterion 3 fails on a warning promoted to an error), the completion bit moved above the
+data write (criteria 1 and 8 fail), `covariance_extent` collapsed onto `noise_extent`
+(criterion 12 fails), and weights normalized over every candidate rather than the survivors
+(criterion 14 fails).
+
+**The first is the one worth keeping.** Nothing in the tree writes a timestamp or a path into
+provenance today, so criterion 1's byte comparison has no producer to catch — until a later
+task adds one, which is exactly when it will look harmless. The mutation stands in for that
+task: `id(config)` in an attr, and the criterion fails.

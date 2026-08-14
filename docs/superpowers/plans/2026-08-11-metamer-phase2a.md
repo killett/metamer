@@ -725,6 +725,36 @@ Cross-process and cross-store properties no single task can express.
 
 ---
 
+## Exit criteria — the closing table (2026-08-14)
+
+**Checked by `tests/test_exit_criteria.py`**, which drives from outside the code that
+satisfies each property wherever an outside exists: a killed subprocess, a store read back
+from disk, a plain `xr.open_zarr` in an environment where metamer is genuinely absent.
+
+| # | criterion | verdict |
+|---|---|---|
+| 1 | kill-and-resume is byte-identical | **met** — `kill -9` mid-run, resumed, every file's SHA-256 equal to an uninterrupted run's |
+| 2 | bitwise-identical across two budgets and two thread counts | **met**, and the budget half is **trivial today**: no cross-point dependency exists in 2a. It stops being trivial in 2c, which inherits this criterion |
+| 3 | plain, warning-free `xr.open_zarr` with metamer uninstalled | **met** — subprocess, `PYTHONPATH` stripped, `find_spec` control inside the child, warnings promoted to errors |
+| 4 | the status/value invariant, both directions | **met** — the same function the write path uses, over the finished store read back from disk |
+| 5 | the resume taxonomy, all arms | **met** — criterion set, `fit_hash`, `/detail/`, wrong candidate at index 1 naming the index, an incomplete source at exit code 4, and the recompute with no fit |
+| 6 | peak RSS against the analytic formula at two or three tile sizes | **met with reduced scope** — measured in a fresh process at two tile sizes and asserted not to track the grid. The criterion is about a 10⁷-point run; this suite fits four series, and peak RSS is dominated by the interpreter at that scale |
+| 7 | a run under a budget well below available RAM stays under it | **met with reduced scope**, same reason. **What would close both: one run at 10⁶–10⁷ points with the RSS-vs-B slope measured in a fresh process** — 2b's calibration tile is the natural place |
+| 8 | the bitmap is never set ahead of the data | **met** — Task 10's injected fault chooses the moment; the suite checks the resulting invariant over a store killed at a moment nobody chose |
+| 9 | `geometry_hash` moves with the geometry, not with a value edit | **met** — both halves through `run`, not through the hashing function |
+| 10 | observed thread limits match requested, per library | **met** — the run observes; the mismatch arm uses the injection seam, since this machine cannot produce one |
+| 11 | the entry contract's ordering is tested | **met** — a config that fails stage 4a **and** would fail the gate reports layer 4 |
+| 12 | the ragged builder with both extent functions, on a discriminating fixture | **met** — M=3 `white / white + matern12 / matern32`: `(0, 1, 4)` against `(0, 1, 7)` |
+| 13 | a point `OK` under every fit that one criterion cannot rank | **met** — REML, `n = 2`, HQIC undefined beside an `OK` status |
+| 14 | a point with one surviving candidate, weights renormalized | **met** — `n_valid = 1` from an optimizer-stage failure |
+| 15 | the recomputed store is self-contained | **met** — source deleted, opened in a subprocess without metamer |
+| 16 | the recomputed store's `fit_hash` equals the source's; `compat_hash` and `run_hash` do not | **met** — with the source's three hashes recorded as provenance |
+
+**Nothing is deferred.** Two are met with reduced scope, both for the same reason and both
+with the same closer.
+
+---
+
 ## What 2a does not do
 
 Calibration tile and `--memory-budget` defaulting (2b, **gated by open question 12**);
