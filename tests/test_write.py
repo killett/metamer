@@ -471,10 +471,16 @@ def test_schema_version_moved_when_the_outcome_vocabulary_grew() -> None:
     written from the enum at creation, so a v1 store and a v2 store disagree
     about the vocabulary even though no 2a run can emit either new code.
 
+    **RE-POINTED AT TASK 11, NOT RE-RUN.** The constant now carries two bumps:
+    v2 is this one, and v3 is the `detail` provenance attr the resume gate
+    compares against. A test asserting `== 2` would have started failing for a
+    reason that has nothing to do with its subject, so the expected value moves
+    and the reason is recorded here.
+
     Catches the two members landing without the bump, which leaves two stores
     claiming the same schema and describing different code sets -- the exact
     failure the version exists to make tractable.
     """
-    assert store.SCHEMA_VERSION == 2
+    assert store.SCHEMA_VERSION == 3
     assert Outcome.SCREENED_OUT.code == 12
     assert Outcome.NOT_APPLICABLE.code == 13

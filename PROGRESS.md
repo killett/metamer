@@ -8,17 +8,16 @@
    Tasks 0–9, and open questions 1, 4, 9, 11, **12**. **The signal-term blocker carried since
    Task 6 is CLOSED**: `config.signal_spec()` builds a `SignalSpec`, `signal.k_beta` gives the
    column count, and `run()` sizes tiles, fits and writes them.
-3. **NEXT: Phase 2a Task 11 — the resume gate and its three outcomes.** Read
-   **[WHAT TASK 11 INHERITS](#what-task-11-inherits--read-this-before-the-task-sections-below)**
-   **before** the plan. **`run()` now skips a tile whose completion bit is set** and stops
-   after the tile in flight on SIGTERM; what Task 11 adds is the *hash* half of the gate,
-   beside the tile-geometry half Task 10 had to build.
-4. **Tests: 897 passed, measured 2026-08-13 after Task 10.** This is the only statement of the
+3. **NEXT: Phase 2a Task 12 — `--reuse-fits-from`, the recompute path.** Read
+   **[WHAT TASK 12 INHERITS](#what-task-12-inherits--read-this-before-the-task-sections-below)**
+   **before** the plan. **The resume gate is in and refuses six ways**; Task 12 is the only
+   recompute path there is, since the in-place recompute arm turned out to have no producer.
+4. **Tests: 910 passed, measured 2026-08-13 after Task 11.** This is the only statement of the
    count in this file; do not restate it elsewhere.
 5. **`pixi run test` is the full sweep and is what every end-of-task verification must run.
-   It takes 302–427 s on the mini PC — six runs, 2026-08-12 and 2026-08-13, at 822, 845, 847,
-   880, 880 and 897 tests.** Quote the range, never one end of it; see the note below, which
-   now includes **two runs of the identical tree 38 s apart**.
+   It takes 302–427 s on the mini PC — seven runs, 2026-08-12 and 2026-08-13, at 822, 845,
+   847, 880, 880, 897 and 910 tests.** Quote the range, never one end of it; see the note
+   below, which includes **two runs of the identical tree 38 s apart**.
 6. **`pixi run test-fast` deselects `slow` and is for iteration only — a green fast run is NOT
    evidence a task is done.** `pixi run test-ci` reproduces CI (`-m 'not machine'`) and is not
    evidence either, because `machine` covers exactly the tests that pin the RSS shim's units and
@@ -83,7 +82,9 @@ rule requires. It came in at **403.6 s** — **38 s above the previous run of by
 code**, and outside the 300–340 s band this file had just declared the thing to explain.
 There is nothing to attribute: **the machine is the variable**, and a per-task attribution
 pass would have been measuring noise with a finer ruler. Task 10 then added 17 tests and the
-sweep took **427.4 s**, i.e. **+24 s for 17 tests against a +38 s step for none.**
+sweep took **427.4 s**, i.e. **+24 s for 17 tests against a +38 s step for none** — and Task
+11 added 13 more, every one of them a gate check rather than a fit, for **425.4 s**, which is
+**2 s down**.
 
 **So: quote the range — 302–427 s over six runs — and treat a step inside it as scatter.**
 The estimate was wrong the same way the verdict's ±0.15 was wrong — **two points do not bound
@@ -171,8 +172,8 @@ was the actual defect the leak exposed.
   the moment one is updated. What belongs here is what the head does not say — which invocation
   means what, and what Phase 2a added: the batch-skeleton, stub-engine, packaging, config,
   input, geometry, validation-staging, runner, thread-budget, machine-identity, tiling,
-  ragged-index, store-schema, signal-vocabulary, write-path and completion-bitmap
-  modules, on top of Phase 1's 588. `pixi run test-fast` (~12 s)
+  ragged-index, store-schema, signal-vocabulary, write-path, completion-bitmap and
+  resume-gate modules, on top of Phase 1's 588. `pixi run test-fast` (~12 s)
   deselects the `slow` marker and is for iteration only — **a green fast run is not evidence
   a task is done.** `pixi run test-ci` reproduces what CI runs (`-m 'not machine'`); it is
   also not evidence on its own, because the `machine` marker covers exactly the tests that
@@ -248,7 +249,7 @@ was the actual defect the leak exposed.
 | Phase 1 task tracker | `docs/superpowers/plans/2026-08-05-metamer-phase1.md.tasks.json` (native task ids 8–27) |
 | Original build prompt | [`docs/phase1-prompt.md`](docs/phase1-prompt.md) — **superseded** by design doc §2 where they conflict |
 | Phase 2 preliminaries pre-flight | [`docs/superpowers/notes/phase2-preliminaries-preflight.md`](docs/superpowers/notes/phase2-preliminaries-preflight.md) — the (a)–(k) audit of the P0/P1/P2 briefs and what each finding changed |
-| **Phase 2a implementation plan** | [`docs/superpowers/plans/2026-08-11-metamer-phase2a.md`](docs/superpowers/plans/2026-08-11-metamer-phase2a.md) — **Tasks 0–10 done; Task 11 next** |
+| **Phase 2a implementation plan** | [`docs/superpowers/plans/2026-08-11-metamer-phase2a.md`](docs/superpowers/plans/2026-08-11-metamer-phase2a.md) — **Tasks 0–11 done; Task 12 next** |
 | **Phase 2a pre-flight, per task** | [`docs/superpowers/notes/phase2a-preflight.md`](docs/superpowers/notes/phase2a-preflight.md) — the (a)–(k) audit of each 2a task brief and what each finding changed. **Append to it before each task, not after.** |
 
 Phase list is design doc §17. Phase 1 exit criteria are §18. Do not duplicate either here.
@@ -502,20 +503,30 @@ Per-task pre-flight audits live in
 [`docs/superpowers/notes/phase2a-preflight.md`](docs/superpowers/notes/phase2a-preflight.md).
 Only the durable conclusions are here.
 
-### WHAT TASK 11 INHERITS — read this before the task sections below
+### WHAT TASK 12 INHERITS — read this before the task sections below
 
-**Tasks 11–13 are what is left of the resumability core** — the resume gate's hash half,
-`--reuse-fits-from`, and the exit-criteria suite. Tasks 0–10 are done. Everything below is
-what a cold session cannot re-derive from the code.
+**Tasks 12–13 are what is left of the resumability core** — `--reuse-fits-from` and the
+exit-criteria suite. Tasks 0–11 are done. Everything below is what a cold session cannot
+re-derive from the code.
 
-#### The state Task 11 starts from
+#### The state Task 12 starts from
 
 - **`run()` SKIPS A TILE WHOSE BIT IS SET**, sets each bit from the fact that `write_tile`
-  returned, and stops after the tile in flight when SIGTERM has been recorded. What it does
-  **not** do is compare any hash against the store's — that is Task 11's whole subject.
-- **THE GATE ALREADY HAS A POSITION AND A TENANT.** `run()` calls
-  `completion.resume_tile_side` between the hashes and the tiling, which is where the entry
-  contract puts the resume gate. Task 11's comparisons go beside it, not somewhere else.
+  returned, and stops after the tile in flight when SIGTERM has been recorded.
+- **THE RESUME GATE IS ONE SITE WITH TWO HALVES**, inside `run()`'s single
+  `if store exists` block: `resume.check_resume` compares identity — schema version,
+  `fit_hash`, the candidate list **positionally**, the criterion set, the `/detail/`
+  selection, `compat_hash` — and then `completion.resume_tile_side` settles geometry.
+  **Identity first, geometry second.** Task 12's source-store verification is the same
+  comparisons run against a *different* store, so reuse `check_resume` rather than writing a
+  second set that can disagree with it.
+- **TASK 12 IS THE ONLY RECOMPUTE PATH THERE IS.** Task 11 refuses a criterion-set change in
+  place and names "recompute into a new store, or rerun" as the resolution — with no flag
+  named, because `--reuse-fits-from` does not parse yet. **When it does, that message should
+  name it**; it is the one diagnostic in the tree waiting on this task.
+- **THE SOURCE'S BITMAP MUST BE FULLY SET, AND THAT IS EXIT CODE 4.** `completion
+  .completed_tiles(source)` is the reader; `.all()` is the check. Recomputing from a
+  partially fitted store yields a complete-looking new store built on incomplete primitives.
 - **`metamer.batch.write.write_tile(store_path, tile, result, *, criteria, index, has_trend)`**
   is the one write path: one region write per array per tile, and **no way to decline.** There
   is deliberately no "skip this tile" exit, because **the bit is set from the fact that the
@@ -540,7 +551,7 @@ tile's data has flushed, so grouping the bits into one object would make every t
 read-modify-write of every other tile's bit. At 10⁷ points the bitmap is of order 100
 elements, so the object count is not a concern.
 
-#### What Tasks 11–13 must honour
+#### What Tasks 12–13 must honour
 
 **Task 10 — ordering — is DONE**; what it built and what it found are in
 [What Task 10 established](#what-task-10-established-done--the-completion-bitmap-write-ordering-and-sigterm)
@@ -548,16 +559,13 @@ below. The properties it must keep: **data then bitmap, always**; **no POSIX ass
 no file locking, no rename-based atomicity, no directory-listing-as-truth, only per-object
 write atomicity; and **SIGTERM flushes rather than dying mid-region-write**.
 
-**Task 11 — the resume gate.** The entry contract's ordering is the guard and must be
-**tested, not trusted**: `open → input contract (4a) → geometry fingerprint → fit_hash →
-resume gate → tiling`. Three outcomes on a matching `fit_hash`: resume; recompute derived
-arrays from stored primitives; **refuse** on a criterion-set change (it resizes `c`, a
-whole-store rewrite with no bitmap of its own) and on a `/detail/` change (fixed at creation,
-and neither fit-relevant nor recomputable). **Plus the positional candidate comparison** —
-`stored[i] == requested[i]` for every `i < len(stored)` and `len(requested) >= len(stored)`,
-refusing on the first mismatch naming the index and both hashes. **The candidate set is
-covered by NO hash and must not be added to one**: a hash expresses equality and a superset
-must stay legal.
+**Task 11 — the resume gate — is DONE**; what it built and what it found are in
+[What Task 11 established](#what-task-11-established-done--the-resume-gate) below. The
+properties it must keep: the entry contract's ordering, **tested and not trusted**
+(`open → input contract (4a) → geometry fingerprint → fit_hash → resume gate → tiling`); the
+**positional** candidate comparison, with `len(requested) >= len(stored)` necessary and not
+sufficient; and **the candidate set covered by NO hash** — a hash expresses equality, and
+extension must stay expressible even though an in-place resume refuses it.
 
 **Task 12 — `--reuse-fits-from`, five requirements.** (1) The new store writes **its own**
 provenance: new `run_hash`, new `compat_hash`, `fit_hash` **equal to the source's**, with the
@@ -722,6 +730,49 @@ construction gives it.
 reachable (the Whittle engine plus the screening block; §14.1's early abort; a declared
 domain-mask variable in §13.6's input contract). **Their codes are 2a's regardless**, because
 stored code meanings are fixed at store creation.
+
+### What Task 11 established (done — the resume gate)
+
+- **THE RECOMPUTE ARM HAS NO PRODUCER, AND THAT IS MEASURED FROM THE ALLOWLISTS.**
+  `COMPAT_RELEVANT_FIELDS = FIT_RELEVANT_FIELDS | {"criteria"}` — they differ by **one
+  field** — so *"`fit_hash` matches, `compat_hash` differs"* **is** "the criterion set
+  changed", which §12.8 refuses in place. **Design doc §12.8 already carried this finding,
+  dated 2026-08-11, while its own summary table and the plan's brief still listed recompute
+  as a live outcome.** The reachable outcomes are **proceed or refuse**; recomputation is
+  Task 12's, into a **new** store. A compat difference that is not the criterion set is
+  **refused explicitly** rather than fallen through — unreachable today, and the arm a later
+  compat-only field would reach is declared rather than assumed.
+- **A STRICT SUPERSET OF THE CANDIDATE SET IS REFUSED IN PLACE, WHICH §12.8 PERMITTED UNTIL
+  2026-08-13.** Adding a candidate resizes `m` and `p` — the argument that refuses a
+  criterion-set change — **and the completion bitmap has no model axis**, so there is no
+  state in which a tile is complete for the stored candidates and outstanding for the new
+  one. `len(requested) >= len(stored)` is **necessary and not sufficient**: it keeps the
+  extension legal at the hash boundary (which is why `candidates` is in no allowlist and
+  must stay out of one), and the in-place resume still refuses it. A **prefix mismatch** and
+  an **extension** are different faults with different messages, and a **shortened** list is
+  a third — it is a prefix, so only the length rule catches it.
+- **THE `/detail/` REFUSAL HAD NOTHING TO COMPARE AGAINST.** `Config.Detail` existed and
+  `provenance_attrs` never recorded it, so §12.8's third outcome category was **a name with
+  no gate** — the `data_uri` defect class. `detail` is now a required root attr and
+  **`store.SCHEMA_VERSION` is 3**: a v2 store cannot answer the question the gate asks, and
+  reading its silence as agreement would pass every `/detail/` change.
+- **`tuple != list` ACROSS THE JSON BOUNDARY.** `Config.criteria` and
+  `candidate_spec_hashes()` are tuples; the same values come back out of zarr's attrs as
+  lists. The natural comparison **refuses every resume, including the correct one** — which
+  is why the green path is the control for every refusal test in the module.
+- **THE DISCRIMINATING FIXTURE FOR A POSITIONAL COMPARISON IS A PERMUTATION.** A set or
+  sorted comparison agrees with a positional one everywhere except a reordering, and a
+  reordering is precisely the case that writes each candidate's fits into the other's slice.
+- **A DEFENCE-IN-DEPTH PAIR, CROSS-COMMENTED.** Task 10's bitmap-shape refusal is now
+  unreachable through a configuration, because the grid is in `geometry_hash` and this gate
+  refuses that upstream by name. Both guards name each other in the source and the shape
+  guard's test calls it directly, since what stays reachable is a store whose bitmap does not
+  describe its own grid.
+- **Refusals are layer 3, exit code 3**, per §14.3's *"resuming will not help"*, and each
+  names what differs **and what resolves it**. **No message names `--reuse-fits-from`**,
+  which does not parse yet: a flag named in a diagnostic reads as supported.
+- **13/13 mutations bite**, after two survivors that diagnosed to different causes — one
+  missing test, one mutation that was not a behaviour change.
 
 ### What Task 10 established (done — the completion bitmap, write ordering, and SIGTERM)
 

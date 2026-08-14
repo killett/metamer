@@ -603,9 +603,28 @@ would compute it from the config alone, which is where `data_uri`-as-proxy came 
 | what changed | outcome |
 |---|---|
 | nothing compat-relevant | resume: reuse completed tiles, fit the outstanding ones |
-| a compat-relevant field that is not the criterion set | recompute derived arrays from stored primitives; do not refit |
+| ~~a compat-relevant field that is not the criterion set~~ | ~~recompute derived arrays from stored primitives; do not refit~~ — **NO PRODUCER, corrected 2026-08-13** |
 | the criterion set | **refuse**, naming the stored set, the requested set, and the two resolutions |
+| a strict superset of the candidate set | **refuse**, naming the resolution — **added 2026-08-13** |
 | the `/detail/` selection | **refuse**: fixed at store creation |
+
+**CORRECTED 2026-08-13, BEFORE IMPLEMENTING. `COMPAT_RELEVANT_FIELDS` is
+`FIT_RELEVANT_FIELDS | {"criteria"}`**, measured, so *"`fit_hash` matches and `compat_hash`
+differs"* **is** "the criterion set changed" and the recompute row has no reachable input.
+Design doc §12.8 carries that finding already, dated 2026-08-11, and this brief did not
+follow it. **Task 11 therefore implements no recompute**; the recompute path is Task 12's,
+into a new store. An unrecognized compat difference is refused explicitly rather than falling
+through, so the arm a later compat-only field would reach is declared rather than assumed.
+
+**AND THE `/detail/` REFUSAL HAD NOTHING TO READ.** `provenance_attrs` did not record the
+selection, so that arm was a name with no gate. `detail` is now a required root attr and
+`store.SCHEMA_VERSION` is **3**.
+
+**AND A STRICT SUPERSET IS REFUSED IN PLACE**, which §12.8 permitted until 2026-08-13: it
+resizes `m` and `p` — the argument that refuses a criterion-set change — **and the completion
+bitmap has no model axis**, so a tile cannot be complete for some candidates and outstanding
+for others. `len(requested) >= len(stored)` stays *necessary and not sufficient*, and the two
+faults get different messages.
 
 **A quantity is recomputable iff it is a function of the stored primitives alone.** `log_lik`,
 `k`, `n_eff` are stored; **the Hessian at the optimum is not**, so everything downstream of it

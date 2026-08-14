@@ -115,7 +115,15 @@ _GEOMETRY_KEYS = frozenset(
 #: `NOT_APPLICABLE` (13).** No 2a run can emit either, but the `flag_values` /
 #: `flag_meanings` legend written into `/status/` at creation comes from the enum,
 #: so a v1 store and a v2 store disagree about the vocabulary.
-SCHEMA_VERSION = 2
+#:
+#: **v3 (2026-08-13, Task 11): root attrs gained `detail`.** The `/detail/`
+#: selection is **in no hash** -- it moves neither `theta_hat` nor the derived
+#: arrays -- so the resume gate's refusal of a change to it can only be made by
+#: comparing against a recorded value, and a v2 store carries none. **A bump for
+#: an added attr rather than an added array**, because the test is what a reader
+#: can be asked: a v2 store cannot answer the question the v3 gate asks, and
+#: treating its silence as agreement would pass every `/detail/` change.
+SCHEMA_VERSION = 3
 
 #: Target bytes for one inner chunk, per design doc 12.7's "a few MB".
 CHUNK_TARGET_BYTES = 4_000_000
@@ -140,6 +148,7 @@ REQUIRED_ATTRS = frozenset(
         "candidate_spec_hashes",
         "compat_hash",
         "criteria",
+        "detail",
         "engine",
         "fit_hash",
         "geometry_components",
@@ -273,6 +282,14 @@ def provenance_attrs(
         "candidate_spec_hashes": list(config.candidate_spec_hashes()),
         "compat_hash": compat,
         "criteria": list(config.criteria),
+        # THE `/detail/` SELECTION IS IN NO HASH, so the resume gate's refusal of
+        # a change to it has nothing to compare against unless it is recorded
+        # here. It moves neither `theta_hat` (not fit-relevant) nor the derived
+        # arrays (not compat-relevant), and it is not recomputable either -- a
+        # covariance derives from the Hessian at the optimum and the Hessian is
+        # not stored -- so the store's own copy of the request is the only
+        # available evidence of what it was built to answer.
+        "detail": json.loads(config.detail.model_dump_json()),
         "engine": config.engine,
         "fit_hash": fit,
         "geometry_components": json.loads(hashing.canonical_json(geometry_components)),

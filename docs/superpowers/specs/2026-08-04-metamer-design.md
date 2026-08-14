@@ -1808,7 +1808,8 @@ outcomes, not two:
 
 | condition | action |
 |---|---|
-| `fit_hash` matches, `compat_hash` matches, candidate set is a **superset** | resume normally: reuse all completed tiles, fit only what the completion bitmap says is outstanding |
+| `fit_hash` matches, `compat_hash` matches, candidate set is **identical** | resume normally: reuse all completed tiles, fit only what the completion bitmap says is outstanding |
+| `fit_hash` matches, `compat_hash` matches, candidate set is a **strict superset** | ~~resume normally~~ — **NARROWED 2026-08-13, see below**: refused in place, for the reasons that narrowed the row beneath it |
 | `fit_hash` matches, **`compat_hash` differs** (e.g. a criterion was added) | ~~recompute the derived `/selection/` arrays and continue~~ — **NARROWED 2026-08-11, see below** |
 | `fit_hash` differs | refuse — the stored fits are not reusable |
 
@@ -1853,6 +1854,26 @@ exists because §12.5 stores per-candidate primitives, making candidate-set exte
 *scientifically* legitimate incremental operation: existing fits are unaffected, only
 `P_total` and the model axis grow.
 
+**NARROWED 2026-08-13, at Task 11, and the narrowing was already implied by the paragraph
+above it.** *"Only `P_total` and the model axis grow"* is **an axis resize**, so reason 1
+applies verbatim — it is a whole-store rewrite with no completion bitmap of its own — and the
+extension carries a second obstacle the criterion set does not:
+
+> **The completion bitmap has no model axis.** A tile is complete or it is not; there is no
+> state in which it is *complete for candidates 0..M−1 and outstanding for M*. So a superset
+> resume cannot record what it has done even if the arrays could be grown, and every
+> already-complete tile would need refitting for the new candidate — which is the cost the
+> whole gate exists to avoid.
+
+So **a strict superset is refused in place**, naming the stored and requested lists and the
+resolution: write a new store. **The positional comparison stays exactly as specified and is
+what detects both cases** — it is *necessary and not sufficient*, and the two faults it
+separates get different messages, because a prefix mismatch is a corruption and an extension
+is an unimplemented operation. **`candidates` still belongs in no hash allowlist**: the
+exclusion is what keeps the extension expressible at all — for the new-store path, for
+`--reuse-fits-from`, and for §11.1's `(fit_hash, candidate spec_hash)` warm-start key — and a
+hash could only express equality.
+
 **ADDED 2026-08-11: the superset rule is enforced by a positional comparison, and until
 2026-08-11 it was enforced by nothing.** `candidates` is in neither hash allowlist — checked
 against `tests/test_hashing.py`, which asserts its absence — and **a hash can only express
@@ -1881,9 +1902,16 @@ three special cases.**
 | what changed | outcome | why |
 |---|---|---|
 | nothing compat-relevant | **resume**: reuse completed tiles, fit the outstanding ones | — |
-| a compat-relevant field that is **not** the criterion set | **recompute** the derived arrays from stored primitives, do not refit | the arrays are functions of stored primitives |
+| a compat-relevant field that is **not** the criterion set | **recompute** the derived arrays from stored primitives, do not refit | the arrays are functions of stored primitives. **NO PRODUCER TODAY** — the two allowlists differ by `criteria` alone, so this row is reachable only once a field is added that changes derived arrays without moving `θ̂`; see the measured note above, and do not invent one to make it constructible |
 | the **criterion set** | **refuse**, and name the two resolutions | it resizes the `c` axis, which is a whole-store rewrite with no completion bitmap of its own |
+| a **strict superset** of the candidate set | **refuse**, and name the resolution (new store) | it resizes the `m` and `p` axes — the same argument — **and the bitmap has no model axis**, so partial-by-candidate completion is not expressible |
 | the **`/detail/` selection** | **refuse**: fixed at store creation | **neither fit-relevant nor recomputable** |
+
+**The `/detail/` row needs the selection to be IN THE STORE, which it was not until Task 11.**
+A refusal that has nothing to compare against is a name rather than a gate — the same defect
+class as `data_uri` standing in for the data it named. `detail` is now a root provenance
+attr, required at creation, and `schema_version` moved to **3** because a v2 store cannot
+answer the question the gate asks.
 
 **The last row is a category this document did not previously have.** A change that does not
 move `θ̂` but cannot be satisfied from stored primitives has **no resolution available**:

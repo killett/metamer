@@ -2160,3 +2160,184 @@ index 1, same length) is **silent** — every array keeps its shape and the stor
 a **longer** list fails on a shape mismatch inside `write_tile`, **after a full tile of fits**
 and with a message about array shapes rather than about candidates. Both are Task 11's, and
 the gate must run **before the tiling loop**.
+
+---
+
+## Task 11 — the resume gate and its three outcomes (audited 2026-08-13)
+
+The brief's own taxonomy is where the findings are. **One of its four arms has no producer,
+one of its refusals has nothing to read, and one of the design doc's permitted resumes
+contradicts the argument the same section uses to refuse a different one.**
+
+### (a5) / (c) — THE MIDDLE ARM IS EMPTY BY CONSTRUCTION, MEASURED FROM THE ALLOWLISTS
+
+The brief's table has four rows, and the second is *"a compat-relevant field that is not the
+criterion set → recompute derived arrays from stored primitives; do not refit"*.
+
+    hashing.COMPAT_RELEVANT_FIELDS = FIT_RELEVANT_FIELDS | {"criteria"}
+
+**`criteria` is the only field in compat and not in fit.** So *"`fit_hash` matches and
+`compat_hash` differs"* is **logically equivalent to "the criterion set changed"**, and the
+row above it — refuse, because growing `c` is a whole-store rewrite with no bitmap of its
+own — consumes every input that could reach the recompute arm. The middle row has no
+producer and cannot be tested through a config.
+
+**The design doc already knew and the plan did not follow.** §12.8's own table carries the
+recompute row **struck through**, with *"NARROWED 2026-08-11"* beside it; the plan's Task 11
+brief and `PROGRESS.md`'s inheritance section both still describe recompute-in-place as a
+live outcome. **The design doc is authoritative on intent, so the arm goes**, and this is the
+kind of disagreement the precedence rule says to resolve in the documents rather than carry
+into an implementation.
+
+**Consequence for the shape of this task: Task 11 implements no recompute.** The reachable
+outcomes on a matching `fit_hash` are **proceed** or **refuse**, with distinct refusal
+*reasons*; the recompute path is Task 12's `--reuse-fits-from`, which writes a **new** store
+and is the only place the three-hash split's claim is cashed. A future compat-only field
+would make the middle arm reachable, so the gate refuses an unrecognized compat difference
+explicitly rather than falling through — (a3), the regime declared without the feature.
+
+### (a2) / (g2) — THE `/detail/` REFUSAL HAS NOTHING TO COMPARE AGAINST
+
+Binding the gate's inputs against what the store actually holds, which is (g2) applied to a
+gate rather than to a consumer:
+
+| the gate needs | in root attrs? |
+|---|---|
+| `schema_version` | yes |
+| `fit_hash`, `compat_hash` | yes |
+| `candidate_spec_hashes` | yes |
+| `criteria` | yes |
+| **the `/detail/` selection** | **NO** |
+
+`Config.Detail` exists — `region` and `subsample`, and its docstring says *"Fixed at store
+creation; Task 11 refuses a change"* — and `provenance_attrs` never writes it. **A refusal
+that reads nothing is a name, not a gate**, and this one would have shipped as an arm of the
+taxonomy that no input can move.
+
+**Changed:** `provenance_attrs` records `detail`, `REQUIRED_ATTRS` demands it, and
+`SCHEMA_VERSION` goes **2 → 3** — a v2 store cannot answer a question the v3 gate asks, which
+is the store's own stated bump rule. `test_schema_version_moved_when_the_outcome_vocabulary_grew`
+is **re-pointed rather than re-run**, per the standing rule.
+
+### (a5) — §12.8's SUPERSET ROW CONTRADICTS ITS OWN CRITERION-SET NARROWING
+
+§12.8 permits resuming when *"the candidate set is a superset"* — resume normally, fitting
+only what the bitmap says is outstanding. **Two facts make that unimplementable in place, and
+the second is the stronger one:**
+
+1. The `m` axis and the ragged `/noise/` axis are **fixed at store creation**. Adding a
+   candidate grows both across the whole grid — a whole-store rewrite, which is precisely why
+   the same section refuses a criterion-set change.
+2. **The completion bitmap has no model axis.** A tile is complete or it is not; it cannot be
+   *complete for candidates 0..M−1 and outstanding for M*. So even with a growable axis there
+   is no state in which a superset resume could record what it had done.
+
+**So the positional rule is necessary and not sufficient.** `len(requested) >= len(stored)`
+is what keeps the *extension* legal at the hash boundary — the reason `candidates` is in no
+allowlist — and an in-place resume still refuses it, naming "write a new store" as the
+resolution. The two refusals are different faults and get different messages: a **prefix
+mismatch** is a corruption refusal (candidate B's fits into candidate A's slice), an
+**extension** is an unimplementable-in-place refusal.
+
+Design doc §12.8 amended, dated, in the same idiom as its 2026-08-11 narrowing.
+
+### (g) — `tuple != list` ACROSS THE JSON BOUNDARY, AND IT FAILS TOWARD REFUSING EVERYTHING
+
+`Config.criteria` and `Config.candidate_spec_hashes()` are **tuples**; the same values come
+back out of zarr's attrs as **JSON lists**. `("aic", "hqic") == ["aic", "hqic"]` is `False`
+in Python, so the natural comparison refuses **every** resume, including the correct one.
+
+**The tell is which way it fails**: a gate that refuses everything looks conservative and is
+caught by the first green-path test, which is why it is worth naming rather than fearing —
+but a gate written the other way round (`set(...)`) would pass a permutation, and that is the
+one that is silent. Both directions are pinned below.
+
+### (i7) — A PERMUTATION IS THE FIXTURE THAT SEPARATES POSITIONAL FROM SET COMPARISON
+
+Where a positional comparison and a set (or sorted) comparison **agree**: every case except a
+reordering. So the discriminating fixture is a **permutation of the stored candidates** —
+`["white", "white + matern12"]` resumed as `["white + matern12", "white"]` — which a set
+comparison accepts and which writes each candidate's fits into the other's slice. At this
+fixture's unequal `p` (1 against 3) it also shifts every ragged offset, so the corruption
+lands in `/noise/` as well as in the model axis.
+
+A **single-position** change is the second fixture, and it is what the "names the index"
+requirement needs: `["white", "matern32"]` differs from the stored list at index 1 only.
+
+### (a1) — THE GATE MUST RUN BEFORE THE TILING LOOP, WHICH IS WHERE THE OTHER HALF ALREADY IS
+
+From the (a1) sweep above: the candidate list fixes the `m` axis, `P_total` and both offset
+tables, and is in no hash by design. Today a prefix mismatch is **silent** and an extension
+fails on an array shape **inside `write_tile`, after a full tile of fits**. Task 10's
+`resume_tile_side` already sits between the hashes and the tiling; the identity comparisons
+join it there, and the ordering inside that block is **identity first, geometry second** — a
+store whose fits are unusable should say so before it says anything about tile sizes.
+
+### (c) — EXITS, ENUMERATED
+
+`resume.check_resume`: one `return None`; `ValidationError(SEMANTIC)` for each of
+**schema_version, fit_hash, candidate prefix, candidate extension, criterion set, `/detail/`,
+and an unrecognized compat difference** — seven refusals, each naming what differs and what
+resolves it. Exit code **3**: §14.3's *"config/validation error — resuming will not help"*,
+which is true of every one of them.
+
+`run()` gains no new return. The gate raises before the tiling loop, so a refusal is
+`tiles_written == 0` by construction rather than by an assertion.
+
+### (c2) — THE REFUSAL TYPE CANNOT BE SWALLOWED BY AN EARLIER CLAUSE
+
+`ValidationError` derives from `Exception`, not from `ValueError`, and the only `except
+ValueError` on the path is `_with_memory_budget`'s, which wraps a `model_validate` call and
+is far above the gate. `__main__` catches `(ValidationError, InputContractError)` and reports
+the layer. Checked rather than assumed, because (c2)'s worked instance was exactly a refusal
+landing in a clause written for something else.
+
+### (i2) — THE NEGATIVE IS "NO FIT RAN BEFORE THE REFUSAL", AND ITS CONTROL EXISTS
+
+Every refusal test asserts `raising_engine.calls == []`, which is unfalsifiable on its own —
+a gate that refuses because the store cannot be opened at all would satisfy it equally. The
+control is Task 10's `test_the_same_resume_reaches_the_engine_for_an_outstanding_tile`: the
+same seam, the same store, one clear bit, and the engine **is** reached. It is cited in the
+new tests rather than duplicated.
+
+### (k) — ONE REFUSAL IS TESTED ACROSS A PROCESS BOUNDARY
+
+The gate's inputs are on disk and its output is an exit code, so at least one arm goes
+through `python -m metamer` and asserts **3**. In-process, the exception type is the only
+observable and the mapping from type to code is a second thing that can break.
+
+### Bite checks — 13 mutations, 13 bite, and the two survivors were different faults
+
+Wiring (2): the gate not called; the gate moved below the tiling loop. Hashed
+comparisons (3): `fit_hash`, the criterion set, `schema_version`. Unhashed comparisons (4):
+the candidate prefix dropped; the prefix compared as a **set**; a strict superset accepted; a
+**shortened** list accepted. Consistency (1): the compat check dropped. Provenance (1):
+`detail` not recorded at creation. Boundary (1): the criterion comparison written without
+normalizing the JSON list. Ordering (1): `check_resume` placed after `resume_tile_side`
+(caught by the message a grid change produces).
+
+**Two survived on the first pass, and they diagnose to different causes — which is the whole
+point of running the taxonomy rather than reacting.**
+
+- **A shortened candidate list was accepted — cause 1, no test protected the guard.** The
+  superset arm had a test and its mirror did not: `["white"]` is a *prefix* of the stored
+  list, so every positional comparison passes it and only the length rule catches it. Test
+  written; the mutation now bites. **A length rule written as one comparison invites exactly
+  this**, because the arm that feels like the interesting one gets the test.
+- **The `tuple`/`list` mutation was not a defect — cause 5.** The mutation written first was
+  `tuple(stored) != config.criteria and stored != config.criteria`, which is **semantically
+  identical to the original on every reachable input**. The reachable defect is the
+  unnormalized comparison alone, `stored_criteria != config.criteria`, and that bites on the
+  green-path test immediately — a gate that refuses every resume. **Verify the mutation is a
+  behaviour change before concluding anything about the test.**
+
+### The defence-in-depth outcome, and both guards now name each other
+
+`completion.resume_tile_side`'s **bitmap-shape refusal became unreachable through a
+configuration** the moment this gate landed: the grid is in `geometry_hash`, which is
+fit-relevant, so a changed grid is refused upstream by name. That is cause 2 of the five —
+a guard above it fires first — and the response is the recorded one: **keep it, comment both,
+each naming the other**, and re-point its test at what stays reachable, which is a store
+whose bitmap does not describe its own grid (a truncated copy, a foreign writer). Without the
+cross-comments the next simplification deletes one on the grounds that the other covers it,
+and deletes the coverage with it.

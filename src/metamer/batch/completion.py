@@ -230,6 +230,14 @@ def resume_tile_side(
             "--memory-budget to at least that, or write a new store",
         )
 
+    # DOUBLY GUARDED, DELIBERATELY, AND EACH GUARD NAMES THE OTHER.
+    # `resume.check_resume` refuses a `fit_hash` difference, and `geometry_hash`
+    # -- which carries the grid -- is fit-relevant, so no *configuration* can
+    # reach the refusal below: a changed grid is refused upstream, by name. What
+    # remains reachable here is a store whose bitmap does not describe its own
+    # grid at all -- a truncated copy, a foreign writer, a partially created
+    # store -- and that is why this is not dead code. Removing either guard on
+    # the grounds that the other covers it removes the coverage as well.
     expected = (-(-grid[0] // stored), -(-grid[1] // stored))
     shape = tuple(int(n) for n in _bitmap(store_path, "r").shape)
     if shape != expected:

@@ -18,10 +18,15 @@ where `data_uri`-as-proxy came from. And every layer-3 check that can *fail*
 sits above the open, so a run whose config is wrong AND whose data is wrong
 reports the config -- the two send a user to different places.
 
-**WHAT THIS DOES NOT DO YET.** The hash comparisons of the resume gate are Task
-11's. What is here is the part the completion bitmap needs: a resume adopts the
-store's tile side, refuses a budget that cannot hold it, and fits only the tiles
-whose bit is clear.
+**THE RESUME GATE HAS ONE SITE AND TWO HALVES.** Inside the single
+`if store exists` block: `resume.check_resume` compares identity -- schema
+version, `fit_hash`, the candidate list positionally, the criterion set, the
+`/detail/` selection, `compat_hash` -- and then `completion.resume_tile_side`
+settles geometry. Identity first: a store whose fits are unusable should say so
+before it says anything about tile sizes. **What this does not do is recompute
+anything**: the compat-only arm has no producer (the two allowlists differ by
+`criteria` alone, which refuses), so recomputation is Task 12's, into a new
+store.
 
 **DATA THEN BITMAP, AND THE BIT IS SET FROM THE FACT THAT THE WRITE RETURNED.**
 `write.write_tile` has no way to decline, so there is no branch in which the bit
@@ -62,6 +67,7 @@ from metamer.batch.geometry import geometry_components, geometry_hash
 from metamer.batch.input import ContractReport, open_input
 from metamer.batch.input import check_contract as check_input_contract
 from metamer.batch.ragged import build_ragged_index, noise_extent
+from metamer.batch.resume import check_resume
 from metamer.batch.store import StoreShape, create_store, provenance_attrs
 from metamer.batch.threads import Phase, thread_budget
 from metamer.batch.tiling import (
@@ -289,11 +295,14 @@ def run(
             n_models=len(specs),
         )
         grid = (contract.n_y, contract.n_x)
-        # THE RESUME GATE'S POSITION IN THE ENTRY CONTRACT: after the hashes,
-        # before the tiling. Task 11's hash comparisons land here beside it. A
-        # store's shards -- and therefore what its completion bits index -- were
-        # fixed when it was created, so its tile side is what a resume must use.
+        # THE RESUME GATE, IN THE ENTRY CONTRACT'S ONE POSITION FOR IT: after
+        # the hashes, before the tiling. **Identity first, geometry second** -- a
+        # store whose fits are unusable says so before it says anything about
+        # tile sizes. A store's shards, and therefore what its completion bits
+        # index, were fixed when it was created, so its tile side is what a
+        # resume must use.
         if Path(store_path).exists():
+            check_resume(store_path, config, geometry_hash=rollup)
             side = resume_tile_side(store_path, derived_side=side, grid=grid)
         tiles = list(tile_grid(grid[0], grid[1], side))
         amplification = read_amplification(handle, tiles[0])

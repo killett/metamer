@@ -35,6 +35,7 @@ from metamer.batch.completion import (
     completed_tiles,
     flush_on_sigterm,
     mark_complete,
+    resume_tile_side,
     tile_index,
 )
 from metamer.batch.run import run
@@ -657,23 +658,29 @@ def test_a_budget_too_small_for_the_stored_tile_is_refused(tmp_path: Path) -> No
 
 
 def test_a_bitmap_that_does_not_describe_this_grid_is_refused(
-    resumable: tuple[Path, Path], tmp_path: Path
+    resumable: tuple[Path, Path],
 ) -> None:
     """A bit is a region, and the region depends on the grid as well as the side.
 
-    The store's bitmap is 2x2 over a 2x2 grid; the same configuration pointed at
-    a 4x2 input needs 4x2 bits. Until Task 11's geometry gate exists this is
-    reachable directly, and it stays worth refusing afterwards because the
-    bitmap is what the refusal is about.
+    **RE-POINTED AT TASK 11, AND THE REASON IS THE INTERESTING PART.** This test
+    used to reach the guard through `run()` with the same configuration pointed
+    at a 4x2 input. It cannot any more: a grid change moves `geometry_hash`,
+    which is fit-relevant, so `resume.check_resume` refuses on `fit_hash` first
+    and this refusal is **unreachable through a configuration** -- the
+    defence-in-depth outcome from the mutation taxonomy, not a dead guard.
+
+    The two guards are cross-commented in the source so a later simplification
+    sees both, and the test now calls this one directly, which is what remains
+    reachable: a store whose bitmap does not describe its own grid, from a
+    truncated copy or a foreign writer.
 
     Catches indexing a smaller bitmap with a bigger grid, where half the tiles
     raise nothing and simply reuse another tile's bit.
     """
-    config, store = resumable
-    wider = _config(tmp_path, _input(tmp_path, n_y=4, n_x=2), budget=ONE_POINT_PER_TILE)
+    _config_path, store = resumable
 
     with pytest.raises(ValidationError, match="completion bitmap"):
-        run(wider, store)
+        resume_tile_side(store, derived_side=1, grid=(4, 2))
 
 
 def test_a_store_without_a_bitmap_is_refused(tmp_path: Path) -> None:
