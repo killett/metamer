@@ -1687,9 +1687,11 @@ itself a diagnostic.
 plan and `PROGRESS.md` both specified an offset inside a gap — "a breakpoint with no support
 for one candidate's design" — for the point where candidate 1 fails and candidate 2 succeeds.
 **In v1 the design is shared**, so that construction fails *both* candidates and gives
-`n_valid = 0`. The reachable construction is an **optimizer-stage** failure: fitting
-`white + matern12` to white noise leaves the correlated candidate degenerate at most points
-while `white` fits, which is open question 9's own fixture defect used deliberately.
+`n_valid = 0`. The reachable construction is an **optimizer-stage** failure, **and it must be one until a
+joint signal x noise search lands**: design-stage outcomes are constant across the model axis
+by construction, so no design can distinguish candidates in v1. Fitting `white + matern12` to
+white noise leaves the correlated candidate degenerate at most points while `white` fits
+(measured: 3 of 4), which is open question 9's own fixture defect used deliberately.
 
 **But in v1 the DESIGN-derived outcomes are constant along the model axis (2026-08-11).**
 `fit.py` computes `design_info(t, mask)` **once**, before the candidate loop, because §12.1's

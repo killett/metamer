@@ -170,6 +170,31 @@ paragraph exists to prevent**, committed in its own example. (`4 + 6` is not 10 
 that went unread too.) It survived three documents and two prior audits because both 4 and
 10 are plausible sizes for that axis.
 
+### (a5) CROSS-CHECK A BRIEF'S REQUIREMENTS AGAINST ITS OWN CONSTRAINTS
+
+> **A requirement and the constraint that forbids it can sit paragraphs apart and both read
+> as correct.** The implementer satisfies the requirement, and the constraint is what the
+> code violates. **Where a brief states both a fixture and a watch, apply the watch to the
+> fixture first.**
+
+**This is the document-level twin of (a4)**, and it is the second time in three tasks that a
+defect was inside the brief's own *text* rather than in its model of the code. (a4) says
+recompute the examples; this says **check the requirements against each other**.
+
+Worked instance, Phase 2a Task 9. The brief required a fixture point *"where candidate 1
+fails and candidate 2 succeeds -- the offset-inside-a-gap construction, a breakpoint with no
+support for one candidate's design"*, and two paragraphs later warned, correctly, that
+**`fit.py` computes `design_info(t, mask)` once, before the candidate loop, so a test
+asserting design-failure behaviour must vary the mask, never the candidate.** The two cannot
+both hold: in v1 the signal spec is fixed, so a design failure is identical for every `m` and
+the prescribed construction gives **`n_valid = 0`**, which is a different test point
+entirely.
+
+**The reachable construction is an OPTIMIZER-stage failure and it must be, until joint
+signal x noise search lands** -- design-stage outcomes are constant across the model axis by
+construction. Fitting `white + matern12` to white noise leaves the correlated candidate
+degenerate at most points while `white` fits (measured: 3 of 4).
+
 ### (b) Batch vs series
 
 Is any per-series fact computed at batch level, or any per-candidate fact stored per point?
@@ -633,6 +658,38 @@ dependency-free environment `find_spec("pkg.sub.mod")` raises whatever `pkg/__in
 raised from inside `find_spec`. Anywhere module *presence* must be checked without importing
 its dependencies, it is a filesystem question, walked outward from a package `__file__` that
 is safe to import.
+
+### An aggregate over a precedence ladder needs its own rule, not the ladder
+
+> **A precedence order defined for one axis does not transfer to a reduction over another
+> axis.** State the reduction rule explicitly and separately, and **test it at the case where
+> the two disagree** -- one member OK, another failed.
+
+`objective.OUTCOME_PRECEDENCE` ranks `OK` **last** because it encodes *causal priority for a
+single fit*: when two classifiers describe the same series, the earliest cause wins.
+Reducing across **candidates** with that same ladder inverts the answer -- it reports a
+disaster wherever the harder candidate struggled, when **a point at which any candidate
+succeeded is a point that succeeded.**
+
+So `/status/point_outcome` is defined separately (Phase 2a Task 9): **`OK` if any candidate is
+`OK`, otherwise `merge_outcomes` over the model axis**, which reuses the declared ladder for
+the only part that needs one. The OK-wins half is load-bearing and is what the mutation test
+pins.
+
+### A constraint justified by "otherwise the test is vacuous" belongs on the test, never on the product
+
+> **The tell is a refusal whose stated reason is about assertions rather than about data.**
+
+Worked instance, Phase 2a Task 8: `create_store` refused fewer than two candidates and fewer
+than two criteria, on the ground that a length-1 axis makes every assertion over it pass. That
+is **true of tests and false of the format** -- fitting one candidate under one criterion is
+coherent, and `delta_ic = 0` with `weight = 1` are the correct answers there. It was a
+**fixture rule enforced against users**, and it refused a legitimate single-candidate run. The
+fix is to relax the product and assert the width **of the suite's own fixture**.
+
+**And how it was found is the argument for the gate.** The full sweep caught it, together with
+a second copy of the outcome code table in another module -- **two defects the task's own
+tests could not see.** `pixi run test-fast` would have shipped both.
 
 ### The other standing rules
 

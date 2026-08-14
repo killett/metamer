@@ -525,8 +525,10 @@ unreachable members reachable.
   for one candidate's design~~ — **CORRECTED 2026-08-13: that cannot work, and the "Watch"
   paragraph below says why.** In v1 the design is shared and built once before the candidate
   loop, so a design failure hits every candidate and gives `n_valid = 0`. The reachable
-  construction is an **optimizer-stage** failure: `white + matern12` fitted to white noise is
-  degenerate at most points while `white` fits.
+  construction is an **optimizer-stage** failure, **and must be one until joint signal x noise
+  search lands**: `white + matern12` fitted to white noise is degenerate at most points while
+  `white` fits (measured: 3 of 4). **This is pre-flight (a5)** -- the brief's own "Watch"
+  paragraph forbade the fixture the brief required, two paragraphs apart.
 - **A point where every fit is `OK` and one criterion cannot rank it.** Take the **REML
   route**: `n = n_obs − design_rank`, so `n_obs = 6` against a rank-4 design gives `n = 2` and
   HQIC is undefined while AIC is fine. **State in the test why the ML route cannot work** —

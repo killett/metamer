@@ -28,9 +28,9 @@
    — 14 tasks, dependencies, sixteen exit criteria.
 9. **THE METHOD IS THE PRE-FLIGHT AND IT LIVES IN EXACTLY ONE PLACE:**
    [`docs/superpowers/notes/phase1-to-phase2-handoff.md`](docs/superpowers/notes/phase1-to-phase2-handoff.md)
-   §1 — (a)–(k) with (a2)–(a4), (c2), (i2)–(i7) and (k2), the **five** causes of a surviving
-   mutation, the standing rules and the fixture facts. **Run it against Task 7's brief before
-   writing code** and append what it finds to
+   §1 — **(a0), (a)–(k) with (a2)–(a5), (c2), (g2), (i2)–(i7) and (k2)**, the **five** causes of
+   a surviving mutation, the standing rules and the fixture facts. **Run it against Task 10's
+   brief before writing code** and append what it finds to
    [`docs/superpowers/notes/phase2a-preflight.md`](docs/superpowers/notes/phase2a-preflight.md),
    as Tasks 0–6 did. **Do not restate the pre-flight here** — the two copies drifted once already.
 10. **Precedence: the design doc is authoritative on INTENT; a measured, dated number supersedes
@@ -491,79 +491,121 @@ Only the durable conclusions are here.
 
 ### WHAT TASK 10 INHERITS — read this before the task sections below
 
-**Task 9 is the tile write path, the status/value invariant, and the signal-term parser** —
-the last of which is the blocker every task since Task 6 has recorded. Tasks 7 and 8 are
-**done**; what they produced and what they oblige Task 9 to do is here.
+**Tasks 10–13 are the resumability core** — the completion bitmap, the resume gate,
+`--reuse-fits-from`, and the exit-criteria suite. Tasks 0–9 are done. Everything below is what
+a cold session cannot re-derive from the code.
 
-**TASK 9 MUST BUMP `store.SCHEMA_VERSION`.** It adds `SCREENED_OUT` and `NOT_APPLICABLE` to
-`Outcome`, which changes the store's stored code meanings and the `flag_values` /
-`flag_meanings` legend written into `/status/` at creation — and `outcomes._CODES`'s own
-docstring already carries that rule. **Task 8 deliberately did not add the members**: their
-`is_failure` and `is_eligible` semantics belong to the task that owns the failure-rate
-denominator, and adding a member without deciding those is a name with no gate.
+#### The state Task 10 starts from
 
-**`iterations` IS EXEMPT FROM THE STATUS/VALUE INVARIANT, AND IT IS THE ONLY MEMBER THAT CAN
-BE.** A uint16 has no NaN. `k` and `n` are unaffected — `CandidateScores` carries both as
-float64 — and `iterations` feeds no arithmetic, so it keeps uint16 with **65535** for "no fit
-ran". **Name the exemption in the invariant check** rather than rediscovering it.
+- **`run()` REWRITES EVERY TILE ON EVERY INVOCATION.** It sizes tiles, fits and writes them,
+  and nothing consults `/completion/tiles`. **That is what Task 10 fixes**, and until it does,
+  "resume" means "redo".
+- **`metamer.batch.write.write_tile(store_path, tile, result, *, criteria, index, has_trend)`**
+  is the one write path: one region write per array per tile, and **no way to decline.** There
+  is deliberately no "skip this tile" exit, because **Task 10 sets the bit from the fact that
+  the write returned** — a path that could decline silently would make the bit's meaning depend
+  on which branch ran.
+- **The invariant is checked BEFORE the write**, on the arrays about to be written, by
+  `write.check_status_invariant`. **The same function is what exit criterion 4 must run over a
+  finished store**, so the two cannot drift.
 
-**`/primitives/` CARRIES `n`, AND THE WRITE PATH MUST POPULATE IT.** §12.2 omitted it and
-`rank_candidates` requires it; without it Task 12 would reopen the input and recount the mask.
-It is per model although v1 makes it constant along `m`.
+#### The fill-value rule, which Task 10 writes into directly
 
-**`FitResult.theta` IS `(B, M, p_max)` NaN-PADDED AND `/noise/` IS `(y, x, P_total)` RAGGED.**
-The write path is where the padding is removed, using `RaggedIndex.block(m)`. **The
-padding-NaN versus failure-NaN ambiguity §12.3 rejects exists in memory** and must not reach
-the store: a padded slot and a failed fit are both NaN in `theta`, and only the ragged layout
-distinguishes them.
+**Every array's fill value is a value its write path cannot produce** — see (a0), the first
+pre-flight line. `OK` is code **0**, zarr's default integer fill is **0**, and zarr writes no
+chunk equal to the fill, so a defaulted store is byte-identical to a wholly successful run.
 
-**THE STORE'S API IS `metamer.batch.store`.** `provenance_attrs(config, ...) -> dict` and
-`create_store(path, *, specs, criteria, shape, attrs)`, with `StoreShape(n_y, n_x, n_beta,
-tile_side)`. `create_store` refuses an existing path, a missing provenance key, fewer than two
-candidates or criteria, and geometry components that are not a fingerprint of an opened input.
-`SCHEMA_VERSION`, `ITERATIONS_UNSET`, `N_VALID_UNSET` and `SELECTED_UNSET` are the module's
-constants; **read the fill table from its docstring before writing anything.**
+> **`/completion/tiles` IS THE ONE DELIBERATE EXCEPTION, AND IT IS LABELLED SO IT IS NOT
+> "FIXED".** Its fill is **0**, and there 0 genuinely means *incomplete* — an unwritten tile
+> really is unwritten. Every other zero-looking fill in this store is a defect.
 
-**ANYTHING THAT CREATES AN ARRAY OR WRITES AN ATTR AFTER CREATION MUST RE-CONSOLIDATE.**
-Consolidated metadata is a copy of every array's metadata and every attr. Task 9 and Task 10
-write chunk data only, which is why nothing re-consolidates today — that is an assertion, not
-an assumption.
+**Its chunking is one chunk per tile, also deliberately**: the bit is written after that
+tile's data has flushed, so grouping the bits into one object would make every tile's write a
+read-modify-write of every other tile's bit. At 10⁷ points the bitmap is of order 100
+elements, so the object count is not a concern.
 
-**THE BUILDER IS `metamer.batch.ragged`, AND ITS COLUMNS ARE STRINGS.**
-`build_ragged_index(specs, extent)` returns `RaggedIndex(extents, offsets, total)` with
-`offsets_array()`, `extents_array()`, `model_index_array()` and `block(m)`;
-`noise_param_coordinates(specs)` returns the index plus **five** string columns and a
-`legend()`. The extent function is **required and has no default**, so each call site names
-which axis it builds.
+#### What Tasks 10–13 must honour
 
-**IT EMITS FIVE COLUMNS, NOT §12.3's FOUR: `model`, `term`, `name`, `unit`, `transform`.**
-Measured: `white + matern12`'s free parameters are `matern12[0].sigma`, `matern12[0].rho`,
-`white[0].sigma` — **two slots in one model's block are named `sigma`**, so a reader selecting on
-`name` alone cannot tell measurement noise from the correlated component. `term` is split out
-rather than folding the two into `"matern12[0].sigma"`, keeping each column atomic.
+**Task 10 — ordering.** **Data then bitmap, always**: a tile's bit is set only after every
+array's region write for that tile has flushed, so an interrupted run can never mark
+incomplete data complete. **No POSIX assumptions** — no file locking, no rename-based
+atomicity, no directory-listing-as-truth; only per-object write atomicity. **SIGTERM flushes
+rather than dying mid-region-write**, so preemption is just resumption. The test is a
+**fault injected between the two writes**, never a timing race.
 
-**`noise_param_model` IS THE SPEC'S CANONICAL LABEL, NOT THE CONFIG STRING.** The config string
-is a REQUEST, the column is an IDENTITY, and **they differ in order on 2a's own fixture**:
-`"white + matern12"` against `"matern12[0] + white[0]"`. `model_index` is the integer join key to
-the `m` axis; the label is for the no-metamer reader. `ragged.model_label` is the one
-definition, used by the columns and by every group's `m` coordinate.
+**Task 11 — the resume gate.** The entry contract's ordering is the guard and must be
+**tested, not trusted**: `open → input contract (4a) → geometry fingerprint → fit_hash →
+resume gate → tiling`. Three outcomes on a matching `fit_hash`: resume; recompute derived
+arrays from stored primitives; **refuse** on a criterion-set change (it resizes `c`, a
+whole-store rewrite with no bitmap of its own) and on a `/detail/` change (fixed at creation,
+and neither fit-relevant nor recomputable). **Plus the positional candidate comparison** —
+`stored[i] == requested[i]` for every `i < len(stored)` and `len(requested) >= len(stored)`,
+refusing on the first mismatch naming the index and both hashes. **The candidate set is
+covered by NO hash and must not be added to one**: a hash expresses equality and a superset
+must stay legal.
 
-**THE COVARIANCE OFFSET TABLE IS NOT IN THE STORE, AND MUST NOT BE ADDED.** `/detail/` is not
-created, and an offset table describing a group that does not exist is name-is-not-a-gate with
-a reader on the other end. Both extent functions are exercised in `tests/test_ragged.py`; only
-the `/noise/` table is written — into `/noise/` **and** `/warmstart/`, which shares the `p`
-axis and would otherwise not be sliceable per model.
+**Task 12 — `--reuse-fits-from`, five requirements.** (1) The new store writes **its own**
+provenance: new `run_hash`, new `compat_hash`, `fit_hash` **equal to the source's**, with the
+source's path and all three hashes recorded as provenance. (2) **Verify the source before the
+tiling loop** — `schema_version`, `fit_hash` against the requested config, and (3) that the
+source's **completion bitmap is fully set**; an incomplete source is **exit code 4**, because
+recomputing from partial primitives yields a complete-looking store with no symptom. (4) The
+new store is **self-contained** and opens with the source deleted. (5) **`fit_hash` equality is
+asserted directly across the two stores** — that equality is the entire claim the three-hash
+split makes; do not infer it from the recompute succeeding.
 
-**TWO RAGGED INDICES WITH DIFFERENT EXTENTS, AND ONE REUSED TABLE IS WRONG AT UNEQUAL `p`.**
-`/noise/` is `Σ_m p_m`; a `/detail/` covariance block is `Σ_m p_m(p_m+1)/2` — **4 against 7** at
-the M=2 fixture (`white`, p=1, beside `white + matern12`, p=3), which is why that fixture has
-unequal `p`. Three consequences, all §12.3's:
+**The raising stub engine** (`tests/conftest.RaisingStubEngine`) proves the negatives, and
+**timing never can**. Three consumers: Task 12's "no fit ran", Task 11's "a resumed run did
+not refit completed tiles", and Task 11/12's "a compat-only rewrite touched nothing upstream
+of `/selection/`". **Its positive control now exists**: `run(..., engine=...)` reaches `fit`,
+proved in `tests/test_write.py`, so a stub never wired in is no longer indistinguishable from
+one never reached.
 
-- the builder takes a per-model **extent function**, not a parameter count — `p_m` for `/noise/`,
-  `p_m(p_m+1)/2` for `/detail/`, same builder, different callable;
-- **both offset tables are stored as coordinate arrays**, never derived at read time, so a
-  no-metamer reader can slice either without knowing the triangular formula;
-- a covariance is stored as the **packed lower triangle with its storage order in attrs**. The
+**Task 13** is not a formality: six of the sixteen exit criteria are cross-process or
+cross-store properties no single task's tests can express.
+
+#### Facts a cold session cannot re-derive
+
+- **THE ONE-CANDIDATE-FAILS POINT MUST COME FROM AN OPTIMIZER-STAGE FAILURE.** The recorded
+  design-stage recipe — an offset inside a gap — **cannot work**: in v1 the signal spec is
+  fixed and `fit.py` builds `design_info` **once, before the candidate loop**, so a design
+  failure is identical for every `m` and gives `n_valid = 0`. **This holds until a joint
+  signal × noise search lands.** The construction that works: `white + matern12` on white
+  noise is degenerate at most points while `white` fits — measured, 3 of 4. See pre-flight
+  **(a5)**.
+- **THE POINT-LEVEL AGGREGATE'S RULE IS `OK` IF ANY CANDIDATE IS `OK`, ELSE
+  `merge_outcomes`.** §12.2 never defined it. **The OK-wins half is load-bearing**:
+  `OUTCOME_PRECEDENCE` ranks `OK` **last** because it encodes causal priority *within one
+  fit*, so a bare merge across candidates reports a disaster wherever the harder candidate
+  struggled — exactly inverted, since a point where any candidate succeeded is a point that
+  succeeded.
+- **THE SIGNAL PARSER SHARES THE REGISTRY AND NOT THE GRAMMAR.** A noise candidate is a **sum
+  expression of bare names**; a signal term is **`kind:argument`** in a **list**. One grammar
+  would have to accept arguments inside a sum and `+` inside an argument. The spelling was
+  half-decided by Task 4's `PER_POINT_TERM_PREFIX = "regressor_field:"`, already inside that
+  field. **`ExpDecay`, `LogDecay` and `Regressor` are deliberately UNREGISTERED**: a reachable
+  name would turn a layer-3 refusal into an exception raised inside the design build, inside
+  the tile loop, ten hours in.
+- **`k_beta` IS A COLUMN COUNT.** `Harmonic` gives cos **and** sin, so 2a's three signal terms
+  are **four** columns — §9.4's worked value. And `design_matrix` returns `(matrix, rank)`:
+  the second element shrinks where the design is degenerate.
+- **`FitResult.scores` IS THE ONLY SOURCE OF `k` AND `n`**, and is what ranks one set of fits
+  under C criteria without refitting.
+- **SWEEP TIMING: 302–376 s over four runs** (2026-08-12 and 2026-08-13, at 822, 845, 847 and
+  880 tests). **Quote the range.** The "at least 5 s" spread recorded from a sample of two was
+  wrong by more than tenfold. **Task 9 is the first addition with a defensible per-test cost**
+  — six of its tests fit real series. **Task 5's ~500 s figure remains VOID**: it was measured
+  while `bench/` leaked numba's thread mask.
+- **OPEN QUESTIONS 10, 13 AND 14 REMAIN OPEN**, with their closers in the table above: macOS
+  and Windows RSS semantics; the packaging guard's `--no-deps` install, which cannot catch a
+  wrong version floor (**do not close it by loosening the floors**); and the benchmarks'
+  synthetic time axis at `unique_dt = 1` against a real monthly axis's **6**.
+- **THE `bench/` LAYERING QUESTION IS STILL OWED WORK.** `bench/references.py` and
+  `bench/spike.py` restore numba's mask in a `try/finally` and do **not** route through
+  `batch.threads.thread_budget` — they cannot, while `core` must stay importable without
+  `threadpoolctl`. **Until it is closed, no test may read the ambient thread mask as a
+  baseline.**
+
 ### THE STORE SCHEMA — what Task 8 BUILT (done), and what it obliges Tasks 9–12 to do
 
 **`metamer.batch.store` implements this.** The layout below is what exists; the paragraphs
