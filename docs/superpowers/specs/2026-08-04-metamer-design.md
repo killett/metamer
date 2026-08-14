@@ -1803,15 +1803,24 @@ rather than archaeological.
 
 ### 12.8 Resumption
 
-Resume compares the three hashes of §13.3 and the candidate set, and there are **three**
-outcomes, not two:
+**AS OF 2026-08-13 THIS SECTION DESCRIBES ONE ACCEPTANCE AND THREE REFUSALS. THERE IS NO
+IN-PLACE RECOMPUTE ARM, AND THE PARAGRAPHS BELOW EXPLAIN WHY RATHER THAN QUALIFY IT.** Read
+this table as the whole taxonomy; the historical rows are struck so a reader can see what was
+narrowed and when, not so that a later implementer builds them.
 
 | condition | action |
 |---|---|
-| `fit_hash` matches, `compat_hash` matches, candidate set is **identical** | resume normally: reuse all completed tiles, fit only what the completion bitmap says is outstanding |
-| `fit_hash` matches, `compat_hash` matches, candidate set is a **strict superset** | ~~resume normally~~ — **NARROWED 2026-08-13, see below**: refused in place, for the reasons that narrowed the row beneath it |
-| `fit_hash` matches, **`compat_hash` differs** (e.g. a criterion was added) | ~~recompute the derived `/selection/` arrays and continue~~ — **NARROWED 2026-08-11, see below** |
-| `fit_hash` differs | refuse — the stored fits are not reusable |
+| `fit_hash` matches, `compat_hash` matches, candidate set is **identical** | **resume**: reuse all completed tiles, fit only what the completion bitmap says is outstanding |
+| `fit_hash` matches, `compat_hash` matches, candidate set is a **strict superset** | ~~resume normally~~ — **REFUSE. Narrowed 2026-08-13**; write a new store |
+| `fit_hash` matches, **`compat_hash` differs** — necessarily a criterion-set change, see the cardinality note below | ~~recompute the derived `/selection/` arrays and continue~~ — **REFUSE. Narrowed 2026-08-11**; recompute into a **new** store with `--reuse-fits-from`, or rerun |
+| the **`/detail/` selection** differs | **REFUSE**: fixed at store creation, and neither fit-relevant nor recomputable |
+| `fit_hash` differs | **REFUSE** — the stored fits are not reusable |
+
+**Recomputation happens in exactly one place, and it is not here: `--reuse-fits-from`, which
+reads a finished store and writes a new one.** With the compat-only arm empty (below), that
+command is the **sole consumer of the three-hash split** and therefore the only demonstration
+that `fit_hash` identifies anything — which is why its tests are the tests of the split
+itself.
 
 **NARROWED 2026-08-11. A `compat_hash` mismatch licenses recomputing the derived arrays
 from stored primitives; it does NOT license resizing an axis in place.** Adding a criterion
@@ -1836,7 +1845,11 @@ Three reasons to narrow rather than implement the resize:
    invariant.
 
 **And a consequence that is a finding in its own right, measured against the code rather
-than assumed.** `hashing.COMPAT_RELEVANT_FIELDS` is `FIT_RELEVANT_FIELDS | {"criteria"}` —
+than assumed — recorded 2026-08-11 and its implication drawn only at Task 11, which is the
+lesson as much as the fact.** A check that establishes the **size** of a set must be followed
+by the question *what is defined over this set, and what happens to it at this size?*; here
+the answer is that the middle arm has no reachable input at all, and it went unasked for nine
+tasks. `hashing.COMPAT_RELEVANT_FIELDS` is `FIT_RELEVANT_FIELDS | {"criteria"}` —
 **the two sets differ by exactly one field, and it is the criterion set.** So after this
 narrowing, *every* constructible `compat_hash`-only mismatch is a criterion-set change and
 *every* criterion-set change is refused: the middle row above has **no reachable in-place
@@ -1890,19 +1903,23 @@ and the store is wrong in a way no invariant catches. Where the candidates diffe
 parameter count it also shifts every offset on the ragged `/noise/` axis, so the corruption
 appears in two arrays. **The wrong-candidate-at-index-1 case is a required test.**
 
-The middle row is the reason §13.3 splits `fit_hash` out of `compat_hash` at all. Without
-it, adding HQIC to a finished 10⁷-point run would demand a full refit to compute arithmetic
-on numbers already sitting in the store.
+**The recompute OPERATION is the reason §13.3 splits `fit_hash` out of `compat_hash` at all**
+— without it, adding HQIC to a finished 10⁷-point run would demand a full refit to compute
+arithmetic on numbers already sitting in the store. **What moved on 2026-08-11 and again on
+2026-08-13 is only where that operation happens: into a new store, never in place.** The
+split is not thereby weakened; it is concentrated, and `--reuse-fits-from` carries all of it.
 
 Refusal never silently mixes.
 
-**THE FULL TAXONOMY OF A RESUME WITH MATCHING `fit_hash` (2026-08-11) — three outcomes, not
-three special cases.**
+**THE FULL TAXONOMY OF A RESUME WITH MATCHING `fit_hash` (2026-08-11, corrected 2026-08-13)
+— ONE ACCEPTANCE AND THREE REFUSALS**, not three special cases and **not** a recompute arm
+with caveats. A reader who takes the second row below as work to be built will implement an
+arm no configuration can reach.
 
 | what changed | outcome | why |
 |---|---|---|
-| nothing compat-relevant | **resume**: reuse completed tiles, fit the outstanding ones | — |
-| a compat-relevant field that is **not** the criterion set | **recompute** the derived arrays from stored primitives, do not refit | the arrays are functions of stored primitives. **NO PRODUCER TODAY** — the two allowlists differ by `criteria` alone, so this row is reachable only once a field is added that changes derived arrays without moving `θ̂`; see the measured note above, and do not invent one to make it constructible |
+| nothing compat-relevant, candidate list identical | **resume**: reuse completed tiles, fit the outstanding ones | — |
+| ~~a compat-relevant field that is not the criterion set~~ | ~~**recompute** the derived arrays in place~~ — **NO PRODUCER; DO NOT BUILD IT** | the two allowlists differ by `criteria` alone, so this row is **empty by construction** and every input that could reach it is consumed by the row below. It becomes reachable only if a field is added that changes derived arrays without moving `θ̂`, and **inventing one to make it constructible would be backwards**. The gate refuses an unrecognized compat difference explicitly, so such a field lands on a declared arm rather than on whichever branch was last |
 | the **criterion set** | **refuse**, and name the two resolutions | it resizes the `c` axis, which is a whole-store rewrite with no completion bitmap of its own |
 | a **strict superset** of the candidate set | **refuse**, and name the resolution (new store) | it resizes the `m` and `p` axes — the same argument — **and the bitmap has no model axis**, so partial-by-candidate completion is not expressible |
 | the **`/detail/` selection** | **refuse**: fixed at store creation | **neither fit-relevant nor recomputable** |

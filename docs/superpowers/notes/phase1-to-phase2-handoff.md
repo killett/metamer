@@ -45,13 +45,23 @@ carry NaN; the dtype is fixed at store creation and the array feeds no arithmeti
 therefore **exempt, named, and given a sentinel of 65535 rather than silently left at 0** --
 justified, labelled, and outside the range the writer can emit.
 
-### (a1) A DERIVED INDEX IS A GATE, AND NO HASH GOVERNS IT
+### (a1) RE-DERIVATION AT RESUME IS THE HAZARD, NOT AN UNHASHED ANCESTOR
 
-> **Any value that names WHERE data goes — an array index, a key, a shard coordinate, a
-> partition — is an identity claim, and it must be checked on resume even when the inputs
-> that derive it are deliberately excluded from every hash.** A hash gate governs **whether**
-> work is reused; an index governs **where it lands**. They are different questions, and
-> excluding a field from the first says nothing about the second.
+> **A stored geometry READ BACK from the store is safe, however it was originally
+> computed. One RE-DERIVED from current inputs is a gate, whether or not those inputs are
+> hashed.** Any value that names **where** data goes — an array index, a key, a shard
+> coordinate, a partition — is an identity claim; a hash governs **whether** work is reused
+> and says nothing about **where it lands**.
+>
+> **So the repair has a default: read it back rather than re-derive it, and guard only where
+> reading back is impossible.**
+
+**This supersedes the weaker form the finding was first written in** — *"any derived index is
+a gate, and must be checked even when its inputs are excluded from every hash"* — which is
+true and over-broad. It sweeps in every geometry with an unhashed ancestor, most of which are
+never recomputed at all, and it does not say what to do. The sharper version came out of the
+sweep below: the operative condition is **re-derivation**, and the two halves of the store
+divide on exactly that line.
 
 **This sits beside (a0) rather than under (a2), and the difference is what makes it its own
 line.** (a2) asks whether a *named* gate is populated by the thing it claims to identify.
@@ -76,10 +86,19 @@ exists for, so the rule is over the **derived** quantity, not the input:
 | **stored < derived** | **adopt the stored side** | a smaller tile subdivides the fixed shards safely and is inside the requested budget |
 | **stored > derived** | **refuse**, naming both sides and the store's recorded budget | the shards were fixed at creation; adopting the larger tile would silently exceed the budget, and writing sub-shard regions would make every write a read-modify-write |
 
-**One instance implies others: sweep for stored geometry derived from a non-hashed input.**
-Done for this store on 2026-08-13 — chunk and shard shapes, the coordinate extents, the `b`
-axis and the `m`/`p` axes; the results are in
-[`phase2a-preflight.md`](phase2a-preflight.md), and one of them is load-bearing for Task 11.
+**And the sweep is what sharpened the rule.** Run over this store on 2026-08-13 — chunk and
+shard shapes, the coordinate extents, the `b` axis, the `m`/`p` axes. The **chunk
+subdivision** depends on a code constant in no hash and is **not** an instance, because every
+write goes through the chunk grid the store already declares: it is read back, never
+recomputed. The **tile side** is an instance precisely because the runner recomputes it from
+the current budget, and the **candidate list** is one because `M`, `P_total` and both offset
+tables are rebuilt from the requested config at every resume. Results in
+[`phase2a-preflight.md`](phase2a-preflight.md); the second instance was load-bearing for
+Task 11.
+
+**Where reading back is impossible, the guard is the fallback and it needs the asymmetry
+above** — the tile side cannot simply be read back and used, because the requested budget may
+not hold it, which is why that one case has three arms rather than one.
 
 ### (a) Absolute vs differential — THE CANCELLATION RULE
 
@@ -141,6 +160,31 @@ calibration cache key, a warm-start cache key. **`machine_fingerprint` is the li
 of a field whose classification changes with its consumer**: self-reported at its own
 boundary, harmless while it reaches `run_hash` alone (provenance, never a gate), and an
 identity the moment the calibration cache key reads it.
+
+#### A DISCOVERED CARDINALITY MUST BE FOLLOWED TO ITS CONSEQUENCES, NOT JUST RECORDED
+
+> **When a check establishes the SIZE of a set — one field, three identities, two openers —
+> ask immediately what breaks at that size.** A set of one makes every distinction defined
+> over it degenerate, and **the degeneracy is invisible to any test written against the
+> general case**, because such a test exercises the distinction where it still holds.
+
+**This is the length-1-axis argument from Q2 and (i7), applied to a configuration set rather
+than to a store axis** — and the two should be read together. There, an axis of length 1
+makes every assertion over it pass; here, a *difference* set of size 1 makes two gates that
+were designed to be independent into the same gate.
+
+Worked instance, Phase 2a Tasks 2 and 11, and the gap between them is the finding. Q3 flagged
+that the hash partition *might* be two-way plus one field; Task 2's allowlist sweep
+**confirmed** it — `COMPAT_RELEVANT_FIELDS = FIT_RELEVANT_FIELDS | {"criteria"}` — and
+**neither pass asked what a one-field difference does to §12.8's recompute arm.** The answer,
+found nine tasks later while implementing that arm: *"`fit_hash` matches and `compat_hash`
+differs"* **is** "the criterion set changed", which §12.8 refuses, so the arm has **no
+reachable input at all**. The cardinality was recorded correctly and its implication went
+unexamined.
+
+The tell is a check that returns a number or a size and is filed as a fact. **The follow-up
+question is one line and it is never asked by the check itself**: what is defined *over* this
+set, and what happens to it at this size?
 
 #### THE SAME RULE AT THE INSTRUMENT LEVEL: A COMPLETE-LOOKING TABLE WITH A ROW MISSING
 
