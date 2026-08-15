@@ -255,6 +255,17 @@ first and alone.
     memory.resident_tile_bytes(*, batch, placement, threads, d, k_beta, p_max,
                                n_time, n_models, per_point_design=False) -> int
 
+> **AMENDED 2026-08-15, BY THE IMPLEMENTATION, AND THE DEVIATION IS REPORTED RATHER THAN
+> ABSORBED.** `resident_bytes_per_series` shipped **without `placement` and without `d`**: under
+> this task's own correction the per-series figure depends on neither, since `d` reaches the
+> formula only through the solver state and the solver state is not per-series. A signature
+> keeping them asserts a dependence the formula denies. They stay on `solver_state_bytes` and
+> `resident_tile_bytes`, and Task 2's `tile_side_for` keeps them correctly. `solver_state_bytes`
+> takes `p_max` rather than `p`, for the same reason `output_slot_bytes` does — the constant must
+> bound the widest candidate. Two more names landed that this list does not have:
+> `memory.MemoryEngineLabel` / `memory_engine_label(engine)`, which Task 5's `cache_key` binds
+> against, and `memory.slope_band`, which is the two-sided check in executable form.
+
 **Tests, and the bug each catches.**
 
 - *The output-slot term equals a hand-built inventory of what `fit` preallocates, asserted
@@ -277,6 +288,14 @@ first and alone.
 
 **Watch.** `Backend` is imported by `batch/tiling.py` and `batch/run.py`. Removing it is a
 signature change those tasks bind against, so (g) is live here rather than clean.
+
+> **CORRECTED 2026-08-15: FOUR `src/` IMPORTERS, NOT TWO.** `batch/tiling.py`,
+> **`batch/validation.py`**, `batch/run.py` and **`bench/spike.py`**, plus three test modules.
+> `bench/spike.py` is the one that matters beyond a count — it is the only prange-over-series
+> driver in the tree and the only caller of `bytes_per_series` outside the tests, and it sits on
+> the far side of the `bench/`-versus-`core` layering question this plan records as still owed.
+> And a **fifth defect (F5) was in the same function as F2**: the optimizer term described §8.3's
+> deleted trust-region as well, and understated the constant 11.3×. See `PROGRESS.md`.
 
 **And this task breaks live assertions on the published tile side** — `test_memory.py:582`,
 `test_tiling.py:188`, `test_validation.py:391` and `:429` pin 338 and 186. **They are correct

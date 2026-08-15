@@ -121,9 +121,18 @@ TO ANY CHECK ON THE TOTAL.** Verify each **term**, never the total. Worked insta
 F2 and F3, found together: `memory.bytes_per_series` multiplied the solver state by `B` when
 the code holds it for one series at a time (**−1056 B/series**, 12.1% too high) while its
 output-slot term omitted `theta_unconstrained`, `n`, an object-array `init_rung` pointer, and
-an int64 rather than uint16 `n_iter` (**+552 B/series**, 28% too low). The total was within
+an int64 rather than uint16 `n_iter` (**+648 B/series**, 33% too low). The total was within
 0.5% of a measurement and **neither term was right**. The tell is a formula validated as a
 sum against an instrument that also produces a sum.
+
+**AND THE CORRECTION WAS ITSELF CARRIED AS A TOTAL, WHICH IS THE RULE FAILING ONE LEVEL UP.**
+F3's magnitude was recorded as **+552 B/series (+46/candidate)** and accepted through planning
+and review. Task 0 rebuilt the inventory field by field and got **+648 (+54)** — the four
+omissions the finding *names* sum to 54, and 46 is that list with one 8-byte member dropped.
+**The recorded number never agreed with the recorded reasoning, and nothing compared them.** So
+the repair is not "verify each term once": it is **verify each term of whatever you are about to
+write down, including the terms of a correction**, and write the derivation beside the number so
+the next reader can do the comparison the author did not.
 
 ### (a2) A NAME IS NOT A GATE
 
@@ -352,6 +361,23 @@ different constants"* was true of two designs and false of the code.
 **The repair is to delete rather than to alias.** Keeping `Backend` as a synonym for the
 replacement would re-commit the defect: a name with no referent, now with a forwarding
 address.
+
+**AND THE SWEEP IS THE HALF THAT PAYS, BECAUSE THE PLAN'S OWN SWEEP WAS SHORT BY HALF.** The
+2b plan named two importers of `Backend`; there were **four** in `src/` — the two named, plus
+`batch/validation.py` and **`bench/spike.py`**, the latter on the far side of a layering
+boundary the project has an open question about. Four **more** descriptions of the same deleted
+subject were in the module and named by nobody: `bytes_per_series` (the "model" *was* the
+deleted architecture's shape), `tile_bytes`, `thread_state_bytes`, and
+`streaming_overhead_bytes`, whose 40 B/series charged a `(B, 1+k_β)` row per series when the
+driver hands the engine B = 1.
+
+**Worst of them was inside the function the finding was already about.** `_solver_state` — the
+subject of F2 — also charged a *"dense quasi-Newton trust-region model"* optimizer term for the
+same deleted §8.3 design, while production runs scipy L-BFGS-B for **both** engines, whose
+workspace is dominated by `11·maxcor²` doubles that do not depend on the parameter count at all.
+The constant was understated **11.3×**. **So: after deleting an implementation, sweep the
+function you are already editing before sweeping the tree** — the survivor nearest the defect is
+the one a reader's eye has already accepted.
 
 ### (b) Batch vs series
 
@@ -1038,18 +1064,26 @@ tests could not see.** `pixi run test-fast` would have shipped both.
 
 ## 3. The number every Phase 2 tile calculation inherits
 
-**`tile_side` is 338. It was 171 for the whole of Phase 1, and the engines were fixed on
-2026-08-10 (P2).**
+**`tile_side` is 347, and it has now been wrong three times.** It was 171 for the whole of
+Phase 1, 338 from 2026-08-10 (P2) to 2026-08-14, and **347 since Phase 2b Task 0**.
 
 | figure | what it is | use it for |
 |---|---|---|
-| **339** (8 682 B/series) | design doc §9.4's **model** — the streaming filter the document describes. `memory.bytes_per_series` | reading §9.4 |
-| **338** (8 722 B/series) | what the code **actually holds** on path A. `memory.resident_bytes_per_series` | **every Phase 2 tile calculation** |
+| **347** (8 274 B/series) | what the code **actually holds**, one live solver working set excluded because `fit` runs one series at a time. `memory.resident_bytes_per_series` | **every Phase 2 tile calculation** |
+| ~~339~~ (8 682 B/series) | §9.4's **model** — and the model was the batched trust-region §8.3 specified and Task 19 deleted. `memory.bytes_per_series`, **deleted** | **nothing** |
+| ~~338~~ (8 722 B/series) | the model plus a per-series charge for the engine's reused row, with the solver state still per series | **nothing after 2026-08-14** |
 | ~~171~~ (33 882 B/series) | what it held while `_augment` materialized `[y \| X]` | **nothing. Any Phase 1 note quoting 171 predates the fix** |
 
-At a 1 GB budget, shared X, d=3, k_β=4, p=4, M=12. Path B's resident figure is 8 B/series
-above its own model rather than 40, because its extra term is a `(B,)` index array and not
-a row of columns.
+At a **10⁹ B** budget, shared X, d=3, k_β=4, p_max=4, M=12, N=630. Per-point X gives **187**.
+**The unit is not decoration**: `run.py` converts `memory_budget_gb` with `1024**3`, which gives
+360 at the same nominal budget, and resolving that is Phase 2b Tasks 2 and 3.
+
+**AND THE SIDE NO LONGER CARRIES A BACKEND.** ~~Path B's resident figure is 8 B/series above
+its own model rather than 40~~ — the per-series cost is the data tile plus the output slots,
+neither of which knows which engine is running, so the two published pairs (338/186 against
+361/189) differed **only** because of the per-series solver charge. The placement moves a
+constant. **A `tile_side` still needs its preconditions — budget and unit, N, M, k_β, p_max and
+the regressor regime — it just does not need an engine.**
 
 **What the defect was, kept because the mechanism is the transferable part.**
 `KalmanEngine._augment` ended in `np.concatenate([y[:, :, None], x], axis=2)`, materializing

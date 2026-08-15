@@ -8,16 +8,16 @@
    Tasks 0–13 — the whole sub-phase**, and open questions 1, 4, 9, 11, **12**. **The signal-term blocker carried since
    Task 6 is CLOSED**: `config.signal_spec()` builds a `SignalSpec`, `signal.k_beta` gives the
    column count, and `run()` sizes tiles, fits and writes them.
-3. **PHASE 2a IS COMPLETE. THE 2b PLAN IS APPROVED. NEXT ACTION: 2b TASK 0 — the memory formula
-   corrected — AND ITS FIRST STEP IS THE PRE-FLIGHT AGAINST ITS OWN BRIEF.** No 2b code has been
-   written. All sixteen 2a exit criteria are met, two with reduced scope; **2b closes both**.
+3. **PHASE 2a IS COMPLETE. THE 2b PLAN IS APPROVED. 2b TASK 0 IS DONE. NEXT ACTION: 2b TASK 1 —
+   the floor — AND ITS FIRST STEP IS THE PRE-FLIGHT AGAINST ITS OWN BRIEF.** All sixteen 2a exit
+   criteria are met, two with reduced scope; **2b closes both**.
    **Read [What 2b's first tasks inherit](#what-2bs-first-tasks-inherit-2026-08-14) before
-   anything else** — it carries the four findings (F1–F4) that changed what 2b is, and every
+   anything else** — it carries the findings (F1–F5) that changed what 2b is, and every
    measured number 2b rests on. Then the plan.
-4. **Tests: 940 passed, measured 2026-08-14 after Task 13, and re-run green on 2026-08-14 after
-   the 2b plan landed.** This is the only statement of the **current** count; the sweep-timing
-   series below carries a size per run because **a duration without its test count is not a
-   measurement**, which is a different fact and not a restatement of this one.
+4. **Tests: 947 passed, measured 2026-08-15 after 2b Task 0** (940 before it). This is the only
+   statement of the **current** count; the sweep-timing series below carries a size per run
+   because **a duration without its test count is not a measurement**, which is a different fact
+   and not a restatement of this one.
 5. **`pixi run test` is the full sweep and is what every end-of-task verification must run.
    It took 302–606 s across nine runs, 2026-08-12 to 2026-08-14, at 822, 845, 847, 880, 880,
    897, 910, 924 and 940 tests.** **THE ATTRIBUTION TRIGGER HAS NOW FIRED AND THE PASS IS
@@ -26,7 +26,9 @@
    test opens a doc file), came in at **777.8 s and 782.7 s — agreeing to 5 s and sitting
    176 s above 606.1 s.** The first was labelled *contaminated by concurrent load*; **the
    second was run with nothing else started and falsified that label.** Do not quote 302–606
-   as current until the pass is done.
+   as current until the pass is done. **The 2026-08-15 run after 2b Task 0 is the FIRST with
+   its machine state recorded: 1004.4 s at 947 tests, load average 7.63/6.53/5.03 before and
+   7.72/8.11/7.30 after, CPU 2299.9 MHz before and 2400.0 MHz after, 4 cores.**
 6. **`pixi run test-fast` deselects `slow` and is for iteration only — a green fast run is NOT
    evidence a task is done.** `pixi run test-ci` reproduces CI (`-m 'not machine'`) and is not
    evidence either, because `machine` covers exactly the tests that pin the RSS shim's units and
@@ -71,12 +73,33 @@ arithmetic over the formula and were hand-recomputed on 2026-08-14.
 |---|---|---|
 | **F1** | `run.py:348` passes the budget in as `block_bytes`; **no document defines the mapping** | at a 1 GB budget the tile is **996 MB, 92.8% of it**, against a **221.5 MB** floor. Exit criterion 7 asserts *peak RSS* and is unsatisfiable wherever the tile dominates |
 | **F2** | `memory.bytes_per_series` multiplies solver state by B; `fit.py:223` loops one series at a time. The formula describes §8.3's batched trust-region, **deleted at Task 19** | **1056 B/series of 8722 — 12.1%, and 120 MB at B = 114 244** |
-| **F3** | the output-slot term omits `theta_unconstrained`, `n`, an object-array `init_rung` pointer, and an int64 (not uint16) `n_iter` | **209 B/candidate against the formula's 163, +28%** |
+| **F3** | the output-slot term omits `theta_unconstrained`, `n`, an object-array `init_rung` pointer, and an int64 (not uint16) `n_iter` | ~~209 B/candidate against the formula's 163, +28%~~ — **217 against 163, +33%**, corrected at Task 0 |
 | **F4** | `CompiledEngine` pranges over the one series `fit` hands it, so **B = 1**; both `Backend` values describe unbuilt architectures | corrected, the two placements differ **in a constant, not in the slope** |
 
 **F2 and F3 have opposite signs and partially cancel**, which is why neither was noticed and why
 the total sat within 0.5% of a measurement while **neither term was right**. Verify each term,
 never the total.
+
+**AND F3's OWN MAGNITUDE WAS THEN CARRIED AS A TOTAL, WHICH IS THE SAME DEFECT ONE LEVEL UP.**
+Task 0 rebuilt the inventory field by field from `fit.py:197-209` and got **217 B/candidate**:
+`3·p_max·8` (theta, theta_unconstrained, theta_err) + `2·k_β·8` (beta, beta_err) + `5·8`
+(loglik, k, n, n_eff_bic, n_eff_trend) + 8 (`n_iter` int64) + 8 (`init_rung` pointer) + 1
+(`outcome` uint8) = `24·p_max + 16·k_β + 57`. The four omissions this table names sum to
+**+54/candidate** against the published 163, and **209 − 163 = 46** — the list with one 8-byte
+member dropped. The recorded number never agreed with the recorded reasoning, and nothing
+compared them. **+648 B/series at M = 12, not +552.**
+
+**A FIFTH DEFECT SAT IN THE SAME FUNCTION AS F2 (found at Task 0, 2026-08-14).**
+`_solver_state` charged path A `(p² + 4p)·8 = 256 B` for §8.3's *"dense quasi-Newton
+trust-region model"* and path B `22p·8` for an L-BFGS history. **Production runs neither:**
+`optimize.py:531` is `minimize(..., method="L-BFGS-B", ...)` and `fit` drives `optimize_series`
+whichever engine it holds. scipy 1.18.0's `_minimize_lbfgsb` allocates
+`wa = 2·m·n + 5·n + 11·m² + 8·m` float64 at `maxcor = 10`, so **`11·m²` dominates and does not
+depend on `p` at all** — 10 240 B at p = 4 for `wa` alone. The whole placement constant is
+**11 984 B against the formula's 1056 — 11.3×**. It does not move `tile_side` (a constant
+against a ~1 GB budget), and **it is exactly what Task 4's intercept and Task 7's cross-check
+measure**, so it had to be right in kind before either runs. Same shape as F2 and F4: a
+description of the deleted architecture surviving in a function nobody re-read.
 
 **And F2's validating measurement drove a different workload.**
 `memory.measure_evaluation_rss_slope` calls `unconstrained_loglik` on a **batch of B**, which
@@ -133,19 +156,52 @@ inside the admissible window**, which differs per array. Rounding loss at the ba
 
 ### The published tile side moves, and it is the FOURTH cascade
 
-Hand-recomputed at §9.4's worked example (d = 3, k_β = 4, p = 4, N = 630, M = 12, 1 GiB), each
-step a claim to measure:
+**THE FIRST VERSION OF THIS TABLE HAD TWO ARITHMETIC ERRORS AND THEY ARE RECORDED RATHER THAN
+OVERWRITTEN**, because the mechanism is the transferable part: it was headed *"1 GiB"* while
+every side in it is a **10⁹** number, and it carried *"corrected ≈ 8218 B → **361**"* when
+`floor(sqrt(10⁹/8218))` is **348** — **361 is the COMPILED backend's published side** at
+7634 B/series, lifted from the neighbouring table rather than computed. Both survived a review.
+**(a4) on the review side, third instance.**
 
-| step | per-series | side |
-|---|---|---|
-| as published | 8722 B | **338** |
-| F3: output slots as `fit` holds them | +552 B | — |
-| F2/F4: solver state is a constant, not a slope term | −1056 B | — |
-| corrected | **≈ 8218 B** | **361** |
-| F1: the floor comes out of the budget | — | **≈ 286** |
-| the smooth-base rounding | — | **≈ 272** |
+Recomputed by hand at §9.4's worked example (d = 3, k_β = 4, p_max = 4, N = 630, M = 12) at a
+**10⁹ B** budget, each step a claim to measure. Rows through *corrected* are settled at Task 0;
+the last two are projections Tasks 2 and 3 will replace with derivations.
+
+| step | per-series | side (shared) | side (per-point) |
+|---|---|---|---|
+| as published | 8722 B | ~~338~~ | ~~186~~ |
+| F3: output slots as `fit` holds them, field by field | +648 B | — | — |
+| F2/F4/F5: solver state is a constant, not a slope term | −1056 B | — | — |
+| the engine's reused `[y \| X]` row is a constant too | −40 B | — | — |
+| **corrected (Task 0, landed)** | **8274 B** | **347** | **187** |
+| F1: the floor comes out of the budget | — | *projected ≈ 286* | — |
+| the smooth-base rounding | — | *projected ≈ 272* | — |
+
+Bracketing squares, so the next reader can check rather than trust: `347² = 120 409 ≤
+10⁹/8274 = 120 860.5 < 121 104 = 348²`, and `187² = 34 969 ≤ 10⁹/28 434 = 35 169.9 < 35 344 =
+188²`.
 
 **The side getting smaller at the same nominal budget is the correct direction and is expected.**
+
+**AND THE BUDGET'S UNIT IS AN OPEN DEFECT, OWNED BY TASKS 2 AND 3.** Every published side in
+this project is computed at `10**9`, while **`run.py` converts `memory_budget_gb` with
+`1024**3`** — 7.4% more bytes for the same word, and 360 rather than 347 at the worked example.
+The runner and the published example have never meant the same thing by "1 GB". `tile_side(1024**3,
+8274) == 360` is pinned by a test so the discrepancy cannot be tidied away before it is decided.
+
+### The published side no longer carries a backend, and that is the visible half of F2/F4
+
+~~`NUMPY_BATCHED` gives 338 shared / 186 per-point and `COMPILED` gives 361 / 189~~ — struck
+2026-08-14. The two pairs differed **only** because the formula charged one live solver working
+set to every series. The per-series cost is the data tile plus the output slots, **neither of
+which knows which engine is running**, so the placement moves a constant and the pair is
+placement-independent. `batch/validation.py`'s per-point refusal correspondingly stopped naming a
+backend: **a precondition that does not change the answer is not a precondition.**
+
+This is where the (i5) trap in Task 0 was: `test_validation.py`'s *"the quoted tile sides are
+backend-specific"* had its subject deleted by the correction, and the repair that keeps it green
+is to keep a placement-dependent per-series term — which is the defect. It was replaced by its
+inverse, whose mutation (multiplying the solver state into the per-series figure) bites.
 
 **THE SPREAD WAS COUNTED, NOT ESTIMATED.** `rg '\b338\b'`, four categories, twenty-plus
 occurrences: design doc **§2.5, §11.1 ×2, §13.4** — **and NOT §9.4, which quotes 339**, the model
@@ -190,6 +246,87 @@ settled.
 as *"≈ 1712 years"* — wrong by 10³ — and accepted by both author and reviewer, because nothing
 either of them disputed was riding on it. The corrected figure is what makes the §9.3 gap a
 question worth asking at all. **(a4)'s review-side instance, in the handoff.**
+
+---
+
+## Phase 2b execution
+
+### What Task 0 established (done 2026-08-15 — read before touching memory, tiling or budgets)
+
+**`core/memory.py` now describes the code.** The formula is one shape with a placement
+parameter:
+
+    resident = B × (N×9 + X_term + out(M, p_max, k_β)) + placement_constant
+
+- **Only two things are per-series**: the data tile and the output slots. Everything the engine
+  and the optimizer hold is inside `fit.py`'s per-series loop and is therefore a constant.
+- **`Backend` is deleted, not aliased**, and it had **four `src/` importers, not the two the
+  plan's Watch named** — `batch/tiling.py`, `batch/validation.py`, `batch/run.py` and
+  **`bench/spike.py`**, plus three test modules. `bench/spike.py` is the one worth remembering:
+  it is the only prange-over-series driver in the tree and the only caller of `bytes_per_series`
+  outside tests, and it sits on the far side of the `bench/`-versus-`core` layering question that
+  is still owed.
+- **Deleted with it**, all (a6) instances of the same subject: `bytes_per_series` (§9.4's model
+  *is* the batched trust-region's shape), `tile_bytes`, `thread_state_bytes`, and
+  `streaming_overhead_bytes` — whose 40 B/series is inside every published 8722 and was a
+  per-series charge for a `(B, 1+k_β)` row the engine gets at B = 1.
+- **New:** `SolverPlacement`, `MemoryEngineLabel` + `memory_engine_label`, `solver_state_bytes`,
+  `resident_tile_bytes`, `slope_band`, `LBFGS_MAXCOR`, `SLOPE_BAND_FACTOR`.
+
+**THE INTERFACE THE PLAN SPECIFIED WAS NOT THE ONE THAT LANDED, AND THE DEVIATION IS THE
+FINDING.** The plan lists
+`resident_bytes_per_series(*, placement, d, k_beta, p_max, n_time, n_models, per_point_design)`.
+Under the correction the per-series figure depends on **neither `placement` nor `d`** — `d`
+reaches the formula only through the solver state, which the same task moves out of the
+per-series term. Keeping them would assert a dependence the formula denies and make *"the solver
+term does not scale with B"* a property of a test rather than of the shape. **Both dropped**;
+they stay on `solver_state_bytes` and `resident_tile_bytes`. **Task 2's `tile_side_for` keeps
+them and is right to** — its block arithmetic subtracts the constant, so it needs the constant's
+inputs. `tiling.tile_side_for` and `run.py` shed `backend`/`d` at Task 0 and Task 2 restores
+`floor`/`placement`/`d`; `run.py` carries a comment saying so, since the "widest candidate's
+state dimension" reasoning would otherwise be lost between the two commits.
+
+**What `tile_side` still does NOT do, stated so Task 2 is not surprised.** It divides the whole
+budget by the per-series cost and subtracts **nothing** — not the floor, not the headroom, not
+`solver_state_bytes`. That is F1, and Task 2 owns it. Until then every derived side is an upper
+bound rather than a budget-safe number, and the docstring says so.
+
+**AND A PER-SERIES TERM IS STILL UNCHARGED, WHICH IS AN INPUT TO TASKS 2 AND 7.** The formula is
+**resident**, not peak. `fit` also holds per-candidate temporaries that **do** scale with B —
+`var_gls` and `var_white` at `(B,)` each, the `np.nan_to_num(theta[:, c, :p])` copy, and
+`hydrate`'s `(B, p_total)` block — allocated inside the candidate loop and dropped at its end.
+**Estimated at order 100 B/series, ~1.2%, and labelled an estimate**: 16 B/series leaves the
+worked example at 347, but 100 B/series gives **345**. Two grid points from a term nobody has
+measured. **Task 7 measures it; Task 2's headroom must cover it — and because it is a SLOPE term
+rather than a constant, the headroom has to stay a fraction of the budget rather than a fixed
+number of bytes.** A constant headroom would be right at one B and wrong at every other.
+
+**The tests that pin it, and every one of them bites** (verified by mutation, 2026-08-15):
+
+| mutation | what fails |
+|---|---|
+| multiply `solver_state_bytes` by `batch` | the tile-solver-term test, and `test_validation`'s placement-independence |
+| drop `n` from the output-slot inventory | the field-by-field test |
+| charge `2·p_max` instead of `3·p_max` (drop `theta_unconstrained`) | the field-by-field test |
+| restore the `22p·8` L-BFGS history | the solver-constant test |
+| drop the reused `[y \| X]` row | the constant-not-per-series test |
+| make `memory_engine_label` return one label | the shared-`EngineId` test |
+| remove the `threads >= 1` guard | the refusal test |
+| make `slope_band` one-sided | the two-sided-band test |
+| widen `fit.py`'s slice to `y[b:b+2]` | the leading-dimension test |
+
+**The reachability assertion drives `run()`, not `fit`.** `test_memory.py` passes a recording
+engine through `run(engine=...)` over a 2×3 grid and asserts every `score` call carried leading
+dimension 1 — six series, so "one per tile" and "one per series" are different numbers and the
+fixture can tell them apart. Its (i2) positive controls are two: the recorder is asserted
+non-empty (an empty list satisfies every "leading dimension is 1" claim for free), and the
+unreachable branch is computed directly against hand-derived numbers elsewhere in the module.
+
+**The B = 50 argument, kept because it is why the invariant is a shape and not a measurement.**
+At B = 50 the difference between "the solver state is a constant" and "it is per series" is
+50 × 11 984 = 599 kB against a 221.5 MB floor — 0.27%, which no instrument here resolves; at any
+B where it is resolvable the run costs hours at ~5.4 s/series. **So it is asserted as a shape and
+labelled as one**, which is the honest form and is what the plan asked for.
 
 ---
 
@@ -272,6 +409,33 @@ decompose per module if the state does not account for it. **Recording the state
 future sweep duration is the cheap half and should land regardless**, because without it the next
 step is unattributable in exactly this way.
 
+**THE CHEAP HALF LANDED AT 2b TASK 0, AND THE FIRST STATE-CARRYING MEASUREMENT ALREADY
+CONTRADICTS THE STATED HYPOTHESIS.** 2026-08-15, after Task 0: **1004.4 s at 947 tests**, load
+average **7.63/6.53/5.03 before and 7.72/8.11/7.30 after**, CPU **2299.9 MHz before, 2400.0 MHz
+after**, 4 cores, `pixi run test` alone with nothing else started.
+
+| what | 2026-08-14 | 2026-08-15 |
+|---|---|---|
+| duration | 782.7 s | **1004.4 s** |
+| tests | 940 | 947 |
+| load average (15 min) | 5.48 | 5.03 → 7.30 |
+| CPU clock | **~1.31 GHz** (below the N95's 1.7 GHz base) | **2.30–2.40 GHz** (above base) |
+
+**The box was running 1.8× FASTER per core and the sweep took 28% LONGER.** So "below base
+clock" cannot be the explanation the 2026-08-14 note reached for, and the state that differs is
+the **load average**, not the frequency. That is one comparison, not a decomposition, and it is
+recorded as such.
+
+**+222 s at +7 tests, and the new tests do not account for it.** `test_memory.py` in full is
+~46 s (8.3 s fast, 38.1 s slow) and most of that predates Task 0; the one genuinely expensive
+addition drives a real `run()` over a 2×3 grid. **At most ~40 s of the step is attributable and
+~180 s is not.** Recorded as unattributed rather than explained away, which is the discipline
+Task 13 of 2a set and the one this series exists to keep.
+
+**The trigger's condition is unchanged and is now cheap to satisfy**: the next same-tree run
+decides, and every run from here carries its state, so the comparison the 2026-08-14 pair could
+not support is available the first time it is needed.
+
 **So: 302–427 s over six runs was the range, and it is NOT current.** Treat a step inside it as
 scatter only once the pass above has explained the 176 s.
 The estimate was wrong the same way the verdict's ±0.15 was wrong — **two points do not bound
@@ -323,7 +487,7 @@ was the actual defect the leak exposed.
 | **10** | macOS and Windows support | deciding what RSS accounting *means* there (peak vs current; `ru_maxrss` has no Windows equivalent), then a green run on both. What failed was never the library — it was `test_memory.py`'s RSS assertions and `test_bench.py`'s hard-coded `threads=4` against a 3-core runner |
 | **13** | the packaging guard installs `--no-deps`, so a **wrong version floor** is uncaught | an offline wheelhouse: `pip wheel` the resolved set once, install `metamer[batch]` with `--no-index --find-links`. Needs pip in the environment and a decision about where the wheelhouse lives. **Do not close it by loosening the floors** — an untested lower bound is the thing being guarded |
 | **14** | the benchmarks use a synthetic axis with `unique_dt = 1`; real monthly data has **6** | run the spike with a realistic calendar axis beside the synthetic one at the same B and thread count. **"It plausibly cancels in the ratio" is the reasoning that has failed twice** — measure it. A fixture change, not a harness change |
-| **15** | **the sweep is 176 s slower on a byte-identical tree** (777.8 and 782.7 s against 606.1 s, 2026-08-14), and the sweep-timing series **records no machine state**, so nothing can attribute it | re-measure the same tree recording load average, CPU frequency and thermal state — the box was at **~1.31 GHz against a 1.7 GHz base** and load 5.48 on 4 cores when the two slow runs were taken. Decompose per module only if state does not account for it. **Record state alongside every future duration regardless** |
+| **15** | **the sweep is 176 s slower on a byte-identical tree** (777.8 and 782.7 s against 606.1 s, 2026-08-14), and the sweep-timing series **records no machine state**, so nothing can attribute it. **Half-closed 2026-08-15**: state is now recorded with every duration, and the first state-carrying run (1004.4 s, 947 tests, load 5.03→7.30, **2.30–2.40 GHz**) shows the box **1.8× faster per core and 28% slower overall** than the 782.7 s run at ~1.31 GHz — **so "below base clock" is falsified as the cause and load average is the surviving candidate** | a **same-tree** re-measurement with state recorded, now that state is recorded. Decompose per module only if state does not account for it. The frequency hypothesis is dead; do not restore it |
 
 ---
 
@@ -439,11 +603,18 @@ was the actual defect the leak exposed.
 | Phase 2 preliminaries pre-flight | [`docs/superpowers/notes/phase2-preliminaries-preflight.md`](docs/superpowers/notes/phase2-preliminaries-preflight.md) — the (a)–(k) audit of the P0/P1/P2 briefs and what each finding changed |
 | **Phase 2a implementation plan** | [`docs/superpowers/plans/2026-08-11-metamer-phase2a.md`](docs/superpowers/plans/2026-08-11-metamer-phase2a.md) — **COMPLETE: Tasks 0–13, all sixteen exit criteria met** |
 | **Phase 2a pre-flight, per task** | [`docs/superpowers/notes/phase2a-preflight.md`](docs/superpowers/notes/phase2a-preflight.md) — the (a)–(k) audit of each 2a task brief and what each finding changed. **Append to it before each task, not after.** |
-| **Phase 2b implementation plan** | [`docs/superpowers/plans/2026-08-14-metamer-phase2b.md`](docs/superpowers/plans/2026-08-14-metamer-phase2b.md) — 11 tasks, 16 exit criteria. **Awaiting review; no code yet.** Its head carries findings F1–F4, which are why 2b begins with a correction task rather than with the calibration tile |
-| **Phase 2b pre-flight, per task** | [`docs/superpowers/notes/phase2b-preflight.md`](docs/superpowers/notes/phase2b-preflight.md) — carries the pre-plan audit; per-task entries are appended **before** each task |
+| **Phase 2b implementation plan** | [`docs/superpowers/plans/2026-08-14-metamer-phase2b.md`](docs/superpowers/plans/2026-08-14-metamer-phase2b.md) — 11 tasks, 16 exit criteria, **approved 2026-08-14. Task 0 landed 2026-08-15.** Its head carries findings F1–F4, which are why 2b begins with a correction task rather than with the calibration tile |
+| **Phase 2b pre-flight, per task** | [`docs/superpowers/notes/phase2b-preflight.md`](docs/superpowers/notes/phase2b-preflight.md) — carries the pre-plan audit and Task 0's; per-task entries are appended **before** each task |
 
-**Next action:** review the 2b plan. On approval, Task 0 — and its first step is the
-pre-flight against its own brief, appended to `phase2b-preflight.md`.
+**Next action:** Task 1 — the floor, `total_ram_bytes`'s cgroup branch, `tile_side_basis` and
+`SCHEMA_VERSION` 4. Its first step is the pre-flight against its own brief, appended to
+`phase2b-preflight.md`.
+
+**THIS TABLE SAID "AWAITING REVIEW; NO CODE YET" WHILE THE COLD-START HEAD TWELVE HUNDRED LINES
+ABOVE SAID "APPROVED 2026-08-14".** Found at Task 0's start, 2026-08-15. Same shape as the
+692/693 test count: **two statements of one fact, and the stale one reads exactly like the fresh
+one.** The head is the single source for the plan's status; this cell now points at it rather
+than restating it.
 
 Phase list is design doc §17. Phase 1 exit criteria are §18. Do not duplicate either here.
 

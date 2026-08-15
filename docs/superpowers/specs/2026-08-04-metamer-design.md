@@ -1398,10 +1398,24 @@ not affect bytes-per-series).
   field, the key would have named `fit_hash` while `fit_hash` said nothing about the regime,
   and **a cached shared-X measurement reused for a per-point run understates peak by 3.3×
   against a hard memory constraint.**
-- **Backend must be in the key** because bytes-per-series is backend-dependent — path A's
+- **Backend must be in the key** ~~because bytes-per-series is backend-dependent — path A's
   solver state is per-series, path B's is per-thread; the formulas have different *shapes*,
-  not just different constants. (If the backend is fixed per metamer version, the version
+  not just different constants.~~ (If the backend is fixed per metamer version, the version
   covers it; the design states which.)
+
+  > **AMENDED 2026-08-15 (Phase 2b Task 0). The conclusion survives; the reasoning does not,
+  > and the reasoning is what the next decision would have been built on.**
+  > **Bytes-per-series is NOT backend-dependent.** `fit` drives `optimize_series` one series at
+  > a time whichever engine it holds, so the solver state is a **constant** under both, and the
+  > per-series cost is the data tile plus the output slots — neither of which knows which engine
+  > is running. The two placements differ in `1 × c` against `T × c`, both independent of B: a
+  > **constant**, not a shape. §9.4's *"different shapes, not just different constants"* was
+  > true of the two designs and false of the code.
+  > **The engine still belongs in the key, for a different reason**, and it must **not** be
+  > `EngineId`: both shipped engines share `EngineId.KALMAN` deliberately so their scores stay
+  > rankable, while the day a batched driver lands their workspaces become per-series terms and
+  > differ. `memory.MemoryEngineLabel` is the key's label; `EngineId` answers a different
+  > question about the same pair.
 - **Machine fingerprint is `(CPU model, core count, total RAM)` hashed — instance-type
   based.** Hostname is meaningless on ephemeral nodes. Thread count is deliberately
   excluded so a fresh spot instance of the same type **reuses** a calibration rather than
