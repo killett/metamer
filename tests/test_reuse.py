@@ -643,6 +643,43 @@ def test_the_new_store_keeps_the_sources_tile_geometry(
     assert copied.shards == source_array.shards
 
 
+def test_the_new_store_copies_the_sources_tile_side_basis(
+    ready: tuple[str, Path], tmp_path: Path, raising_engine: RaisingStubEngine
+) -> None:
+    """A recompute derives no side, so it claims no basis of its own.
+
+    The side is read back from the source (a1), so the basis that produced it is
+    the source's too. Expected value determined independently: the source was
+    written by an ordinary run, which can only use the shipped analytic formula
+    until Phase 2b Task 5, so both stores must read `default`.
+
+    **THIS FIXTURE CANNOT YET FAIL FOR THE RIGHT REASON AND THAT IS RECORDED
+    HERE**, not left for a reader to discover: nothing in 2b before Task 5 can
+    write a basis other than `default`, so `copy the source's` and `write
+    DEFAULT` agree on every store this suite can build -- (i7), a fixture
+    sitting exactly where the two functions agree. **Task 5 is what moves it off
+    that point**, by making a calibrated source expressible, and it owns
+    strengthening this to a source whose basis is `cached`.
+
+    Bug this catches once that lands: a recompute claiming it derived the side
+    analytically when it derived nothing, which makes Task 6 read a basis change
+    across a resume that never happened -- and send the user to a cache that was
+    never involved.
+    """
+    uri, src = ready
+    new = tmp_path / "new.zarr"
+
+    run(
+        _config(tmp_path, uri, criteria='["aic"]', name="new.toml"),
+        new,
+        reuse_fits_from=src,
+        engine=raising_engine,
+    )
+
+    assert _attrs(src)["tile_side_basis"] == "default"
+    assert _attrs(new)["tile_side_basis"] == _attrs(src)["tile_side_basis"]
+
+
 def test_the_recomputed_ranking_matches_the_one_the_fit_path_wrote(
     ready: tuple[str, Path], tmp_path: Path, raising_engine: RaisingStubEngine
 ) -> None:

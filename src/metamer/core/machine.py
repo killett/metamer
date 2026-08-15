@@ -72,6 +72,7 @@ from __future__ import annotations
 import platform
 import subprocess
 import sys
+from enum import StrEnum
 
 from metamer.core.hashing import machine_fingerprint
 
@@ -172,17 +173,114 @@ def physical_cores() -> int:
     )
 
 
-def total_ram_bytes() -> int:
-    """Return total system RAM in bytes.
+class RamBasis(StrEnum):
+    """Which reading produced a total-RAM figure.
+
+    A `StrEnum`, so a caller comparing against `"host"` still works and the
+    value serializes into provenance unchanged.
+    """
+
+    HOST = "host"
+    CGROUP_V1 = "cgroup_v1"
+    CGROUP_V2 = "cgroup_v2"
+
+
+CGROUP_V2_PATH = "/sys/fs/cgroup/memory.max"
+"""cgroup v2's memory limit. Holds the literal `max` when there is none."""
+
+CGROUP_V1_PATH = "/sys/fs/cgroup/memory/memory.limit_in_bytes"
+"""cgroup v1's memory limit. Holds a huge sentinel when there is none.
+
+The sentinel needs no special case here: it is far above any host's physical
+memory, so the `min` below discards it for the same reason it discards a limit
+that is simply generous.
+"""
+
+
+def _read_cgroup_limit(path: str) -> int | None:
+    """Read one cgroup memory limit, or None if there is not one to read.
+
+    Args:
+        path: Where the limit lives.
 
     Returns:
-        Total physical memory, in **bytes** -- `psutil` reports bytes, unlike
-        `ru_maxrss`, whose kilobyte-on-Linux reading is the unit trap this
-        module exists for.
+        The limit in bytes, or None if the file is absent, unreadable, or holds
+        anything that is not a positive integer -- cgroup v2 writes the literal
+        `max` for "no limit", which is the common case and not an error.
+    """
+    try:
+        with open(path) as handle:  # noqa: PTH123 - a sysfs path, not a data file
+            raw = handle.read().strip()
+    except OSError:
+        return None
+    try:
+        value = int(raw)
+    except ValueError:
+        return None
+    return value if value > 0 else None
+
+
+def _resolve_total_ram() -> tuple[int, RamBasis]:
+    """Return total RAM and the basis that produced it, from ONE reading.
+
+    **THE VALUE AND ITS LABEL COME OUT OF THE SAME COMPUTATION, AND THAT IS THE
+    WHOLE REASON THIS FUNCTION EXISTS.** `total_ram_bytes` and `ram_basis` are
+    two questions about one fact; answering them in two independent readers lets
+    provenance record a basis that did not produce the number beside it, and
+    nothing downstream could tell. It is (a2)'s fourth fact turned around: the
+    label must be produced by the thing it labels.
+
+    **The rule is the minimum over the host reading and any readable limit.**
+    `psutil` reads the host, which is what a container sees through
+    `/proc/meminfo` and is **not** what it is allowed to use. A limit at or above
+    the host figure loses the `min` and the basis stays `host`, which is also how
+    cgroup v1's no-limit sentinel is handled without naming it.
+
+    Returns:
+        `(bytes, basis)`.
     """
     import psutil
 
-    return int(psutil.virtual_memory().total)
+    host = int(psutil.virtual_memory().total)
+    best, basis = host, RamBasis.HOST
+    # v2 first, so a machine mounting both and reporting equal limits records
+    # the modern one rather than the tie-break of whichever was read last.
+    for path, candidate in (
+        (CGROUP_V2_PATH, RamBasis.CGROUP_V2),
+        (CGROUP_V1_PATH, RamBasis.CGROUP_V1),
+    ):
+        limit = _read_cgroup_limit(path)
+        if limit is not None and limit < best:
+            best, basis = limit, candidate
+    return best, basis
+
+
+def total_ram_bytes() -> int:
+    """Return total RAM in bytes, respecting a container's memory limit.
+
+    **NOT `psutil.virtual_memory().total` ALONE.** `psutil` reads the host
+    through `/proc/meminfo`, which inside a container reports the machine's
+    memory rather than the container's allowance -- so a 2 GB container on a
+    128 GB box would size its tiles for 128 GB, and the consequence is an OOM
+    kill rather than a slow run. See `_resolve_total_ram`.
+
+    Returns:
+        Total memory this process may use, in **bytes** -- `psutil` reports
+        bytes, unlike `ru_maxrss`, whose kilobyte-on-Linux reading is the unit
+        trap this module exists for.
+    """
+    return _resolve_total_ram()[0]
+
+
+def ram_basis() -> str:
+    """Return which reading `total_ram_bytes` used.
+
+    Returns:
+        One of `host`, `cgroup_v1`, `cgroup_v2` -- a `RamBasis`, which is a
+        `str`. **From the same computation as the value**, never a second
+        reading; see `_resolve_total_ram`.
+    """
+    return _resolve_total_ram()[1]
 
 
 def fingerprint() -> str:
@@ -196,6 +294,15 @@ def fingerprint() -> str:
     config-supplied fingerprint would let one machine's calibration be reused on
     another. Wiring it from the platform before the cache exists is what avoids
     invalidating whatever the cache already holds.
+
+    **THE RAM COMPONENT BECAME CGROUP-AWARE ON 2026-08-15, AND THAT MOVES THIS
+    VALUE INSIDE A CONTAINER.** Two containers of different sizes on one host
+    previously shared a fingerprint -- (a2)'s third fact failing, a change in the
+    thing identified not moving the field -- and they now do not. The
+    consequence is a changed `run_hash` for stores built under a memory limit,
+    which is the point rather than a side effect. **This machine cannot show it**
+    (`/sys/fs/cgroup/memory.max` is `max`, measured 2026-08-15), so the evidence
+    is a constructed test and nothing else.
 
     Returns:
         The 16-hex-digit fingerprint.

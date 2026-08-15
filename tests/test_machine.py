@@ -116,6 +116,123 @@ def test_the_ram_reading_is_a_plausible_total():
     assert total > 256 * 1024**2
 
 
+@pytest.mark.machine
+def test_this_machine_has_no_cgroup_limit_so_the_fixtures_below_are_constructed():
+    """The environment cannot express the defect, so it is recorded that it cannot.
+
+    Measured 2026-08-15: `/sys/fs/cgroup/memory.max` holds the literal `max`, so
+    the host reading and the cgroup reading coincide and **every test in this
+    suite would pass against a `total_ram_bytes` that ignored cgroups
+    entirely.** That is the same shape as the defect being guarded, so this test
+    exists to make the gap visible rather than to check a behaviour.
+
+    Same class as `choose_core_count` (no SMT here) and `library_table` (one
+    OpenBLAS here): the constructed fixtures below are the only evidence, and a
+    reader who does not know that would take a green suite as coverage.
+    """
+    assert machine.ram_basis() == machine.RamBasis.HOST
+    assert machine.total_ram_bytes() == machine._resolve_total_ram()[0]
+
+
+@pytest.mark.parametrize(
+    ("v2", "v1", "expected_basis"),
+    [
+        ("max", None, machine.RamBasis.HOST),
+        (None, None, machine.RamBasis.HOST),
+        ("2147483648", None, machine.RamBasis.CGROUP_V2),
+        (None, "2147483648", machine.RamBasis.CGROUP_V1),
+        # v1's no-limit sentinel, which needs no special case: it loses the min.
+        (None, "9223372036854771712", machine.RamBasis.HOST),
+        # A limit above the host's memory is not a limit that binds.
+        ("1099511627776", None, machine.RamBasis.HOST),
+        # Both mounted and disagreeing: the smaller one is the one that kills.
+        ("4294967296", "2147483648", machine.RamBasis.CGROUP_V1),
+    ],
+    ids=["v2-max", "absent", "v2-limit", "v1-limit", "v1-sentinel", "generous", "both"],
+)
+def test_total_ram_respects_a_cgroup_limit_and_records_which_reading_won(
+    tmp_path, monkeypatch, v2, v1, expected_basis
+):
+    """A container's allowance beats the host reading, and the basis says so.
+
+    **CONSTRUCTED, because this machine has no limit.** Each case writes the
+    file the kernel would write and asserts both the value and the basis.
+
+    Expected values determined independently: `psutil` reads the host through
+    `/proc/meminfo`, which inside a container reports the machine and not the
+    allowance, so the answer is `min(host, any readable limit)`. 2 GiB is
+    2 147 483 648 and is below any host this can run on; 1 TiB is above it;
+    v1's no-limit sentinel is `9223372036854771712`, and it is handled by the
+    same `min` rather than by naming it.
+
+    Bug this catches: a 2 GB container on a 128 GB host sizing its tiles for
+    128 GB. **The consequence is an OOM kill, not a slow run**, and nothing in
+    the process would report it -- the budget default, the derived tile side and
+    the provenance would all be internally consistent and all wrong.
+
+    **And the basis is asserted beside the value in every case**, because the
+    two come from one computation and a label that can drift from its number is
+    a name rather than a report.
+    """
+    for name, value in (("CGROUP_V2_PATH", v2), ("CGROUP_V1_PATH", v1)):
+        path = tmp_path / name
+        if value is not None:
+            path.write_text(value + "\n")
+        monkeypatch.setattr(machine, name, str(path))
+
+    import psutil
+
+    host = int(psutil.virtual_memory().total)
+    total, basis = machine._resolve_total_ram()
+
+    if expected_basis is machine.RamBasis.HOST:
+        assert total == host
+    else:
+        assert total == int(v2 if expected_basis is machine.RamBasis.CGROUP_V2 else v1)
+        assert total < host
+    assert basis == expected_basis
+    # The public pair moves together, which is the whole reason they share a
+    # computation: a `ram_basis` that read the filesystem again could report a
+    # basis that did not produce the number recorded beside it.
+    assert machine.total_ram_bytes() == total
+    assert machine.ram_basis() == expected_basis
+
+
+def test_a_cgroup_limit_moves_the_fingerprint_and_therefore_the_run_hash(
+    tmp_path, monkeypatch
+):
+    """Two containers of different sizes no longer share a calibration key.
+
+    **This was (a2)'s third fact failing** -- a change in the thing identified
+    not moving the field. `machine.fingerprint()` takes `total_ram_bytes()`, so
+    while that read the host, a 2 GB container and a 32 GB container on one host
+    were the same machine as far as the fingerprint was concerned, and Task 5's
+    calibration cache would serve one's measured bytes-per-series to the other.
+
+    Expected value determined independently: the fingerprint is
+    `machine_fingerprint(cpu_model, cores, total_ram_bytes)`, so changing the
+    third argument must change the digest -- which the parametrized test above
+    already pins for a hand-supplied value. This asserts the wiring: the change
+    arrives through the *reading*, not through a caller.
+
+    Bug this catches: `fingerprint()` keeping a separate, host-only RAM reading
+    after `total_ram_bytes` became cgroup-aware, which would leave the gap
+    exactly where it was while looking fixed.
+    """
+    host_fingerprint = machine.fingerprint()
+
+    limited = tmp_path / "memory.max"
+    limited.write_text("2147483648\n")
+    monkeypatch.setattr(machine, "CGROUP_V2_PATH", str(limited))
+    monkeypatch.setattr(machine, "CGROUP_V1_PATH", str(tmp_path / "absent"))
+
+    assert machine.total_ram_bytes() == 2147483648
+    assert machine.fingerprint() != host_fingerprint
+    assert machine.fingerprint() == machine_fingerprint(
+        machine.cpu_model(), machine.physical_cores(), 2147483648
+    )
+
+
 def test_the_fingerprint_is_wired_from_the_platform_and_not_from_a_caller():
     """`machine.fingerprint()` is `machine_fingerprint` over the three readings.
 

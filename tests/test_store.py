@@ -31,10 +31,31 @@ from metamer.config import load
 from metamer.core import hashing
 from metamer.core.capability import EngineId, Objective
 from metamer.core.criteria import CandidateScores, Criterion, rank_candidates
+from metamer.core.memory import FloorReport
 from metamer.core.outcomes import Outcome
 from metamer.core.registry import REGISTRY_VERSION
 
 pytestmark = pytest.mark.filterwarnings("ignore::UserWarning")
+
+# CONSTRUCTED, NOT MEASURED, and deliberately: a test about what provenance
+# RECORDS should not spawn a probe, import numba or open anything. The values
+# are the 2026-08-14 ladder so a reader recognizes them, and no assertion here
+# depends on their being this machine's -- `test_memory.py` owns the
+# measurement, this module owns the recording.
+_FLOOR = FloorReport(
+    pre_warm_bytes=170_700_000,
+    post_warm_bytes=221_500_000,
+    with_input_bytes=232_800_000,
+    peak_bytes=232_800_000,
+    components={
+        "interpreter_numpy": 73_800_000,
+        "xarray_zarr": 162_400_000,
+        "metamer_batch_run": 170_700_000,
+        "numba_threading_layer": 213_900_000,
+        "kalman_kernel_warm": 221_500_000,
+        "input_open": 232_800_000,
+    },
+)
 
 _CONFIG = """
 data_uri = "{uri}"
@@ -82,7 +103,9 @@ def _fixture(tmp_path: Path, **shape_kwargs: int) -> tuple[Path, dict[str, Any]]
         thread_limits={"openblas": 1, "openmp": 1, "numba": 1},
         read_amplification=1.0,
         unique_dt_count=2,
-        tile_sides={"shared": 338, "per_point": 186},
+        tile_sides={"shared": 347, "per_point": 187},
+        tile_side_basis=store.TileSideBasis.DEFAULT,
+        floor=_FLOOR,
     )
     shape = store.StoreShape(
         **{"n_y": 4, "n_x": 6, "n_beta": 4, "tile_side": 2, **shape_kwargs}
@@ -618,7 +641,9 @@ def test_a_geometry_that_was_never_opened_is_refused(tmp_path):
             thread_limits={"openblas": 1},
             read_amplification=1.0,
             unique_dt_count=2,
-            tile_sides={"shared": 338},
+            tile_sides={"shared": 347},
+            tile_side_basis=store.TileSideBasis.DEFAULT,
+            floor=_FLOOR,
         )
 
 
@@ -667,6 +692,101 @@ def test_provenance_identities_come_from_the_installed_code(tmp_path):
     assert stored["metamer_version"] == metamer.__version__
 
 
+def test_the_schema_version_records_every_bump_and_what_it_was_for():
+    """The current on-disk schema version, stated absolutely, in one place.
+
+    Expected value determined independently from the ledger in `store.py`'s own
+    comment, which is the record of why each bump happened:
+
+        v2  `Outcome` gained SCREENED_OUT (12) and NOT_APPLICABLE (13), and the
+            `/status/` legend is written from the enum at creation
+        v3  root attrs gained `detail`, which the resume gate compares against
+            and a v2 store cannot answer
+        v4  root attrs gained `tile_side_basis` and `floor`, which Phase 2b
+            Task 6's refusal reads and a v3 store cannot answer
+
+    **THIS IS THE ONE PLACE THE NUMBER IS ASSERTED ABSOLUTELY.** It used to be
+    asserted inside `test_write.py`'s outcome-vocabulary test, which then failed
+    at every bump for a reason unrelated to its subject -- and a test that fails
+    for the wrong reason teaches its next reader that editing the number is the
+    fix. That test now bounds rather than pins; this one owns the value.
+
+    Bug this catches: a bump landing without its reason recorded, so a later
+    reader meeting a v5 store has no way to know what it can and cannot answer.
+    The count below is the check -- four versions, three documented bumps.
+    """
+    assert store.SCHEMA_VERSION == 4
+    # Each bump added something a store one version older cannot answer, and
+    # each of those is a REQUIRED attr -- which is what makes the older store's
+    # silence a refusal rather than a default.
+    assert "detail" in store.REQUIRED_ATTRS  # v3
+    assert "tile_side_basis" in store.REQUIRED_ATTRS  # v4
+    assert Outcome.SCREENED_OUT.code == 12  # v2
+    assert Outcome.NOT_APPLICABLE.code == 13  # v2
+
+
+def test_a_store_records_which_basis_produced_its_tile_side(tmp_path):
+    """`tile_side_basis` is a required attr and reads back as it was written.
+
+    Expected value determined independently: nothing in 2b before Task 5 can
+    calibrate, so a run's only honest answer is design doc 13.4's case (c), the
+    shipped default -- and `TileSideBasis.DEFAULT` is that case's name.
+
+    Bug this catches: the field being added to the writer without being added to
+    `REQUIRED_ATTRS`, so a store created by any other path omits it. Task 6's
+    refusal reads it to name calibration as the cause of a moved tile side, and
+    **a missing field would be read as agreement** -- the same failure `detail`
+    had before v3, and the reason both bumps happened at all.
+    """
+    path, attrs = _fixture(tmp_path)
+
+    stored = xr.open_zarr(str(path)).attrs
+    assert attrs["tile_side_basis"] == "default"
+    assert stored["tile_side_basis"] == "default"
+    assert store.TileSideBasis(stored["tile_side_basis"]) is store.TileSideBasis.DEFAULT
+    assert "tile_side_basis" in store.REQUIRED_ATTRS
+    # All three of 13.4's states are expressible, or the field cannot record
+    # what Task 5 will need it to.
+    assert {member.value for member in store.TileSideBasis} == {
+        "cached",
+        "measured",
+        "default",
+    }
+
+
+def test_a_store_records_both_floors_and_the_gap_between_them(tmp_path):
+    """Pre- and post-warm both reach provenance, not only the one in use.
+
+    Expected values determined independently: they are `_FLOOR`'s, a constructed
+    ladder, and the assertion is that the store carries **both** ends of it plus
+    the peak the budget arithmetic will use.
+
+    Bug this catches: recording only the floor the budget spent, which makes the
+    30% import-time gap invisible in a store and leaves a later reader unable to
+    tell a warm floor from an import-time one without re-running anything. The
+    gap is the evidence for measuring post-warm at all, so a store that omits it
+    cannot support its own tile side.
+    """
+    path, _ = _fixture(tmp_path)
+
+    stored = xr.open_zarr(str(path)).attrs["floor"]
+    assert stored["pre_warm_bytes"] == 170_700_000
+    assert stored["post_warm_bytes"] == 221_500_000
+    assert stored["with_input_bytes"] == 232_800_000
+    assert stored["peak_bytes"] == 232_800_000
+    # The gap is what the record exists for: 50.8 MB, 30% of the pre-warm floor.
+    assert stored["post_warm_bytes"] - stored["pre_warm_bytes"] == 50_800_000
+    assert stored["components"]["numba_threading_layer"] == 213_900_000
+    assert sorted(stored["components"]) == [
+        "input_open",
+        "interpreter_numpy",
+        "kalman_kernel_warm",
+        "metamer_batch_run",
+        "numba_threading_layer",
+        "xarray_zarr",
+    ]
+
+
 def test_warm_start_used_is_a_fact_about_the_run_not_the_config(tmp_path):
     """A config that enables warm starts still records `warm_start_used: false`.
 
@@ -688,7 +808,9 @@ def test_warm_start_used_is_a_fact_about_the_run_not_the_config(tmp_path):
         thread_limits={"openblas": 1},
         read_amplification=1.0,
         unique_dt_count=2,
-        tile_sides={"shared": 338},
+        tile_sides={"shared": 347},
+        tile_side_basis=store.TileSideBasis.DEFAULT,
+        floor=_FLOOR,
     )
 
     assert attrs["warm_start_used"] is False
@@ -850,7 +972,25 @@ def test_the_root_attrs_are_byte_identical_across_processes(tmp_path):
         from metamer.batch import geometry, store
         from metamer.batch.input import open_input
         from metamer.config import load
+        from metamer.core.memory import FloorReport
 
+        # CONSTRUCTED HERE TOO, and the components mapping is what this test is
+        # actually about: it is nested inside the attrs, so a hash-ordered
+        # mapping anywhere in the floor would show up as a byte difference.
+        floor = FloorReport(
+            pre_warm_bytes=170_700_000,
+            post_warm_bytes=221_500_000,
+            with_input_bytes=232_800_000,
+            peak_bytes=232_800_000,
+            components={
+                "numba_threading_layer": 213_900_000,
+                "interpreter_numpy": 73_800_000,
+                "input_open": 232_800_000,
+                "kalman_kernel_warm": 221_500_000,
+                "xarray_zarr": 162_400_000,
+                "metamer_batch_run": 170_700_000,
+            },
+        )
         config = load(sys.argv[1])
         attrs = store.provenance_attrs(
             config,
@@ -860,7 +1000,9 @@ def test_the_root_attrs_are_byte_identical_across_processes(tmp_path):
             thread_limits={"openblas": 1, "openmp": 1},
             read_amplification=1.0,
             unique_dt_count=2,
-            tile_sides={"shared": 338, "per_point": 186},
+            tile_sides={"shared": 347, "per_point": 187},
+            tile_side_basis=store.TileSideBasis.DEFAULT,
+            floor=floor,
         )
         print(json.dumps(attrs, sort_keys=False))
         """

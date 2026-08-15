@@ -35,6 +35,7 @@ from metamer.core.memory import (
     SolverPlacement,
     data_and_workspace_bytes_per_series,
     measure_evaluation_rss_slope,
+    measure_floor,
     memory_engine_label,
     output_slot_bytes,
     resident_bytes_per_series,
@@ -901,6 +902,193 @@ def test_measured_peak_rss_is_at_least_the_arrays_that_provably_exist():
     assert measured > resident_bytes_per_series(**CASE) - output_slot_bytes(
         n_models=12, p_max=4, k_beta=4
     )
+
+
+# --------------------------------------------------------------------------
+# The floor -- what a process holds before a tile exists
+# --------------------------------------------------------------------------
+
+
+def _floor_input(tmp_path):
+    """A small real zarr input for the floor probe to open.
+
+    Args:
+        tmp_path: pytest's temporary directory.
+
+    Returns:
+        The store URI, as a string.
+    """
+    import xarray as xr
+
+    n_time, n_y, n_x = 24, 4, 4
+    origin = np.datetime64("2000-01-01")
+    time = np.array([origin + np.timedelta64(31 * i, "D") for i in range(n_time)])
+    path = tmp_path / "floor-in.zarr"
+    xr.Dataset(
+        {"sla": (("time", "y", "x"), np.zeros((n_time, n_y, n_x), dtype="float32"))},
+        coords={
+            "time": time,
+            "y": np.arange(n_y, dtype="float64"),
+            "x": np.arange(n_x, dtype="float64"),
+        },
+    ).to_zarr(path, mode="w", consolidated=True)
+    return str(path)
+
+
+@pytest.mark.slow
+@pytest.mark.machine
+def test_the_floor_ladder_reproduces_the_recorded_rungs(tmp_path):
+    """Each rung against its own absolute band, then the relations.
+
+    **THE ABSOLUTES COME FIRST AND THAT IS THE POINT.** Every test the brief
+    proposed for this was a relation -- `post > pre`, `with_input > without` --
+    and a relation is satisfied by two absent readings, two zeros, and two
+    mistakes in the same direction. That is (i3), and it is the shape that let
+    `assert fit_moved == compat_moved` pass against a payload that dropped the
+    field entirely.
+
+    Expected values, MB, current RSS, measured 2026-08-14 and re-measured
+    2026-08-15 by this probe:
+
+        interpreter + numpy                     73.8 / 74.0
+        + xarray, zarr                         162.4 / 163.0
+        + metamer.batch.run                    170.7 / 171.2   pre-warm
+        + numba imported, layer launched       213.9 / 214.4
+        + Kalman kernel warm                   221.5 / 216.9   post-warm
+
+    The bands below are +/-25% of the 2026-08-15 readings, wide enough to
+    survive an interpreter or numpy release and far too narrow to admit a
+    missing rung: the smallest step in the ladder is 8 MB and the largest is 89.
+
+    **The warm rung is a LOWER BOUND and is asserted as one.** This probe warms
+    with a one-series `white` fit at N=16 -- the smallest thing that drives
+    `KalmanEngine.score` end to end -- while the 2026-08-14 ladder used a
+    heavier spec. Tuning the warm until it reproduced 221.5 would have measured
+    the tuning.
+
+    Bug this catches: a floor taken at import time. It reads 171 against 217, so
+    it understates by **27%** and the entire difference is charged to the tile --
+    which is the unsafe direction, since the tile is what the budget then
+    oversizes.
+    """
+    report = measure_floor(data_uri=_floor_input(tmp_path), variable="sla")
+    rungs = report.components
+    expected = {
+        "interpreter_numpy": 74.0e6,
+        "xarray_zarr": 163.0e6,
+        "metamer_batch_run": 171.2e6,
+        "numba_threading_layer": 214.4e6,
+        "kalman_kernel_warm": 216.9e6,
+    }
+    print("\n" + "\n".join(f"{k:28s} {v / 1e6:7.1f} MB" for k, v in rungs.items()))
+    for name, value in expected.items():
+        assert 0.75 * value <= rungs[name] <= 1.25 * value, name
+
+    # ...and only now the relations, as additional checks rather than as the
+    # evidence. The pre/post gap is what justifies measuring post-warm at all.
+    assert report.post_warm_bytes > report.pre_warm_bytes
+    assert report.post_warm_bytes - report.pre_warm_bytes > 30e6
+    assert report.pre_warm_bytes == rungs["metamer_batch_run"]
+    assert report.post_warm_bytes == rungs["kalman_kernel_warm"]
+    # numba's threading layer is a fifth of the floor and is an ACCEPTED cost:
+    # the layer-3 determinism precondition cannot be observed until it launches.
+    assert rungs["numba_threading_layer"] - rungs["metamer_batch_run"] > 30e6
+
+
+@pytest.mark.slow
+@pytest.mark.machine
+def test_the_floor_with_the_input_open_exceeds_the_floor_without_it(tmp_path):
+    """A zarr store's residency belongs to the floor, not to the tile term.
+
+    Expected value determined independently: an opened zarr store holds its
+    handles, its consolidated metadata and a decompression buffer for the chunk
+    that was read, and none of those scale with the tile. Measured 2026-08-15 on
+    a 24x4x4 input: **11.3 MB**, from 216.9 to 228.2.
+
+    The bound below is one-sided and loose (at least 1 MB) because the size is a
+    property of the store rather than of this code, and a bigger input moves it.
+    **What is being pinned is the sign**, and the sign is what decides which
+    term the bytes are charged to.
+
+    Bug this catches: measuring the floor before the open. Those bytes are then
+    inside neither the floor nor the per-series formula, so they are effectively
+    charged to the tile -- and `tile_side` comes out too large, which is the
+    unsafe direction against a budget the design doc calls hard.
+    """
+    report = measure_floor(data_uri=_floor_input(tmp_path), variable="sla")
+
+    assert report.with_input_bytes > report.post_warm_bytes
+    assert report.with_input_bytes - report.post_warm_bytes > 1e6
+    assert report.components["input_open"] == report.with_input_bytes
+    # The peak is never below the largest current reading. `ru_maxrss` is
+    # updated lazily -- measured here at 227.7 MB against a current 228.2 read
+    # an instant earlier -- so a floor trusting the watermark alone would
+    # subtract less than the process demonstrably held.
+    assert report.peak_bytes >= max(report.components.values())
+    assert report.peak_bytes >= report.with_input_bytes
+
+
+@pytest.mark.slow
+def test_the_floor_is_measured_fresh_every_call_and_never_cached(tmp_path):
+    """Two calls both measure. Counting the probes is what makes it falsifiable.
+
+    **"NOTHING WAS CACHED" IS A PURE NEGATIVE, AND THE OBVIOUS TEST FOR IT IS
+    UNFALSIFIABLE HERE** -- no cache exists until Task 5, so *"no cache entry
+    appeared"* is satisfied by a caching mechanism that does not exist. Counting
+    child spawns is the form that can fail: **memoization is the mutation, and
+    under it the second call spawns nothing.**
+
+    Expected value determined independently: `measure_floor` runs exactly one
+    child per call, so two calls run two.
+
+    Bug this catches: an `lru_cache` added for speed. The floor's dependencies
+    are the hardest thing here to key on -- the input's contribution depends on
+    the chunk grid, which Task 11's (a1) sweep classified as read back from the
+    store rather than hashed -- so a cache would need a gate the project
+    deliberately does not have. **An uncached quantity has no staleness failure
+    mode**, and this is what holds it uncached.
+    """
+    import subprocess
+
+    uri = _floor_input(tmp_path)
+    calls: list[object] = []
+    real_run = subprocess.run
+
+    def counting_run(*args, **kwargs):
+        calls.append(args[0])
+        return real_run(*args, **kwargs)
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(subprocess, "run", counting_run)
+        first = measure_floor(data_uri=uri, variable="sla")
+        assert len(calls) == 1
+        second = measure_floor(data_uri=uri, variable="sla")
+        assert len(calls) == 2
+
+    # Both calls returned a real ladder, so the count above is not satisfied by
+    # two failures -- the (i2) positive half.
+    for report in (first, second):
+        assert report.post_warm_bytes > report.pre_warm_bytes > 0
+        assert len(report.components) == 6
+
+
+@pytest.mark.slow
+def test_a_floor_probe_that_cannot_open_the_input_raises_rather_than_returning_zero(
+    tmp_path,
+):
+    """The open happens inside the child, so its failure is the child's exit.
+
+    Expected behaviour determined independently: `measure_floor` checks the
+    child's return code and raises with its stderr attached, so a URI no opener
+    can handle surfaces as an error naming the URI.
+
+    Bug this catches: a bare `except` or an unchecked return code producing a
+    floor of zero. **Zero is a plausible number**: it reads as "the process
+    holds nothing", which makes the entire budget available to the tile and
+    produces an oversized tile rather than an error.
+    """
+    with pytest.raises(RuntimeError, match="floor probe failed"):
+        measure_floor(data_uri=str(tmp_path / "does-not-exist.zarr"), variable="sla")
 
 
 # --------------------------------------------------------------------------

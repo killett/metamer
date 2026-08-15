@@ -70,7 +70,12 @@ from metamer.batch.input import ContractReport, open_input
 from metamer.batch.input import check_contract as check_input_contract
 from metamer.batch.ragged import build_ragged_index, noise_extent
 from metamer.batch.resume import check_resume, check_source
-from metamer.batch.store import StoreShape, create_store, provenance_attrs
+from metamer.batch.store import (
+    StoreShape,
+    TileSideBasis,
+    create_store,
+    provenance_attrs,
+)
 from metamer.batch.threads import Phase, thread_budget
 from metamer.batch.tiling import (
     Tile,
@@ -95,6 +100,7 @@ from metamer.core.criteria import Criterion
 from metamer.core.engines.protocol import Engine
 from metamer.core.fit import fit
 from metamer.core.lint import Finding
+from metamer.core.memory import FloorReport, measure_floor
 from metamer.core.signal import k_beta as signal_k_beta
 
 
@@ -253,6 +259,7 @@ def run(
     engine: Engine | None = None,
     on_tile_written: Callable[[Tile], None] | None = None,
     reuse_fits_from: Path | str | None = None,
+    floor: FloorReport | None = None,
 ) -> RunReport:
     """Validate a configuration, fit every tile, and write the store.
 
@@ -285,6 +292,15 @@ def run(
             loop changes.** The new store writes its own provenance with the
             source's path and hashes recorded, and is self-contained: it opens
             with the source deleted.
+        floor: The measured process floor. **Measured fresh here when omitted,
+            and never cached** -- an uncached quantity has no staleness failure
+            mode, and the alternative would key on the input's chunk grid, which
+            Task 11's (a1) sweep established is read back rather than hashed.
+            Supplying one overrides the measurement, on the same grounds as
+            `observed_thread_limits`: the probe costs a child process, a numba
+            import and an open, and a test that is not about the floor should not
+            pay for one. **The default path is exercised by its own test**, or
+            the seam would make every floor assertion vacuous.
 
     Returns:
         What the run established.
@@ -355,6 +371,18 @@ def run(
             n_time=contract.n_time,
             n_models=len(specs),
         )
+        # MEASURED AFTER THE OPEN AND BEFORE THE STORE, in a child of its own:
+        # the input's handles, consolidated metadata and decompression buffers
+        # are resident and scale with the store rather than with the tile, so a
+        # floor taken before the open attributes them to the tile term.
+        # **Recorded and not yet spent** -- Task 2 is what subtracts it from the
+        # budget, and landing the measurement one task ahead of its consumer is
+        # what keeps a wrong number attributable to one of them.
+        measured_floor = (
+            measure_floor(data_uri=config.data_uri, variable=config.variable)
+            if floor is None
+            else floor
+        )
         grid = (contract.n_y, contract.n_x)
         # THE SOURCE IS VERIFIED BEFORE ANYTHING IS READ FROM IT, and its tile
         # side is READ BACK rather than re-derived: the copied groups must be
@@ -387,6 +415,25 @@ def run(
             read_amplification=amplification,
             unique_dt_count=contract.unique_dt,
             tile_sides={"shared": side},
+            # DEFAULT IS THE ONLY BASIS AN ORDINARY RUN CAN REACH UNTIL TASK 5,
+            # and it is written rather than left out: a store that cannot say
+            # which basis produced its side has its silence read as agreement by
+            # Task 6's refusal.
+            #
+            # **A RECOMPUTE COPIES THE SOURCE'S BASIS, AND THAT IS NOT A THIRD
+            # STATE.** `--reuse-fits-from` READS the side back out of the source
+            # (a1) rather than deriving one, so the side in this store is
+            # literally the source's and so is its provenance. Writing DEFAULT
+            # here would claim this run derived the side analytically when it
+            # derived nothing -- and Task 6, comparing bases across a resume,
+            # would then read a basis change that never happened. A valid source
+            # is v4 by `check_source`'s schema gate, so the key is always there.
+            tile_side_basis=(
+                TileSideBasis.DEFAULT
+                if source_attrs is None
+                else TileSideBasis(source_attrs["tile_side_basis"])
+            ),
+            floor=measured_floor,
             source=None
             if source_attrs is None
             else {

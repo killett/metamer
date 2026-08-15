@@ -76,6 +76,7 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -96,6 +97,7 @@ from metamer.core.registry import REGISTRY_VERSION
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from metamer.config.model import Config
+    from metamer.core.memory import FloorReport
     from metamer.core.terms import ProcessSpec
 
 #: Keys `geometry.geometry_components` always produces. Their absence means the
@@ -123,7 +125,17 @@ _GEOMETRY_KEYS = frozenset(
 #: an added attr rather than an added array**, because the test is what a reader
 #: can be asked: a v2 store cannot answer the question the v3 gate asks, and
 #: treating its silence as agreement would pass every `/detail/` change.
-SCHEMA_VERSION = 3
+#:
+#: **v4 (2026-08-15, Phase 2b Task 1): root attrs gained `tile_side_basis` and
+#: `floor`.** The v3 test applied to a new question: a v3 store cannot answer
+#: *"was your tile side analytic, measured this session, or read from a
+#: calibration cache?"*, and Task 6's resume refusal needs the answer to name
+#: calibration as the cause when a side moves. **The field lands before its only
+#: reader** -- every store written in between would otherwise be unable to answer
+#: and its silence would read as agreement -- and it lands beside Task 0's
+#: corrected arithmetic, so no store is ever written under the new formula
+#: without recording which basis produced its side.
+SCHEMA_VERSION = 4
 
 #: Target bytes for one inner chunk, per design doc 12.7's "a few MB".
 CHUNK_TARGET_BYTES = 4_000_000
@@ -158,8 +170,37 @@ REQUIRED_ATTRS = frozenset(
         "registry_version",
         "run_hash",
         "schema_version",
+        "tile_side_basis",
     }
 )
+
+
+class TileSideBasis(StrEnum):
+    """How the tile side in a store's attrs was arrived at.
+
+    **THE VOCABULARY IS DESIGN DOC 13.4's AND IT PREDATES THE NEED FOR IT.**
+    13.4 requires every printed constant to be labelled *(a) measured on this
+    machine from a cached calibration, (b) measured on this machine in this
+    session, or (c) a default shipped with the package* -- written for
+    `--explain`, and exactly the three states a stored tile side can be in.
+    Reusing it rather than inventing a second vocabulary is what keeps the store
+    and the eventual report saying the same thing about the same run.
+
+    **In case (c), 13.4 also requires a RANGE rather than a point estimate**, and
+    that requirement is now weaker than it was: since Phase 2b Task 2 the
+    analytic path is conservative rather than optimistic, so `DEFAULT` is an
+    honest estimate and not a guess dressed as one.
+
+    Attributes:
+        CACHED: Derived from a calibration read out of the cache.
+        MEASURED: Derived from a calibration measured in this session.
+        DEFAULT: Derived from the shipped analytic formula, which is the only
+            reachable value until Phase 2b Task 5 lands the cache.
+    """
+
+    CACHED = "cached"
+    MEASURED = "measured"
+    DEFAULT = "default"
 
 
 @dataclass(frozen=True)
@@ -228,6 +269,8 @@ def provenance_attrs(
     read_amplification: float,
     unique_dt_count: int,
     tile_sides: Mapping[str, int],
+    tile_side_basis: TileSideBasis,
+    floor: FloorReport,
     warm_start_used: bool = False,
     source: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
@@ -243,8 +286,18 @@ def provenance_attrs(
         read_amplification: Bytes read over bytes used for the tile geometry.
         unique_dt_count: Distinct timesteps on the realized axis.
         tile_sides: Tile side per regressor regime, both branches, because one
-            config field moves it by 3.3x in area and a sizing figure without its
-            regime is not a figure.
+            config field moves it by 3.44x in area and a sizing figure without
+            its regime is not a figure.
+        tile_side_basis: Which of 13.4's three states produced those sides.
+            **Required, and required with no default**, because a default is a
+            self-report: the one basis a caller would omit is the one it is least
+            sure of, and a store that cannot answer Task 6's question would have
+            its silence read as agreement.
+        floor: The measured process floor. **Both the pre- and post-warm
+            readings go in**, not just the one the budget uses, so the 30% gap
+            between them is visible in a store rather than only in a docstring --
+            and so a later reader can tell an import-time floor from a warm one
+            without re-running anything.
         warm_start_used: **A fact about the RUN, not about the config.** Reading
             it off `config.warm_start.enabled` would write `true` for a 2a run
             that cannot warm-start at all.
@@ -300,6 +353,17 @@ def provenance_attrs(
         "detail": json.loads(config.detail.model_dump_json()),
         "engine": config.engine,
         "fit_hash": fit,
+        # THE LADDER, NOT JUST THE FIGURE THE BUDGET USED. `peak` is what Task 2
+        # subtracts; the other three are what make it checkable from the store.
+        "floor": {
+            "pre_warm_bytes": int(floor.pre_warm_bytes),
+            "post_warm_bytes": int(floor.post_warm_bytes),
+            "with_input_bytes": int(floor.with_input_bytes),
+            "peak_bytes": int(floor.peak_bytes),
+            "components": {
+                name: int(floor.components[name]) for name in sorted(floor.components)
+            },
+        },
         "geometry_components": json.loads(hashing.canonical_json(geometry_components)),
         "geometry_hash": rollup,
         "memory_budget_gb": config.memory_budget_gb,
@@ -313,6 +377,7 @@ def provenance_attrs(
         "thread_limits": {
             name: int(thread_limits[name]) for name in sorted(thread_limits)
         },
+        "tile_side_basis": str(TileSideBasis(tile_side_basis)),
         "tile_sides": {name: int(tile_sides[name]) for name in sorted(tile_sides)},
         "unique_dt_count": int(unique_dt_count),
         "warm_start_used": bool(warm_start_used),

@@ -66,6 +66,8 @@ import json
 import math
 import subprocess
 import sys
+from collections.abc import Mapping
+from dataclasses import dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
@@ -507,6 +509,221 @@ def data_and_workspace_bytes_per_series(d: int, k_beta: int, n_time: int) -> int
         batched evaluation.
     """
     return int(n_time * 9 + _engine_workspace_bytes(d, k_beta))
+
+
+@dataclass(frozen=True)
+class FloorReport:
+    """What a process holds before a tile exists, measured rather than assumed.
+
+    **THIS IS THE TERM F1 SAID NOBODY HAD.** `--memory-budget` bounds process
+    peak RSS, so `block_bytes = budget - floor - headroom` and the floor has to
+    be a number rather than an argument. Measured 2026-08-14, MB, current RSS:
+
+        interpreter + numpy                          73.8
+        + xarray, zarr                              162.4   (+88.6)
+        + metamer.batch.run                         170.7   (+8.3)   pre-warm
+        + numba imported, threading layer launched  213.9   (+43.2)
+        + Kalman kernel warm                        221.5   (+7.6)   post-warm
+        + compiled kernel JIT-compiled              264.3   (+42.8)
+
+    Re-measured 2026-08-15 by this probe, MB: 74.0 / 163.0 / 171.2 / 214.4 /
+    **216.9**, with the input open at 228.2 and a peak of 228.2. The first four
+    rungs reproduce to under 1%. **The warm rung does not, and the reason is the
+    instrument rather than the machine**: this probe warms with a one-series
+    `white` fit at N=16, which is the smallest thing that drives
+    `KalmanEngine.score` end to end, while the 2026-08-14 ladder's warm was a
+    heavier spec. **So `post_warm_bytes` is a LOWER BOUND on the post-warm
+    floor** -- stated rather than tuned, because tuning a warm until it
+    reproduces a recorded number measures the tuning.
+
+    **AN IMPORT-TIME FLOOR UNDERSTATES BY 50.8 MB -- 30%.** Task 5 established
+    that numba's threading layer is invisible to `threadpool_info()` until
+    something parallel has run; **its residency is invisible for the same
+    reason**, and this ladder is the measurement of it.
+
+    **THE PRODUCTION FLOOR IS THE POST-WARM ONE, NOT THE COMPILED-KERNEL ONE**,
+    because under F4 production never reaches the compiled kernel. **That is a
+    claim about F4**, pinned by `test_memory.py`'s reachability assertion, so
+    the two move together the day a batched driver lands.
+
+    **numba's 43.2 MB is a measured, accepted cost and is NOT TO BE "FIXED".**
+    It buys the layer-3 determinism precondition, which cannot be observed until
+    the layer has launched. Recorded with its justification, or someone reclaims
+    a fifth of the floor and silently loses the check.
+
+    Attributes:
+        pre_warm_bytes: Current RSS after the imports and before numba's
+            threading layer -- what an import-time floor would have recorded.
+        post_warm_bytes: Current RSS after the layer has launched and the Kalman
+            kernel has run. **The production floor.**
+        with_input_bytes: Current RSS after the input is open and one chunk has
+            been read. A zarr store's handles, consolidated metadata and
+            decompression buffers are resident and scale with the store rather
+            than with the tile; measuring before the open attributes them to the
+            tile term and makes `tile_side` wrong in the **unsafe** direction.
+        peak_bytes: The child's own high-water mark across the whole ladder,
+            floored at the largest rung. **THIS IS WHAT TASK 2 SUBTRACTS FROM
+            THE BUDGET, AND IT IS A DIFFERENT INSTRUMENT FROM THE ROWS ABOVE.**
+            Exit criterion 7 asserts *peak* RSS, so what must come out of the
+            budget is the peak of everything that is not the tile -- import
+            transients, numba's JIT, zarr's first-chunk buffers. The current-RSS
+            ladder omits exactly those, and budgeting against it overcommits by
+            their size. The ladder stays in current RSS because that is the
+            series the recorded figures are in and the only one comparable to
+            them. **The `max` against the ladder is load-bearing**: `ru_maxrss`
+            is updated lazily and was measured here at 227.7 MB against a
+            current 228.2 MB read an instant earlier, so the watermark alone can
+            report less than the process demonstrably held.
+        components: The whole ladder, rung by rung, so the 30% gap is legible in
+            a store rather than only in this docstring.
+    """
+
+    pre_warm_bytes: int
+    post_warm_bytes: int
+    with_input_bytes: int
+    peak_bytes: int
+    components: Mapping[str, int]
+
+
+_FLOOR_CHILD = """
+import json
+from metamer.core.machine import current_rss_bytes, peak_rss_bytes
+
+uri, variable = {uri!r}, {variable!r}
+rungs = {{}}
+
+import numpy as np
+rungs["interpreter_numpy"] = current_rss_bytes()
+
+import xarray, zarr
+rungs["xarray_zarr"] = current_rss_bytes()
+
+import metamer.batch.run
+rungs["metamer_batch_run"] = current_rss_bytes()
+pre_warm = rungs["metamer_batch_run"]
+
+# THE LAYER IS LAUNCHED THROUGH A PUBLIC CALL, not by importing numba. Task 5:
+# `threadpool_info()` sees OpenBLAS alone until a prange function has executed,
+# and `get_num_threads()` is what starts the runtime.
+import numba
+numba.get_num_threads()
+rungs["numba_threading_layer"] = current_rss_bytes()
+
+# The KALMAN kernel, deliberately, and NOT the compiled one: under F4 production
+# never reaches `CompiledEngine`'s JIT, which costs a further 42.8 MB.
+from metamer.core.capability import Objective
+from metamer.core.engines.kalman import KalmanEngine
+from metamer.core.objective import ConcentratedObjective
+from metamer.core.registry import kernel_registry
+from metamer.core.signal import Constant, SignalSpec, Trend
+from metamer.core.statespace import StateSpace
+from metamer.core.terms import ProcessSpec, TermSpec, free_param_index
+
+family = kernel_registry["white"]()
+spec = ProcessSpec((TermSpec("white", family.param_specs(),
+                             getattr(family, "ordering_param", None)),))
+signal = SignalSpec([Constant(), Trend()])
+warm_n = 16
+warm_t = np.arange(warm_n, dtype=np.float64) / 12.0
+warm_y = np.zeros((1, warm_n))
+warm_mask = np.ones_like(warm_y, dtype=bool)
+objective = ConcentratedObjective(
+    spec, StateSpace.from_spec(spec), KalmanEngine(), Objective.ML
+)
+objective.unconstrained_loglik(
+    np.zeros((1, len(free_param_index(spec)))),
+    warm_y, warm_mask, warm_t, signal.design_info(warm_t, warm_mask),
+)
+rungs["kalman_kernel_warm"] = current_rss_bytes()
+post_warm = rungs["kalman_kernel_warm"]
+
+from metamer.batch.input import open_input
+handle = open_input(uri, variable)
+array = handle.dataset[handle.variable]
+# ONE CHUNK, not the whole variable: what is being measured is the store's
+# resident overhead, and reading everything would measure the data instead.
+array.isel({{dim: 0 for dim in array.dims[1:]}}).values
+rungs["input_open"] = current_rss_bytes()
+
+# `max` WITH THE LADDER, AND IT IS NOT BELT-AND-BRACES. `ru_maxrss` is
+# `mm->hiwater_rss` and the kernel updates it LAZILY -- measured here, 227.7 MB
+# against a current 228.2 MB read an instant earlier, and measured before at
+# 470.8 against 471.3. So the watermark can sit BELOW a current reading taken
+# from the same process, and a floor that trusted it alone would subtract less
+# than the process demonstrably held.
+peak = max([peak_rss_bytes()] + list(rungs.values()))
+
+print(json.dumps({{"pre_warm": pre_warm, "post_warm": post_warm,
+                   "with_input": rungs["input_open"],
+                   "peak": peak,
+                   "components": rungs}}))
+"""
+
+
+_BARE_LAUNCHER = """
+import subprocess, sys
+# IMPORTS NOTHING LARGE, ON PURPOSE. `peak_rss_bytes` is inherited across
+# fork/exec -- the parent's OWN high-water, and the inheritance does not compound
+# -- so a probe spawned straight from a large process reports that process's
+# watermark. This one exists solely to break the chain: its own high-water is a
+# bare interpreter, so the probe below starts from a known floor whatever the
+# caller has allocated. Load-bearing only for `peak`; the current-RSS ladder is
+# not a watermark and is not contaminated either way.
+out = subprocess.run([sys.executable, "-c", {probe!r}], capture_output=True,
+                     text=True)
+sys.stdout.write(out.stdout)
+sys.stderr.write(out.stderr)
+sys.exit(out.returncode)
+"""
+
+
+def measure_floor(*, data_uri: str, variable: str) -> FloorReport:
+    """Measure this release's process floor, with the input open.
+
+    **MEASURED FRESH EVERY RUN AND NEVER CACHED**, which is a decision rather
+    than an omission. Its two parts are cheap -- one child process, one open,
+    one chunk read -- and their dependencies are the hardest thing in this
+    project to key on: the input's contribution depends on the **chunk grid**,
+    which Task 11's (a1) sweep classified as read back from the store rather
+    than hashed. Keying on it would invent a gate the project deliberately does
+    not have. **An uncached quantity has no staleness failure mode**, and that is
+    the whole argument.
+
+    Args:
+        data_uri: The input to open, so its resident cost is inside the floor.
+        variable: Which variable to read one chunk of.
+
+    Returns:
+        A `FloorReport`.
+
+    Raises:
+        RuntimeError: If the probe fails, with its stderr attached -- including
+            when the input cannot be opened, since the open happens inside the
+            child. **A silent zero here is a floor of nothing**, which reads as
+            "the whole budget is available to the tile" and is a plausible
+            number rather than an error.
+    """
+    probe = _FLOOR_CHILD.format(uri=data_uri, variable=variable)
+    # S603: the argv is this module's own template with the configured URI and
+    # variable substituted in as Python literals, run under this interpreter.
+    result = subprocess.run(  # noqa: S603
+        [sys.executable, "-c", _BARE_LAUNCHER.format(probe=probe)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"the floor probe failed for {data_uri!r} / {variable!r}: {result.stderr}"
+        )
+    payload = json.loads(result.stdout.strip().splitlines()[-1])
+    return FloorReport(
+        pre_warm_bytes=int(payload["pre_warm"]),
+        post_warm_bytes=int(payload["post_warm"]),
+        with_input_bytes=int(payload["with_input"]),
+        peak_bytes=int(payload["peak"]),
+        components={name: int(value) for name, value in payload["components"].items()},
+    )
 
 
 _CHILD = """

@@ -28,6 +28,7 @@ import sys
 import textwrap
 import time
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pytest
@@ -152,6 +153,28 @@ def _digest(store: Path) -> dict[str, str]:
                 path.read_bytes()
             ).hexdigest()
     return digests
+
+
+#: Root attrs that record a MEASUREMENT OF THE PROCESS rather than a property
+#: of the run, and therefore cannot be part of a byte-identity claim about the
+#: run's output. **Naming them is the whole point**: a key that varies and is
+#: not here fails criterion 1, and the criterion keeps its force for everything
+#: else. `floor` is measured fresh every run and deliberately never cached
+#: (Phase 2b Task 1), so two runs of one configuration record two different
+#: byte counts -- which is correct behaviour and an honest difference.
+_MEASURED_ATTRS = frozenset({"floor"})
+
+
+def _attrs(store: Path) -> dict[str, Any]:
+    """Read a store's root attrs.
+
+    Args:
+        store: The store to read.
+
+    Returns:
+        The root attrs mapping.
+    """
+    return dict(zarr.open_group(str(store), mode="r").attrs)
 
 
 def _group(store: Path, name: str) -> xr.Dataset:
@@ -280,6 +303,23 @@ def test_criterion_1_a_killed_and_resumed_run_is_byte_identical(
 
     Catches a resume that rewrites a completed tile with different bytes, and
     any provenance field that varies between two runs of one configuration.
+
+    **ONE PROVENANCE KEY IS EXCLUDED, AND FINDING THAT OUT COST THIS TEST A
+    FAILURE (2026-08-15, Phase 2b Task 1).** `floor` is **measured fresh every
+    run and deliberately never cached**, so two runs of one configuration record
+    two different byte counts and the root `zarr.json` differs -- while every
+    array, every chunk and every other attr is identical. **Two settled
+    requirements that cannot both hold as stated**: a measurement of the process
+    cannot be part of a byte-identity claim about the run's output, and (a5) is
+    exactly this shape -- a requirement and the constraint that forbids it,
+    written paragraphs apart and both correct.
+
+    **The resolution keeps the criterion's force rather than the sentence.**
+    Every file is still compared byte for byte, including the root document's
+    structure; the root ATTRS are then compared key by key with the measured
+    keys named and excluded, and **the excluded keys are asserted present in
+    both stores**, so "excluded" cannot silently become "absent". A key that
+    varies and is not in `_MEASURED_ATTRS` still fails.
     """
     _base, _uri, config, reference = fitted
     store = tmp_path / "killed.zarr"
@@ -309,7 +349,32 @@ def test_criterion_1_a_killed_and_resumed_run_is_byte_identical(
 
     assert finished.returncode == ExitCode.OK, finished.stderr
     assert completed_tiles(store).all()
-    assert _digest(store) == _digest(reference)
+
+    # Everything except the root document, byte for byte. This is where a
+    # rewritten chunk, a moved metadata key or a differently formatted float
+    # would surface, and none of it is excluded.
+    resumed_files = _digest(store)
+    reference_files = _digest(reference)
+    assert set(resumed_files) == set(reference_files)
+    assert {
+        name: value for name, value in resumed_files.items() if name != "zarr.json"
+    } == {name: value for name, value in reference_files.items() if name != "zarr.json"}
+
+    # ...then the root attrs, key by key, with the measured keys named.
+    resumed_attrs = _attrs(store)
+    reference_attrs = _attrs(reference)
+    assert set(resumed_attrs) == set(reference_attrs)
+    # The exclusion is not an absence: both stores carry it, and it differs,
+    # which is what makes the exclusion necessary rather than convenient.
+    for key in _MEASURED_ATTRS:
+        assert key in resumed_attrs and key in reference_attrs
+    assert {
+        key: value for key, value in resumed_attrs.items() if key not in _MEASURED_ATTRS
+    } == {
+        key: value
+        for key, value in reference_attrs.items()
+        if key not in _MEASURED_ATTRS
+    }
 
 
 # --------------------------------------------------------------------------

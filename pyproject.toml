@@ -246,6 +246,12 @@ markers = [
     # macOS runner has 3 cores against the hard-coded threads=4. A green CI run
     # therefore does NOT cover these; `pixi run test` locally does.
     "machine: asserts on host memory bandwidth, RSS or timing; not portable to CI runners",
+    # `real_floor` opts a test OUT of conftest's default floor stub, so `run()`
+    # spawns its real probe -- a child that imports numba and opens the input.
+    # The stub exists because ~80 `run()` call sites are not about the floor and
+    # would otherwise re-measure one number eighty times; the marker exists
+    # because a seam nothing reaches makes every downstream assertion vacuous.
+    "real_floor: lets run() spawn its real floor probe instead of conftest's stub",
 ]
 pythonpath = ["src"]
 

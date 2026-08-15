@@ -224,6 +224,105 @@ def test_the_memory_budget_override_reaches_the_run_hash(tmp_path):
     assert overridden.compat_hash == default.compat_hash
 
 
+@pytest.mark.slow
+@pytest.mark.machine
+@pytest.mark.real_floor
+def test_a_run_measures_its_own_floor_when_none_is_supplied(tmp_path):
+    """**THE POSITIVE CONTROL FOR conftest's FLOOR STUB.** Without it, nothing.
+
+    Every other `run()` in this suite gets a stubbed probe, because the real one
+    is a child process that imports numba and opens the input and there are ~80
+    call sites. **A default-stubbed seam makes every downstream floor assertion
+    vacuous** -- "the floor reached the store" is satisfied identically by a
+    probe that ran and a probe that was never wired in. This is the test that
+    can tell them apart, and it is the only one.
+
+    Expected values determined independently, from the ladder in
+    `test_memory.py`: on this machine the post-warm floor is ~217 MB and the
+    figure with the input open is ~228 MB. The bounds below are 120-500 MB,
+    deliberately wide -- what is being pinned is that a **measurement** happened,
+    not what it measured -- and they exclude conftest's stub, whose ladder is
+    round hundreds of megabytes ending at 600 MB.
+
+    Bug this catches: `run()` never calling `measure_floor` at all, or the
+    `floor=` seam swallowing the default. Under either, the store records a
+    floor that describes no process, and Task 2 would compute
+    `block_bytes = budget - floor - headroom` from a number nobody measured.
+    """
+    import xarray as xr
+
+    from tests.conftest import STUB_FLOOR_COMPONENTS
+
+    report = run(_config(tmp_path, _store(tmp_path)), tmp_path / "out.zarr")
+
+    stored = xr.open_zarr(str(report.store_path)).attrs["floor"]
+    print(f"\nmeasured floor: {stored}")
+    assert 120e6 < stored["post_warm_bytes"] < 500e6
+    assert stored["with_input_bytes"] >= stored["post_warm_bytes"]
+    assert stored["post_warm_bytes"] > stored["pre_warm_bytes"]
+    assert stored["peak_bytes"] >= max(stored["components"].values())
+    # ...and it is NOT the stub, which is the half that makes this a control.
+    assert stored["components"] != STUB_FLOOR_COMPONENTS
+    assert stored["with_input_bytes"] != STUB_FLOOR_COMPONENTS["input_open"]
+
+
+def test_a_supplied_floor_is_used_instead_of_a_measurement(tmp_path):
+    """The seam overrides, and the store records what the run actually used.
+
+    Expected values determined independently: they are the ones handed in, and
+    they are outside any real machine's ladder so a measurement could not
+    produce them by accident.
+
+    Bug this catches: the parameter being accepted and ignored -- the
+    `observed`-recorded-and-ignored shape Task 5 of 2a already found once, and
+    the reason that seam exists at all is that a test needs to construct a state
+    this machine will not produce.
+    """
+    import xarray as xr
+
+    from metamer.core.memory import FloorReport
+
+    supplied = FloorReport(
+        pre_warm_bytes=11_000_000,
+        post_warm_bytes=22_000_000,
+        with_input_bytes=33_000_000,
+        peak_bytes=44_000_000,
+        components={"constructed": 33_000_000},
+    )
+    report = run(
+        _config(tmp_path, _store(tmp_path)), tmp_path / "out.zarr", floor=supplied
+    )
+
+    stored = xr.open_zarr(str(report.store_path)).attrs["floor"]
+    assert stored["pre_warm_bytes"] == 11_000_000
+    assert stored["post_warm_bytes"] == 22_000_000
+    assert stored["with_input_bytes"] == 33_000_000
+    assert stored["peak_bytes"] == 44_000_000
+    assert stored["components"] == {"constructed": 33_000_000}
+
+
+def test_a_run_records_the_basis_that_produced_its_tile_side(tmp_path):
+    """No calibration exists yet, so the only honest basis is the shipped default.
+
+    Expected value determined independently from design doc 13.4's vocabulary:
+    a constant is (a) cached, (b) measured this session, or (c) a shipped
+    default. Phase 2b Task 5 is what makes (a) and (b) reachable; until then a
+    run that used the analytic formula must say so.
+
+    Bug this catches: the attr defaulting to `cached` or `measured`, which would
+    make Task 6's refusal name calibration for a run that never calibrated --
+    sending the user to a cache that does not exist while the real cause was the
+    budget.
+    """
+    import xarray as xr
+
+    report = run(_config(tmp_path, _store(tmp_path)), tmp_path / "out.zarr")
+
+    stored = xr.open_zarr(str(report.store_path)).attrs
+    assert stored["tile_side_basis"] == "default"
+    assert stored["schema_version"] == 4
+
+
 def test_an_out_of_range_memory_budget_is_a_schema_failure(tmp_path):
     """A command-line budget goes through the same pydantic constraint.
 

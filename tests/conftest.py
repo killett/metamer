@@ -117,3 +117,57 @@ class RaisingStubEngine:
 def raising_engine() -> RaisingStubEngine:
     """A fresh `RaisingStubEngine` per test, so `calls` never leaks between them."""
     return RaisingStubEngine()
+
+
+#: The floor a test gets unless it asks for the real one. **Values chosen so
+#: they cannot be mistaken for a measurement**: round numbers in a ladder no
+#: machine produces, so an assertion that accidentally reads them fails a review
+#: rather than passing as evidence.
+STUB_FLOOR_COMPONENTS = {
+    "interpreter_numpy": 100_000_000,
+    "xarray_zarr": 200_000_000,
+    "metamer_batch_run": 300_000_000,
+    "numba_threading_layer": 400_000_000,
+    "kalman_kernel_warm": 500_000_000,
+    "input_open": 600_000_000,
+}
+
+
+@pytest.fixture(autouse=True)
+def _stub_the_floor_probe(request, monkeypatch):
+    """Replace `run()`'s floor probe unless a test asks for the real one.
+
+    **THE PROBE IS A CHILD PROCESS THAT IMPORTS NUMBA AND OPENS THE INPUT**, and
+    `run()` measures one per call because the floor is deliberately never
+    cached. There are ~80 `run()` call sites in this suite and almost none of
+    them are about the floor; paying ~10 s each would put ~15 minutes on the
+    sweep to re-measure one number eighty times.
+
+    **A DEFAULT-STUBBED SEAM IS THE (i2) HAZARD IN PERSON**, so it is paired:
+    `test_memory.py` drives the real `measure_floor` directly -- it imports from
+    `metamer.core.memory` and is untouched by this patch -- and
+    `test_runner.py::test_a_run_measures_its_own_floor_when_none_is_supplied`
+    carries `@pytest.mark.real_floor` and asserts the DEFAULT path produces a
+    plausible ladder and puts it in provenance. Without that pair, "the floor
+    reached the store" would be satisfied by a probe that never runs.
+
+    Args:
+        request: pytest's request, read for the `real_floor` marker.
+        monkeypatch: pytest's patcher.
+    """
+    if request.node.get_closest_marker("real_floor") is not None:
+        return
+
+    from metamer.batch import run as run_module
+    from metamer.core.memory import FloorReport
+
+    stub = FloorReport(
+        pre_warm_bytes=STUB_FLOOR_COMPONENTS["metamer_batch_run"],
+        post_warm_bytes=STUB_FLOOR_COMPONENTS["kalman_kernel_warm"],
+        with_input_bytes=STUB_FLOOR_COMPONENTS["input_open"],
+        peak_bytes=STUB_FLOOR_COMPONENTS["input_open"],
+        components=dict(STUB_FLOOR_COMPONENTS),
+    )
+    monkeypatch.setattr(
+        run_module, "measure_floor", lambda **_kwargs: stub, raising=True
+    )
