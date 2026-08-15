@@ -330,6 +330,14 @@ this project's idiom, because the idiom already requires the derivation to be st
 number. **State both, then compare them** — a correction that gives only a magnitude has
 discarded the one thing that could have caught it.
 
+**AND IT APPLIES TO YOUR OWN HAND-COUNTS, WHICH IS WHERE IT KEEPS BITING.** Phase 2b Task 2:
+re-deriving four modules' fixture budgets needed `p_max`, and I counted `white + matern12` as
+two free parameters by reading the candidate list. It is **three** — both sigmas and the
+timescale — and `build_ragged_index`'s extents are what know it. Two budgets meant to straddle a
+tile-side boundary landed on the same side, a refusal stopped firing, and the **slow** suite
+caught it. **Where a structure in the tree computes the quantity, read it; a hand-count is an
+unverified claim in exactly the way (a4) describes.**
+
 ### (a5) CROSS-CHECK A BRIEF'S REQUIREMENTS AGAINST ITS OWN CONSTRAINTS
 
 > **A requirement and the constraint that forbids it can sit paragraphs apart and both read
@@ -387,6 +395,20 @@ identical.** Both requirements are right. Stated together, they are unsatisfiabl
 **And it was invisible to the task's own tests**, because the suite stubs the probe while
 criterion 1 drives the CLI in a subprocess where the stub does not reach. The full sweep caught
 it — the third time it has caught what a task's own tests could not.
+
+> **AN ORDERING CONSTRAINT THAT IS CURRENTLY UNENFORCEABLE IS STILL BINDING, AND THE TASK THAT
+> MAKES IT ENFORCEABLE INHERITS THE OBLIGATION TO TEST IT.** A documented order over steps that
+> cannot fail is satisfied by every arrangement, so nothing holds it — and the day one step
+> becomes fallible, the order becomes load-bearing **without anyone editing it**.
+>
+> Worked instance, Phase 2b Task 2. §13.7 orders the entry contract *identity first, geometry
+> second*, and the geometry step derived a tile side that in practice never refused — so the
+> derivation sat above the gates harmlessly for a whole sub-phase. Task 2 made it refuse a budget
+> below the process floor, and a run with a wrong candidate list **and** a small budget then
+> reported the budget: the two send a user to different places. **The task that introduced the
+> refusal is the one that owed the reordering and the test**, and neither was in its brief.
+
+
 
 The repair keeps the criterion's force: files compared byte for byte, attrs compared key by key
 against a **named** exclusion set, and **the excluded key asserted present in both stores**, so
@@ -495,6 +517,26 @@ coefficient tuned to make 704 into 11 144 at p = 4 would have read as a successf
 and been wrong at every other `p` — and *right* for the wrong reason at the only `p` anyone
 measures. **The question is never "is this number too small"; it is "what is this number a
 function of".**
+
+### (a8) TWO INDEPENDENT LINES CONVERGING ON ONE PATHOLOGICAL CASE IS EVIDENCE, NOT COINCIDENCE
+
+> **When a guard's own documentation names a failure mode and an unrelated correction lands
+> squarely on it, that convergence IS the guard's justification.** Record it as such. A later
+> reader proposing to remove the guard then has to answer a measured number rather than a
+> preference, and the guard stops looking like a tuning parameter.
+
+Worked instance, Phase 2b Tasks 0 and 2, from two directions that never met:
+
+- `store._chunk_side` picks a **divisor** of the tile side, and its docstring had said since 2a
+  that **a prime side has no useful subdivision** — written as a caution, with no instance.
+- Task 0's formula correction moved the published side from 338 to **347, which is prime.** So
+  is 349, and so is 353.
+
+Measured at the convergence: the worst array's chunk goes from 18.3 MB at 338 to **38.5 MB at
+347 — 9.63× a 4 MB target.** **`TILE_SIDE_BASE` is therefore not a tuning parameter; it is what
+makes the corrected arithmetic usable at all**, and dropping it costs a tenfold chunk on every
+tile. The caution and the correction are independent, which is exactly why their meeting is
+evidence.
 
 ### (b) Batch vs series
 
@@ -1131,6 +1173,19 @@ tests could not see.** `pixi run test-fast` would have shipped both.
   `cftime`, which xarray reaches for to decode any non-standard calendar, is the worked case.
   **The guard has a stated hole rather than an unknown one**, and such dependencies are
   declared by hand with a comment saying why.
+- **A MEASUREMENT'S SUBJECT IS A PRECONDITION, AND THE SPREAD ACROSS SUBJECTS IS NOT SMALL.**
+  *"The divisor ratio is 2.3×"* without naming the array is the same defect as a `tile_side`
+  without its backend. Measured, Phase 2b Task 2: on `noise/theta` (float32 × `P_total`) it is
+  **2.3×**; on `warmstart/theta_unconstrained` (float64, the **same** `P_total`) it is **4.57×**.
+  One dtype apart, twice as bad, and the published note had picked the representative one.
+  **Measure the worst case and say which it is**, or the number describes a case nobody
+  operates at.
+  > **AND A BAND ASSERTION THAT FAILS FOR A CORRECT REASON MEANS THE POPULATION IS NOT
+  > HOMOGENEOUS. PARTITION IT — NEVER WIDEN THE BAND.** Seven of eighteen store arrays are
+  > narrow enough that a whole shard cannot reach the chunk target at all (`point_outcome` is one
+  > byte per cell), so one chunk per shard is the **right** answer there and not a fallback. A
+  > band held over all eighteen fails on those seven; widening it to accommodate them would
+  > destroy the check for the eleven it exists for.
 - **A recorded measurement carries its measurement date AND ITS PRECONDITIONS**, because a
   quoted figure drifts and a stale one reads exactly like a fresh one — and a figure quoted
   without the conditions that produced it is not a measurement, it is a number. **Three
@@ -1204,26 +1259,37 @@ tests could not see.** `pixi run test-fast` would have shipped both.
 
 ## 3. The number every Phase 2 tile calculation inherits
 
-**`tile_side` is 347, and it has now been wrong three times.** It was 171 for the whole of
-Phase 1, 338 from 2026-08-10 (P2) to 2026-08-14, and **347 since Phase 2b Task 0**.
+**`tile_side` IS 272, AND IT HAS NOW BEEN WRONG FOUR TIMES.** 171 for the whole of Phase 1;
+338 from 2026-08-10 (P2); 347 after Phase 2b Task 0 corrected the per-series formula; and **272
+since Phase 2b Task 2 stopped treating the budget as the block.** Every superseded figure is
+struck rather than deleted, so a reader meeting one in an old note can date it: ~~171~~ (while
+`_augment` materialized `[y | X]`), ~~338~~ and ~~339~~ (the model and the resident figure, both
+charging one live solver working set to every series), ~~347~~ (the corrected per-series cost
+divided into the **whole** budget).
 
-| figure | what it is | use it for |
-|---|---|---|
-| **347** (8 274 B/series) | what the code **actually holds**, one live solver working set excluded because `fit` runs one series at a time. `memory.resident_bytes_per_series` | **every Phase 2 tile calculation** |
-| ~~339~~ (8 682 B/series) | §9.4's **model** — and the model was the batched trust-region §8.3 specified and Task 19 deleted. `memory.bytes_per_series`, **deleted** | **nothing** |
-| ~~338~~ (8 722 B/series) | the model plus a per-series charge for the engine's reused row, with the solver state still per series | **nothing after 2026-08-14** |
-| ~~171~~ (33 882 B/series) | what it held while `_augment` materialized `[y \| X]` | **nothing. Any Phase 1 note quoting 171 predates the fix** |
+**THE CURRENT NUMBER AND ITS PRECONDITIONS, WHICH IT IS NOT A NUMBER WITHOUT:**
 
-At a **10⁹ B** budget, shared X, d=3, k_β=4, p_max=4, M=12, N=630. Per-point X gives **187**.
-**The unit is not decoration**: `run.py` converts `memory_budget_gb` with `1024**3`, which gives
-360 at the same nominal budget, and resolving that is Phase 2b Tasks 2 and 3.
+| precondition | value |
+|---|---|
+| budget | **10⁹ B** — `memory_budget_gb = 1.0`, and **the unit is SI, not `1024**3`** |
+| **process floor** | `peak_bytes` = **228 200 000** — measured, with the input open |
+| headroom | `memory.HEADROOM_FRACTION` = 0.15, of what is left after the floor |
+| smooth base | `store.TILE_SIDE_BASE` = 16, rounding **down** |
+| model | d = 3, k_β = 4, p_max = 4, N = 630, M = 12, shared X |
+| **answer** | **272** shared, **144** per-point |
 
-**AND THE SIDE NO LONGER CARRIES A BACKEND.** ~~Path B's resident figure is 8 B/series above
-its own model rather than 40~~ — the per-series cost is the data tile plus the output slots,
-neither of which knows which engine is running, so the two published pairs (338/186 against
-361/189) differed **only** because of the per-series solver charge. The placement moves a
-constant. **A `tile_side` still needs its preconditions — budget and unit, N, M, k_β, p_max and
-the regressor regime — it just does not need an engine.**
+**THE FLOOR IS THE ONLY PRECONDITION THAT IS A MEASUREMENT**, and it is measured **with the
+input open**, so the derived side depends on the store being read. A published side therefore
+needs a **pinned** floor beside it or it is not reproducible; `tests/test_tiling.py`'s
+`WORKED_FLOOR` is that pin.
+
+**AND THE SIDE DOES NOT CARRY A BACKEND.** The per-series cost is the data tile plus the output
+slots, neither of which knows which engine is running, so the two published pairs
+(~~338/186~~ against ~~361/189~~) differed **only** because of the per-series solver charge.
+The placement moves a constant.
+
+The step-by-step correction — which term moved and by how much — is in `PROGRESS.md`'s
+**What 2b's first tasks inherit** section and is not repeated here.
 
 **What the defect was, kept because the mechanism is the transferable part.**
 `KalmanEngine._augment` ended in `np.concatenate([y[:, :, None], x], axis=2)`, materializing

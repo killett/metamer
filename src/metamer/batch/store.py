@@ -142,34 +142,24 @@ CHUNK_TARGET_BYTES = 4_000_000
 
 #: POLICY. Every derived tile side is rounded DOWN to a multiple of this.
 #:
-#: **THE JUSTIFICATION IS A MEASUREMENT, NOT ELEGANCE.** `_chunk_side` picks a
-#: **divisor** of the tile side, so the achievable chunk sizes are set by the
-#: side's factorization, and *"prefer a composite side"* -- this project's own
-#: earlier phrasing -- is wrong in both directions. Measured 2026-08-15 at M=12,
-#: C=2, k_beta=4, P_total=40, worst array over all arrays whose shard can reach
-#: the target:
+#: **THIS IS NOT A TUNING PARAMETER AND A READER PROPOSING TO DROP IT HAS TO
+#: ANSWER 9.63x.** `_chunk_side` picks a **divisor** of the tile side, so the
+#: achievable chunk sizes are set by the side's factorization -- and this
+#: function's own docstring has warned since 2a that **a prime side has no useful
+#: subdivision**, with no instance to point at. Phase 2b Task 0's formula
+#: correction then moved the published side to **347, which is prime**; so are
+#: 349 and 353. **Two independent lines meeting on the same pathological case is
+#: evidence, not coincidence**, and the measurement at the meeting is that the
+#: worst array's chunk goes from 18.3 MB at side 338 to **38.5 MB at 347 --
+#: 9.63x the 4 MB target**. Without the base, the corrected arithmetic is not
+#: usable.
 #:
-#:     side 338 (= 2*13^2, composite)     18.3 MB    4.57x    theta_unconstrained
-#:     side 347 (PRIME, and it is the
-#:               corrected side Task 0
-#:               published)               38.5 MB    9.63x    theta_unconstrained
-#:     side 336 (= 2^4*3*7)                5.4 MB    1.35x    beta / delta_ic
-#:
-#: **338 is composite and still bad; 347 is prime and catastrophic.** The
-#: property actually wanted is a divisor inside the admissible window, which
-#: differs per array, so the base is chosen by sweeping every derived side from
-#: 100 to 600 and reading the worst case off:
-#:
-#:     base   worst   median   mean area loss
-#:        8   3.41x    1.57x     2.3%
-#:       12   2.12x    1.52x     3.4%
-#:       16   1.99x    1.49x     4.5%
-#:       24   1.99x    1.39x     6.7%
-#:       60   1.75x    1.21x    16.4%
-#:
-#: **16 is the smallest base that reaches the 1.99x floor**, and nothing below 60
-#: improves on it. 24 matches its worst case with a better median and costs half
-#: again as much tile area.
+#: *"Prefer a composite side"* -- this project's own earlier phrasing -- is wrong
+#: in both directions: 338 is composite and still gives 4.57x. The property
+#: wanted is a divisor inside the admissible window, and that window differs per
+#: array, so **the value was chosen by sweeping every derived side from 100 to
+#: 600 rather than by elegance.** The sweep table lives in `PROGRESS.md`'s
+#: *What Task 2 established* section, once.
 #:
 #: **THE ASYMMETRY, since this is policy rather than a derived value:** a base
 #: too small leaves the prime and near-prime sides in, whose chunks are ten times
