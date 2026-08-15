@@ -8,19 +8,27 @@
    Tasks 0–13 — the whole sub-phase**, and open questions 1, 4, 9, 11, **12**. **The signal-term blocker carried since
    Task 6 is CLOSED**: `config.signal_spec()` builds a `SignalSpec`, `signal.k_beta` gives the
    column count, and `run()` sizes tiles, fits and writes them.
-3. **PHASE 2a IS COMPLETE. NEXT: sub-phase 2b — the calibration tile and `--memory-budget`
-   defaulting.** Read
+3. **PHASE 2a IS COMPLETE. NEXT: sub-phase 2b — the memory formula, the floor, the calibration
+   tile and `--memory-budget`.** The brainstorm is done and
+   **[the 2b plan exists](docs/superpowers/plans/2026-08-14-metamer-phase2b.md)** — 11 tasks,
+   16 exit criteria, **awaiting review; no code yet.** Read
    **[WHAT SUB-PHASE 2b INHERITS](#what-sub-phase-2b-inherits--read-this-before-the-task-sections-below)**
-   **before** anything else; **there is no 2b plan yet**, so the next session's first job is
-   the brainstorm that produces one. All sixteen 2a exit criteria are met, two with reduced
-   scope; the table is at the end of the 2a plan.
+   and then the **[2b brainstorm section](#phase-2b-brainstorm--settled-decisions-2026-08-14)**,
+   which carries four findings (F1–F4) that changed what 2b is. All sixteen 2a exit criteria
+   are met, two with reduced scope; the table is at the end of the 2a plan, and **2b closes
+   both**.
 4. **Tests: 940 passed, measured 2026-08-14 after Task 13.** This is the only statement of the
    count in this file; do not restate it elsewhere.
 5. **`pixi run test` is the full sweep and is what every end-of-task verification must run.
    It takes 302–606 s on the mini PC — nine runs, 2026-08-12 to 2026-08-14, at 822, 845,
    847, 880, 880, 897, 910, 924 and 940 tests.** Quote the range, never one end of it; see
    the note below, which includes **two runs of the identical tree 38 s apart** and one step
-   that is only two-thirds attributed.
+   that is only two-thirds attributed. **A tenth run, 2026-08-14, came in at 777.8 s at 940
+   tests on a byte-identical test tree — and is DELIBERATELY EXCLUDED from the range**,
+   because `typecheck`, `lint`, `pre-commit --all-files` and a subprocess RSS probe were
+   running concurrently. **It is recorded rather than dropped, and it does not fire the
+   attribution trigger**: a contaminated measurement labelled at the time is worth more than
+   a clean-looking one whose confound is discovered later.
 6. **`pixi run test-fast` deselects `slow` and is for iteration only — a green fast run is NOT
    evidence a task is done.** `pixi run test-ci` reproduces CI (`-m 'not machine'`) and is not
    evidence either, because `machine` covers exactly the tests that pin the RSS shim's units and
@@ -32,11 +40,12 @@
    — 14 tasks, dependencies, sixteen exit criteria.
 9. **THE METHOD IS THE PRE-FLIGHT AND IT LIVES IN EXACTLY ONE PLACE:**
    [`docs/superpowers/notes/phase1-to-phase2-handoff.md`](docs/superpowers/notes/phase1-to-phase2-handoff.md)
-   §1 — **(a0), (a1), (a)–(k) with (a2)–(a5), (c2), (c3), (g2), (i2)–(i8) and (k2)**, the **five** causes of
-   a surviving mutation, the standing rules and the fixture facts. **Run it against Task 10's
-   brief before writing code** and append what it finds to
-   [`docs/superpowers/notes/phase2a-preflight.md`](docs/superpowers/notes/phase2a-preflight.md),
-   as Tasks 0–6 did. **Do not restate the pre-flight here** — the two copies drifted once already.
+   §1 — **(a0), (a1), (a6), (a)–(k) with (a2)–(a5), (c2), (c3), (g2), (i2)–(i8), (j2), (j3) and
+   (k2)**, the **five** causes of a surviving mutation, the standing rules and the fixture
+   facts. **Run it against each 2b task brief before writing code** and append what it finds to
+   [`docs/superpowers/notes/phase2b-preflight.md`](docs/superpowers/notes/phase2b-preflight.md),
+   as every 2a task did to its own note. **Do not restate the pre-flight here** — the two
+   copies drifted once already.
 10. **Precedence: the design doc is authoritative on INTENT; a measured, dated number supersedes
     an unmeasured one wherever it lives, including in the design doc.** Full statement below.
 
@@ -259,6 +268,11 @@ was the actual defect the leak exposed.
 | Phase 2 preliminaries pre-flight | [`docs/superpowers/notes/phase2-preliminaries-preflight.md`](docs/superpowers/notes/phase2-preliminaries-preflight.md) — the (a)–(k) audit of the P0/P1/P2 briefs and what each finding changed |
 | **Phase 2a implementation plan** | [`docs/superpowers/plans/2026-08-11-metamer-phase2a.md`](docs/superpowers/plans/2026-08-11-metamer-phase2a.md) — **COMPLETE: Tasks 0–13, all sixteen exit criteria met** |
 | **Phase 2a pre-flight, per task** | [`docs/superpowers/notes/phase2a-preflight.md`](docs/superpowers/notes/phase2a-preflight.md) — the (a)–(k) audit of each 2a task brief and what each finding changed. **Append to it before each task, not after.** |
+| **Phase 2b implementation plan** | [`docs/superpowers/plans/2026-08-14-metamer-phase2b.md`](docs/superpowers/plans/2026-08-14-metamer-phase2b.md) — 11 tasks, 16 exit criteria. **Awaiting review; no code yet.** Its head carries findings F1–F4, which are why 2b begins with a correction task rather than with the calibration tile |
+| **Phase 2b pre-flight, per task** | [`docs/superpowers/notes/phase2b-preflight.md`](docs/superpowers/notes/phase2b-preflight.md) — carries the pre-plan audit; per-task entries are appended **before** each task |
+
+**Next action:** review the 2b plan. On approval, Task 0 — and its first step is the
+pre-flight against its own brief, appended to `phase2b-preflight.md`.
 
 Phase list is design doc §17. Phase 1 exit criteria are §18. Do not duplicate either here.
 
@@ -522,6 +536,13 @@ close the two. Everything below is what a cold session cannot re-derive from the
 - **2b IS THE CALIBRATION TILE AND `--memory-budget` DEFAULTING, AND ITS GATE IS LIFTED.**
   This file recorded 2b as *"gated by open question 12"*; **question 12 is closed** (the
   child-inherits-the-parent's-high-water-mark measurement), so nothing blocks it.
+  **PLANNED 2026-08-14**:
+  [`docs/superpowers/plans/2026-08-14-metamer-phase2b.md`](docs/superpowers/plans/2026-08-14-metamer-phase2b.md).
+  **Read the [2b brainstorm section](#phase-2b-brainstorm--settled-decisions-2026-08-14) with
+  it** — the brainstorm's pre-flight found four defects in what this section says 2b inherits,
+  and the bullets below are correct only as amended there. In particular: the measured formula
+  below describes **deleted code** (F2/F4), its validating measurement drove a **different
+  workload** (F2), and the budget it is divided into is **not the block** (F1).
 - **IT INHERITS A MEASURED FORMULA AND A REAL STORE TO SIZE AGAINST**, which is what 2a did
   not have: `memory.resident_bytes_per_series` is validated against the RSS-vs-B slope in a
   fresh process, `tile_side_for` derives the side from it, and a finished store now exists
@@ -1634,6 +1655,162 @@ the third executable. The pre-flight now reads **(a)–(k) with (a2), (a3) and (
 
 ---
 
+## Phase 2b brainstorm — settled decisions (2026-08-14)
+
+**The decisions are in the plan as task behaviour;
+[this section carries the reasoning and the measurements](docs/superpowers/plans/2026-08-14-metamer-phase2b.md),
+which is what a cold session cannot re-derive.** F1–F4 are stated in full at the plan's head
+and are not repeated here — only what follows from them.
+
+### The four findings, in one line each
+
+The pre-flight was run against 2b's **inherited brief** before any task was written, and it is
+why 2b begins with a correction task rather than with the calibration tile.
+
+- **F1** — `run.py:348` passes the budget in as `block_bytes`, and **nothing in any document
+  defines the mapping between them**. At a 1 GB budget the tile is 996 MB, 92.8% of it, and the
+  floor is 221.5 MB. **Exit criterion 7 asserts peak RSS and is unsatisfiable at any tile size
+  where the tile dominates.**
+- **F2** — `memory.bytes_per_series` multiplies the solver state by B while `fit.py:223` loops
+  one series at a time: **1056 B/series, 120 MB at B = 114 244.** The formula describes §8.3's
+  batched trust-region, **deleted at Task 19**. And the measurement that validated it drove a
+  **batched evaluation**, which genuinely holds `B × (d²…)`.
+- **F3** — the output-slot term omits `theta_unconstrained`, `n`, an object-array `init_rung`
+  pointer and an int64 `n_iter`: **209 B/candidate against 163, +28%.**
+- **F4** — `CompiledEngine` pranges over the `y[b:b+1]` it is handed, so **B = 1**: two engines,
+  one production shape, and both `Backend` values describe unbuilt architectures.
+
+**F2 and F3 have opposite signs and partially cancel, which is why neither was noticed.**
+
+### What was promoted, and it is in the handoff rather than here
+
+**(a6)** descriptions outliving their referents; **(j2)** a measurement validates the
+instrument's path; **(j3)** an existing feature as an instrument; the **two-sided** restatement
+of the standing memory check, which in its one-sided form would have passed all three formula
+defects; and **two changes that could each explain a wrong result land in separate commits.**
+
+### The nine settled questions
+
+- **Q1 — `--memory-budget` bounds process peak RSS**, so `block_bytes = budget − floor −
+  headroom`. The alternative — budget bounds the block, criterion restated as "peak ≤ budget +
+  recorded floor" — is **unfalsifiable in the way that matters**: the floor is whatever it
+  turned out to be, so the assertion can never fail, and the hard 16 GB constraint is a
+  statement about process RSS. **Expected consequence, recorded so it does not read as a
+  regression: the side gets SMALLER at the same nominal budget.**
+- **Q2 — the calibration is a capped-iteration run of `run()` itself.** A converged fit at a
+  memory-relevant tile is **86 h** (5.4 s/series × 57 000) and is not runnable anywhere; a
+  batched-evaluation harness is **the instrument F2 indicts**; an uncapped fit at ~600 series
+  measures the slope **inside the intercept's noise** — which is what the current reduced-scope
+  verdict already is, one order up. **The evaluation harness is kept as the measurement of F2's
+  magnitude, named in advance so nobody reconciles the two.**
+- **The cap's blind spot, and why the answer is not "raise the cap".** `fit.py:237` skips
+  **four** allocation sites for a non-`OK` fit — the `theta` write, `inv(hessian)`,
+  `delta_method_cov`, and the final `evaluate`. All four are inside `y[b:b+1]`, so they are
+  **constants, not slope terms**, and belong to the intercept. **The discriminating test is a
+  STEP test at caps {1, 2, 3}, not a slope through {1, 5, 32}**: a first-iteration allocation
+  is a step at 1 → 2, and a three-point fit would read it as a small positive slope and call it
+  noise. Cap 32 stays as the accumulation check.
+- **Q3 — the cache is a sibling object beside the store, and only the SLOPE is cached.** The
+  invariant that preserves §12.4: **the store never resolves through the cache**, so deleting
+  it costs a re-measurement and never a store. Inside root attrs would be self-contained and
+  useless — a fresh store has no attrs, and a resume already reads the side back (a1). **The
+  floor is measured fresh every run**: its parts are seconds, and the input's contribution
+  depends on the **chunk grid**, which Task 11's (a1) sweep classified as read back rather than
+  hashed. **An uncached quantity has no staleness failure mode.**
+- **Invalidation is a digest over EVERY installed distribution's version**, read through
+  `importlib.metadata`, **never from the declaration** — `pixi.toml`'s ranges give one digest
+  across every version they permit. A curated list has the `cftime` hole by construction.
+  **No expiry, not even as a backstop**: time does not cause the change it stands in for, and a
+  backstop firing on an unrelated schedule makes the real gate look optional. `--recalibrate` is
+  the manual override.
+- **Q4 — `memory_budget_gb: float | None = None`, defaulting to a fraction of TOTAL RAM.**
+  A `float` default means **a config omitting the field is byte-identical to one naming the
+  default** — (a0) at a config field. Available RAM was rejected on a consequence: the derived
+  side would move with ambient machine state, hitting `resume_tile_side`'s *stored > derived*
+  arm, so **a resume would fail because a browser was open** — defeating the burst-and-resume
+  workflow `memory_budget_gb`'s run-relevance exists for. **Total RAM is already one of the
+  fingerprint's three components**, so a total-RAM default is stable exactly where the cache is
+  valid; an available-RAM default would vary *within one cache key*.
+- **Q5 — `Backend` is replaced by a placement, read from the run and never from the config.**
+  Corrected, the two placements differ **in a constant, not in the slope**. It stays in the
+  cache key before the driver that needs it exists, because **the day a driver hands an engine a
+  real batch the engine's workspace becomes a per-series term and is engine-dependent** —
+  ~217 B/series for `CompiledEngine`, ~432 for a batched `KalmanEngine`. **`EngineId` must not
+  be reused for it**: it answers *are these scores comparable*, and the key asks *do these
+  engines cost the same*.
+- **Q6 — the derived side is rounded down to a multiple of a smooth base, inside
+  `tile_side_for`.** **"Prefer a composite side" was wrong in both directions**: 338 = 2·13² is
+  composite and its smallest admissible divisor is 169, a **9.1 MB chunk against a 4 MB
+  target**; 336 = 2⁴·3·7 gives 84 and **4.5 MB**. Rounding inside the derivation makes smooth
+  sides **structural rather than a deliberate choice a later reader can simplify away**.
+- **Q7 — criteria 6 and 7 decompose into three claims, and PROGRESS's own stated closer was the
+  wrong quantity for two of them.** **Peak RSS is a property of ONE TILE**: a 10⁶-point grid at
+  a small budget has the same peak as a 10⁴-point grid at the same budget. Slope → four or five
+  sides; peak-under-budget → one capped run at side ≥ 192; **no accumulation → `--reuse-fits-from`,
+  which is the tile loop with the fit removed** and runs 10⁵–10⁶ points in minutes.
+- **Q8 — calibration is opt-in (`--calibrate`), and the basis is recorded** in §13.4's
+  cached / measured / default vocabulary. Under Q1 the analytic path is conservative rather than
+  optimistic, so the un-calibrated state is honest. **The shipped calibration measures a small-B
+  ladder and records that it assumed linearity**; the linearity claim itself is the one-off
+  instrument's, with residuals. A threshold-triggered calibration was rejected: it leaves the
+  test suite never reaching the mechanism *and* makes the trigger unpredictable.
+- **Q9 — `tile_side_basis` is a required root attr and `store.SCHEMA_VERSION` becomes 4**, on
+  Task 11's precedent. A calibration that enlarges the side makes a resume **refuse**, correctly
+  by Task 10's rule, and the refusal must name calibration — which needs the store to record
+  which basis produced its side. **2a-written stores will not resume**; harmless now for the same
+  reason the 2026-08-07 golden regeneration was.
+
+### The floor, measured 2026-08-14 behind a bare launcher
+
+`current_rss`, MB, on the mini PC:
+
+| stage | current | Δ |
+|---|---|---|
+| interpreter + numpy | 73.8 | — |
+| + xarray, zarr | 162.4 | +88.6 |
+| + `metamer.batch.run` | 170.7 | +8.3 |
+| + numba imported, threading layer launched | 213.9 | +43.2 |
+| + Kalman kernel warm | 221.5 | +7.6 |
+| + compiled kernel JIT-compiled | 264.3 | +42.8 |
+
+**A floor taken at import understates by 50.8 MB — 30%** — and by 54% if the compiled kernel is
+reached. **The production floor is 221.5, not 264.3**, because under F4 production never reaches
+the compiled kernel; **that is a claim about F4** and is pinned by the same reachability
+assertion, so the two move together. **This floor still excludes the input open**, so it is a
+lower bound.
+
+**numba costs 43.2 MB — a fifth of the floor — for an observation of a backend production never
+runs.** Not to be "fixed": Task 5 established the layer is invisible until something parallel has
+executed, and the check is load-bearing for §11.3's determinism preconditions. **Recorded as a
+measured, accepted cost with its justification, or someone reclaims the memory and silently
+loses the precondition.**
+
+### The published tile side moves, and it is the FOURTH cascade
+
+Hand-recomputed at §9.4's worked example, each step a claim to measure: **8722 → 8218 B/series**
+(F3 +552, F2/F4 −1056), so the side goes **338 → 361**, then **≈ 286** once F1's floor comes out
+of the budget, then **≈ 272** after Q6's rounding.
+
+**THE SPREAD WAS COUNTED RATHER THAN ESTIMATED, 2026-08-14, AND "five documents" WAS WRONG
+TWICE.** `rg '\b338\b'`: design doc **§2.5, §11.1 ×2, §13.4** — and **not §9.4, which quotes
+339**, the model figure, so the section everyone cites for this number does not contain it;
+**five source docstrings** in `core/memory.py` and `batch/tiling.py`; **13 occurrences across
+four test modules, five of them live assertions** (`test_memory.py:582`, `test_tiling.py:188`,
+`test_validation.py:391` and `:429`); the 2a plan; and this file, 13 times.
+
+**So the correction fails tests, and that is the tests working.** Per (i5), the repair is named
+in advance: the thing that would have to change is the published constant, so **re-derive each
+expected value by hand and record the derivation beside it** — never paste it from the failure,
+which is the discipline the three `GOLDEN_*` constants already carry. **The source docstrings are
+the half a documentation sweep misses**, and `tiling.py`'s is what a tiling implementer reads
+first — the position §11.1 held when it carried the superseded 445.
+
+Plan Task 9 amends every site **after** the floor is measured, states the number **once with its
+derivation and its preconditions**, and adds the only durable fix: **a test asserting the
+documented number equals `tile_side_for` of its documented inputs.**
+
+---
+
 ## Phase 2 brainstorm — settled decisions (in progress, 2026-08-11)
 
 **Live record, appended as each question is settled.** It migrates into the Phase 2
@@ -2194,6 +2371,7 @@ explicit corrections. Per-task audits for Phase 2a are appended to
 | **(a)** | Absolute vs differential — **the cancellation rule** |
 | **(a2)** | A name is not a gate — **classify request vs identity first** |
 | **(a3)** | Defer the feature, declare the regime |
+| **(a6)** | When code is deleted or replaced, sweep for the descriptions that survive it |
 | **(b)** | Batch vs series |
 | **(c)** | Exit paths — enumerate, never count |
 | **(c2)** | Does dispatching on exception type actually discriminate? |
@@ -2208,6 +2386,8 @@ explicit corrections. Per-task audits for Phase 2a are appended to
 | **(i4)** | An error message matching the input is not evidence the input was diagnosed |
 | **(i5)** | If the obvious repair moves a shared constant, the fixture is a trap |
 | **(j)** | Does the oracle share a derivation path with the thing it checks? |
+| **(j2)** | A measurement validates the code path the **instrument** exercises |
+| **(j3)** | An existing feature can be an instrument for a property its own purpose does not concern |
 | **(k)** | Does anything stable across runs depend on process-local state? — **test across processes** |
 | **(k2)** | A coded vocabulary crossing a process boundary — **enumerate what the runtime already emits** |
 
@@ -3264,7 +3444,15 @@ cannot reconstruct them.
 
 | machine | threads | role |
 |---|---|---|
-| Ubuntu mini PC — 4 slow cores, 16 GB RAM (~10 GB free) | {1, 4} | primary development; correctness, oracles, memory formula. **Cannot answer the budget question.** |
+| Ubuntu mini PC — 4 slow cores, **16.54 GB total / 7.13 GB available, measured 2026-08-14** | {1, 4} | primary development; correctness, oracles, memory formula. **Cannot answer the budget question.** |
+
+**The RAM figures replace "16 GB RAM (~10 GB free)", which was undated and wrong on the half
+that matters.** Total is a **machine property** and is what the `--memory-budget` default
+reads; **available is a session measurement and varies**, so it is dated and must be
+re-measured rather than quoted. `/sys/fs/cgroup/memory.max` is `max` here — **no container
+limit**, measured 2026-08-14 — so this box cannot exercise the cgroup branch that
+`machine.total_ram_bytes` acquires in 2b, and its test is therefore constructed. Same shape as
+`choose_core_count` (no SMT here) and `library_table` (one OpenBLAS here).
 | Linux box, 64 cores (RAM unknown — establish before use) | {1, 4, full} | **the decisive measurement**; only valid place for the 19 ms budget comparison |
 | Apple Silicon MacBook, 32 GB | {1, full} | adversarial case for path A; arm64 smoke test |
 | SkyPilot via a forthcoming `cloudify` skill | — | future; design doc §15.5 |

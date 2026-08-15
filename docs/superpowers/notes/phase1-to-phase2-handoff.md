@@ -116,6 +116,15 @@ The cure is always an **absolute value, hand-derived**. Task 16 needed *three* g
 hashes, not one, because each payload builder can drift independently: a `run_payload`
 filing a `None` fingerprint changed every `run_hash` while every comparison stayed green.
 
+**AND THE RULE REACHES INSIDE A SUM: TWO ERRORS OF OPPOSITE SIGN IN ONE TOTAL ARE INVISIBLE
+TO ANY CHECK ON THE TOTAL.** Verify each **term**, never the total. Worked instance, Phase 2b
+F2 and F3, found together: `memory.bytes_per_series` multiplied the solver state by `B` when
+the code holds it for one series at a time (**−1056 B/series**, 12.1% too high) while its
+output-slot term omitted `theta_unconstrained`, `n`, an object-array `init_rung` pointer, and
+an int64 rather than uint16 `n_iter` (**+552 B/series**, 28% too low). The total was within
+0.5% of a measurement and **neither term was right**. The tell is a formula validated as a
+sum against an instrument that also produces a sum.
+
 ### (a2) A NAME IS NOT A GATE
 
 Three instances, each of which reads as a gate and is not one: `metamer_version` in
@@ -295,6 +304,34 @@ records, returns, and the flag is read *after* the bit is written — so the sig
 observed inside the window at all. A raising handler (the `KeyboardInterrupt` idiom, and the
 first thing a reader reaches for) satisfies "stop promptly" and lands its exception in
 precisely the window the other requirement protects, at a point no test can choose.
+
+### (a6) WHEN CODE IS DELETED OR REPLACED, SWEEP FOR THE DESCRIPTIONS THAT SURVIVE IT
+
+> **A description whose subject no longer exists reads as specification and is
+> unfalsifiable, because nothing exercises the thing it describes.** After deleting or
+> replacing an implementation, sweep for what described it — formulas, enums, cache keys,
+> docstrings, config fields, benchmark harnesses — and delete or re-point each one.
+
+**This is (a2) along the time axis.** (a2) asks whether a name was ever backed by the thing
+it claims; this asks whether it **stopped** being backed. The tell is identical — a name that
+reads as a gate and is not — and so is the failure: nothing under test, so nothing fails.
+
+Worked instance, Phase 2b F2 and F4, and it is the **third** time a name has outlived its
+referent here (`metamer_version` populated by nobody; `candidates` covered by no hash while
+§12.8 assumed enforcement; and now this).
+
+`memory.Backend` named two architectures and production had neither. Path A's
+`B × (… + c_A)` described the **batched trust-region of §8.3**, which the stage-1 spike
+deleted — *Task 19 was deleted, not deferred*, under the ≥3× rule, correctly and with the
+decision recorded. Path B's `T × c_B` described a `prange`-over-series driver that exists
+only in `bench/spike.py`. **The deletion was right, was recorded, and the formula describing
+the deleted architecture went with neither.** Corrected, the two placements differ in a
+**constant**, not in the slope — so §9.4's *"the formulas have different shapes, not just
+different constants"* was true of two designs and false of the code.
+
+**The repair is to delete rather than to alias.** Keeping `Backend` as a synonym for the
+replacement would re-commit the defect: a name with no referent, now with a forwarding
+address.
 
 ### (b) Batch vs series
 
@@ -641,6 +678,50 @@ An independent oracle means a **different construction**, not different constant
 The tell: if the reference is not at least ~100× more accurate than the subject, it is
 probably the same algorithm. Nested Richardson qualifies; a wider step does not.
 
+### (j2) A MEASUREMENT VALIDATES THE CODE PATH THE INSTRUMENT EXERCISES, NOT THE ONE THE FORMULA CLAIMS TO DESCRIBE
+
+> **Before trusting a validating measurement, verify the instrument drives the production
+> path** — same entry point, same loop structure, same batch shape. **A benchmark that
+> approximates the workload validates the approximation.**
+
+**This is worse than an unvalidated formula, because the validation is what makes it
+trusted.** (j) asks whether the oracle shares a derivation path with its subject; this asks
+something narrower and easier to miss — an instrument built from the **formula's**
+assumptions rather than from the **code's** is an oracle sharing a derivation path, and it
+will agree.
+
+Worked instance, Phase 2b F2. `memory.bytes_per_series` described a batched optimizer;
+`fit.py:223` loops `optimize_series` over one series at a time; and the confirming
+measurement, `measure_evaluation_rss_slope`, drove `unconstrained_loglik` on a **batch of B**,
+which genuinely does hold `B × (d²…)`. **The measurement was sound, the formula was sound for
+what the instrument did, and neither described production.** The agreement — 8471 B/series
+measured against a 6382 B floor, a ratio of 1.33, inside the ~1.5× band — was read as
+confirmation for four months.
+
+The check is one question: *what does this instrument call, and is it what the run calls?*
+Where the answer is "not quite", the instrument's disagreement with the production path is a
+**quantity to measure and name in advance**, never a discrepancy to reconcile.
+
+### (j3) AN EXISTING FEATURE CAN BE AN INSTRUMENT FOR A PROPERTY ITS OWN PURPOSE DOES NOT CONCERN
+
+> **Before building a harness, enumerate the code paths that already exercise the loop under
+> test with the expensive part absent.** A cheap instrument found this way **drives the
+> production path by construction**, which is exactly what (j2) says a purpose-built harness
+> does not.
+
+The pairing with (j2) is the point: this is not an efficiency. A bespoke harness for the same
+property would approximate the loop and then validate the approximation.
+
+Worked instance, Phase 2b Task 8. The claim is *peak RSS does not grow with tile count*, which
+needs many tiles, and fitting them is prohibitive — 5.4 s/series. **`--reuse-fits-from` is the
+tile loop with the fit removed**: same loop, same write path, same completion bitmap, no
+optimizer. A recompute over 10⁵–10⁶ points runs in minutes and exercises the production loop
+rather than a copy of it. It was cheap all along and was built for something else entirely.
+
+**State what such an instrument does NOT cover**, or it reads as a stronger claim than it is:
+a recompute holds less than a fit does, so it witnesses no accumulation *in the loop* and says
+nothing about what the engines or the optimizer retain.
+
 ### (k) Does anything that must be stable across runs depend on process-local state?
 
 Set iteration order, `id()`, the `repr` of an unordered container, time, environment.
@@ -907,6 +988,15 @@ tests could not see.** `pixi run test-fast` would have shipped both.
   survived because every fixture had `B = 1`. Task 17's utilization measurement uses a
   heterogeneous sample because a homogeneous one reports 1.0 by construction — the number
   the measurement exists to challenge.
+- **TWO CHANGES THAT COULD EACH EXPLAIN A WRONG RESULT MUST LAND IN SEPARATE COMMITS, OR
+  NEITHER CAN BE BLAMED. Attribution is a property of the sequence, not of the diff.**
+  Three instances of one principle: the golden reversal is a **chain, one hop per allowlist
+  change**, because two hops reversed together give two ways to be wrong that cancel; the
+  271 → 307 s sweep step was recorded as **undecomposed** rather than explained, because two
+  changes had landed together; and Phase 2b splits the formula correction, the floor
+  measurement and the arithmetic that joins them into three tasks — the first falsifiable
+  with no measurement, the second a measurement with no consumer, the third the join — so a
+  wrong number has exactly one new input.
 - **Enumerate exits, never count them** — see (c).
 - **A CLAMP, FLOOR OR EPSILON GUARD ABOVE THE DIAGNOSTIC LIMIT OF WHAT IT GUARDS IS A
   FABRICATION MACHINE.** It converts a reportable fact into a plausible number *and* makes
@@ -960,9 +1050,20 @@ that is a ratio of **1.33**, inside the ~1.5× below.
 **And the standing check that produced that number:** *does the memory formula describe the
 code, or a model of the code?* §9.4 was wrong twice in ways three places agreed on.
 **Verify against measured resident bytes** — the slope of RSS against B, in a fresh process,
-sampled during the workload — and treat any factor above ~1.5× as a missing term rather than
-measurement noise. It was 5.0× before the fix and nothing in the suite said so until the
-measurement existed.
+sampled during the workload. It was 5.0× before the fix and nothing in the suite said so
+until the measurement existed.
+
+**THE CHECK IS A TWO-SIDED BAND, CORRECTED 2026-08-14.** It was stated as *"treat any factor
+above ~1.5× as a missing term"*, and **that one-sided form would have passed all three of
+Phase 2b's formula defects.** A measured slope **materially below** the formula is equally a
+finding: the formula charges for something the code does not hold, and the excess capacity
+hides whatever else is wrong. Read a ratio outside the band in **either** direction as a term
+that is wrong, never as measurement noise — and per (a), check the **terms** rather than the
+sum, because two errors of opposite sign land the total inside the band.
+
+**And per (j2), check the instrument before checking the ratio.** The 1.33 that cleared this
+band in 2026-08-10 was measured on a batched evaluation against a formula for a per-series
+loop; a ratio computed from the wrong workload is not evidence in either direction.
 
 ---
 

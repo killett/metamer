@@ -757,7 +757,9 @@ with the same closer.
 
 ## What 2a does not do
 
-Calibration tile and `--memory-budget` defaulting (2b, **gated by open question 12**);
+Calibration tile and `--memory-budget` defaulting (2b — ~~gated by open question 12~~
+**question 12 closed 2026-08-12, planned 2026-08-14 in
+[`2026-08-14-metamer-phase2b.md`](2026-08-14-metamer-phase2b.md)**);
 two-pass warm start (2c); hysteresis audit (2d); run-level reporting, `metamer report`, early
 abort and the mechanism that **produces** `CANDIDATE_DROPPED` (2e); the command tree,
 `validate --explain`, profiles and `rich` (Phase 5).
