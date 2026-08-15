@@ -58,11 +58,18 @@ _WORKED_EXAMPLE = {"k_beta": 4, "p_max": 4, "n_time": 630, "n_models": 12}
 _WORKED_EXAMPLE_BUDGET = 10**9
 """Bytes, DECIMAL, and the unit is not decoration.
 
-`run()` converts `memory_budget_gb` with `1024**3`, so the runner's "1 GB" is
-7.4% more bytes than this example's and the two have never produced the same
-side. Recorded 2026-08-14 as an open defect owned by Tasks 2 and 3, which is
-where the budget is resolved; until then the pair below is a 10**9 pair and says
-so.
+**THE UNIT IS SETTLED AND `run()` NOW AGREES WITH IT.** It converted
+`memory_budget_gb` with `1024**3` until Phase 2b Task 2 -- 7.4% more bytes for
+the same word, so the runner's "1 GB" and this example's had never produced the
+same side. Both are 10**9 now.
+
+**WHAT THIS PAIR IS NOT IS A SIDE A RUN WOULD DERIVE**, and the message says so.
+Layer 3 runs before the input is open and therefore before the process floor is
+measured, so the sides below divide the WHOLE budget -- an upper bound, and the
+pre-Task-2 arithmetic. **What the refusal is for is the RATIO**, which is what
+the per-point declaration costs and which the floor does not move; quoting the
+pair without that qualification would publish a fourth tile side into a project
+that has already had three.
 """
 
 _WORKED_EXAMPLE_STATE_DIM = 3
@@ -341,8 +348,10 @@ def check_semantics(
             "engine) it takes tile_side from "
             f"{shared_side} to {per_point_side}, a "
             f"{(shared_side / per_point_side) ** 2:.2f}x change in tile area "
-            "from one declaration. Drop the declaration to fit with a shared "
-            "design",
+            "from one declaration. Both sides divide the whole budget, before "
+            "the process floor and the headroom come out, so each is an upper "
+            "bound and the ratio is what the declaration costs. Drop the "
+            "declaration to fit with a shared design",
         )
 
     try:

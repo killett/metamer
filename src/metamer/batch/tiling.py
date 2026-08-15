@@ -27,11 +27,17 @@ reads. `.load()`'s peak is analytic where a graph's is emergent, which is what
 lets 2b's calibration tile turn the memory formula from a model into a
 measurement.
 
-**A TILE SIDE IS NOT A NUMBER WITHOUT ITS PRECONDITIONS**, and the ones it needs
-changed on 2026-08-14. At §9.4's worked example (d=3, k_β=4, p_max=4, N=630,
-M=12) under a **10⁹** budget the side is **347** shared / **187** per-point,
-recomputed by hand from the corrected formula. The superseded pair is
-~~338 / 186~~ and the superseded backend-specific pair is ~~361 / 189~~.
+**A TILE SIDE IS NOT A NUMBER WITHOUT ITS PRECONDITIONS, AND THIS DOCSTRING NO
+LONGER STATES ONE.** The current pair and its full precondition list — budget,
+measured floor, headroom, base, and §9.4's model — live in
+`docs/superpowers/notes/phase1-to-phase2-handoff.md` §3, **once**. Every
+superseded pair is struck there rather than deleted, so a reader meeting one in
+an old note can date it. This file carried ~~347 shared / 187 per-point~~ until
+2026-08-15, which was Task 0's corrected per-series cost divided into the
+**whole** budget — the defect F1 names, and Task 2 fixed. **A second copy here
+is how the two came to disagree**, and the source docstring is the half a
+documentation sweep misses: this is the position §11.1 held while it carried the
+superseded 445.
 
 **AND THE SIDE NO LONGER CARRIES A BACKEND**, which is the visible half of the
 correction: the two engines' published pairs differed only because the formula
@@ -41,10 +47,13 @@ which knows which engine is running — and the placement moves a **constant**.
 ~~`NUMPY_BATCHED` gives 338 / 186 and `COMPILED` gives 361 / 189~~, struck
 2026-08-14.
 
-**THE BUDGET'S UNIT IS AN OPEN DEFECT.** Every published side here is computed
-at `10**9`, while `run.py` converts the user's `memory_budget_gb` with
-`1024**3` — 7.4% more bytes for the same word. Tasks 2 and 3 own the budget and
-own resolving it; do not restate a side without saying which unit produced it.
+**THE BUDGET'S UNIT IS SETTLED: `memory_budget_gb` IS 10⁹ BYTES.** It was
+`1024**3` in `run.py` until Phase 2b Task 2 — 7.4% more bytes for the same word
+— and correcting it LOWERS the budget, which is the safe direction against a
+constraint the design doc calls hard. The field is named `_gb` and SI GB is
+10⁹; a `1024**3` field is named `_gib`. **The value itself is resolved at run**
+since Task 3: a config that omits it is distinguishable from one that names a
+number, and the omission resolves to a fraction of TOTAL RAM.
 
 **FORWARD NOTE — PASS 1's COARSE STRIDE LANDS HERE IN 2c AND HAS FIVE DOWNSTREAM
 CONSUMERS.** 2a defines no stride. Nowhere else records the list, so a later

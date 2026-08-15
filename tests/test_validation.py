@@ -372,6 +372,14 @@ def test_a_per_point_regressor_is_refused_naming_the_field_and_both_tile_sides(
     constraint that is the difference between a configuration fitting in RAM
     and not.
 
+    **NEITHER SIDE IS A SIDE A RUN WOULD DERIVE, AND THE MESSAGE MUST SAY SO.**
+    Layer 3 runs before the input is open and therefore before the process floor
+    exists, so both divide the WHOLE budget -- the pre-Task-2 arithmetic, which
+    is an upper bound. The ratio is what the declaration costs and the floor
+    does not move it. Bug the added assertion catches: a message that publishes
+    a fourth tile side into a project that has had three, by quoting a number a
+    reader would take for the one their run will use.
+
     Bug this catches: a refusal reading "per-point regressors are not
     implemented", which wastes the context layer 3 already has. The expected
     tile sides are recomputed here from `memory` at the same worked example --
@@ -411,6 +419,7 @@ def test_a_per_point_regressor_is_refused_naming_the_field_and_both_tile_sides(
     assert str(expected[0]) in message
     assert str(expected[1]) in message
     assert "10^9 B" in message
+    assert "before the process floor and the headroom come out" in message
 
 
 def test_the_quoted_tile_sides_no_longer_depend_on_which_engine_runs(tmp_path):

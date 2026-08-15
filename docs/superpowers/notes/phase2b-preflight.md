@@ -445,3 +445,181 @@ parameter rather than a test hack: a sandbox that forbids spawning cannot run th
   bypass it. At Task 2 `memory_budget_gb` still has a pydantic default of 1.0, so there is no
   `None` to bypass with; **that test is Task 3's and is recorded as owed rather than written
   here against a state that cannot occur.**
+
+---
+
+## Task 3 — the `--memory-budget` default, and the unset sentinel
+
+Run 2026-08-15 against the task brief in
+[`../plans/2026-08-14-metamer-phase2b.md`](../plans/2026-08-14-metamer-phase2b.md), the live
+`config/model.py`, `batch/run.py`, `batch/store.py`, `batch/completion.py`, `batch/tiling.py`,
+`batch/validation.py`, `core/machine.py` and `core/hashing.py`. **Eleven findings. Two are
+descriptions of a defect Task 2 closed that still name Task 3 as their owner, and one is a
+store guard whose "required" and this task's sentinel cannot both hold.**
+
+### (a6) TWO DOCSTRINGS STILL CARRY THE UNIT DEFECT AS OPEN, AND ONE OF THEM PUBLISHES A SUPERSEDED SIDE AS CURRENT
+
+Task 2 decided the unit and corrected `run.py` to `10**9`. Two descriptions of the old state
+survive it, and **both name Task 3 as a co-owner**, so a reader arriving here is told to resolve
+something already resolved:
+
+- `batch/tiling.py`'s module docstring: *"THE BUDGET'S UNIT IS AN OPEN DEFECT … `run.py`
+  converts the user's `memory_budget_gb` with `1024**3` … Tasks 2 and 3 own the budget"*.
+- `batch/validation.py`'s `_WORKED_EXAMPLE_BUDGET` docstring: *"`run()` converts
+  `memory_budget_gb` with `1024**3` … Recorded 2026-08-14 as an open defect owned by Tasks 2
+  and 3"*.
+
+**And the same tiling docstring states the tile side as `347` shared / `187` per-point**, which
+is Task 0's pre-floor pair. Since Task 2 the answer is **272 / 144** and its one home is the
+handoff's §3. This is the *"source docstrings are the half a documentation sweep misses"*
+instance for the third time, at the position §11.1 held when it carried the superseded 445:
+**`tiling.py`'s docstring is what a tiling implementer opens first.**
+
+Repair: strike both unit notes, and **delete the pair rather than update it** — precedence says
+a measurement stated twice loses a copy, and the handoff's §3 is the copy that stays.
+
+### (a5) AN AVAILABILITY READING MUST NOT REACH THE STORE, AND THE BRIEF DOES NOT SAY SO
+
+The brief requires availability to be **read and reported**. It says nothing about provenance,
+and provenance is where the analogous decision went wrong one task ago: Task 1 put a per-run
+measurement (`floor`) in the root attrs and **broke 2a's exit criterion 1**, which cost a named
+`_MEASURED_ATTRS` carve-out to repair.
+
+Availability is worse on the two axes that matter. It is a measurement of **ambient machine
+state** rather than of this process, and it has **no consumer at all** — nothing reads it, now
+or in any planned task. Measured spread on this one machine: **7.13 GB (2026-08-14, the
+Hardware table), 5.05 GB (2026-08-15, Task 1), 2.59 GB (2026-08-15, taken while the full sweep
+was running)** — a **2.75× range in two days**, which is also the measurement that justifies the
+total-RAM default rather than an argument for it.
+
+**So: reported, never stored.** The distinction to keep is that the *total*-RAM figure the
+warning compares against **is** recorded — through the resolved budget and through
+`machine.fingerprint()` — because it is stable across runs on one machine. **Stable measurements
+may reach a store; ambient ones may not.**
+
+### (a0) THE SENTINEL IS `None`, AND `REQUIRED_ATTRS` READS `None` AS MISSING
+
+`store.create_store` refuses on `attrs.get(key) is None`. So the one provenance key whose `None`
+**is its meaning** — "the config did not name a budget" — **cannot be a required attr**:
+"required" and "nullable" are incompatible in that guard, and adding it would refuse every
+defaulted run.
+
+That leaves absence and null indistinguishable to any reader using `attrs.get`, which is (a0)
+exactly. **The mechanism that closes it is the schema version**, not the required list: a bump
+makes a store written before this task **refused** rather than read as "the budget was
+defaulted". So `SCHEMA_VERSION` goes to **5**, the ledger records the reason, and the ledger's
+own rule — *each bump's field is a REQUIRED attr* — acquires its first stated exception, with
+the exception's reason beside it.
+
+### (a1) THE DEFAULT WIDENS THE RE-DERIVATION HAZARD, AND THE EXISTING GUARD'S MESSAGE THEN NAMES A FLAG NOBODY TYPED
+
+The tile side is re-derived at every resume — the (a1) instance from Phase 2a Task 10. Until now
+its input was in the config, so **two resumes of one config derived the same side on any
+machine**. From this task the derived side is a function of the machine's **total RAM**, so a
+defaulted store resumed on a smaller machine hits `completion.resume_tile_side`'s *stored >
+derived* arm and refuses.
+
+**The arm is correct and the message is not.** It reads *"the budget that produced them was
+4.133932032 GB … Either raise `--memory-budget` to at least that, or write a new store"* for a
+user who never typed a budget, and the number is an artefact of the *other* machine's RAM.
+**(c3)'s phrasing rule, one register over**: a resolution that names an operation the user is
+not performing is worse than none. The message names the default when the store records a null
+request, which is what the new provenance key is for beyond bookkeeping.
+
+### (c3) `_with_memory_budget`'s REFUSAL IS PHRASED FOR THE COMMAND LINE, AND THE DEFAULT PATH IS A SECOND CALLER
+
+`run._with_memory_budget` re-validates an overridden budget and prefixes its layer-2 message
+with `--memory-budget: `. The default resolution wants the same re-validation and **must not
+borrow the phrasing**. It cannot fire today — the default is positive for any positive RAM
+reading — and that is precisely the shape of message defect that ships: unreachable,
+correct-looking, and wrong on the first machine that reports something strange. The caller
+supplies the phrase.
+
+### (g) THE TYPE CHANGE IS HALF OF "A `None` CANNOT BYPASS THE REFUSAL", AND IT IS THE STATIC HALF
+
+Making the field `float | None` turns every consumer that expects a `float` into a mypy error
+until it narrows. There is exactly one production consumer of the value —
+`run.py`'s `int(config.memory_budget_gb * 10**9)` feeding `tile_side_for` — and it stops
+type-checking until the resolution lands above it. **So the owed test is the runtime half of a
+claim whose other half is checked by `pixi run typecheck`**, and both are worth having: mypy
+cannot see the store's copy in `provenance_attrs`, whose value is typed `Any` the moment it
+enters the attrs mapping.
+
+**And that copy is guarded one layer up rather than directly.** `provenance_attrs` calls
+`config.run_hash(...)`, which refuses an unresolved budget, so a store can never record a null
+in `memory_budget_gb`. The two are cross-commented, per the doubled-guard rule.
+
+### (a2) BOTH PROVENANCE FIELDS ARE REQUESTS, AND THE IDENTITY THEY REST ON IS ALREADY WIRED
+
+Classified before checking, per (a2). `memory_budget_requested_gb` **is** the request, so
+self-reporting is correct and there is nothing to verify. The resolved `memory_budget_gb` is
+also a request — it is what the run asked the tiler for — even though its default derives from
+total RAM, which is an identity. **That identity is already populated from the platform**:
+`machine.fingerprint()` reads `total_ram_bytes()` and reaches `run_hash`, wired at Task 1
+before the calibration cache made it a gate. **No new identity field, so (a2)'s four facts have
+nothing new to check** — and the same config on two machines yielding two `run_hash`es is that
+wiring working, not nondeterminism.
+
+### (a4) THE FRACTION, THE FIGURE THE SANITY CHECK USED, AND THE SIDE IT DERIVES
+
+The brief requires a policy fraction sanity-checked against this machine's measured available
+RAM, **naming which figure was used**. It is **7.13 GB, the Hardware table's, measured
+2026-08-14**.
+
+| fraction | budget on this box | against 7.13 GB available |
+|---|---|---|
+| 0.5 | **8.268 GB** | **above every availability reading ever recorded here** — 7.13, 5.05 and 2.59 |
+| **0.25** | **4.134 GB** | below all but the sweep-loaded 2.59 GB reading |
+| 0.125 | 2.067 GB | below all three, and throws away half the usable tile |
+
+**0.5 is what decides the value, not taste**: a default that exceeds availability on an idle
+machine warns on **every** run, and a warning that always fires is not a warning. **0.25**, with
+the same asymmetry the headroom has — too high kills the process, too low costs runtime.
+
+Derived side at the default, hand-computed against this machine's **measured 228.2 MB floor**:
+`(4 133 932 031 − 228 200 000) × 0.85 = 3 319 872 226`, less the 11 984 B solver constant,
+÷ 8274 B/series = **401 240.1 series**, and `633² = 400 689 ≤ 401 240 < 401 956 = 634²`, so the
+raw side is **633** and the base takes it to **624** (39 × 16). Brackets against Task 2's
+published ladder — 4 GB → 608, 8 GB → 880 — and 4.134 GB sits just above 4 GB. **Recomputed by
+hand, not read off the implementation.**
+
+**And a float note, stated so nobody "fixes" it.** The budget round-trips through a GB float, so
+`int(0.25 × 16 535 728 128 / 10⁹ × 10⁹)` is **4 133 932 031 B — one byte below `total // 4`**.
+Deterministic, invisible against a 4 GB budget, and not worth a special case.
+
+### (i7) THE LOW-AVAILABILITY FIXTURE MUST BE PLACED WHERE AN AVAILABLE-RAM DEFAULT WOULD DIFFER
+
+*"A low-availability machine still derives the same side"* is satisfied for free wherever the
+availability figure and the total figure round to the same side — which, with conftest's 1 MB
+stub floor and a 2×3 grid, is most pairs. **The fixture carries its own positive control**: the
+side `tile_side_for` gives at a budget taken from the availability figure is asserted to be
+**different** from the one the run derived. Without that assertion the test passes against an
+available-RAM default, which is the defect it exists to catch.
+
+### (i2) THE AVAILABILITY WARNING NEEDS BOTH CONTROLS, AND (k) SAYS WHERE THEY RUN
+
+*"The warning does not move the exit code"* passes when the warning never fires — the pure
+negative. Paired: a run whose budget exceeds availability **prints the warning and exits 0**, and
+a run whose budget is below availability **prints nothing and exits 0**.
+
+**An exit code is a property of a process**, so both run `python -m metamer` in a subprocess —
+where no monkeypatch survives. The fixture therefore moves the **budget** rather than the
+availability: they are the two sides of one inequality, and `--memory-budget 100000` exceeds any
+development machine's free RAM with no patching at all. The precondition is asserted in the test
+rather than assumed.
+
+### (d), (c) and (i3), briefly
+
+- **(d)** `rg 'available'` over `src/`: **nothing reads available memory anywhere in the tree**
+  — every hit is the word in prose or `tiling.block_bytes_for`'s local. The warning is the first
+  reader, so there is no existing convention to match and no second definition to collide with.
+  `HEADROOM_FRACTION` is the idiom a policy fraction is written in: value, asymmetry, and what it
+  must cover.
+- **(c)** new exits enumerated: `default_budget_gb` has one return and no raise;
+  `Config.run_hash` gains one raise (unresolved budget) above its one return; `run()` gains no
+  exit of its own — the default path reuses `_with_memory_budget`'s layer-2 raise rather than
+  growing a second refusal for a condition no positive RAM reading produces.
+- **(i3)** *"both runs derive the same side"* is a relation, and two runs failing identically
+  satisfy it. The side is additionally asserted against `tile_side_for` called with the
+  total-RAM budget — a second traversal of the production path, which pins the **routing**; the
+  arithmetic itself is pinned by Task 2's tests and is not re-derived here.
