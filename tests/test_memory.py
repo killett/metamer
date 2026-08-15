@@ -29,37 +29,47 @@ import pytest
 
 from metamer.core.machine import current_rss_bytes, peak_rss_bytes
 from metamer.core.memory import (
-    Backend,
-    bytes_per_series,
+    LBFGS_MAXCOR,
+    SLOPE_BAND_FACTOR,
+    MemoryEngineLabel,
+    SolverPlacement,
     data_and_workspace_bytes_per_series,
     measure_evaluation_rss_slope,
+    memory_engine_label,
     output_slot_bytes,
     resident_bytes_per_series,
-    streaming_overhead_bytes,
-    thread_state_bytes,
-    tile_bytes,
+    resident_tile_bytes,
+    slope_band,
+    solver_state_bytes,
     tile_side,
 )
 
 
 class _Case(TypedDict):
-    """The section 9.4 worked-example parameters.
+    """The section 9.4 worked-example parameters the PER-SERIES cost takes.
 
     A TypedDict rather than a plain dict so `**CASE` type-checks: mypy
     otherwise has to assume a `dict[str, int]` might land in the `bool`
     `per_point_design` slot.
+
+    **`d` IS ABSENT AND THAT IS THE 2026-08-14 CORRECTION**, not an oversight:
+    the state dimension reaches the formula only through the solver working
+    set, and that set is live for one series at a time.
     """
 
-    d: int
     k_beta: int
-    p: int
+    p_max: int
     n_time: int
     n_models: int
 
 
 # Corrected 2026-08-07: the output-slot scalar count is 4
-# (log_lik, k, n_eff_trend, n_eff_bic) and not 2.
-CASE: _Case = {"d": 3, "k_beta": 4, "p": 4, "n_time": 630, "n_models": 12}
+# (log_lik, k, n_eff_trend, n_eff_bic) and not 2. Corrected again 2026-08-14:
+# it is 5, plus an object pointer and an int64, and the widths are p_max.
+CASE: _Case = {"k_beta": 4, "p_max": 4, "n_time": 630, "n_models": 12}
+
+# Design doc section 9.4's `d`, which only the tile-level functions take.
+STATE_DIM = 3
 
 
 # --------------------------------------------------------------------------
@@ -357,70 +367,135 @@ def test_the_inheritance_does_not_compound_across_a_generation():
 # --------------------------------------------------------------------------
 
 
-def test_output_slots_carry_four_scalars_not_two():
-    """Both n_eff variants are per candidate, so the scalar count is 4.
+def test_the_output_slot_term_is_the_inventory_fit_preallocates_field_by_field():
+    """Every field `fit` holds until the tile write is charged, and no others.
 
-    Expected value determined independently, by hand from design doc section
-    9.4: per candidate the stored slots are theta-hat and its error (p each),
-    beta and its error (k_beta each), then log_lik, k, n_eff_trend and
-    n_eff_bic as float64, plus iterations (uint16) and status (uint8). At
-    M=12, p=4, k_beta=4 that is 12 * (8 + 8 + 4) * 8 + 12 * 3 = 1920 + 36 =
-    1956 B. Under the superseded count of 2 scalars it is 12 * 18 * 8 + 36 =
-    1764 B, so the correction is worth exactly 192 B per series.
+    Expected values built by hand from `fit.py:197-209`, ASSERTED PER FIELD
+    rather than as a total, because a total is precisely what hid the previous
+    two errors: the solver term was 12.1% high while this one was 25% low, and
+    the sum sat within 0.5% of a measurement while neither term was right.
 
-    Bug this catches: THE SUPERSEDED `2p + 2k_beta + 2`, which design doc
-    section 9.4 still carried in its worked table while its own formula three
-    paragraphs earlier said 4, and which the plan's fence transcribed. It
-    propagates into bytes_per_series, tile_side and every downstream RAM
-    projection. Nothing downstream can see it: 1764 and 1956 are both
-    plausible, both scale the same way with B, and the error cancels out of
-    every path-A-against-path-B comparison because it is common to both.
+        theta, theta_unconstrained, theta_err   3 * p_max * 8   = 96
+        beta, beta_err                          2 * k_beta * 8  = 64
+        loglik, k, n, n_eff_bic, n_eff_trend    5 * 8           = 40
+        n_iter                                  int64           =  8
+        init_rung                               object pointer  =  8
+        outcome                                 uint8           =  1
+                                                                 ---
+                                                                  217
+
+    so 12 * 217 = 2604 B/series at M = 12. The superseded
+    `M*(2p + 2k_beta + 4)*8 + 3M` gives 12 * 163 = 1956.
+
+    Bug this catches: the four omissions returning one at a time --
+    `theta_unconstrained` (32 B), `n` (8 B), the `init_rung` object pointer
+    (8 B), and `n_iter` charged as a uint16 rather than an int64 (6 B). Each is
+    individually plausible and invisible in a total; each is asserted here on
+    its own line. **The published magnitude of this correction was itself
+    wrong**: it was recorded as +46 B/candidate, which is this list with one
+    8-byte member dropped, and 217 - 163 = 54.
     """
-    assert output_slot_bytes(n_models=12, p=4, k_beta=4) == 1956
-    assert output_slot_bytes(n_models=12, p=4, k_beta=4) - 1764 == 192
+    theta_slots = 3 * 4 * 8
+    beta_slots = 2 * 4 * 8
+    float_scalars = 5 * 8
+    n_iter_slot = 8
+    init_rung_pointer = 8
+    outcome_slot = 1
+    assert theta_slots == 96
+    assert beta_slots == 64
+    assert float_scalars == 40
+    per_candidate = (
+        theta_slots
+        + beta_slots
+        + float_scalars
+        + n_iter_slot
+        + init_rung_pointer
+        + outcome_slot
+    )
+    assert per_candidate == 217
+
+    assert output_slot_bytes(n_models=12, p_max=4, k_beta=4) == 12 * per_candidate
+    assert output_slot_bytes(n_models=12, p_max=4, k_beta=4) == 2604
+
+    # Against the superseded formula, term by term rather than as a delta.
+    superseded = 12 * ((2 * 4 + 2 * 4 + 4) * 8 + 3)
+    assert superseded == 1956
+    assert 2604 - superseded == 12 * 54
 
 
-def test_path_a_matches_the_corrected_worked_example():
-    """Path A is 8682 B/series at the documented configuration.
+def test_the_per_series_cost_is_the_data_tile_and_the_output_slots_only():
+    """8274 B/series: nothing the optimizer or the engine holds is per-series.
 
-    Expected value determined independently by summing design doc section
-    9.4's table by hand: 5670 data (630 * 9) + 1956 output + 432 d-squared
-    terms (6 * 9 * 8) + 120 augmented x (3 * 5 * 8) + 120 accumulators
-    ((10 + 4 + 1) * 8) + 256 trust-region ((16 + 16) * 8) + 128 Hessian
-    (16 * 8) = 8682.
+    Expected value determined independently by summing what one more series in
+    the tile costs: 5670 data (630 * 9, float64 `y` plus a byte of mask) + 2604
+    output slots = 8274. **The solver state is not here**, because `fit.py:223`
+    is `for b in range(batch): optimize_series(obj, y[b:b+1], ...)` -- one live
+    working set whatever B is.
 
-    Bug this catches: the fence's 8490, which is this sum with the superseded
-    output-slot count. Asserted as an absolute total AND term by term, so a
-    failure says which term moved rather than only that the total did.
+    Bug this catches: the superseded 8722, which is this sum plus 1056 B of
+    solver state and 40 B of the engine's reused `[y | X]` row, both charged
+    per series. It described design doc section 8.3's batched trust-region,
+    which Task 19 deleted. The error is 5.4% and in the SAFE direction, which
+    is why it survived a validating measurement -- and the measurement drove a
+    batched evaluation, which really does hold those blocks per series.
     """
-    assert bytes_per_series(Backend.NUMPY_BATCHED, **CASE) == 8682
-    assert 5670 + 1956 + 432 + 120 + 120 + 256 + 128 == 8682
+    assert resident_bytes_per_series(**CASE) == 8274
+    assert 5670 + 2604 == 8274
+    assert 630 * 9 == 5670
+    # The superseded 8722, decomposed into the three corrections, each signed:
+    # +648 of output slots it never charged, -1056 of solver state it charged
+    # per series, -40 of the engine's reused row it charged per series.
+    assert 8722 + 648 - 1056 - 40 == 8274
 
 
-def test_path_b_drops_only_the_per_series_solver_state():
-    """Path B is 7626 B/series: data plus output slots only.
+def test_both_placements_agree_on_the_slope_and_differ_only_in_the_constant():
+    """One formula, one slope, two constants -- not two shapes.
 
-    Expected value determined independently: 5670 + 1956 = 7626, and the
-    difference from path A is exactly path A's solver state, 1056 B. The
-    saving is 1056 / 8682 = 12.16%.
+    Expected values determined independently: the per-series cost takes neither
+    a placement nor `d`, so it is 8274 either way; the constant is 11 984 B
+    once under `PER_SERIES_LIVE` and 4 * 11 984 = 47 936 B under `PER_THREAD`
+    at four threads.
 
-    Bug this catches: claiming path B's memory advantage is transformative and
-    letting that drive the stage-1 decision. It is 12.2%, because data and
-    output slots are already 88% of the total -- so the reason to prefer path
-    B is speed and the collapse of the ragged cliff, not memory. A backend
-    formula that dropped the output slots too would report a far larger and
-    entirely fictional saving.
+    Bug this catches: someone restoring design doc section 9.4's
+    *"the formulas have different shapes, not just different constants"*. That
+    was true of the two DESIGNS and is false of the code -- `CompiledEngine`
+    pranges over whatever batch `score` is handed and `fit` hands it one series,
+    so both engines have the same tile shape. Under the superseded formula the
+    two published tile sides differed (338 against 361) purely because of this
+    error, and a reader planning a run against the wrong one was told to.
     """
-    path_a = bytes_per_series(Backend.NUMPY_BATCHED, **CASE)
-    path_b = bytes_per_series(Backend.COMPILED, **CASE)
-    assert path_b == 7626
-    assert path_a - path_b == 1056
-    assert (path_a - path_b) / path_a == pytest.approx(0.1216, abs=0.0005)
-    assert (5670 + 1956) / path_a == pytest.approx(0.878, abs=0.001)
+    per_series = resident_bytes_per_series(**CASE)
+    live = solver_state_bytes(
+        SolverPlacement.PER_SERIES_LIVE, d=STATE_DIM, k_beta=4, p_max=4, threads=4
+    )
+    threaded = solver_state_bytes(
+        SolverPlacement.PER_THREAD, d=STATE_DIM, k_beta=4, p_max=4, threads=4
+    )
+    assert per_series == 8274
+    assert live == 11984
+    assert threaded == 4 * 11984 == 47936
+
+    # The slope is identical and the tiles differ by exactly the constants.
+    for batch in (1, 1000, 10_000):
+        both = {
+            placement: resident_tile_bytes(
+                batch=batch,
+                placement=placement,
+                threads=4,
+                d=STATE_DIM,
+                **CASE,
+            )
+            for placement in SolverPlacement
+        }
+        difference = (
+            both[SolverPlacement.PER_THREAD] - both[SolverPlacement.PER_SERIES_LIVE]
+        )
+        assert difference == threaded - live
+        assert difference == 3 * 11984
 
 
 def test_per_point_regressors_add_the_design_matrix_per_series():
-    """A per-point X adds N * k_beta * 8 bytes to both backends.
+    """A per-point X adds N * k_beta * 8 bytes, and it is the one branch left.
 
     Expected value determined independently: 630 * 4 * 8 = 20160 by hand.
     That is roughly 2.4x the entire rest of the per-series cost, so it is not
@@ -432,20 +507,38 @@ def test_per_point_regressors_add_the_design_matrix_per_series():
     correct; with a per-point regressor field (a GIA model, say) X is
     per-series. Getting it wrong understates RAM by 70% in the regime where
     the hard 16 GB constraint actually binds.
+
+    **THE REGIME SHIPS TESTED THOUGH THE FEATURE IS REFUSED** (a3), and this is
+    now the only branch the per-series formula has -- the placement branch moved
+    to the tile level on 2026-08-14. A branch nothing exercises rots while
+    unreachable, and `batch.validation` quotes both sides of this one in the
+    refusal a user actually reads.
     """
-    for backend in Backend:
-        shared = bytes_per_series(backend, **CASE)
-        per_point = bytes_per_series(backend, **CASE, per_point_design=True)
-        assert per_point - shared == 20160
+    shared = resident_bytes_per_series(**CASE)
+    per_point = resident_bytes_per_series(**CASE, per_point_design=True)
+    assert per_point - shared == 20160
+    assert 630 * 4 * 8 == 20160
+    assert per_point == 28434
 
 
 def test_tile_side_floors_and_reflects_the_full_accounting():
     """tile_side floors, and the full accounting shrinks it against data-only.
 
-    Expected value determined independently: floor(sqrt(1e9 / 8682)) =
-    floor(339.4) = 339 with shared X, floor(sqrt(1e9 / 28842)) = floor(186.2)
-    = 186 with per-point X, against the prompt's data-only
-    floor(sqrt(1e9 / 5040)) = floor(445.4) = 445.
+    Expected values re-derived by hand from the corrected per-series cost, at a
+    10**9 budget: 10**9 / 8274 = 120 860.5 and 347**2 = 120 409 <= 120 860.5 <
+    121 104 = 348**2, so the side is **347**; 10**9 / 28434 = 35 169.9 and
+    187**2 = 34 969 <= 35 169.9 < 35 344 = 188**2, so the per-point side is
+    **187**. The prompt's data-only formula still gives floor(sqrt(1e9/5040)) =
+    445. The superseded pair is ~~338 / 186~~, from the superseded 8722.
+
+    **NEITHER NUMBER WAS READ OFF A FAILURE.** Both bracketing squares are
+    written out above precisely so the next reader can check rather than trust,
+    which is the discipline the `GOLDEN_*` constants carry and the one this
+    cascade exists because nobody applied.
+
+    **THE BUDGET IS 10**9 B AND THE UNIT IS NOT DECORATION**: `run.py` converts
+    `memory_budget_gb` with `1024**3`, which is 7.4% more bytes for the same
+    word and gives 350 rather than 347. Tasks 2 and 3 own resolving that.
 
     Bug this catches: the fence asserted 187 for the per-point case while its
     own implementation floors -- sqrt(1e9/28650) is 186.83, so its expected
@@ -453,9 +546,13 @@ def test_tile_side_floors_and_reflects_the_full_accounting():
     against the very implementation printed beneath it. Rounding up here
     overcommits a hard memory budget by a full tile row.
     """
-    assert tile_side(10**9, 8682) == 339
-    assert tile_side(10**9, 28842) == 186
+    assert 347**2 <= 10**9 / 8274 < 348**2
+    assert 187**2 <= 10**9 / 28434 < 188**2
+    assert tile_side(10**9, 8274) == 347
+    assert tile_side(10**9, 28434) == 187
     assert tile_side(10**9, 5040) == 445
+    # The unit really does move the answer, so the pair carries it.
+    assert tile_side(1024**3, 8274) == 360
 
 
 def test_a_tile_that_does_not_fit_its_budget_is_refused():
@@ -471,7 +568,7 @@ def test_a_tile_that_does_not_fit_its_budget_is_refused():
     the budget.
     """
     with pytest.raises(ValueError, match="budget"):
-        tile_side(1000, 8682)
+        tile_side(1000, 8274)
 
 
 # --------------------------------------------------------------------------
@@ -479,67 +576,217 @@ def test_a_tile_that_does_not_fit_its_budget_is_refused():
 # --------------------------------------------------------------------------
 
 
-def test_thread_state_is_per_thread_and_absent_from_the_per_series_cost():
-    """Path B's solver state is per thread, which is the whole shape change.
+def test_the_solver_constant_is_scipys_workspace_plus_the_engines():
+    """11 984 B, and scipy's L-BFGS-B workspace is 93% of it.
 
-    Expected value determined independently, from design doc section 9.4's
-    table with path B's L-BFGS optimizer term: 432 d-squared + 120 augmented
-    x + 120 accumulators + 704 L-BFGS history (22 * 4 * 8) + 128 Hessian =
-    1504 B per thread. At T=4 that is ~6 kB and at T=64 ~96 kB -- negligible
-    either way, which is the point.
+    Expected values determined independently, by reading the allocations rather
+    than the old formula:
 
-    Bug this catches: folding thread state into the per-series figure, which
-    would make it appear 64 times over at T=64 and inflate path B's projected
-    tile RAM by ~96 kB per series instead of ~96 kB per tile.
+        engine     6*d*d*8 = 432, d*(1+k_beta)*8 = 120,
+                   (k_beta*(k_beta+1)/2 + k_beta + 1)*8 = 120,
+                   the reused (1, 1+k_beta) row = 40          ->    712
+        optimizer  wa = (2*m*p + 5*p + 11*m*m + 8*m)*8 at m=10 ->  10 240
+                   x, low_bnd, upper_bnd, g = 4*p*8           ->     128
+                   nbd (p) and iwa (3p), 8 B/int              ->     128
+                   dsave 29 + isave 44 + lsave 4 + task 2
+                     + ln_task 2, all 8 B                     ->     648
+        Hessian    p*p*8                                      ->     128
+                                                                  ------
+                                                                   11 984
+
+    Bug this catches: THE SUPERSEDED OPTIMIZER TERM, which is the same defect as
+    the deleted `Backend` and sat in the same function. It charged
+    `(p**2 + 4p)*8 = 256 B` for section 8.3's *"dense quasi-Newton trust-region
+    model"*, deleted with Task 19, and `22*p*8 = 704 B` for an L-BFGS history.
+    `optimize.py:531` runs scipy L-BFGS-B for BOTH engines, and scipy's
+    workspace is dominated by `11*m*m` -- **1100 doubles that do not depend on
+    `p` at all** -- so `22p*8` is not the same quantity with a different
+    constant, it is the wrong shape. The whole constant was understated 11.3x.
+
+    It is a constant, so it does not move `tile_side`. It IS what Task 4's
+    intercept and Task 7's cross-check measure, so a 1056 B model against an
+    ~12 kB reality is a discrepancy someone would have reconciled the wrong way.
     """
-    assert thread_state_bytes(d=3, k_beta=4, p=4) == 1504
-    assert 432 + 120 + 120 + 704 + 128 == 1504
-    per_series = bytes_per_series(Backend.COMPILED, **CASE)
-    assert per_series == 7626
-    assert thread_state_bytes(d=3, k_beta=4, p=4) not in (per_series - 7626,)
+    engine = 432 + 120 + 120 + 40
+    workspace = (2 * 10 * 4 + 5 * 4 + 11 * 10 * 10 + 8 * 10) * 8
+    vectors = 4 * 4 * 8
+    integer_arrays = 4 * 4 * 8
+    saves = (29 + 44 + 4 + 2 + 2) * 8
+    hessian = 4 * 4 * 8
+    assert engine == 712
+    assert workspace == 10240
+    assert saves == 648
+    assert engine + workspace + vectors + integer_arrays + saves + hessian == 11984
 
-
-@pytest.mark.parametrize("threads", [1, 4, 64])
-def test_peak_tile_memory_is_independent_of_thread_count_on_path_a(threads):
-    """Path A's tile cost does not depend on how many threads run it.
-
-    Expected value determined independently: path A's formula is
-    B * per_series with no thread term at all, so the total at B=1000 is
-    8 682 000 B whatever T is. Path B's is B * per_series + T * 1504, so it
-    grows by exactly 1504 B per thread -- 94 752 B more at T=64 than at T=1.
-
-    Bug this catches: a formula in which peak RAM scales with core count.
-    Parallelism is within a tile and over series, never across tiles, and that
-    is precisely what keeps peak RAM independent of T. A formula that
-    multiplied the per-series solver state by T would make the 64-core box
-    look like it needed 64x the RAM, and the 16 GB machine like it could not
-    run at all.
-    """
-    assert tile_bytes(Backend.NUMPY_BATCHED, batch=1000, threads=threads, **CASE) == (
-        1000 * 8682
-    )
-    expected_b = 1000 * 7626 + threads * 1504
     assert (
-        tile_bytes(Backend.COMPILED, batch=1000, threads=threads, **CASE) == expected_b
+        solver_state_bytes(
+            SolverPlacement.PER_SERIES_LIVE, d=STATE_DIM, k_beta=4, p_max=4
+        )
+        == 11984
     )
+    # The superseded term, kept so the size of the correction is on the record.
+    assert 432 + 120 + 120 + 256 + 128 == 1056
 
 
-def test_path_b_thread_term_is_the_only_thread_dependence():
-    """The T-dependence is 1504 B per thread and nothing else.
+def test_scipys_maxcor_default_is_still_what_the_optimizer_term_assumes():
+    """The dominant term is `11 * maxcor**2`, so the default is load-bearing.
 
-    Expected value determined independently: 1504 B per thread from the table
-    above, so 63 extra threads cost 63 * 1504 = 94 752 B.
+    Read from scipy's own signature, which is a different construction from
+    this module's arithmetic (j): the constant is not derived from the same
+    place it is checked against.
+
+    Bug this catches: scipy changing `maxcor`'s default and the optimizer term
+    silently describing a workspace that no longer exists. At m=10 `wa` is 1280
+    doubles; at m=20 it would be 4560, a 3.6x change in the dominant term, and
+    nothing in this project's own source would move.
+    """
+    import inspect
+
+    from scipy.optimize import _lbfgsb_py
+
+    default = inspect.signature(_lbfgsb_py._minimize_lbfgsb).parameters["maxcor"]
+    assert default.default == LBFGS_MAXCOR == 10
+
+
+@pytest.mark.parametrize("batch", [1, 1000, 10_000])
+def test_the_tile_solver_term_does_not_grow_with_batch(batch):
+    """The solver state is added once per tile, never once per series.
+
+    Expected value determined independently: `batch * 8274 + 11 984` under
+    `PER_SERIES_LIVE` at any thread count, so the constant is the SAME number
+    at B=1 and at B=10 000 -- 11 984 B, not 11 984 * B.
+
+    Bug this catches: F2 directly, and the mutation is one character --
+    multiplying `solver_state_bytes` by `batch`. At B = 114 244 (a 338-point
+    tile side) that is 120 MB of memory the run does not hold and 12.1% of the
+    per-series figure, and it survived a validating measurement because the
+    instrument drove a batched evaluation which really does allocate that way.
+    """
+    for threads in (1, 4, 64):
+        total = resident_tile_bytes(
+            batch=batch,
+            placement=SolverPlacement.PER_SERIES_LIVE,
+            threads=threads,
+            d=STATE_DIM,
+            **CASE,
+        )
+        assert total == batch * 8274 + 11984
+        assert total - batch * 8274 == 11984
+
+
+def test_the_thread_term_is_the_only_thread_dependence():
+    """Under the unreachable placement T scales the constant and nothing else.
+
+    Expected value determined independently: 11 984 B per thread, so 63 extra
+    threads cost 63 * 11 984 = 754 992 B whatever the batch is.
 
     Bug this catches: a thread term that also scaled with batch size, which
-    would be per-series state wearing a thread label -- the exact confusion
-    the two-formula shape exists to prevent.
+    would be per-series state wearing a thread label. **This is the (i2)
+    positive control for the unreachability assertion**: without it, "the
+    batched placement is not reachable through `run()`" is equally satisfied by
+    a branch that does not work at all.
     """
-    one = tile_bytes(Backend.COMPILED, batch=1000, threads=1, **CASE)
-    many = tile_bytes(Backend.COMPILED, batch=1000, threads=64, **CASE)
-    assert many - one == 63 * 1504
-    big_one = tile_bytes(Backend.COMPILED, batch=10_000, threads=1, **CASE)
-    big_many = tile_bytes(Backend.COMPILED, batch=10_000, threads=64, **CASE)
-    assert big_many - big_one == 63 * 1504
+    for batch in (1000, 10_000):
+        one = resident_tile_bytes(
+            batch=batch,
+            placement=SolverPlacement.PER_THREAD,
+            threads=1,
+            d=STATE_DIM,
+            **CASE,
+        )
+        many = resident_tile_bytes(
+            batch=batch,
+            placement=SolverPlacement.PER_THREAD,
+            threads=64,
+            d=STATE_DIM,
+            **CASE,
+        )
+        assert one == batch * 8274 + 11984
+        assert many == batch * 8274 + 64 * 11984
+        assert many - one == 63 * 11984 == 754992
+
+
+def test_a_thread_count_below_one_is_refused():
+    """Zero threads would zero the whole term, which is a plausible number.
+
+    Expected behaviour determined independently: `PER_THREAD` multiplies the
+    constant by `threads`, so `threads=0` returns 0 -- a tile total that reads
+    as "the solver costs nothing" rather than as an error.
+
+    Bug this catches: a thread count arriving as 0 from an unresolved budget
+    and silently deleting the only thread-dependent quantity in the formula.
+    Both placements refuse, because the argument is wrong in both even where
+    one of them ignores its value.
+    """
+    for placement in SolverPlacement:
+        with pytest.raises(ValueError, match="threads must be at least 1"):
+            solver_state_bytes(placement, d=STATE_DIM, k_beta=4, p_max=4, threads=0)
+
+
+def test_the_two_engines_share_an_engine_id_and_not_a_memory_label():
+    """`EngineId` answers a different question, and gives the wrong answer here.
+
+    Expected values determined independently by reading the classes:
+    `kalman.py:107` and `compiled.py:208` both set `engine_id = EngineId.KALMAN`,
+    deliberately, because the two compute the same likelihood by the same
+    recursion and their scores must stay rankable against each other.
+
+    Bug this catches: a calibration cache keyed on `EngineId`, which would serve
+    one engine's measured slope to the other. `CompiledEngine` allocates
+    `accum`, `sum_log_s`, `n_used` and `degenerate` per series inside its
+    `prange`, where a batched `KalmanEngine` would hold one `(B, d, d)` block --
+    so the day a batched driver lands the two really do cost different amounts,
+    and the key that must already distinguish them cannot be the one that must
+    not.
+    """
+    from metamer.core.engines.compiled import CompiledEngine
+    from metamer.core.engines.kalman import KalmanEngine
+
+    kalman, compiled = KalmanEngine(), CompiledEngine()
+    assert kalman.engine_id is compiled.engine_id
+    assert memory_engine_label(kalman) is MemoryEngineLabel.KALMAN_NUMPY
+    assert memory_engine_label(compiled) is MemoryEngineLabel.KALMAN_COMPILED
+    assert memory_engine_label(kalman) is not memory_engine_label(compiled)
+
+
+def test_an_unaccounted_engine_has_no_memory_label():
+    """A default would file an unmeasured engine under a measured engine's key.
+
+    Bug this catches: `memory_engine_label` falling back to a label rather than
+    raising. The cache would then hit, the run would proceed on another engine's
+    slope, and nothing anywhere would report it -- an under-measured budget
+    against a hard memory constraint is an OOM kill, not a slow run.
+    """
+
+    class _Other:
+        engine_id = None
+
+    with pytest.raises(TypeError, match="no memory label"):
+        memory_engine_label(_Other())  # type: ignore[arg-type]
+
+
+def test_the_slope_band_is_two_sided():
+    """A slope materially BELOW the formula is a finding too.
+
+    Expected values determined independently: the band around 8274 B/series at
+    a factor of 1.5 is (5516.0, 12 411.0).
+
+    Bug this catches: the one-sided form -- *"treat any factor above ~1.5x as a
+    missing term"* -- which is what the standing check said until 2026-08-14 and
+    which **would have passed every formula defect found that day**. A formula
+    charging for something the code does not hold reads as headroom, and the
+    headroom hides whatever else is wrong.
+    """
+    low, high = slope_band(8274)
+    assert SLOPE_BAND_FACTOR == 1.5
+    assert low == pytest.approx(5516.0)
+    assert high == pytest.approx(12411.0)
+    assert low < 8274 < high
+    # Both directions, which is the whole correction.
+    assert not low <= 5000 <= high
+    assert not low <= 13000 <= high
+    with pytest.raises(ValueError, match="positive prediction"):
+        slope_band(0)
 
 
 # --------------------------------------------------------------------------
@@ -547,48 +794,49 @@ def test_path_b_thread_term_is_the_only_thread_dependence():
 # --------------------------------------------------------------------------
 
 
-def test_the_streaming_engines_leave_only_one_row_above_the_formula():
-    """Resident cost now matches section 9.4's model to 0.5%.
+def test_the_reused_row_is_inside_the_constant_and_not_a_per_series_term():
+    """The engine's `[y | X]` row is 40 B once, not 40 B per series.
 
-    Expected value determined independently from the shapes the engines
-    allocate, not from the formula: path A keeps ONE `(B, 1+k_beta)` float64
-    row and reuses it across all N steps, so `(1 + 4) * 8 = 40` B/series; path
-    B keeps a `(B,)` `intp` map from series to design row, so 8 B/series.
-    Section 9.4's per-series total at this case is 8682 B, giving 8722 and
-    8690 resident. `tile_side` at a 1 GB budget is `floor(sqrt(1e9/8722))`
-    = 338, one below the model's 339.
+    Expected value determined independently from the shape the engines
+    allocate: both index the observation and the design columns out of one
+    reused `(B, 1+k_beta)` float64 row, and `fit` gives them B = 1, so the row
+    is `(1 + 4) * 8 = 40` B for the whole tile. It is inside
+    `solver_state_bytes`, whose engine part is 712 = 432 + 120 + 120 + 40.
 
-    Bug this catches: a return to materializing `[y | X]`, which is what
-    `_augment` did until 2026-08-10 -- `np.concatenate([y[:, :, None], x],
-    axis=2)`, a `(B, N, 1+k_beta)` float64 array, 25 200 B/series at N=630 and
-    k_beta=4. That is 2.9x section 9.4's ENTIRE per-series total, it did not
-    vanish when the design was shared, and it put `tile_side` at 171 rather
-    than 339. The `np.broadcast_to` immediately above the concatenate is a
-    view and costs nothing, which is exactly why the copy was easy to miss on
-    a read -- so the guard is arithmetic on the resident total, not a reading
-    of the source.
+    Bug this catches TWO things. First, `streaming_overhead_bytes` returning as
+    a per-series term: it charged 40 B/series on path A and 8 B/series on path
+    B, which is the same defect as F2 one term over, and its 40 B is still
+    inside every published 8722. Second, a return to materializing `[y | X]`,
+    which is what `_augment` did until 2026-08-10 --
+    `np.concatenate([y[:, :, None], x], axis=2)`, a `(B, N, 1+k_beta)` float64
+    array, 25 200 B/series at N=630, k_beta=4. That one WAS per-series, it did
+    not vanish when the design was shared, and it put `tile_side` at 171. The
+    `np.broadcast_to` immediately above the concatenate is a view and costs
+    nothing, which is exactly why the copy was easy to miss on a read.
 
-    The two backends are asserted separately because the terms differ in kind
-    (a row of columns against an index array), and a single formula with
-    different constants would be wrong rather than merely imprecise.
+    The guard against the second is arithmetic on the tile total rather than a
+    reading of the source: at B = 1000 a returning augmented block would add
+    25 200 000 B, which is three times the whole tile.
     """
-    assert streaming_overhead_bytes(Backend.NUMPY_BATCHED, k_beta=4) == 40
-    assert streaming_overhead_bytes(Backend.COMPILED, k_beta=4) == 8
+    engine_part = solver_state_bytes(
+        SolverPlacement.PER_SERIES_LIVE, d=STATE_DIM, k_beta=4, p_max=4
+    ) - (10240 + 128 + 128 + 648 + 128)
+    assert engine_part == 712
+    assert engine_part - (432 + 120 + 120) == 40
 
-    target = bytes_per_series(Backend.NUMPY_BATCHED, **CASE)
-    resident = resident_bytes_per_series(Backend.NUMPY_BATCHED, **CASE)
-    assert resident - target == 40
-    assert resident == 8722
-    assert tile_side(10**9, resident) == 338
-    assert tile_side(10**9, target) == 339
+    # The row does not appear in the per-series cost at any batch size.
+    for batch in (1, 1000):
+        total = resident_tile_bytes(
+            batch=batch,
+            placement=SolverPlacement.PER_SERIES_LIVE,
+            threads=1,
+            d=STATE_DIM,
+            **CASE,
+        )
+        assert total == batch * 8274 + 11984
 
-    compiled_target = bytes_per_series(Backend.COMPILED, **CASE)
-    compiled_resident = resident_bytes_per_series(Backend.COMPILED, **CASE)
-    assert compiled_resident - compiled_target == 8
-
-    # The headline: the gap is now a rounding error on the tile side, where it
-    # used to be a factor of 3.9 and 168 grid points.
-    assert resident < 1.01 * target
+    # And a returned augmented block would be unmissable at tile scale.
+    assert 1000 * 25200 > 3 * (1000 * 8274 + 11984)
 
 
 @pytest.mark.slow
@@ -635,10 +883,199 @@ def test_measured_peak_rss_is_at_least_the_arrays_that_provably_exist():
     measured, intercept = measure_evaluation_rss_slope(
         batches=(1000, 3000, 5000), n_time=630
     )
-    floor = data_and_workspace_bytes_per_series(d=3, k_beta=4, n_time=630)
+    floor = data_and_workspace_bytes_per_series(d=STATE_DIM, k_beta=4, n_time=630)
     assert floor == 6382
     print(
         f"\nfloor {floor} B/series, measured {measured:.0f} B/series, "
         f"intercept {intercept / 1e6:.1f} MB"
     )
     assert floor <= measured <= 2.0 * floor
+
+    # AND THE INSTRUMENT'S DISAGREEMENT WITH PRODUCTION IS STATED IN ADVANCE,
+    # NOT RECONCILED (j2). This drives `unconstrained_loglik` on a batch of B,
+    # which genuinely holds the engine's blocks per series; `run()` drives
+    # `fit`, which hands the engine one series at a time. So this slope MUST
+    # exceed the production per-series cost's engine content, and the amount is
+    # the measurement of the deleted term's size rather than a second opinion.
+    assert floor - 630 * 9 == 712
+    assert measured > resident_bytes_per_series(**CASE) - output_slot_bytes(
+        n_models=12, p_max=4, k_beta=4
+    )
+
+
+# --------------------------------------------------------------------------
+# The shapes the formula rests on: B = 1 through the optimizer, and through
+# `run()`. These drive `core.fit` and `batch.run` from a test named for
+# `core.memory` on purpose -- the claim being checked is the memory formula's,
+# and it is a claim about what the driver does.
+# --------------------------------------------------------------------------
+
+
+class _ShapeRecorder:
+    """An engine that records the leading dimension of everything it is given.
+
+    Wraps a real engine rather than stubbing one: a stub that never computes
+    cannot tell "the batch is 1" from "the engine was never reached", and the
+    difference is the whole point of the assertion.
+
+    Attributes:
+        engine_id: Delegated, so `fit` files the scores as the real engine's.
+        batches: One entry per `score` call, the leading dimension of each
+            array argument.
+    """
+
+    def __init__(self, inner):
+        self.inner = inner
+        self.engine_id = inner.engine_id
+        self.batches: list[tuple[int, ...]] = []
+
+    def score(self, state_space, theta, y, mask, t, design, objective=None):
+        """Record the batch shapes, then delegate.
+
+        Args:
+            state_space: Passed through.
+            theta: Passed through.
+            y: Passed through.
+            mask: Passed through.
+            t: Passed through.
+            design: Passed through.
+            objective: Passed through when supplied.
+
+        Returns:
+            Whatever the wrapped engine returns.
+        """
+        self.batches.append(
+            (
+                int(np.shape(theta)[0]),
+                int(np.shape(y)[0]),
+                int(np.shape(mask)[0]),
+            )
+        )
+        if objective is None:
+            return self.inner.score(state_space, theta, y, mask, t, design)
+        return self.inner.score(state_space, theta, y, mask, t, design, objective)
+
+
+def test_everything_the_optimizer_drives_has_a_leading_dimension_of_one():
+    """A shape assertion standing in for a byte measurement, stated as such.
+
+    At B = 50 the difference between "the solver state is a constant" and "it
+    is per series" is 50 * 11 984 = 599 kB against a 221.5 MB process floor --
+    0.27%, which no RSS instrument on this machine resolves. At any B where it
+    IS resolvable the run is not affordable: `fit` costs ~5.4 s/series, so a
+    B where the term reaches 1% of the floor is hours. **So the invariant is
+    checked as a shape and labelled a shape**, rather than presented as a
+    measurement it is not.
+
+    Expected value determined independently from `fit.py:223`, which reads
+    `optimize_series(obj, y[b:b+1], mask[b:b+1], t, one, warm, max_iter)`: the
+    slices are one series wide, so every array reaching an engine through the
+    optimizer has leading dimension 1 whatever B is.
+
+    Bug this catches: someone batching the optimizer -- which is exactly what
+    design doc section 8.3 originally specified and what Task 19 deleted. That
+    change makes the solver state a per-series term again, and this module's
+    entire correction wrong, and **nothing else in the suite would notice**,
+    because the results would be identical.
+    """
+    from metamer.core.criteria import Criterion
+    from metamer.core.engines.kalman import KalmanEngine
+    from metamer.core.fit import fit
+    from metamer.core.registry import kernel_registry
+    from metamer.core.signal import Constant, SignalSpec, Trend
+    from metamer.core.terms import ProcessSpec, TermSpec
+
+    def _spec(*kinds):
+        return ProcessSpec(
+            tuple(
+                TermSpec(
+                    kind,
+                    kernel_registry[kind]().param_specs(),
+                    getattr(kernel_registry[kind](), "ordering_param", None),
+                )
+                for kind in kinds
+            )
+        )
+
+    n_time = 60
+    t = np.arange(n_time, dtype=np.float64) / 12.0
+    y = np.random.default_rng(0).standard_normal((4, n_time))
+    recorder = _ShapeRecorder(KalmanEngine())
+    fit(
+        y,
+        t,
+        SignalSpec([Constant(), Trend()]),
+        [_spec("white"), _spec("white", "matern12")],
+        Criterion.AIC,
+        engine=recorder,
+        max_iter=2,
+    )
+
+    # THE POSITIVE HALF FIRST: the engine really did run. An empty list
+    # satisfies every "leading dimension is 1" assertion for free (i2).
+    assert recorder.batches
+    assert set(recorder.batches) == {(1, 1, 1)}
+
+
+@pytest.mark.slow
+def test_the_batched_placement_is_not_reachable_through_run(tmp_path):
+    """`run()` fits one series at a time, so `PER_THREAD` has no producer.
+
+    Driven through `run()` rather than through `fit` because the claim is about
+    the production entry point: `CompiledEngine` realizes path B's shape at
+    whatever B `score` is given, and what decides that is the driver above it,
+    not the engine.
+
+    Expected value determined independently from `fit.py:223` -- see the test
+    above -- and the grid here is 2 x 3, so a per-series claim and a per-tile
+    claim give 6 and 1 and are distinguishable.
+
+    Bug this catches: a driver change making the batched placement reachable
+    without the memory formula, the floor, or the calibration key following.
+    **An unreachable branch with no reachability assertion becomes reachable
+    silently**, and this one carries a 64x thread multiplier on a term the
+    budget arithmetic treats as a constant.
+
+    ITS (i2) POSITIVE CONTROLS ARE TWO, AND BOTH ARE ELSEWHERE IN THIS MODULE:
+    `test_the_thread_term_is_the_only_thread_dependence` computes the
+    unreachable branch directly against hand-derived numbers, so "not reached"
+    is not satisfied by a branch that cannot work; and the assertion above that
+    the engine ran at all.
+    """
+    import xarray as xr
+
+    from metamer.batch.run import run
+    from metamer.core.engines.kalman import KalmanEngine
+
+    n_time, n_y, n_x = 24, 2, 3
+    origin = np.datetime64("2000-01-01")
+    time = np.array([origin + np.timedelta64(31 * i, "D") for i in range(n_time)])
+    values = np.random.default_rng(1).standard_normal((n_time, n_y, n_x))
+    source = tmp_path / "in.zarr"
+    xr.Dataset(
+        {"sla": (("time", "y", "x"), values.astype("float32"))},
+        coords={
+            "time": time,
+            "y": np.arange(n_y, dtype="float64"),
+            "x": np.arange(n_x, dtype="float64"),
+        },
+    ).to_zarr(source, mode="w", consolidated=True)
+
+    config = tmp_path / "c.toml"
+    config.write_text(
+        f'data_uri = "{source}"\n'
+        'variable = "sla"\n'
+        'signal_terms = ["constant", "trend"]\n'
+        'candidates = ["white", "white + matern12"]\n'
+        'criteria = ["aic"]\n'
+    )
+
+    recorder = _ShapeRecorder(KalmanEngine())
+    run(config, tmp_path / "out.zarr", engine=recorder)
+
+    assert recorder.batches
+    assert set(recorder.batches) == {(1, 1, 1)}
+    # The grid holds six series, so "one per tile" and "one per series" are
+    # different numbers here and the fixture can tell them apart.
+    assert n_y * n_x == 6
+    assert max(batch for batch, _, _ in recorder.batches) == 1

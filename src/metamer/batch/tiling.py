@@ -27,12 +27,24 @@ reads. `.load()`'s peak is analytic where a graph's is emergent, which is what
 lets 2b's calibration tile turn the memory formula from a model into a
 measurement.
 
-**BUDGET AGAINST `resident_bytes_per_series`, NEVER `bytes_per_series`.** The
-model and the resident figure agree to 0.5% today and **that is a measurement,
-not a guarantee**: before the 2026-08-10 engine change the same pair was 8682
-against 33 882 and the tile side was 171 rather than 338. **And a tile side
-carries its backend** — measured 2026-08-12 at §9.4's worked example,
-`NUMPY_BATCHED` gives 338 shared / 186 per-point and `COMPILED` gives 361 / 189.
+**A TILE SIDE IS NOT A NUMBER WITHOUT ITS PRECONDITIONS**, and the ones it needs
+changed on 2026-08-14. At §9.4's worked example (d=3, k_β=4, p_max=4, N=630,
+M=12) under a **10⁹** budget the side is **347** shared / **187** per-point,
+recomputed by hand from the corrected formula. The superseded pair is
+~~338 / 186~~ and the superseded backend-specific pair is ~~361 / 189~~.
+
+**AND THE SIDE NO LONGER CARRIES A BACKEND**, which is the visible half of the
+correction: the two engines' published pairs differed only because the formula
+charged one live solver working set to every series. `fit` runs one series at a
+time, so the per-series cost is the data tile plus the output slots — neither of
+which knows which engine is running — and the placement moves a **constant**.
+~~`NUMPY_BATCHED` gives 338 / 186 and `COMPILED` gives 361 / 189~~, struck
+2026-08-14.
+
+**THE BUDGET'S UNIT IS AN OPEN DEFECT.** Every published side here is computed
+at `10**9`, while `run.py` converts the user's `memory_budget_gb` with
+`1024**3` — 7.4% more bytes for the same word. Tasks 2 and 3 own the budget and
+own resolving it; do not restate a side without saying which unit produced it.
 
 **FORWARD NOTE — PASS 1's COARSE STRIDE LANDS HERE IN 2c AND HAS FIVE DOWNSTREAM
 CONSUMERS.** 2a defines no stride. Nowhere else records the list, so a later
@@ -55,7 +67,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from metamer.batch.input import InputContractError, InputHandle
-from metamer.core.memory import Backend, resident_bytes_per_series, tile_side
+from metamer.core.memory import resident_bytes_per_series, tile_side
 
 
 @dataclass(frozen=True)
@@ -122,10 +134,8 @@ def tile_grid(n_y: int, n_x: int, side: int) -> Iterator[Tile]:
 def tile_side_for(
     *,
     budget_bytes: int,
-    backend: Backend,
-    d: int,
     k_beta: int,
-    p: int,
+    p_max: int,
     n_time: int,
     n_models: int,
     per_point_design: bool = False,
@@ -136,16 +146,25 @@ def tile_side_for(
 
     **NOT `sqrt(block_bytes / (n_time * itemsize))`**, which is the prompt's
     formula: it counts only the float64 data and overestimates, giving 445 where
-    the full accounting gives 338. Design doc §11.1 carried it until 2026-08-12
+    the full accounting gives 347. Design doc §11.1 carried it until 2026-08-12
     while §9.4 rejected it, and §11.1 is the section a tiling implementer opens
     first.
 
+    **NO PLACEMENT AND NO `d`, AS OF 2026-08-14.** The per-series cost is the
+    data tile plus the output slots and nothing else; the solver state is one
+    live working set whatever B is, so it is a constant and `d` reaches the
+    arithmetic only through it. **The constant is not subtracted here** — that
+    is F1, and Task 2 owns it, together with the process floor and the headroom.
+    Until then this is an upper bound on the side rather than a budget-safe one,
+    and it will grow a `floor`, a `placement` and a `d` argument when it becomes
+    one.
+
     Args:
         budget_bytes: The memory budget for one tile.
-        backend: Which execution strategy — the answer depends on it.
-        d: Composite state dimension.
         k_beta: Number of design columns.
-        p: Number of free noise parameters.
+        p_max: Widest candidate's free noise parameter count. The tile holds
+            whichever candidate is being fitted and `fit` sizes every slot to
+            the widest, so a per-candidate `p` understates the allocation.
         n_time: Series length.
         n_models: Candidate count held until the tile is written.
         per_point_design: True if any regressor is a per-point field.
@@ -159,10 +178,8 @@ def tile_side_for(
     return tile_side(
         budget_bytes,
         resident_bytes_per_series(
-            backend,
-            d=d,
             k_beta=k_beta,
-            p=p,
+            p_max=p_max,
             n_time=n_time,
             n_models=n_models,
             per_point_design=per_point_design,
@@ -303,10 +320,13 @@ def assemble_tile(handle: InputHandle, tile: Tile) -> NDArray[np.float64]:
     whole tile materializes the entire float32 block, and casting that has both
     full representations alive at once -- which "float32 to float64 conversion
     per chunk, so both full representations never coexist" exists to forbid.
-    Measured at design doc section 9.4's worked example (`tile_side` 338,
-    N = 630): the float32 tile is **288 MB** and the float64 tile **575 MB**, so
-    the one-call form peaks at **863 MB against 575 MB -- a 50% overshoot of the
-    data term** against a budget the design doc calls hard.
+    Recomputed at design doc section 9.4's worked example on 2026-08-14, at the
+    corrected `tile_side` of **347** (was 338) and N = 630: 347**2 * 630 =
+    75 857 670 points, so the float32 tile is **303 MB** and the float64 tile
+    **607 MB**, and the one-call form peaks at **910 MB against 607 MB -- a 50%
+    overshoot of the data term** against a budget the design doc calls hard.
+    The ratio is 3:2 by construction and does not move with the side; the
+    absolute figures do, which is why they carry the side that produced them.
 
     So the float64 destination is allocated once and each span from
     `assembly_spans` is loaded, cast into its slice, and dropped.

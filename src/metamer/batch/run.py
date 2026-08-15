@@ -95,9 +95,7 @@ from metamer.core.criteria import Criterion
 from metamer.core.engines.protocol import Engine
 from metamer.core.fit import fit
 from metamer.core.lint import Finding
-from metamer.core.memory import Backend
 from metamer.core.signal import k_beta as signal_k_beta
-from metamer.core.statespace import StateSpace
 
 
 @dataclass(frozen=True)
@@ -339,17 +337,21 @@ def run(
         specs = list(config.process_specs())
         index = build_ragged_index(specs, noise_extent)
 
-        # **d IS THE WIDEST CANDIDATE'S STATE DIMENSION, NOT THE FIRST'S.** The
-        # tile holds whichever candidate is being fitted, so a budget taken from
-        # `white` (d = 0) would size a tile the `white + matern12` pass cannot
-        # hold. Same argument as budgeting against p_max.
-        state_dims = [StateSpace.from_spec(spec).state_dim for spec in specs]
+        # **p_max IS THE WIDEST CANDIDATE'S FREE PARAMETER COUNT, NOT THE
+        # FIRST'S.** The tile holds whichever candidate is being fitted and
+        # `fit` sizes every output slot to the widest, so a budget taken from
+        # `white` would size a tile the `white + matern12` pass cannot hold.
+        #
+        # **THE STATE DIMENSION IS NOT AN ARGUMENT HERE, AS OF 2026-08-14.** It
+        # reaches the memory formula only through the solver working set, and
+        # that set is live for one series at a time (`fit.py:223`), so it is a
+        # constant rather than a per-series term. Task 2 subtracts the constant
+        # along with the process floor and the headroom, and `d` comes back with
+        # it -- as the widest candidate's, for the reason above.
         side = tile_side_for(
             budget_bytes=int(config.memory_budget_gb * 1024**3),
-            backend=Backend.NUMPY_BATCHED,
-            d=max(state_dims),
             k_beta=columns,
-            p=max(index.extents),
+            p_max=max(index.extents),
             n_time=contract.n_time,
             n_models=len(specs),
         )

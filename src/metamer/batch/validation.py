@@ -49,24 +49,34 @@ from metamer.batch.input import InputContractError
 from metamer.config.model import PER_POINT_TERM_PREFIX, Config, StampedKeyError, load
 from metamer.core.criteria import Criterion
 from metamer.core.lint import Finding, lint
-from metamer.core.memory import Backend, resident_bytes_per_series, tile_side
+from metamer.core.memory import resident_bytes_per_series, tile_side
 
 # Design doc section 9.4's worked example. The per-point refusal quotes tile
 # sizes, and they are COMPUTED from these rather than written down, so a change
 # to the memory formula moves the message instead of dating it.
-_WORKED_EXAMPLE = {"d": 3, "k_beta": 4, "p": 4, "n_time": 630, "n_models": 12}
+_WORKED_EXAMPLE = {"k_beta": 4, "p_max": 4, "n_time": 630, "n_models": 12}
 _WORKED_EXAMPLE_BUDGET = 10**9
-_WORKED_EXAMPLE_BACKEND = Backend.NUMPY_BATCHED
-"""Which backend the quoted tile sizes belong to.
+"""Bytes, DECIMAL, and the unit is not decoration.
 
-**THE PUBLISHED 338 AND 186 ARE PATH A's NUMBERS AND NOTHING SAID SO.**
-Recomputed 2026-08-12: `NUMPY_BATCHED` gives 338 shared / 186 per-point, a 3.30x
-change in tile area, while `COMPILED` gives 361 / 189 and 3.65x. Design doc
-section 13.4, the Phase 2a plan and PROGRESS all quote the first pair without
-naming a backend. This is the backend `fit()` actually defaults to today
-(`KalmanEngine`), so it is the pair a 2a run would plan against -- and the
-message names it, because a tile size without its backend is the same shape of
-claim as a benchmark ratio without its harness.
+`run()` converts `memory_budget_gb` with `1024**3`, so the runner's "1 GB" is
+7.4% more bytes than this example's and the two have never produced the same
+side. Recorded 2026-08-14 as an open defect owned by Tasks 2 and 3, which is
+where the budget is resolved; until then the pair below is a 10**9 pair and says
+so.
+"""
+
+_WORKED_EXAMPLE_STATE_DIM = 3
+"""§9.4's `d`, kept for the message and NOT used in the arithmetic.
+
+**THE PUBLISHED PAIR NO LONGER CARRIES A BACKEND, AND THAT IS THE CORRECTION.**
+It did -- ~~`NUMPY_BATCHED` gives 338 shared / 186 per-point and `COMPILED`
+gives 361 / 189~~, recomputed 2026-08-12, struck 2026-08-14 -- and the two
+differed **only** because the formula charged one live solver working set to
+every series. `fit.py:223` fits one series at a time, so that set is a constant
+and the per-series cost is the data tile plus the output slots, neither of which
+knows which engine is running. `d` reaches the formula only through the
+constant, which is why it is quoted in the refusal and does not appear in
+`_per_point_tile_sides`.
 """
 
 
@@ -273,9 +283,7 @@ def _per_point_tile_sides() -> tuple[int, int]:
     return tuple(  # type: ignore[return-value]
         tile_side(
             _WORKED_EXAMPLE_BUDGET,
-            resident_bytes_per_series(
-                _WORKED_EXAMPLE_BACKEND, **_WORKED_EXAMPLE, per_point_design=per_point
-            ),
+            resident_bytes_per_series(**_WORKED_EXAMPLE, per_point_design=per_point),
         )
         for per_point in (False, True)
     )
@@ -325,11 +333,12 @@ def check_semantics(
             f"{list(per_point)} with the {PER_POINT_TERM_PREFIX!r} prefix, and "
             "per-point regressors are not implemented. **The regime is not a "
             "detail of the design matrix**: at design doc section 9.4's worked "
-            f"example ({_WORKED_EXAMPLE['d']=}, {_WORKED_EXAMPLE['k_beta']=}, "
-            f"{_WORKED_EXAMPLE['p']=}, {_WORKED_EXAMPLE['n_time']=}, "
+            f"example (d={_WORKED_EXAMPLE_STATE_DIM}, "
+            f"{_WORKED_EXAMPLE['k_beta']=}, "
+            f"{_WORKED_EXAMPLE['p_max']=}, {_WORKED_EXAMPLE['n_time']=}, "
             f"{_WORKED_EXAMPLE['n_models']=}, a "
-            f"{_WORKED_EXAMPLE_BUDGET / 10**9:g} GB budget, backend "
-            f"{_WORKED_EXAMPLE_BACKEND.value}) it takes tile_side from "
+            f"{_WORKED_EXAMPLE_BUDGET / 10**9:g} GB (10^9 B) budget, any "
+            "engine) it takes tile_side from "
             f"{shared_side} to {per_point_side}, a "
             f"{(shared_side / per_point_side) ** 2:.2f}x change in tile area "
             "from one declaration. Drop the declaration to fit with a shared "

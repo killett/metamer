@@ -546,9 +546,9 @@ def _sweep_cells(
     from metamer.core.engines.compiled import CompiledEngine
     from metamer.core.engines.kalman import KalmanEngine
     from metamer.core.memory import (
-        Backend,
-        bytes_per_series,
+        SolverPlacement,
         resident_bytes_per_series,
+        solver_state_bytes,
     )
     from metamer.core.statespace import StateSpace
     from metamer.core.terms import free_param_index
@@ -627,23 +627,26 @@ def _sweep_cells(
                             "path_a_over_budget": a_fit_ms / CORE_BUDGET_MS,
                             "path_b_over_budget": b_fit_ms / CORE_BUDGET_MS,
                             "pass_in_canonical_units": a_pass / canonical_seconds,
-                            "predicted_bytes_per_series_target": bytes_per_series(
-                                Backend.NUMPY_BATCHED,
-                                d=dim,
-                                k_beta=k_beta,
-                                p=p_free,
-                                n_time=n_time,
-                                n_models=1,
-                            ),
-                            "predicted_bytes_per_series_resident": (
+                            # THIS HARNESS IS THE ONLY prange-OVER-SERIES
+                            # DRIVER IN THE TREE, so its solver state really is
+                            # per thread -- `run()` reaches neither this loop
+                            # nor that placement. The per-series figure is
+                            # placement-independent and the constant is not,
+                            # which is why they are reported apart.
+                            "predicted_resident_bytes_per_series": (
                                 resident_bytes_per_series(
-                                    Backend.NUMPY_BATCHED,
-                                    d=dim,
                                     k_beta=k_beta,
-                                    p=p_free,
+                                    p_max=p_free,
                                     n_time=n_time,
                                     n_models=1,
                                 )
+                            ),
+                            "predicted_solver_state_bytes": solver_state_bytes(
+                                SolverPlacement.PER_THREAD,
+                                d=dim,
+                                k_beta=k_beta,
+                                p_max=p_free,
+                                threads=count,
                             ),
                         }
                     )

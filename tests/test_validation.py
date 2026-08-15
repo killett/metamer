@@ -28,7 +28,12 @@ from metamer.batch.validation import (
     load_config,
 )
 from metamer.core.lint import Rule
-from metamer.core.memory import Backend, resident_bytes_per_series, tile_side
+from metamer.core.memory import (
+    SolverPlacement,
+    resident_bytes_per_series,
+    solver_state_bytes,
+    tile_side,
+)
 
 _GOOD = """
 data_uri = "x.zarr"
@@ -361,10 +366,11 @@ def test_a_per_point_regressor_is_refused_naming_the_field_and_both_tile_sides(
 
     **The regime is declared even though the feature is deferred**, because a
     mechanism that can only be right in one regime is not right -- it is
-    untested in the other. One declaration moves `tile_side` from 338 to 186 at
-    design doc section 9.4's worked example, a 3.3x change in tile area, and
-    against a hard 16 GB constraint that is the difference between a
-    configuration fitting in RAM and not.
+    untested in the other. One declaration moves `tile_side` from **347 to 187**
+    at design doc section 9.4's worked example (~~338 to 186~~, superseded
+    2026-08-14), a 3.44x change in tile area, and against a hard 16 GB
+    constraint that is the difference between a configuration fitting in RAM
+    and not.
 
     Bug this catches: a refusal reading "per-point regressors are not
     implemented", which wastes the context layer 3 already has. The expected
@@ -383,58 +389,88 @@ def test_a_per_point_regressor_is_refused_naming_the_field_and_both_tile_sides(
         tile_side(
             10**9,
             resident_bytes_per_series(
-                Backend.NUMPY_BATCHED, 3, 4, 4, 630, 12, per_point_design=per_point
+                k_beta=4,
+                p_max=4,
+                n_time=630,
+                n_models=12,
+                per_point_design=per_point,
             ),
         )
         for per_point in (False, True)
     ]
-    assert expected == [338, 186]  # the published pair, recomputed 2026-08-12
+    # RE-DERIVED BY HAND, 2026-08-14, never pasted from a failure: the shared
+    # per-series cost is 5670 + 2604 = 8274 and 347**2 <= 1e9/8274 < 348**2;
+    # the per-point cost adds 630 * 4 * 8 = 20 160, giving 28 434, and
+    # 187**2 <= 1e9/28434 < 188**2. The superseded pair is ~~338 / 186~~.
+    assert 347**2 <= 10**9 / 8274 < 348**2
+    assert 187**2 <= 10**9 / 28434 < 188**2
+    assert expected == [347, 187]
     message = str(caught.value)
     assert caught.value.layer is ValidationLayer.SEMANTIC
     assert "gia" in message
     assert str(expected[0]) in message
     assert str(expected[1]) in message
-    assert Backend.NUMPY_BATCHED.value in message
+    assert "10^9 B" in message
 
 
-def test_the_quoted_tile_sides_are_backend_specific_and_the_message_says_which(
-    tmp_path,
-):
-    """Path A and path B do not give the same tile sizes, nor the same ratio.
+def test_the_quoted_tile_sides_no_longer_depend_on_which_engine_runs(tmp_path):
+    """The published pair is placement-independent, and that is the correction.
 
-    Expected values recomputed 2026-08-12 from `memory`, independently of the
-    refusal: `NUMPY_BATCHED` gives 338 / 186 and a 3.30x change in tile area;
-    `COMPILED` gives 361 / 189 and 3.65x. Design doc section 13.4, the Phase 2a
-    plan and PROGRESS all quote the first pair **without naming a backend**,
-    and the spike adopted path B.
+    It was not. ~~`NUMPY_BATCHED` gives 338 / 186 and a 3.30x change in tile
+    area; `COMPILED` gives 361 / 189 and 3.65x~~ -- recomputed 2026-08-12,
+    struck 2026-08-14. The two differed **only** because the formula charged one
+    live solver working set to every series, and `fit.py:223` fits one series at
+    a time, so that set is a constant. The per-series cost is the data tile plus
+    the output slots and neither knows which engine is running.
 
-    Bug this catches: a message quoting a tile size with no backend attached --
-    the same shape of claim as a benchmark ratio quoted without its harness,
-    which this project has already paid for. The two pairs differ, so a user
-    planning a per-point run against the wrong one is off by 4%% in tile side
-    and 10%% in area.
+    Expected values re-derived by hand: 5670 + 2604 = 8274 shared and 28 434
+    per-point, giving 347 / 187 at a 10**9 budget, whatever the placement.
+
+    Bug this catches, and it is the (i5) trap in this task: **the tempting way
+    to keep the superseded version of this test green is to keep a
+    placement-dependent per-series term** -- which is the defect. The mutation
+    that must bite is multiplying `solver_state_bytes` into the per-series
+    figure; under it the two placements separate again and the equality below
+    fails. The refusal message correspondingly stops naming a backend, because
+    a precondition that does not change the answer is not a precondition.
     """
     sides = {
-        backend: [
+        placement: [
             tile_side(
                 10**9,
                 resident_bytes_per_series(
-                    backend, 3, 4, 4, 630, 12, per_point_design=per_point
+                    k_beta=4,
+                    p_max=4,
+                    n_time=630,
+                    n_models=12,
+                    per_point_design=per_point,
                 ),
             )
             for per_point in (False, True)
         ]
-        for backend in Backend
+        for placement in SolverPlacement
     }
-    assert sides[Backend.NUMPY_BATCHED] == [338, 186]
-    assert sides[Backend.COMPILED] == [361, 189]
+    assert sides[SolverPlacement.PER_SERIES_LIVE] == [347, 187]
+    assert sides[SolverPlacement.PER_THREAD] == [347, 187]
+
+    # THE POSITIVE HALF: the placement is not inert everywhere, it is inert
+    # HERE. Without this the equality above is satisfied by a placement nothing
+    # reads at all (i2), and the two claims are different.
+    live = solver_state_bytes(
+        SolverPlacement.PER_SERIES_LIVE, d=3, k_beta=4, p_max=4, threads=4
+    )
+    threaded = solver_state_bytes(
+        SolverPlacement.PER_THREAD, d=3, k_beta=4, p_max=4, threads=4
+    )
+    assert threaded == 4 * live
 
     body = _GOOD.replace('"annual"', '"regressor_field:gia"')
     with pytest.raises(ValidationError) as caught:
         check_semantics(load_config(_write(tmp_path, body)))
     message = str(caught.value)
-    assert Backend.NUMPY_BATCHED.value in message
-    assert str(sides[Backend.COMPILED][0]) not in message
+    assert "any engine" in message
+    assert "numpy_batched" not in message
+    assert "361" not in message
 
 
 def test_two_candidates_that_are_the_same_model_are_refused_by_spec_hash(tmp_path):

@@ -1,37 +1,63 @@
-"""Analytic bytes-per-series, one formula per backend (design doc section 9.4).
+"""Analytic bytes-per-series for the code that exists (design doc section 9.4).
 
-    Path A:  B * ( N*9 + X_term + out(M, p, k_beta) + c_A(d, k_beta, p) )
-    Path B:  B * ( N*9 + X_term + out(M, p, k_beta) )  +  T * c_B(d, k_beta, p)
+    resident = B * ( N*9 + X_term + out(M, p_max, k_beta) )  +  placement_constant
 
-**The shapes genuinely differ, and that is not a detail.** Path A's solver
-state is per series; path B's is per thread. One formula with different
-constants would hide the fact that path B's tile cost depends on the thread
-count and path A's does not.
+**ONE FORMULA WITH A PLACEMENT PARAMETER, NOT TWO SHAPES.** Design doc section
+9.4 says *"the formulas have different shapes, not just different constants"*.
+That was true of the two **designs** and is false of the **code**:
 
-**Peak RAM is independent of core count**, which is what makes a 16 GB machine
-and a 64-core machine both runnable: parallelism is *within* a tile and *over*
-series, never across tiles. The only thread term anywhere is path B's
-`T * c_B`, at ~1.5 kB per thread -- ~96 kB at T=64, against megabytes of tile.
+- Path A's `B * (... + c_A)` described the batched trust-region of section 8.3,
+  which the stage-1 spike deleted -- Task 19, deleted rather than deferred,
+  under the >=3x rule. `fit.py:223` is `for b in range(batch)` around
+  `optimize_series(obj, y[b:b+1], ...)`, so **every allocation the optimizer and
+  the engine make is live for one series at a time.**
+- Path B's `T * c_B` described a `prange`-over-series driver. `CompiledEngine`
+  pranges over whatever batch `score` is handed, and `fit` hands it one series,
+  so **B = 1 through `run()`** and the compiled engine's tile shape is the
+  Kalman engine's.
 
-Terms, and why each is where it is:
+So the two placements differ in a **constant** -- `1 * c` against `T * c` --
+both independent of B. `SolverPlacement.PER_THREAD` is **declared and
+unreachable** through `run()`; `test_memory.py` asserts the unreachability and
+pins the arithmetic of the branch through a constructed call, because an
+unreachable branch with no reachability assertion becomes reachable silently.
 
-- `N*9` -- the data tile: 8 bytes of float64 `y` plus a 1-byte mask. Data
-  arrives float32 from disk and `core` is float64; the conversion happens **per
-  dask chunk during tile assembly**, so the full float32 and full float64
-  representations never coexist and the ~44% swing on the dominant term
-  disappears.
+WHAT IS PER-SERIES, AND WHY IT IS ONLY THESE TWO THINGS.
+-------------------------------------------------------
+- `N*9` -- the data tile: 8 bytes of float64 `y` plus a 1-byte mask, held for
+  every series in the tile at once. Data arrives float32 from disk and `core` is
+  float64; the conversion happens per chunk during tile assembly, so the two
+  representations never coexist.
 - `X_term` -- zero when every regressor is shared (one copy, negligible), and
   `N * k_beta * 8` when **any** regressor is a per-point field. At N=630,
-  k_beta=4 that is 20.2 kB/series, roughly 2.4x everything else combined. It is
-  not a rounding error: it moves `tile_side` by about a factor of two.
-- `out(...)` -- output slots, held until the tile is written, and they **do not
-  shrink under path B**. The scalar count is **4** (`log_lik`, `k`,
-  `n_eff_trend`, `n_eff_bic`), not 2: both `n_eff` variants are per candidate,
-  each being a function of the fitted model (section 10.1).
+  k_beta=4 that is 20.2 kB/series and it moves `tile_side` by about a factor of
+  two, which is why the refused regime still ships a formula branch (a3).
+- `out(...)` -- the output slots `fit` preallocates and holds until the tile is
+  written. See `output_slot_bytes`.
 
-Data plus output slots are 88% of path A's total, so path B saves 12.2% -- and
-3.7% once per-point regressors are present. **The reason to prefer path B is
-speed and the collapse of the ragged cliff, not memory.**
+Everything else -- the filter's state blocks, the normal-equation accumulators,
+the reused `[y | X]` row, scipy's L-BFGS-B workspace, the Hessian and its
+inverse -- is inside `fit.py`'s per-series loop and is therefore a constant.
+
+**WHAT THIS FORMULA IS AND IS NOT: RESIDENT, NOT PEAK.** It counts what is live
+for the life of the tile. `fit` also holds **per-candidate temporaries that do
+scale with B** -- `var_gls` and `var_white` at `(B,)` each, the
+`np.nan_to_num(theta[:, c, :p])` copy, and `hydrate`'s `(B, p_total)` block --
+all allocated inside the candidate loop and dropped at its end.
+
+**AND THE ESTIMATE IS NOT NEGLIGIBLE, WHICH IS WHY IT IS WRITTEN DOWN RATHER
+THAN WAVED AT.** `var_gls` and `var_white` alone are 16 B/series and leave the
+worked example's side at 347 (8290 -> 347). The whole set is **of order 100
+B/series, ~1.2%**, and at 8374 the side is **345** -- two grid points, from a
+term nobody has measured. **That is an ESTIMATE, not a measurement**, and
+labelling it as one is the point: Task 7 measures it, and Task 2's
+`HEADROOM_FRACTION` is what must cover it. **It is a slope term rather than a
+constant, which is the argument for the headroom staying a FRACTION of the
+budget instead of a fixed number of bytes.**
+
+**THE STANDING CHECK IS A TWO-SIDED BAND.** It was *"treat any factor above
+~1.5x as a missing term"*, and that one-sided form would have passed all four of
+this module's 2026-08-14 defects. See `slope_band`.
 """
 
 from __future__ import annotations
@@ -41,143 +67,335 @@ import math
 import subprocess
 import sys
 from enum import StrEnum
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:  # pragma: no cover - import cycle; only needed for the label
+    from metamer.core.engines.protocol import Engine
 
 
-class Backend(StrEnum):
-    """Which execution strategy the formula describes."""
+class SolverPlacement(StrEnum):
+    """Where one live solver working set sits, relative to the series axis.
 
-    NUMPY_BATCHED = "numpy_batched"
-    COMPILED = "compiled"
+    `PER_SERIES_LIVE` is what `run()` reaches: `fit` loops `optimize_series`
+    over the batch, so exactly one working set exists at a time whatever B is.
+    `PER_THREAD` describes a driver that hands an engine a real batch and
+    parallelizes over series -- **it does not exist**, and `bench/spike.py` is
+    the only thing shaped like it.
+
+    **The unreachable member is declared rather than deleted**, on Task 16's
+    `shared_with` precedent: the day a batched driver lands, the engine's own
+    workspace becomes a per-series term and it is engine-dependent, so the
+    calibration key has to distinguish placements **before** the driver exists
+    or the first batched measurement silently reuses a per-series-live entry.
+    """
+
+    PER_SERIES_LIVE = "per_series_live"
+    PER_THREAD = "per_thread"
 
 
-def output_slot_bytes(n_models: int, p: int, k_beta: int) -> int:
+class MemoryEngineLabel(StrEnum):
+    """Which engine's workspace a memory measurement belongs to.
+
+    **NOT `EngineId`, AND THE DIFFERENCE IS LOAD-BEARING.**
+    `CompiledEngine.engine_id` is `EngineId.KALMAN` deliberately, because the
+    two engines compute the same likelihood by the same recursion and their
+    scores must stay rankable against each other. `EngineId` answers *"are these
+    scores comparable"*; this answers *"do these engines cost the same"*. **They
+    give different answers for the same pair** -- `CompiledEngine` allocates
+    `accum`, `sum_log_s`, `n_used` and `degenerate` per series inside its
+    `prange`, where a batched `KalmanEngine` would hold one `(B, d, d)` block --
+    so a calibration cache keyed on `EngineId` would serve one engine's slope to
+    the other.
+    """
+
+    KALMAN_NUMPY = "kalman_numpy"
+    KALMAN_COMPILED = "kalman_compiled"
+
+
+LBFGS_MAXCOR = 10
+"""scipy's `maxcor` default, and `optimize_series` does not override it.
+
+The L-BFGS-B workspace is dominated by `11 * maxcor**2` doubles, which does
+**not** depend on the parameter count -- see `_optimizer_bytes`. Read from
+scipy 1.18.0's `_lbfgsb_py._minimize_lbfgsb` signature on 2026-08-14; it is a
+default this module depends on, so it is named rather than inlined.
+"""
+
+SLOPE_BAND_FACTOR = 1.5
+"""POLICY. How far a measured slope may sit from the formula, either way.
+
+**Two-sided, corrected 2026-08-14.** The check was *"treat any factor above
+~1.5x as a missing term"*, and a measured slope **materially below** the formula
+is equally a finding: the formula is then charging for something the code does
+not hold, and the excess capacity hides whatever else is wrong. The one-sided
+form passed every formula defect found on 2026-08-14, including two of opposite
+sign that put the total within 0.5% of a measurement while neither term was
+right.
+
+**Consequence of the value, stated because it is policy and not derived.** Too
+wide and a missing term reads as transients; too narrow and allocator rounding
+reads as a defect. 1.5 is inherited from the one-sided form, where it was chosen
+to admit per-step transients and allocator rounding while still rejecting a term
+carrying an extra factor of N or `k_beta`. **And per (a), a ratio inside the
+band is not evidence the terms are right** -- check the terms.
+"""
+
+
+def memory_engine_label(engine: Engine) -> MemoryEngineLabel:
+    """Return the memory-relevant label for an engine instance.
+
+    Dispatches on the concrete type rather than on `engine_id`, which both
+    shipped engines deliberately share.
+
+    Args:
+        engine: A likelihood engine.
+
+    Returns:
+        The label a calibration key should carry for it.
+
+    Raises:
+        TypeError: For an engine this module has no measured shape for. A
+            default would file an unmeasured engine's slope under a measured
+            engine's key, which is the one failure a cache cannot detect.
+    """
+    from metamer.core.engines.compiled import CompiledEngine
+    from metamer.core.engines.kalman import KalmanEngine
+
+    if isinstance(engine, CompiledEngine):
+        return MemoryEngineLabel.KALMAN_COMPILED
+    if isinstance(engine, KalmanEngine):
+        return MemoryEngineLabel.KALMAN_NUMPY
+    raise TypeError(
+        f"no memory label for engine {type(engine).__name__!r}: its resident "
+        f"working set has not been accounted for, and defaulting would file it "
+        f"under another engine's calibration key"
+    )
+
+
+def output_slot_bytes(n_models: int, p_max: int, k_beta: int) -> int:
     """Per-series output slots, held for every candidate until the tile writes.
 
-    Per candidate: `theta_hat` and `theta_hat_err` (`p` each), `beta` and
-    `beta_err` (`k_beta` each), then `log_lik`, `k`, `n_eff_trend` and
-    `n_eff_bic` as float64, plus `iterations` (uint16) and `status` (uint8).
+    **Field by field, from `fit.py:197-209`**, per `(series, candidate)` cell:
 
-    **Four scalars, not two.** Both `n_eff` variants are per `(point,
-    candidate)` because both are functions of the fitted model -- `n_eff_bic`
-    through the model ACF, `n_eff_trend` through the fitted Sigma (section
-    10.1). The count was 2 while they were believed per-point, and the
-    superseded value survives in older drafts of the section 9.4 table.
+    | field | dtype | width | bytes |
+    |---|---|---|---|
+    | `theta` | float64 | `p_max` | `8*p_max` |
+    | `theta_unconstrained` | float64 | `p_max` | `8*p_max` |
+    | `theta_err` | float64 | `p_max` | `8*p_max` |
+    | `beta` | float64 | `k_beta` | `8*k_beta` |
+    | `beta_err` | float64 | `k_beta` | `8*k_beta` |
+    | `loglik`, `k`, `n`, `n_eff_bic`, `n_eff_trend` | float64 | 1 each | 40 |
+    | `n_iter` | int64 | 1 | 8 |
+    | `init_rung` | object | 1 pointer | 8 |
+    | `outcome` | uint8 | 1 | 1 |
+
+    so `24*p_max + 16*k_beta + 57` per candidate.
+
+    **`p_max`, NOT `p_m`.** `fit.py:186` sizes every candidate's slot to the
+    widest candidate's free-parameter count and NaN-pads the rest, so a
+    per-candidate `p` understates the array that is actually allocated.
+
+    **THREE FIELDS AND A DTYPE WERE MISSING, AND THE ERROR WAS INVISIBLE
+    BECAUSE IT CANCELLED.** The superseded
+    `M*(2p + 2k_beta + 4)*8 + 3M` named neither `theta_unconstrained` nor `n`
+    nor `init_rung`, and charged `n_iter` as a uint16. It was **163 B/candidate
+    against 217, 25% low**, while the solver-state term was 12% high -- and the
+    total sat within 0.5% of a measurement while **neither term was right**.
+    That is the cancellation rule inside a sum: **verify each term, never the
+    total**, which is why this function is asserted field by field.
 
     Args:
         n_models: Candidate count held until the tile is written.
-        p: Number of free noise parameters.
+        p_max: Widest candidate's free noise parameter count.
         k_beta: Number of design columns.
 
     Returns:
         Bytes of output slots per series.
     """
-    return n_models * (2 * p + 2 * k_beta + 4) * 8 + n_models * 3
+    per_candidate = 3 * p_max * 8 + 2 * k_beta * 8 + 5 * 8 + 8 + 8 + 1
+    return int(n_models * per_candidate)
 
 
-def _solver_state(backend: Backend, d: int, k_beta: int, p: int) -> int:
-    """Solver working set: per series on path A, per thread on path B.
+def _engine_workspace_bytes(d: int, k_beta: int) -> int:
+    """One live filter pass's working set, for the batch of one it is given.
 
-    The optimizer term is the only part that differs. Section 8.3 specifies a
-    batched **trust-region** for path A precisely because line search breaks
-    batch utilization, and a trust-region with a dense quasi-Newton model
-    stores `p^2` plus a few `p`-vectors -- **not** the 22`p` of an L-BFGS
-    history. L-BFGS appears only on path B, where it is per thread.
+    `P`, `F`, `Q`, `P_inf` and two workspace copies; the state augmented over
+    `[y | X]`; the normal-equation accumulators; and the one reused
+    `(1, 1+k_beta)` float64 row both engines index the observation and the
+    design columns out of per timestep.
+
+    **The row used to be charged per series** (`streaming_overhead_bytes`,
+    deleted 2026-08-14). It is `(B, 1+k_beta)` and production's B is 1, so it is
+    a constant by the same argument that moved the rest of this function out of
+    the per-series term.
 
     Args:
-        backend: Which execution strategy.
         d: Composite state dimension.
         k_beta: Number of design columns.
-        p: Number of free noise parameters.
 
     Returns:
-        Bytes of solver state.
+        Bytes of engine working set for one live pass.
     """
-    d2 = 6 * d * d * 8  # P, F, Q, P_inf and two workspace copies
-    x_aug = d * (1 + k_beta) * 8  # state augmented over [y | X]
-    accum = (k_beta * (k_beta + 1) // 2 + k_beta + 1) * 8
-    hessian = p * p * 8  # at the optimum, transient
-    if backend is Backend.COMPILED:
-        optimizer = 22 * p * 8  # L-BFGS history, m ~= 10
-    else:
-        optimizer = (p * p + 4 * p) * 8  # dense quasi-Newton trust-region model
-    return d2 + x_aug + accum + optimizer + hessian
+    state_blocks = 6 * d * d * 8
+    augmented_state = d * (1 + k_beta) * 8
+    accumulators = (k_beta * (k_beta + 1) // 2 + k_beta + 1) * 8
+    reused_row = (1 + k_beta) * 8
+    return int(state_blocks + augmented_state + accumulators + reused_row)
 
 
-def bytes_per_series(
-    backend: Backend,
+def _optimizer_bytes(p_max: int) -> int:
+    """The scipy L-BFGS-B workspace at `p_max` free parameters.
+
+    **THE OPTIMIZER IS L-BFGS-B FOR BOTH ENGINES.** `optimize.py:531` is
+    `minimize(negative, u0, jac=jac, method="L-BFGS-B", ...)` and `fit` drives
+    `optimize_series` whichever engine it holds, so there is one optimizer term
+    and it does not vary with the placement. The superseded formula charged path
+    A a *"dense quasi-Newton trust-region model"* of `(p**2 + 4p)*8` -- section
+    8.3's design, deleted with Task 19 -- and path B `22p*8` for an L-BFGS
+    history.
+
+    Read out of scipy 1.18.0's `_lbfgsb_py._minimize_lbfgsb` on 2026-08-14, at
+    `n = p_max` and `m = LBFGS_MAXCOR`:
+
+        wa   = zeros(2*m*n + 5*n + 11*m*m + 8*m, float64)
+        iwa  = zeros(3*n, int_dtype)
+        nbd  = zeros(n, int_dtype)
+        low_bnd, upper_bnd, g, x                     n float64 each
+        dsave = zeros(29, float64)
+        isave, lsave, task, ln_task                  44 + 4 + 2 + 2 ints
+
+    **`11*m*m` dominates and does not depend on `p` at all**, so `22p*8` was not
+    the same quantity with a different constant: at p=4 it gives 704 B against
+    10 240 B for `wa` alone. That is why the term is wrong in **shape** rather
+    than in magnitude, and why replacing it is part of correcting the formula
+    rather than a refinement of it.
+
+    **Integers are charged 8 bytes.** scipy picks int32 unless built with ILP64;
+    8 is the conservative reading and the difference is 4*(4*p_max + 52) bytes,
+    which is below the resolution of anything downstream.
+
+    Args:
+        p_max: Widest candidate's free noise parameter count.
+
+    Returns:
+        Bytes of optimizer workspace for one live fit.
+    """
+    m = LBFGS_MAXCOR
+    workspace = (2 * m * p_max + 5 * p_max + 11 * m * m + 8 * m) * 8
+    vectors = 4 * p_max * 8  # x, low_bnd, upper_bnd, g
+    integer_arrays = 4 * p_max * 8  # nbd (n) and iwa (3n)
+    saves = 29 * 8 + (44 + 4 + 2 + 2) * 8  # dsave; isave, lsave, task, ln_task
+    return int(workspace + vectors + integer_arrays + saves)
+
+
+def solver_state_bytes(
+    placement: SolverPlacement,
+    *,
     d: int,
     k_beta: int,
-    p: int,
+    p_max: int,
+    threads: int = 1,
+) -> int:
+    """Solver working set for a tile: one copy, or one per thread.
+
+    The three terms are the engine's working set (`_engine_workspace_bytes`),
+    scipy's L-BFGS-B workspace (`_optimizer_bytes`), and the `p_max * p_max`
+    Hessian `optimize_series` returns and `fit` inverts. **None of them scales
+    with B**, which is this module's whole correction: `fit.py:223` runs them
+    one series at a time.
+
+    `p_max` rather than a per-candidate `p` for the same reason
+    `output_slot_bytes` takes it: the constant must bound the widest candidate,
+    since the tile holds whichever candidate is being fitted.
+
+    Args:
+        placement: `PER_SERIES_LIVE` for the loop that exists, `PER_THREAD` for
+            a batched driver that does not.
+        d: Composite state dimension.
+        k_beta: Number of design columns.
+        p_max: Widest candidate's free noise parameter count.
+        threads: Worker threads. Ignored under `PER_SERIES_LIVE`, by
+            construction -- one loop holds one working set whatever the machine
+            has.
+
+    Returns:
+        Bytes of solver state for the whole tile.
+
+    Raises:
+        ValueError: If `threads` is below 1. Zero threads zeroes the entire
+            term under `PER_THREAD`, which is a plausible-looking number that
+            silently removes the only thread-dependent quantity in the formula.
+    """
+    if threads < 1:
+        raise ValueError(f"threads must be at least 1, got {threads}")
+    one = (
+        _engine_workspace_bytes(d, k_beta) + _optimizer_bytes(p_max) + p_max * p_max * 8
+    )
+    if placement is SolverPlacement.PER_THREAD:
+        return int(threads * one)
+    return int(one)
+
+
+def resident_bytes_per_series(
+    *,
+    k_beta: int,
+    p_max: int,
     n_time: int,
     n_models: int,
     per_point_design: bool = False,
 ) -> int:
-    """Analytic per-series memory cost.
+    """What one more series in the tile costs.
 
-    Path B's solver state is deliberately absent: it is per thread, and
-    `tile_bytes` adds it once per thread rather than once per series.
+    **Takes neither a placement nor `d`, and that is the correction rather than
+    an omission.** `d` reaches the formula only through the solver state, and
+    the solver state is not per-series; a signature carrying either would assert
+    a dependence this formula denies. The tile-level functions
+    (`solver_state_bytes`, `resident_tile_bytes`, `tiling.tile_side_for`) take
+    both, where they are real.
 
     Args:
-        backend: Which execution strategy.
-        d: Composite state dimension.
         k_beta: Number of design columns.
-        p: Number of free noise parameters.
+        p_max: Widest candidate's free noise parameter count.
         n_time: Series length.
         n_models: Candidate count held until the tile is written.
         per_point_design: True if any regressor is a per-point field, which
             makes X per series rather than one shared copy.
 
     Returns:
-        Bytes per series.
+        Bytes per series held resident for the life of the tile.
     """
     data = n_time * 9
     x_term = n_time * k_beta * 8 if per_point_design else 0
-    total = data + x_term + output_slot_bytes(n_models, p, k_beta)
-    if backend is Backend.NUMPY_BATCHED:
-        total += _solver_state(backend, d, k_beta, p)
-    return int(total)
+    return int(data + x_term + output_slot_bytes(n_models, p_max, k_beta))
 
 
-def thread_state_bytes(d: int, k_beta: int, p: int) -> int:
-    """Per-thread solver state for the compiled backend.
-
-    Args:
-        d: Composite state dimension.
-        k_beta: Number of design columns.
-        p: Number of free noise parameters.
-
-    Returns:
-        Bytes per thread.
-    """
-    return int(_solver_state(Backend.COMPILED, d, k_beta, p))
-
-
-def tile_bytes(
-    backend: Backend,
+def resident_tile_bytes(
+    *,
     batch: int,
+    placement: SolverPlacement,
     threads: int,
     d: int,
     k_beta: int,
-    p: int,
+    p_max: int,
     n_time: int,
     n_models: int,
     per_point_design: bool = False,
 ) -> int:
-    """Total bytes for one tile, composing the backend's shape.
+    """Total bytes one tile holds resident.
 
-    Path A has no thread term at all, so its tile cost is independent of core
-    count. Path B adds its solver state once per thread. **This is the whole
-    structural difference between the two formulas**, and it is why a single
-    formula with different constants would be wrong rather than merely
-    imprecise.
+    `batch * resident_bytes_per_series(...) + solver_state_bytes(...)`. The
+    second term is added **once**, or once per thread under the unreachable
+    placement -- never once per series. Multiplying it by `batch` is the defect
+    this module was carrying, and it is worth 1056 B/series (12.1%) at the
+    section 9.4 worked example.
 
     Args:
-        backend: Which execution strategy.
         batch: Series in the tile.
-        threads: Worker threads. Ignored on path A, by construction.
+        placement: Where the live solver state sits.
+        threads: Worker threads. Ignored under `PER_SERIES_LIVE`.
         d: Composite state dimension.
         k_beta: Number of design columns.
-        p: Number of free noise parameters.
+        p_max: Widest candidate's free noise parameter count.
         n_time: Series length.
         n_models: Candidate count held until the tile is written.
         per_point_design: True if any regressor is a per-point field.
@@ -185,13 +403,43 @@ def tile_bytes(
     Returns:
         Total bytes for the tile.
     """
-    per_series = bytes_per_series(
-        backend, d, k_beta, p, n_time, n_models, per_point_design
+    per_series = resident_bytes_per_series(
+        k_beta=k_beta,
+        p_max=p_max,
+        n_time=n_time,
+        n_models=n_models,
+        per_point_design=per_point_design,
     )
-    total = batch * per_series
-    if backend is Backend.COMPILED:
-        total += threads * thread_state_bytes(d, k_beta, p)
-    return int(total)
+    return int(
+        batch * per_series
+        + solver_state_bytes(
+            placement, d=d, k_beta=k_beta, p_max=p_max, threads=threads
+        )
+    )
+
+
+def slope_band(formula_bytes_per_series: float) -> tuple[float, float]:
+    """The two-sided band a measured per-series slope must sit inside.
+
+    Args:
+        formula_bytes_per_series: What the formula predicts.
+
+    Returns:
+        `(low, high)`, both inclusive bounds in bytes per series.
+
+    Raises:
+        ValueError: If the prediction is not positive. A band around zero
+            admits every measurement, which is the one outcome a band exists to
+            prevent.
+    """
+    if formula_bytes_per_series <= 0:
+        raise ValueError(
+            f"a slope band needs a positive prediction, got {formula_bytes_per_series}"
+        )
+    return (
+        formula_bytes_per_series / SLOPE_BAND_FACTOR,
+        formula_bytes_per_series * SLOPE_BAND_FACTOR,
+    )
 
 
 def tile_side(budget_bytes: int, per_series_bytes: int) -> int:
@@ -200,9 +448,15 @@ def tile_side(budget_bytes: int, per_series_bytes: int) -> int:
     Floors rather than rounds: rounding up overcommits a hard memory budget by
     a full tile row, and the 16 GB constraint is hard.
 
+    **THIS DIVIDES THE WHOLE BUDGET BY THE PER-SERIES COST AND SUBTRACTS
+    NOTHING** -- not the process floor, not the headroom, not
+    `solver_state_bytes`. That is F1, and Task 2 owns it: `block_bytes =
+    budget - floor - headroom` and the block is what a tile may hold. Until then
+    this function's answer is an upper bound on the side, not a budget-safe one.
+
     Args:
         budget_bytes: Memory budget for one tile.
-        per_series_bytes: From `bytes_per_series`.
+        per_series_bytes: From `resident_bytes_per_series`.
 
     Returns:
         Tile side in grid points.
@@ -221,111 +475,27 @@ def tile_side(budget_bytes: int, per_series_bytes: int) -> int:
     return side
 
 
-def streaming_overhead_bytes(backend: Backend, k_beta: int) -> int:
-    """What the streaming filter costs per series beyond section 9.4's model.
-
-    **THIS REPLACED `augmented_block_bytes`, AND THE REPLACEMENT IS THE WHOLE
-    POINT OF THE 2026-08-10 ENGINE CHANGE.** Until then `KalmanEngine._augment`
-    ended in `np.concatenate([y[:, :, None], x], axis=2)`, materializing a
-    `(B, N, 1+k_beta)` float64 array -- **25 200 B/series at N=630, k_beta=4**,
-    roughly three times section 9.4's entire per-series total, and it did not
-    vanish when the design was shared, which is exactly the case the section's
-    `X_term` calls free. Both engines now index the observation and the design
-    columns per timestep, so section 9.4's model is true of the code rather
-    than aspirational.
-
-    What is left is genuinely per series and genuinely small:
-
-    - **Path A** reuses one `(B, 1+k_beta)` float64 row across all `N` steps:
-      `(1 + k_beta) * 8` bytes per series, **40 B at k_beta=4**, against
-      25 200 before. It is `N` times smaller because the row is the thing the
-      accumulator ever needed.
-    - **Path B** carries `block_row`, a `(B,)` `intp` map from series to design
-      row, so the compiled kernel can read a shared design without a per-series
-      copy and without a branch on a boolean argument inside `prange`:
-      **8 B/series**.
-
-    Kept as a named term rather than folded into `bytes_per_series` because
-    the seam is the standing check -- *does the memory formula describe the
-    code, or a model of the code?* -- and section 9.4 remains the model. The
-    next divergence needs somewhere to live.
-
-    Args:
-        backend: Which execution strategy.
-        k_beta: Number of design columns.
-
-    Returns:
-        Bytes per series beyond section 9.4's accounting.
-    """
-    if backend is Backend.COMPILED:
-        return 8
-    return int((1 + k_beta) * 8)
-
-
-def resident_bytes_per_series(
-    backend: Backend,
-    d: int,
-    k_beta: int,
-    p: int,
-    n_time: int,
-    n_models: int,
-    per_point_design: bool = False,
-) -> int:
-    """What a series actually costs, against `bytes_per_series`'s model.
-
-    `bytes_per_series` is design doc section 9.4's formula: the memory a
-    streaming implementation uses, and the number to aim at. This adds
-    `streaming_overhead_bytes`, everything the real engines hold that the
-    section does not name, and is the number to **budget** against.
-
-    **The two now agree to 0.5%.** At the section 9.4 worked example the gap is
-    40 B/series -- 8682 B model against 8722 B resident on path A -- and
-    `tile_side` at a 1 GB budget is 338 against the model's 339. Until
-    2026-08-10 the gap was 25 200 B/series, 8682 against 33 882, a factor of
-    3.9, and `tile_side` was **171**. Every Phase 1 tile figure quoting 171
-    predates the streaming engines.
-
-    **Still budget against this one, not against the model.** The gap being
-    small today is a measurement, not a guarantee, and the seam is what makes
-    the next divergence visible instead of silent.
-
-    Args:
-        backend: Which execution strategy.
-        d: Composite state dimension.
-        k_beta: Number of design columns.
-        p: Number of free noise parameters.
-        n_time: Series length.
-        n_models: Candidate count held until the tile is written.
-        per_point_design: True if any regressor is a per-point field.
-
-    Returns:
-        Bytes per series actually held resident.
-    """
-    return bytes_per_series(
-        backend, d, k_beta, p, n_time, n_models, per_point_design
-    ) + streaming_overhead_bytes(backend, k_beta)
-
-
 def data_and_workspace_bytes_per_series(d: int, k_beta: int, n_time: int) -> int:
-    """The subset of the formula one batched likelihood evaluation allocates.
+    """The instrument's floor: what ONE BATCHED EVALUATION holds per series.
 
-    The data tile plus the engine's per-series working set -- `P`, `F`, `Q`,
-    `P_inf` and two workspace copies, the augmented state, the normal-equation
-    accumulators, and the one reused `[y | X]` row. It excludes the optimizer
-    state, the Hessian and the output slots, none of which a single evaluation
-    touches.
+    **THIS IS NOT THE PRODUCTION PER-SERIES COST AND MUST NOT BE COMPARED
+    AGAINST ONE.** `measure_evaluation_rss_slope` drives
+    `objective.unconstrained_loglik` on a **batch of B**, which genuinely does
+    hold `B * (6d^2 + ...)`; `run()` drives `fit`, which hands the engine one
+    series at a time, so those blocks are a constant there. The two disagree by
+    approximately `_engine_workspace_bytes(d, k_beta)` per series **by
+    construction**, and that disagreement is the measurement of the deleted
+    per-series solver term's magnitude -- **a quantity to state in advance, not
+    a discrepancy to reconcile.**
+
+    This function is the right floor **for the instrument**, which is why it
+    survives: Task 7 uses it as the cross-check.
 
     **This was 31 542 B/series until 2026-08-10 and is now 6382**, because
-    25 200 of it was the materialized augmented block. Measured against it,
-    the slope of resident RSS on batch size went from 43 392 B/series to
-    **8471** -- a ratio to the floor of 1.33, inside the ~1.5x the standing
-    check allows before a term counts as missing rather than as transients.
-
-    This exists because it is what `measure_evaluation_rss_slope` can actually
-    measure. **A full `fit` at tile scale is not runnable**: measured on this
-    machine, `fit` costs ~5.4 s per series through the per-series scipy loop,
-    so the 10 000-series batch the plan's fence proposed would take ~15 hours.
-    Validating the measurable 76% is worth more than not validating anything.
+    25 200 of it was a materialized augmented block. Measured against it, the
+    slope of resident RSS on batch size went from 43 392 to **8471**, a ratio to
+    the floor of 1.33 -- inside `slope_band`, and that agreement was read for
+    four months as confirming a formula the instrument never exercised.
 
     Args:
         d: Composite state dimension.
@@ -333,19 +503,10 @@ def data_and_workspace_bytes_per_series(d: int, k_beta: int, n_time: int) -> int
         n_time: Series length.
 
     Returns:
-        Bytes per series for the data tile plus engine workspace.
+        Bytes per series for the data tile plus engine workspace, under a
+        batched evaluation.
     """
-    data = n_time * 9
-    d2 = 6 * d * d * 8
-    x_aug = d * (1 + k_beta) * 8
-    accum = (k_beta * (k_beta + 1) // 2 + k_beta + 1) * 8
-    return int(
-        data
-        + d2
-        + x_aug
-        + accum
-        + streaming_overhead_bytes(Backend.NUMPY_BATCHED, k_beta)
-    )
+    return int(n_time * 9 + _engine_workspace_bytes(d, k_beta))
 
 
 _CHILD = """
@@ -464,6 +625,10 @@ def measure_evaluation_rss_slope(
     batches: tuple[int, ...], n_time: int
 ) -> tuple[float, float]:
     """Measure bytes-per-series as the slope of peak RSS against batch size.
+
+    **THE WORKLOAD IS A BATCHED EVALUATION, NOT A FIT.** Its oracle is
+    `data_and_workspace_bytes_per_series`; see that function for why it is not
+    the production per-series cost and what the two are expected to disagree by.
 
     **The formula's claim is about the gradient, not the absolute peak.** A
     process carries a large per-run constant -- interpreter, numpy, imports --

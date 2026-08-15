@@ -36,7 +36,7 @@ from metamer.batch.tiling import (
     tile_grid,
     tile_side_for,
 )
-from metamer.core.memory import Backend, resident_bytes_per_series, tile_side
+from metamer.core.memory import resident_bytes_per_series, tile_side
 
 pytestmark = pytest.mark.filterwarnings("ignore::UserWarning")
 
@@ -167,32 +167,37 @@ def test_a_side_of_zero_is_refused():
 def test_the_tile_side_is_budgeted_against_the_resident_figure(tmp_path):
     """`tile_side_for` budgets against `resident_bytes_per_series`.
 
-    Expected value recomputed here from `memory`, independently of the tiling
-    module: at design doc section 9.4's worked example a 1 GB budget gives
-    **338** on the reference backend, against **339** from the model formula.
+    Expected value RE-DERIVED BY HAND from the corrected formula, not read off
+    a failure: the per-series cost at design doc section 9.4's worked example is
+    630 * 9 = 5670 data plus 12 * 217 = 2604 output slots, so 8274, and
+    10**9 / 8274 = 120 860.5 with 347**2 = 120 409 <= 120 860.5 < 121 104 =
+    348**2. The side is **347**. The superseded pair is ~~338~~ (from a
+    per-series figure that charged one live solver working set to every series)
+    and ~~339~~ (from the section 9.4 model, now deleted).
 
-    Bug this catches: budgeting against `bytes_per_series`, the section 9.4
-    model, which omits what the engines actually hold. The two agree to 0.5%
-    today and **that is a measurement rather than a guarantee** -- before the
-    2026-08-10 engine change the same pair was 8682 against 33 882 and the
-    tile side was 171. A one-point difference now becomes a factor of two the
-    next time the engines diverge from the model, and nothing else would report
-    it.
+    **AND `tile_side_for` NO LONGER TAKES A BACKEND OR A `d`.** The per-series
+    cost is the data tile plus the output slots, neither of which knows which
+    engine is running.
+
+    Bug this catches: a tile side derived from anything other than what one more
+    series in the tile actually costs. The two failure directions are not
+    symmetric -- the section 9.4 model omitted what the engines hold and gave a
+    side that was too large, which overcommits a budget the design doc calls
+    hard; the superseded resident figure charged a constant per series and gave
+    one too small, which is safe and wastes runtime. **Only a measurement tells
+    them apart**, which is why Task 7 exists.
     """
     expected = tile_side(
         10**9,
-        resident_bytes_per_series(
-            Backend.NUMPY_BATCHED, d=3, k_beta=4, p=4, n_time=630, n_models=12
-        ),
+        resident_bytes_per_series(k_beta=4, p_max=4, n_time=630, n_models=12),
     )
-    assert expected == 338
+    assert 347**2 <= 10**9 / 8274 < 348**2
+    assert expected == 347
     assert (
         tile_side_for(
             budget_bytes=10**9,
-            backend=Backend.NUMPY_BATCHED,
-            d=3,
             k_beta=4,
-            p=4,
+            p_max=4,
             n_time=630,
             n_models=12,
         )
