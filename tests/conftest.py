@@ -119,23 +119,70 @@ def raising_engine() -> RaisingStubEngine:
     return RaisingStubEngine()
 
 
-#: The floor a test gets unless it asks for the real one. **Values chosen so
-#: they cannot be mistaken for a measurement**: round numbers in a ladder no
-#: machine produces, so an assertion that accidentally reads them fails a review
+#: The floor a test gets unless it asks for the real one.
+#:
+#: **1 MB, WHICH NO PROCESS THAT IMPORTS NUMPY COULD EVER HOLD** -- the measured
+#: floor is ~228 MB -- so a value read from here can never be mistaken for a
+#: measurement, and an assertion that accidentally depends on one fails review
 #: rather than passing as evidence.
+#:
+#: **AND IT IS SMALL ON PURPOSE, NOT ARBITRARILY.** Since Phase 2b Task 2 the
+#: block is `(budget - floor) x (1 - headroom)`, so the floor sets the smallest
+#: budget a fixture can ask for. A realistic 228 MB stub would push every
+#: tile-side fixture's budget into that range and bury the arithmetic those
+#: fixtures exist to express.
+STUB_FLOOR_PEAK = 1_000_000
+
 STUB_FLOOR_COMPONENTS = {
-    "interpreter_numpy": 100_000_000,
-    "xarray_zarr": 200_000_000,
-    "metamer_batch_run": 300_000_000,
-    "numba_threading_layer": 400_000_000,
-    "kalman_kernel_warm": 500_000_000,
-    "input_open": 600_000_000,
+    "interpreter_numpy": 400_000,
+    "xarray_zarr": 600_000,
+    "metamer_batch_run": 700_000,
+    "numba_threading_layer": 800_000,
+    "kalman_kernel_warm": 900_000,
+    "input_open": STUB_FLOOR_PEAK,
 }
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _stub_the_floor_probe_for_the_session():
+    """Patch the floor probe for the whole session, before any fixture runs.
+
+    **SESSION-SCOPED BECAUSE MODULE-SCOPED FIXTURES BUILD STORES.** A
+    function-scoped autouse fixture is ordered *after* every higher-scoped one,
+    so `test_resume.py`'s module-scoped store was built with the real probe and
+    its budget -- chosen against the stub floor -- was refused. Measured, and it
+    is the ordering rule rather than a race.
+
+    Yields:
+        Nothing; the patch is undone at session end.
+    """
+    from metamer.batch import run as run_module
+    from metamer.core.memory import FloorReport
+
+    stub = FloorReport(
+        pre_warm_bytes=STUB_FLOOR_COMPONENTS["metamer_batch_run"],
+        post_warm_bytes=STUB_FLOOR_COMPONENTS["kalman_kernel_warm"],
+        with_input_bytes=STUB_FLOOR_COMPONENTS["input_open"],
+        peak_bytes=STUB_FLOOR_PEAK,
+        components=dict(STUB_FLOOR_COMPONENTS),
+    )
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(run_module, "measure_floor", lambda **_kwargs: stub)
+        # **AND THE SAME NUMBER OUT OF PROCESS.** A subprocess inherits the
+        # environment but not the patch, and since Task 2 the tile side is a
+        # function of the floor -- so a CLI-driven test would derive a different
+        # side from the in-process one, and no choice of budget could fix it:
+        # the window that selects a small side is a few kB wide while a measured
+        # floor varies by megabytes. `run()` reads this variable when no floor is
+        # supplied, and an overridden floor records itself in provenance as
+        # `components={"override": N}`.
+        patch.setenv(run_module.FLOOR_OVERRIDE_ENV, str(STUB_FLOOR_PEAK))
+        yield
 
 
 @pytest.fixture(autouse=True)
 def _stub_the_floor_probe(request, monkeypatch):
-    """Replace `run()`'s floor probe unless a test asks for the real one.
+    """Restore `run()`'s real floor probe for a test that asks for it.
 
     **THE PROBE IS A CHILD PROCESS THAT IMPORTS NUMBA AND OPENS THE INPUT**, and
     `run()` measures one per call because the floor is deliberately never
@@ -155,19 +202,14 @@ def _stub_the_floor_probe(request, monkeypatch):
         request: pytest's request, read for the `real_floor` marker.
         monkeypatch: pytest's patcher.
     """
-    if request.node.get_closest_marker("real_floor") is not None:
+    if request.node.get_closest_marker("real_floor") is None:
         return
 
+    # THE OPT-OUT, AND IT IS THE HALF THAT CAN FAIL. Undo the session patch for
+    # this test only, so `run()` spawns its real probe and the seam is exercised
+    # rather than merely present.
+    import metamer.core.memory as memory_module
     from metamer.batch import run as run_module
-    from metamer.core.memory import FloorReport
 
-    stub = FloorReport(
-        pre_warm_bytes=STUB_FLOOR_COMPONENTS["metamer_batch_run"],
-        post_warm_bytes=STUB_FLOOR_COMPONENTS["kalman_kernel_warm"],
-        with_input_bytes=STUB_FLOOR_COMPONENTS["input_open"],
-        peak_bytes=STUB_FLOOR_COMPONENTS["input_open"],
-        components=dict(STUB_FLOOR_COMPONENTS),
-    )
-    monkeypatch.setattr(
-        run_module, "measure_floor", lambda **_kwargs: stub, raising=True
-    )
+    monkeypatch.setattr(run_module, "measure_floor", memory_module.measure_floor)
+    monkeypatch.delenv(run_module.FLOOR_OVERRIDE_ENV, raising=False)

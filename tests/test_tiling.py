@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import warnings
 from collections import Counter
+from typing import Any
 
 import numpy as np
 import pytest
@@ -27,18 +28,50 @@ import xarray as xr
 from zarr.storage import LocalStore
 
 from metamer.batch.input import InputContractError, open_input
+from metamer.batch.store import CHUNK_TARGET_BYTES, TILE_SIDE_BASE
 from metamer.batch.tiling import (
+    BudgetTooSmallError,
     Tile,
     assemble_tile,
     assembly_spans,
+    block_bytes_for,
     chunk_shape,
     read_amplification,
     tile_grid,
     tile_side_for,
 )
-from metamer.core.memory import resident_bytes_per_series, tile_side
+from metamer.core.memory import (
+    HEADROOM_FRACTION,
+    FloorReport,
+    SolverPlacement,
+    resident_bytes_per_series,
+    solver_state_bytes,
+    tile_side,
+)
 
 pytestmark = pytest.mark.filterwarnings("ignore::UserWarning")
+
+#: Design doc section 9.4's worked example, as `tile_side_for` takes it.
+WORKED_EXAMPLE: dict[str, Any] = {
+    "d": 3,
+    "k_beta": 4,
+    "p_max": 4,
+    "n_time": 630,
+    "n_models": 12,
+}
+
+#: **THE PUBLISHED SIDE NOW NEEDS A PINNED FLOOR AMONG ITS PRECONDITIONS**, which
+#: it never did before Phase 2b Task 2: the floor is measured with the input
+#: open, so the derived side depends on the store being read. These are this
+#: machine's readings of 2026-08-15, frozen here so the documented number is
+#: reproducible rather than machine-dependent.
+WORKED_FLOOR = FloorReport(
+    pre_warm_bytes=171_200_000,
+    post_warm_bytes=216_900_000,
+    with_input_bytes=228_200_000,
+    peak_bytes=228_200_000,
+    components={"input_open": 228_200_000},
+)
 
 
 def _store(tmp_path, *, n_time=12, n_y=16, n_x=16, chunks=(12, 4, 4), name="a.zarr"):
@@ -193,16 +226,10 @@ def test_the_tile_side_is_budgeted_against_the_resident_figure(tmp_path):
     )
     assert 347**2 <= 10**9 / 8274 < 348**2
     assert expected == 347
-    assert (
-        tile_side_for(
-            budget_bytes=10**9,
-            k_beta=4,
-            p_max=4,
-            n_time=630,
-            n_models=12,
-        )
-        == expected
-    )
+    # ...and 347 is what a budget-IS-the-block derivation gives. What
+    # `tile_side_for` returns is smaller by the floor, the headroom and the
+    # rounding; see `test_the_worked_example_derives_272_from_the_whole_chain`.
+    assert tile_side_for(budget_bytes=10**9, floor=WORKED_FLOOR, **WORKED_EXAMPLE) < 347
 
 
 # --------------------------------------------------------------------------
@@ -451,3 +478,297 @@ def test_an_input_that_declares_no_chunking_is_refused(tmp_path):
             read_amplification(handle, Tile(y_start=0, y_stop=2, x_start=0, x_stop=2))
     finally:
         batch_input.opener_registry.unregister("memchunkless")
+
+
+# --------------------------------------------------------------------------
+# The budget, the block, and the smooth base (Phase 2b Task 2)
+# --------------------------------------------------------------------------
+
+
+def test_the_worked_example_derives_272_from_the_whole_chain():
+    """Every step of `budget -> block -> side -> rounded side`, by hand.
+
+    Expected values derived independently, at design doc section 9.4's worked
+    example under a 10**9 B budget and this machine's measured floor:
+
+        floor.peak                                   228 200 000 B
+        available = budget - floor                   771 800 000 B
+        block     = available * (1 - 0.15)           656 030 000 B
+        block - solver_state(11 984)                 656 018 016 B
+        / 8274 B per series                              79 285.5
+        sqrt                                                281.6
+        floor()                                               281
+        round down to a multiple of 16                    **272**
+
+    Bug this catches: F1 recurring -- the budget used as the block. That gave
+    **347** here, a tile of 996 MB against a 1 GB budget with a 228 MB floor
+    already spent, and exit criterion 7 was unsatisfiable by arithmetic. It
+    also catches the rounding being dropped: 281 is prime-adjacent enough to
+    matter, and 272 = 16 x 17 is what makes the store's chunks land near target.
+
+    **AND THE FLOOR IS A PRECONDITION OF THE PUBLISHED NUMBER NOW**, which it
+    never was: the floor is measured with the input open, so the side depends on
+    the store being read. `WORKED_FLOOR` pins it.
+    """
+    available = 10**9 - WORKED_FLOOR.peak_bytes
+    assert available == 771_800_000
+    block = block_bytes_for(budget_bytes=10**9, floor=WORKED_FLOOR)
+    assert block == int(available * (1 - HEADROOM_FRACTION)) == 656_030_000
+
+    constant = solver_state_bytes(
+        SolverPlacement.PER_SERIES_LIVE, d=3, k_beta=4, p_max=4
+    )
+    per_series = resident_bytes_per_series(k_beta=4, p_max=4, n_time=630, n_models=12)
+    assert constant == 11_984
+    assert per_series == 8_274
+    raw = tile_side(block - constant, per_series)
+    assert 281**2 <= (block - constant) / per_series < 282**2
+    assert raw == 281
+
+    side = tile_side_for(budget_bytes=10**9, floor=WORKED_FLOOR, **WORKED_EXAMPLE)
+    assert side == 272
+    assert side == (raw // TILE_SIDE_BASE) * TILE_SIDE_BASE
+    # Per-point X, the other branch of the same worked example.
+    assert (
+        tile_side_for(
+            budget_bytes=10**9,
+            floor=WORKED_FLOOR,
+            per_point_design=True,
+            **WORKED_EXAMPLE,
+        )
+        == 144
+    )
+
+
+def test_a_tile_at_the_derived_side_plus_the_floor_fits_inside_the_budget():
+    """The arithmetic criterion 7 asserts, checked here and measured in Task 8.
+
+    Expected values determined independently: the tile holds
+    `side**2 * per_series + solver_state`, and that plus the floor must sit
+    inside the budget with the headroom still unspent.
+
+    **THE ABSOLUTE COMES FIRST AND THE RELATION SECOND** -- (i3). "The tile plus
+    the floor is within the budget" is satisfied by a side of zero, by a floor of
+    zero, and by both being wrong in the same direction, so the derived side is
+    asserted against its own hand-computed value before any inequality is.
+
+    Bug this catches: F1 recurring at any budget rather than only at the
+    documented one. Under the defect the tile alone was 92.8% of the budget with
+    the floor unaccounted for, so the check below fails by a factor of four.
+    """
+    for budget in (10**9, 2 * 10**9, 4 * 10**9, 8 * 10**9):
+        side = tile_side_for(budget_bytes=budget, floor=WORKED_FLOOR, **WORKED_EXAMPLE)
+        tile = side * side * resident_bytes_per_series(
+            k_beta=4, p_max=4, n_time=630, n_models=12
+        ) + solver_state_bytes(SolverPlacement.PER_SERIES_LIVE, d=3, k_beta=4, p_max=4)
+        assert tile + WORKED_FLOOR.peak_bytes <= budget
+        # ...and the headroom really is still unspent, which is what makes this
+        # a bound rather than a coincidence at the rounding.
+        assert tile <= block_bytes_for(budget_bytes=budget, floor=WORKED_FLOOR)
+    assert [
+        tile_side_for(budget_bytes=b, floor=WORKED_FLOOR, **WORKED_EXAMPLE)
+        for b in (10**9, 2 * 10**9, 4 * 10**9, 8 * 10**9)
+    ] == [272, 416, 608, 880]
+
+
+def test_a_budget_at_or_below_the_floor_is_refused_with_planning_information():
+    """The refusal names the floor, its rungs, and a budget that would work.
+
+    Expected behaviour determined independently: at a budget equal to the floor
+    the available bytes are zero, so the block is zero and no tile exists.
+
+    Bug this catches: a refusal that says only "too small". The user has no
+    other way to discover the floor -- it is a property of this release on this
+    machine with this input open, and it is measured rather than documented -- so
+    a bare refusal is a wall while this one is planning information against a
+    hard constraint.
+    """
+    with pytest.raises(BudgetTooSmallError) as caught:
+        block_bytes_for(budget_bytes=WORKED_FLOOR.peak_bytes, floor=WORKED_FLOOR)
+
+    message = str(caught.value)
+    assert "228.2 MB" in message  # the floor
+    assert "input_open" in message  # its components, by rung
+    assert "15%" in message  # what else was held back
+    # A budget that would work, and it really does.
+    workable = int(WORKED_FLOOR.peak_bytes / (1 - HEADROOM_FRACTION)) + 2
+    assert f"{workable / 1e9:.4g} GB" in message
+    assert block_bytes_for(budget_bytes=workable, floor=WORKED_FLOOR) >= 1
+
+
+def test_a_budget_that_clears_the_floor_but_holds_no_series_is_refused_too():
+    """Both arms of "too small" are the same refusal type, and say the same thing.
+
+    Expected behaviour determined independently: a budget just above the floor
+    leaves a positive block that is still smaller than the 11 984 B solver
+    working set plus 8274 B for one series.
+
+    Bug this catches: the second arm escaping as `memory.tile_side`'s bare
+    `ValueError`, whose message names bytes per series and never mentions the
+    floor -- so the user reads "your series are too big" when the answer is
+    "your budget is 228 MB of interpreter". Same question, so the same type
+    (c2), dispatched structurally rather than on wording.
+    """
+    just_above = WORKED_FLOOR.peak_bytes + 10_000
+    block = block_bytes_for(budget_bytes=just_above, floor=WORKED_FLOOR)
+    assert block == 8500
+    assert block < 11_984 + 8_274  # the solver working set plus one series
+    with pytest.raises(BudgetTooSmallError, match="one series"):
+        tile_side_for(budget_bytes=just_above, floor=WORKED_FLOOR, **WORKED_EXAMPLE)
+
+
+def test_every_derived_side_at_or_above_the_base_is_a_multiple_of_it():
+    """Over a wide range of budgets, not at one documented point.
+
+    Expected behaviour determined independently: `tile_side_for` rounds down to
+    a multiple of `TILE_SIDE_BASE`, and passes a raw side below the base through
+    because below the base the base is provably inert -- the widest array is
+    `8 * P_total` bytes per cell, so no shard can reach the chunk target until
+    the side is around 112.
+
+    Bug this catches: the rounding applied at a call site rather than inside the
+    derivation. That is how a calibration and a production run come to disagree
+    about the side for one configuration -- (j2) -- and how a resume reads back
+    a side its own derivation would not have produced.
+    """
+    sides = []
+    for budget in range(300_000_000, 20_000_000_000, 311_000_000):
+        try:
+            side = tile_side_for(
+                budget_bytes=budget, floor=WORKED_FLOOR, **WORKED_EXAMPLE
+            )
+        except BudgetTooSmallError:
+            continue
+        sides.append(side)
+        assert side < TILE_SIDE_BASE or side % TILE_SIDE_BASE == 0, (budget, side)
+    # The fixture has to be able to fail: a range that produced only sides below
+    # the base would satisfy the assertion without exercising the rounding.
+    assert len(sides) > 40
+    assert max(sides) > 1000
+    assert any(side % TILE_SIDE_BASE == 0 and side > 0 for side in sides)
+
+
+def _chunk_bytes(side, trailing_bytes):
+    """Bytes in one inner chunk, mirroring `store._chunk_side`'s divisor rule.
+
+    Args:
+        side: Tile side.
+        trailing_bytes: Bytes per grid cell for this array.
+
+    Returns:
+        Achieved chunk bytes.
+    """
+    for rows in range(1, side + 1):
+        if side % rows == 0 and rows * side * trailing_bytes >= CHUNK_TARGET_BYTES:
+            return rows * side * trailing_bytes
+    return side * side * trailing_bytes
+
+
+def test_the_achieved_chunk_bytes_are_in_band_for_the_worst_array_not_a_typical_one():
+    """The base is validated on the array with the least data per cell.
+
+    Expected values measured 2026-08-15 at M=12, C=2, k_beta=4, P_total=40. The
+    per-cell widths span 1 byte (`status/point_outcome`) to 320
+    (`warmstart/theta_unconstrained`, float64 x P_total), and the **widest** one
+    is the worst case for the divisor search because it needs the fewest rows
+    and therefore lands hardest on a coarse divisor set:
+
+        side 338 (composite)   theta_unconstrained   18.3 MB   4.57x
+        side 347 (PRIME)       theta_unconstrained   38.5 MB   9.63x
+        side 272 (base 16)     beta / delta_ic        7.1 MB   1.78x
+
+    **THE PUBLISHED DIVISOR NOTE WAS TAKEN ON `theta`** -- float32 x P_total,
+    160 B/cell -- and reported 2.3x at side 338. The worst array is exactly
+    twice as bad. That is why this asserts over every array rather than a
+    representative one.
+
+    **AND THE ARRAYS PARTITION.** Seven of them are narrow enough that a whole
+    shard cannot reach the 4 MB target at all -- `point_outcome` is one byte per
+    cell, so a 272-side shard is 74 kB -- and for those one chunk per shard is
+    the right answer, not a fallback. Holding them to the band would fail for a
+    correct reason.
+
+    Bug this catches: a base validated on `theta` alone, or on a side that
+    happens to factor well. Under a base that leaves prime sides reachable the
+    worst array's chunk is ten times the target, which is read amplification on
+    every tile and a decompression buffer to match.
+    """
+    widths = {
+        "beta": 4 * 12 * 4,
+        "delta_ic": 4 * 12 * 2,
+        "ic_best": 8 * 2,
+        "selected": 2 * 2,
+        "n_valid": 2,
+        "log_lik": 8 * 12,
+        "iterations": 2 * 12,
+        "theta": 4 * 40,
+        "outcome": 1 * 12,
+        "point_outcome": 1,
+        "theta_unconstrained": 8 * 40,
+    }
+    side = tile_side_for(budget_bytes=10**9, floor=WORKED_FLOOR, **WORKED_EXAMPLE)
+    assert side == 272
+
+    reachable, capped = [], []
+    for name, width in widths.items():
+        got = _chunk_bytes(side, width)
+        if side * side * width < CHUNK_TARGET_BYTES:
+            capped.append(name)
+            # One chunk per shard, which is the whole array.
+            assert got == side * side * width, name
+        else:
+            reachable.append(name)
+            assert CHUNK_TARGET_BYTES <= got <= 2 * CHUNK_TARGET_BYTES, (name, got)
+
+    # BOTH HALVES ARE NON-EMPTY, or the partition is doing no work and one of
+    # the two assertions above never ran.
+    assert set(reachable) == {
+        "beta",
+        "delta_ic",
+        "log_lik",
+        "theta",
+        "theta_unconstrained",
+    }
+    assert "point_outcome" in capped and "n_valid" in capped
+
+    # ...and the base is what buys it: the unrounded side is prime.
+    assert all(281 % d for d in range(2, 17))
+    assert _chunk_bytes(281, 8 * 40) / CHUNK_TARGET_BYTES > 6
+    # ...and worse still at Task 0's published 347, which is also prime.
+    assert all(347 % d for d in range(2, 19))
+    assert _chunk_bytes(347, 8 * 40) / CHUNK_TARGET_BYTES > 9
+
+
+def test_the_solver_constant_comes_out_of_the_block_before_the_side_is_derived():
+    """The tile is `B x per_series + solver_state`, so the constant is not free.
+
+    Expected values determined independently: at `per_series = 8274` and
+    `solver_state = 11 984`, a block of 40 000 B holds
+    `(40 000 - 11 984) / 8274 = 3.39` series -- a side of 1 -- while the same
+    block without the subtraction holds 4.83, a side of 2.
+
+    **THE FIXTURE HAS TO BE THIS SMALL AND THAT IS THE FINDING.** At the worked
+    example the constant is 11 984 B against a block of 656 030 000 -- 0.002% --
+    so it moves the raw side by less than one and the rounding to a multiple of
+    16 erases it entirely. **Deleting the subtraction there changes nothing
+    observable**, which is (i8)'s first shape: the parameter under test sits at a
+    fixed point. Measured: the mutation survived every other test in this module.
+
+    Bug this catches: `tile_side(block, per_series)` -- the block spent entirely
+    on series, with the live solver working set overcommitted on top. It is
+    12 kB at production budgets and it is the whole block at the boundary, which
+    is exactly where a user with a hard constraint operates.
+    """
+    per_series = resident_bytes_per_series(k_beta=4, p_max=4, n_time=630, n_models=12)
+    constant = solver_state_bytes(
+        SolverPlacement.PER_SERIES_LIVE, d=3, k_beta=4, p_max=4
+    )
+    assert (per_series, constant) == (8274, 11984)
+
+    block = 40_000
+    assert 1**2 <= (block - constant) / per_series < 2**2
+    assert 2**2 <= block / per_series < 3**2
+
+    budget = WORKED_FLOOR.peak_bytes + int(block / (1 - HEADROOM_FRACTION)) + 1
+    assert block_bytes_for(budget_bytes=budget, floor=WORKED_FLOOR) >= block
+    assert tile_side_for(budget_bytes=budget, floor=WORKED_FLOOR, **WORKED_EXAMPLE) == 1

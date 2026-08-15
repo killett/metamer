@@ -140,6 +140,45 @@ SCHEMA_VERSION = 4
 #: Target bytes for one inner chunk, per design doc 12.7's "a few MB".
 CHUNK_TARGET_BYTES = 4_000_000
 
+#: POLICY. Every derived tile side is rounded DOWN to a multiple of this.
+#:
+#: **THE JUSTIFICATION IS A MEASUREMENT, NOT ELEGANCE.** `_chunk_side` picks a
+#: **divisor** of the tile side, so the achievable chunk sizes are set by the
+#: side's factorization, and *"prefer a composite side"* -- this project's own
+#: earlier phrasing -- is wrong in both directions. Measured 2026-08-15 at M=12,
+#: C=2, k_beta=4, P_total=40, worst array over all arrays whose shard can reach
+#: the target:
+#:
+#:     side 338 (= 2*13^2, composite)     18.3 MB    4.57x    theta_unconstrained
+#:     side 347 (PRIME, and it is the
+#:               corrected side Task 0
+#:               published)               38.5 MB    9.63x    theta_unconstrained
+#:     side 336 (= 2^4*3*7)                5.4 MB    1.35x    beta / delta_ic
+#:
+#: **338 is composite and still bad; 347 is prime and catastrophic.** The
+#: property actually wanted is a divisor inside the admissible window, which
+#: differs per array, so the base is chosen by sweeping every derived side from
+#: 100 to 600 and reading the worst case off:
+#:
+#:     base   worst   median   mean area loss
+#:        8   3.41x    1.57x     2.3%
+#:       12   2.12x    1.52x     3.4%
+#:       16   1.99x    1.49x     4.5%
+#:       24   1.99x    1.39x     6.7%
+#:       60   1.75x    1.21x    16.4%
+#:
+#: **16 is the smallest base that reaches the 1.99x floor**, and nothing below 60
+#: improves on it. 24 matches its worst case with a better median and costs half
+#: again as much tile area.
+#:
+#: **THE ASYMMETRY, since this is policy rather than a derived value:** a base
+#: too small leaves the prime and near-prime sides in, whose chunks are ten times
+#: the target -- read amplification on every tile and a decompression buffer to
+#: match. A base too large throws away tile area, which costs runtime linearly.
+#: **Rounding DOWN is always budget-safe**, which is why the loss is the only
+#: cost worth trading against.
+TILE_SIDE_BASE = 16
+
 #: "No fit ran" for `/primitives/iterations`, which cannot carry NaN. Above any
 #: reachable iteration count: the cap is 200.
 ITERATIONS_UNSET = 65535

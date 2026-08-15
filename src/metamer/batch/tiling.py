@@ -67,7 +67,26 @@ import numpy as np
 from numpy.typing import NDArray
 
 from metamer.batch.input import InputContractError, InputHandle
-from metamer.core.memory import resident_bytes_per_series, tile_side
+from metamer.batch.store import TILE_SIDE_BASE
+from metamer.core.memory import (
+    HEADROOM_FRACTION,
+    FloorReport,
+    SolverPlacement,
+    resident_bytes_per_series,
+    solver_state_bytes,
+    tile_side,
+)
+
+
+class BudgetTooSmallError(ValueError):
+    """A memory budget that does not leave a usable block.
+
+    **A DISTINCT TYPE RATHER THAN A BARE `ValueError`**, so the caller that
+    stages it into a layer-3 refusal dispatches structurally instead of on
+    message text -- (c2). `memory.tile_side` also raises `ValueError`, for the
+    different condition "the block holds no series", and the two must never be
+    told apart by their wording.
+    """
 
 
 @dataclass(frozen=True)
@@ -131,36 +150,103 @@ def tile_grid(n_y: int, n_x: int, side: int) -> Iterator[Tile]:
             )
 
 
+def block_bytes_for(*, budget_bytes: int, floor: FloorReport) -> int:
+    """Return what a tile may hold, out of what the process may hold.
+
+    **`block_bytes = budget - floor - headroom`, AND THE BUDGET IS THE PROCESS,
+    NOT THE TILE.** `--memory-budget` bounds process peak RSS -- that is what
+    exit criterion 7 asserts -- and until 2026-08-15 the budget was passed
+    straight in as the block, so a tile was sized to the whole budget and the
+    interpreter's hundreds of megabytes had nowhere to live. At a 1 GB budget
+    the tile came out at **996 MB, 92.8% of it, against a 221.5 MB floor**: the
+    criterion was met only because the suite fits four series.
+
+    **The floor taken is `peak_bytes`**, not the post-warm current reading,
+    because criterion 7 is about a peak: what must come out of the budget is the
+    high-water mark of everything that is not the tile. See `memory.FloorReport`.
+
+    **The headroom is a FRACTION of what is left after the floor**, not of the
+    budget: what it absorbs scales with the block. See `memory.HEADROOM_FRACTION`
+    for the four things it covers and for the asymmetry that sets its value.
+
+    Args:
+        budget_bytes: The resolved process memory budget, in bytes.
+        floor: The measured process floor.
+
+    Returns:
+        Bytes a tile may hold.
+
+    Raises:
+        BudgetTooSmallError: If the budget does not clear the floor and the
+            headroom. **The message names the floor, its components and a budget
+            that would work**, because the user has no other way to find out --
+            a refusal that says only "too small" is a wall, and this one is
+            planning information against a hard constraint.
+    """
+    available = budget_bytes - floor.peak_bytes
+    block = int(available * (1.0 - HEADROOM_FRACTION))
+    if block < 1:
+        ladder = ", ".join(
+            f"{name} {value / 1e6:.1f} MB"
+            for name, value in sorted(floor.components.items())
+        )
+        workable = int((floor.peak_bytes + 1) / (1.0 - HEADROOM_FRACTION)) + 1
+        raise BudgetTooSmallError(
+            f"a memory budget of {budget_bytes / 1e9:.4g} GB ({budget_bytes} B) "
+            f"leaves nothing for a tile: this process holds "
+            f"{floor.peak_bytes / 1e6:.1f} MB before a tile exists, and "
+            f"{HEADROOM_FRACTION:.0%} of what is left is held back for "
+            f"transients. The floor, rung by rung: {ladder}. A budget above "
+            f"{workable / 1e9:.4g} GB ({workable} B) leaves a positive block; a "
+            f"useful one is several times that, since the tile is what the "
+            f"budget is for"
+        )
+    return block
+
+
 def tile_side_for(
     *,
     budget_bytes: int,
+    floor: FloorReport,
+    placement: SolverPlacement = SolverPlacement.PER_SERIES_LIVE,
+    d: int,
+    threads: int = 1,
     k_beta: int,
     p_max: int,
     n_time: int,
     n_models: int,
     per_point_design: bool = False,
 ) -> int:
-    """Return the square tile side a byte budget allows.
+    """Return the square tile side a memory budget allows.
 
-    `sqrt(budget_bytes / resident_bytes_per_series)`, floored.
+    `sqrt((block_bytes - solver_state) / resident_bytes_per_series)`, floored,
+    then rounded **down** to a multiple of `store.TILE_SIDE_BASE`.
 
     **NOT `sqrt(block_bytes / (n_time * itemsize))`**, which is the prompt's
     formula: it counts only the float64 data and overestimates, giving 445 where
-    the full accounting gives 347. Design doc §11.1 carried it until 2026-08-12
+    the full accounting gives 272. Design doc §11.1 carried it until 2026-08-12
     while §9.4 rejected it, and §11.1 is the section a tiling implementer opens
     first.
 
-    **NO PLACEMENT AND NO `d`, AS OF 2026-08-14.** The per-series cost is the
-    data tile plus the output slots and nothing else; the solver state is one
-    live working set whatever B is, so it is a constant and `d` reaches the
-    arithmetic only through it. **The constant is not subtracted here** — that
-    is F1, and Task 2 owns it, together with the process floor and the headroom.
-    Until then this is an upper bound on the side rather than a budget-safe one,
-    and it will grow a `floor`, a `placement` and a `d` argument when it becomes
-    one.
+    **THE ROUNDING HAPPENS HERE, BEFORE THE SIDE IS STORED**, and that placement
+    is the point rather than a detail. A calibration that rounded at its own call
+    site would exercise a derivation the production run does not, which is (j2);
+    and a resume reads the side back out of the store, so the stored value must
+    already be the rounded one or the two derivations disagree by construction.
+
+    **AND IT REMOVES A FOOTGUN RATHER THAN DOCUMENTING ONE.** With every derived
+    side a multiple of the base, Task 7's instrument gets chunk-friendly sides
+    **by construction**, and there is no deliberate choice of awkward budgets for
+    a later reader to "simplify" into round numbers. A property that holds
+    structurally beats one that must survive future editing.
 
     Args:
-        budget_bytes: The memory budget for one tile.
+        budget_bytes: The resolved process memory budget, in bytes.
+        floor: The measured process floor.
+        placement: Where the live solver state sits. One reachable value.
+        d: Composite state dimension, the widest candidate's. It reaches the
+            arithmetic only through the solver constant.
+        threads: Worker threads. Ignored under the reachable placement.
         k_beta: Number of design columns.
         p_max: Widest candidate's free noise parameter count. The tile holds
             whichever candidate is being fitted and `fit` sizes every slot to
@@ -170,21 +256,51 @@ def tile_side_for(
         per_point_design: True if any regressor is a per-point field.
 
     Returns:
-        The tile side in grid points.
+        The tile side in grid points: a multiple of `store.TILE_SIDE_BASE`, or a
+        raw side below the base, where the base is provably inert.
 
     Raises:
-        ValueError: If the budget does not hold one series.
+        BudgetTooSmallError: If the budget does not clear the floor and the
+            headroom, or if what is left does not hold one series at the base.
+            **Both arms are this type**, because both are the same question to
+            the user -- "your budget is too small, here is one that works" --
+            and dispatching on which arithmetic step ran out is the caller's
+            problem rather than theirs.
     """
-    return tile_side(
-        budget_bytes,
-        resident_bytes_per_series(
-            k_beta=k_beta,
-            p_max=p_max,
-            n_time=n_time,
-            n_models=n_models,
-            per_point_design=per_point_design,
-        ),
+    block = block_bytes_for(budget_bytes=budget_bytes, floor=floor)
+    constant = solver_state_bytes(
+        placement, d=d, k_beta=k_beta, p_max=p_max, threads=threads
     )
+    per_series = resident_bytes_per_series(
+        k_beta=k_beta,
+        p_max=p_max,
+        n_time=n_time,
+        n_models=n_models,
+        per_point_design=per_point_design,
+    )
+    if block - constant < per_series:
+        raise BudgetTooSmallError(
+            f"a memory budget of {budget_bytes / 1e9:.4g} GB leaves a block of "
+            f"{block} B, of which {constant} B is the live solver working set, "
+            f"so {block - constant} B remain against {per_series} B for one "
+            f"series. The process floor is {floor.peak_bytes / 1e6:.1f} MB and "
+            f"{HEADROOM_FRACTION:.0%} of what is above it is held back for "
+            f"transients"
+        )
+    raw = tile_side(block - constant, per_series)
+    # **BELOW THE BASE THE BASE IS INERT, SO THE SIDE PASSES THROUGH.** The base
+    # exists because `store._chunk_side` picks a DIVISOR of the side, and that
+    # only matters once some array's shard can reach `CHUNK_TARGET_BYTES`. The
+    # widest array is `warmstart/theta_unconstrained` at `8 * P_total` bytes per
+    # cell, so a shard reaches the target at
+    # `side >= sqrt(CHUNK_TARGET_BYTES / (8 * P_total))` -- 112 at P_total = 40,
+    # and a side below 16 would need P_total above 2200 to get there. **So for
+    # every side under the base, every array is already one chunk per shard and
+    # the divisor structure is irrelevant.** Rounding such a side to zero would
+    # refuse a small run for no benefit at all.
+    if raw < TILE_SIDE_BASE:
+        return raw
+    return (raw // TILE_SIDE_BASE) * TILE_SIDE_BASE
 
 
 def chunk_shape(handle: InputHandle) -> tuple[int, ...]:

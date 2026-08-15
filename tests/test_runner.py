@@ -20,6 +20,7 @@ import subprocess
 import sys
 import textwrap
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pytest
@@ -321,6 +322,140 @@ def test_a_run_records_the_basis_that_produced_its_tile_side(tmp_path):
     stored = xr.open_zarr(str(report.store_path)).attrs
     assert stored["tile_side_basis"] == "default"
     assert stored["schema_version"] == 4
+
+
+def test_the_budget_is_si_gigabytes_and_not_gibibytes(tmp_path):
+    """`memory_budget_gb` is 10**9 bytes, decided at Phase 2b Task 2.
+
+    Expected value determined independently: `run()` must derive the same side
+    as `tile_side_for` called with `budget * 10**9`, and a DIFFERENT one from
+    `budget * 1024**3`, which is 7.4% more bytes. The fixture picks a budget
+    where the two land on different multiples of the base, or the assertion
+    below cannot fail -- (i7), a fixture placed off the point where the two
+    functions agree.
+
+    Bug this catches: the `1024**3` this ran on until 2026-08-15. The field is
+    named `_gb`, every published tile side in this project is a 10**9 number,
+    and the Hardware table already reports this machine as 16.54 GB -- the SI
+    reading -- so the runner and the documentation meant different things by one
+    word. **The correction lowers the budget**, which is the safe direction.
+    """
+    from metamer.batch.tiling import tile_side_for
+    from metamer.core.memory import FloorReport
+    from tests.conftest import STUB_FLOOR_PEAK
+
+    floor = FloorReport(
+        pre_warm_bytes=STUB_FLOOR_PEAK,
+        post_warm_bytes=STUB_FLOOR_PEAK,
+        with_input_bytes=STUB_FLOOR_PEAK,
+        peak_bytes=STUB_FLOOR_PEAK,
+        components={"override": STUB_FLOOR_PEAK},
+    )
+    # 0.1 GB gives 384 under SI and 400 under GiB. **0.05 GB gives 272 under
+    # BOTH** -- the rounding absorbs the 7.4% there -- and this test was written
+    # at 0.05 first and passed against a runner still using `1024**3`. That is
+    # (i7) in one line: a fixture placed where the two functions agree.
+    # p_max is 3, not 2: `white + matern12` has three free parameters (both
+    # sigmas and the timescale), and the ragged index says so -- read from it
+    # rather than counted by eye, since a wrong p_max here would make this test
+    # agree with a runner doing something else.
+    budget = 0.1
+    shape: dict[str, Any] = {
+        "d": 1,
+        "k_beta": 4,
+        "p_max": 3,
+        "n_time": 24,
+        "n_models": 2,
+    }
+    si = tile_side_for(budget_bytes=int(budget * 10**9), floor=floor, **shape)
+    gib = tile_side_for(budget_bytes=int(budget * 1024**3), floor=floor, **shape)
+    # THE FIXTURE CAN FAIL: the two units give different sides here.
+    assert si != gib
+    assert si < gib
+
+    report = run(
+        _config(tmp_path, _store(tmp_path), extra=f"memory_budget_gb = {budget}\n"),
+        tmp_path / "out.zarr",
+    )
+    assert report.tile_side == si
+
+
+def test_a_budget_below_the_process_floor_is_a_layer_three_refusal(tmp_path):
+    """The refusal reaches the user as exit code 3, naming the floor.
+
+    Expected behaviour determined independently: conftest pins the floor at
+    1 MB, so a budget of 0.0000001 GB -- 100 bytes -- cannot clear it.
+
+    Bug this catches: `BudgetTooSmallError` escaping as a bare `ValueError`,
+    which CPython reports as exit code 1 -- and 1 means "completed with failures
+    above threshold" in this taxonomy, i.e. **the opposite fact about the run**.
+    A caller that resumes on 1 would resume from a crash. Staging it as layer 3
+    is what makes the code say "your request is wrong".
+    """
+    with pytest.raises(ValidationError) as caught:
+        run(
+            _config(tmp_path, _store(tmp_path), extra="memory_budget_gb = 0.0000001\n"),
+            tmp_path / "out.zarr",
+        )
+
+    assert caught.value.layer is ValidationLayer.SEMANTIC
+    message = str(caught.value)
+    assert "1.0 MB" in message
+    assert "override" in message  # the floor's rungs, which here is the override
+    assert "leaves nothing for a tile" in message
+
+
+def test_the_identity_gate_refuses_before_the_budget_does(tmp_path):
+    """A wrong candidate list and a small budget: the candidates are reported.
+
+    Design doc 13.7 orders the entry contract identity-first, geometry-second.
+    The tiling step only became able to FAIL at Phase 2b Task 2, so until then
+    deriving the side above the gates was harmless; after it, a derivation above
+    the gates makes this run report the budget.
+
+    Expected behaviour determined independently: the store below was fitted with
+    two candidates, this run asks for three, and its budget cannot hold three
+    candidates' output slots -- so both refusals are live and exactly one of
+    them is the right answer.
+
+    Bug this catches: the budget refusal preempting the resume gate, which sends
+    a user to raise their budget when the real problem is that these fits are
+    not the ones they asked for. **The two send them to different places.**
+    """
+    uri = _store(tmp_path)
+    store = tmp_path / "out.zarr"
+    run(_config(tmp_path, uri), store)
+
+    with pytest.raises(ValidationError) as caught:
+        run(
+            _config(
+                tmp_path,
+                uri,
+                extra='objective = "reml"\nmemory_budget_gb = 0.0000001\n',
+                name="reml.toml",
+            ),
+            store,
+        )
+    message = str(caught.value)
+    # BOTH refusals are live: the objective moves `fit_hash`, and the budget
+    # cannot clear the 1 MB floor. Exactly one of them is the right answer.
+    assert "fit_hash" in message
+    assert "leaves nothing for a tile" not in message
+
+    # THE POSITIVE CONTROL: the same tiny budget against a store whose identity
+    # matches DOES reach the budget refusal, so the assertion above is about
+    # ordering rather than about the budget check being unreachable (i2).
+    with pytest.raises(ValidationError) as budget_refusal:
+        run(
+            _config(
+                tmp_path,
+                uri,
+                extra="memory_budget_gb = 0.0000001\n",
+                name="small.toml",
+            ),
+            store,
+        )
+    assert "leaves nothing for a tile" in str(budget_refusal.value)
 
 
 def test_an_out_of_range_memory_budget_is_a_schema_failure(tmp_path):

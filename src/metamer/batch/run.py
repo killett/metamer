@@ -49,6 +49,7 @@ first task that fits and is where it must arrive.**
 
 from __future__ import annotations
 
+import os
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -78,6 +79,7 @@ from metamer.batch.store import (
 )
 from metamer.batch.threads import Phase, thread_budget
 from metamer.batch.tiling import (
+    BudgetTooSmallError,
     Tile,
     assemble_tile,
     read_amplification,
@@ -102,6 +104,7 @@ from metamer.core.fit import fit
 from metamer.core.lint import Finding
 from metamer.core.memory import FloorReport, measure_floor
 from metamer.core.signal import k_beta as signal_k_beta
+from metamer.core.statespace import StateSpace
 
 
 @dataclass(frozen=True)
@@ -250,6 +253,74 @@ def _with_memory_budget(config: Config, budget_gb: float) -> Config:
         ) from error
 
 
+FLOOR_OVERRIDE_ENV = "METAMER_FLOOR_BYTES"
+"""Environment variable that replaces the measured floor with a fixed one.
+
+**THIS DEFEATS F1's GUARANTEE AND IS PROVIDED ANYWAY, FOR TWO REASONS.**
+
+The first is production: `measure_floor` spawns two processes and imports numba.
+A sandbox that forbids spawning cannot run the probe at all, and without an
+override every run there fails at a step that has nothing to do with the fit.
+
+The second is that a measured floor makes an **out-of-process** fixture unable to
+pin a tile side. `block = (budget - floor) x (1 - headroom)`, so selecting a
+side of 1 means landing the block inside a window about three series wide --
+a few kB -- while the measured floor varies by megabytes between runs. **The
+window is a thousand times narrower than the jitter.** In-process tests have
+`run(floor=...)`; a test that must drive `python -m metamer` in a subprocess has
+nothing else.
+
+**IT RECORDS ITSELF AND NEEDS NO NEW FIELD.** An overridden floor writes
+`components = {"override": N}` into the store's provenance, so a store built
+with one says so in its own attrs -- which is the difference between a seam and
+a hole.
+"""
+
+
+def _resolve_floor(config: Config) -> FloorReport:
+    """Return the floor for this run: the override if set, else a measurement.
+
+    Args:
+        config: The effective configuration, for the input to open.
+
+    Returns:
+        The floor.
+
+    Raises:
+        ValidationError: Layer 2, if the override is set to something that is
+            not a positive integer. **Refused rather than ignored**: a
+            misspelled value silently falling back to a measurement would give a
+            different tile side from the one the caller arranged, and the
+            symptom would be an unexplained refusal several steps later.
+    """
+    raw = os.environ.get(FLOOR_OVERRIDE_ENV)
+    if raw is None:
+        return measure_floor(data_uri=config.data_uri, variable=config.variable)
+    try:
+        value = int(raw)
+    except ValueError as error:
+        raise ValidationError(
+            ValidationLayer.SCHEMA,
+            f"{FLOOR_OVERRIDE_ENV}={raw!r} is not an integer number of bytes",
+        ) from error
+    if value < 1:
+        raise ValidationError(
+            ValidationLayer.SCHEMA,
+            f"{FLOOR_OVERRIDE_ENV}={raw!r} must be positive; a floor of zero "
+            "says the process holds nothing before a tile exists, which is a "
+            "plausible number and never a true one",
+        )
+    return FloorReport(
+        pre_warm_bytes=value,
+        post_warm_bytes=value,
+        with_input_bytes=value,
+        peak_bytes=value,
+        # ONE RUNG NAMED `override`, so the store's own provenance distinguishes
+        # an overridden floor from a measured one without a schema change.
+        components={"override": value},
+    )
+
+
 def run(
     config_path: Path | str,
     store_path: Path | str,
@@ -358,52 +429,78 @@ def run(
         # `fit` sizes every output slot to the widest, so a budget taken from
         # `white` would size a tile the `white + matern12` pass cannot hold.
         #
-        # **THE STATE DIMENSION IS NOT AN ARGUMENT HERE, AS OF 2026-08-14.** It
-        # reaches the memory formula only through the solver working set, and
-        # that set is live for one series at a time (`fit.py:223`), so it is a
-        # constant rather than a per-series term. Task 2 subtracts the constant
-        # along with the process floor and the headroom, and `d` comes back with
-        # it -- as the widest candidate's, for the reason above.
-        side = tile_side_for(
-            budget_bytes=int(config.memory_budget_gb * 1024**3),
-            k_beta=columns,
-            p_max=max(index.extents),
-            n_time=contract.n_time,
-            n_models=len(specs),
-        )
+        state_dims = [StateSpace.from_spec(spec).state_dim for spec in specs]
         # MEASURED AFTER THE OPEN AND BEFORE THE STORE, in a child of its own:
         # the input's handles, consolidated metadata and decompression buffers
         # are resident and scale with the store rather than with the tile, so a
         # floor taken before the open attributes them to the tile term.
-        # **Recorded and not yet spent** -- Task 2 is what subtracts it from the
-        # budget, and landing the measurement one task ahead of its consumer is
-        # what keeps a wrong number attributable to one of them.
-        measured_floor = (
-            measure_floor(data_uri=config.data_uri, variable=config.variable)
-            if floor is None
-            else floor
-        )
+        measured_floor = floor if floor is not None else _resolve_floor(config)
         grid = (contract.n_y, contract.n_x)
-        # THE SOURCE IS VERIFIED BEFORE ANYTHING IS READ FROM IT, and its tile
-        # side is READ BACK rather than re-derived: the copied groups must be
-        # byte-identical to the source, which needs identical shard geometry,
-        # and the budget's rule bounds a FIT's resident set, which a recompute
-        # does not have. Consequence, stated: the new store carries the source's
-        # tile side, so a later fitting run against it under a smaller budget
-        # refuses -- correctly, because that run would fit.
+
+        # **IDENTITY FIRST, GEOMETRY SECOND -- AND THE ORDER MATTERS MORE SINCE
+        # TASK 2 THAN IT DID BEFORE IT.** The tiling step used to be infallible
+        # in practice, so deriving a side above the gates was harmless. Now
+        # `tile_side_for` refuses a budget that does not clear the floor, and a
+        # derivation above the gates makes a run with a wrong candidate list AND
+        # a small budget report the budget -- sending the user to the wrong
+        # question. Design doc 13.7 already prescribes this order; it simply had
+        # nothing to enforce until the geometry step could fail.
         source_attrs: dict[str, Any] | None = None
         if reuse_fits_from is not None:
             check_source(reuse_fits_from, config, geometry_hash=rollup)
-            side = reuse.source_tile_side(reuse_fits_from)
             source_attrs = dict(zarr.open_group(str(reuse_fits_from), mode="r").attrs)
-        # THE RESUME GATE, IN THE ENTRY CONTRACT'S ONE POSITION FOR IT: after
-        # the hashes, before the tiling. **Identity first, geometry second** -- a
-        # store whose fits are unusable says so before it says anything about
-        # tile sizes. A store's shards, and therefore what its completion bits
-        # index, were fixed when it was created, so its tile side is what a
-        # resume must use.
         if Path(store_path).exists():
             check_resume(store_path, config, geometry_hash=rollup)
+
+        # **p_max IS THE WIDEST CANDIDATE'S FREE PARAMETER COUNT AND d IS THE
+        # WIDEST CANDIDATE'S STATE DIMENSION, NEITHER THE FIRST'S.** The tile
+        # holds whichever candidate is being fitted and `fit` sizes every output
+        # slot to the widest, so a budget taken from `white` (d = 0) would size a
+        # tile the `white + matern12` pass cannot hold.
+        #
+        # **THE BUDGET IS 10**9 BYTES PER `memory_budget_gb`, NOT 1024**3.** The
+        # field is named `_gb` and SI GB is 10**9; every published tile side in
+        # this project is a 10**9 number; and the Hardware table already reports
+        # this machine as 16.54 GB, which is the SI reading. It was `1024**3`
+        # until 2026-08-15, i.e. 7.4% more bytes than the published example, and
+        # correcting it LOWERS the budget -- the safe direction against a
+        # constraint the design doc calls hard.
+        #
+        # **A RECOMPUTE DERIVES NOTHING AND MUST NOT BE REFUSED FOR ITS BUDGET.**
+        # Its tile side is READ BACK from the source -- the copied groups must be
+        # byte-identical, which needs identical shard geometry -- and **the
+        # budget's rule bounds a FIT's resident set, which a recompute does not
+        # have.** Running the budget arithmetic anyway would refuse a legitimate
+        # recompute on a machine too small to have fitted the source, which is
+        # exactly the case `--reuse-fits-from` exists to serve. Consequence,
+        # stated: the new store carries the source's tile side, so a later
+        # FITTING run against it under a smaller budget refuses -- correctly.
+        if reuse_fits_from is not None:
+            side = reuse.source_tile_side(reuse_fits_from)
+        else:
+            try:
+                side = tile_side_for(
+                    budget_bytes=int(config.memory_budget_gb * 10**9),
+                    floor=measured_floor,
+                    d=max(state_dims),
+                    k_beta=columns,
+                    p_max=max(index.extents),
+                    n_time=contract.n_time,
+                    n_models=len(specs),
+                )
+            except BudgetTooSmallError as error:
+                # STAGED AS LAYER 3, NOT LEFT AS A ValueError. It is a
+                # cross-field sense failure -- this budget against this machine's
+                # floor -- and exit code 3 is what a caller uses to tell "your
+                # request is wrong" from "your data is wrong". Dispatching on the
+                # distinct type rather than on the message is (c2).
+                raise ValidationError(ValidationLayer.SEMANTIC, str(error)) from error
+        # THE RESUME GATE'S GEOMETRY HALF. Its identity half ran above, before
+        # the derivation; a store's shards -- and therefore what its completion
+        # bits index -- were fixed when it was created, so its tile side is what
+        # a resume must use, and the derived side is only what that is compared
+        # against.
+        if Path(store_path).exists():
             side = resume_tile_side(store_path, derived_side=side, grid=grid)
         tiles = list(tile_grid(grid[0], grid[1], side))
         amplification = read_amplification(handle, tiles[0])

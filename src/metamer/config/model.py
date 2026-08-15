@@ -215,8 +215,16 @@ class Config(BaseModel):
         audit: See `Audit`. Not fit identity.
         detail: See `Detail`. Fixed at store creation.
         screening: See `Screening`. Refused at layer 3.
-        memory_budget_gb: Byte budget the tile size derives from. Run-relevant:
-            §11.1.1 requires peak RAM to be derivable from the budget alone.
+        memory_budget_gb: Byte budget the tile size derives from, in **SI
+            gigabytes -- 10**9 bytes, not 1024**3**. Run-relevant: §11.1.1
+            requires peak RAM to be derivable from the budget alone.
+            **IT BOUNDS PROCESS PEAK RSS, NOT THE TILE**: since Phase 2b Task 2
+            the tile gets `(budget - measured floor) * (1 - headroom)`, so a
+            budget at or below this release's process floor is refused naming
+            the floor and a budget that would work. The unit was `1024**3`
+            until 2026-08-15, i.e. 7.4% more bytes than every published tile
+            side; the field is named `_gb`, and a `1024**3` field is named
+            `_gib`.
         threads: Thread count. **Run-relevant only.** If it moved `fit_hash` the
             hash boundary would be conceding that §11.3's determinism guarantee
             does not hold -- the guarantee and the boundary are the same claim

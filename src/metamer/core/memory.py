@@ -123,6 +123,39 @@ scipy 1.18.0's `_lbfgsb_py._minimize_lbfgsb` signature on 2026-08-14; it is a
 default this module depends on, so it is named rather than inlined.
 """
 
+HEADROOM_FRACTION = 0.15
+"""POLICY. The fraction of `budget - floor` held back from the tile.
+
+**NOT eps-derived, and nothing about float64 has an opinion here.** It exists
+because peak RSS overshoots a steady-state model through transients, and this
+module's formula counts what is **resident** rather than what is **peak**. What
+it must absorb, named so a later reader can check whether 0.15 still covers it:
+
+- **The per-candidate temporaries `fit` holds and this formula does not charge**
+  -- `var_gls` and `var_white` at `(B,)` each, the
+  `np.nan_to_num(theta[:, c, :p])` copy, and `hydrate`'s `(B, p_total)` block.
+  Estimated at order 100 B/series, ~1.2%.
+- **The float32 span alive during tile assembly**, before it is cast into the
+  float64 destination and dropped.
+- **zarr's decompression buffers** on the chunk reads that fill the tile.
+- **`FloorReport.post_warm_bytes` being a LOWER bound** (the probe warms with a
+  lighter spec than production), so `block_bytes` is an upper bound.
+
+**A FRACTION AND NOT A FIXED NUMBER OF BYTES, for two independent reasons that
+push the same way**: the first three items above scale with the block, and the
+fourth makes the block itself an over-estimate. A constant would be right at one
+budget and wrong at every other.
+
+**THE ASYMMETRY IS THE JUSTIFICATION FOR CHOOSING CONSERVATIVELY, and it is not
+a matter of taste**: too small kills the process, too large costs runtime. One
+failure mode ends the run and the other slows it, so the two are not
+interchangeable and the value is set from the expensive side.
+
+**Whether 0.15 is enough is a MEASUREMENT and Task 8 is what takes it.** Until
+then it is a policy constant with its components named, in
+`lint.OVERLAP_RATIO`'s idiom, and it must not be dressed as derived.
+"""
+
 SLOPE_BAND_FACTOR = 1.5
 """POLICY. How far a measured slope may sit from the formula, either way.
 

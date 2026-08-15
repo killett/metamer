@@ -58,14 +58,21 @@ objective = "ml"
 
 #: `tile_side = 1` at the fixture's geometry, so a 2x2 grid is four tiles and a
 #: resume has something to skip. **A one-tile fixture cannot express anything in
-#: this module.** Measured 2026-08-13: `resident_bytes_per_series` is **1322 B**
-#: at `d=1, k_beta=4, p=3, N=60, M=2` -- `d` is the **widest** candidate's state
-#: dimension, which is `white + matern12`'s 1 and not the 3 a reading of the
-#: candidate list suggests -- and `floor(sqrt(2147/1322)) = 1`.
-ONE_POINT_PER_TILE = 2e-6
+#: this module.** `d` is the **widest** candidate's state dimension, which is
+#: `white + matern12`'s 1 and not the 3 a reading of the candidate list suggests.
+#: **RE-DERIVED 2026-08-15 AT PHASE 2b TASK 2**, where the budget stopped being
+#: the block. `block = (budget - floor) x (1 - 0.15)` and the floor here is
+#: `tests/conftest.py`'s 1 MB stub, in-process and through `METAMER_FLOOR_BYTES`
+#: for a subprocess. At `d=1, k_beta=4, p_max=3, N=60, M=2` the per-series cost
+#: is **926 B** (was 1322 before Task 0 corrected the formula) and the live
+#: solver working set is **11 200 B**, so a side of `s` needs a block of
+#: `s^2 x 926 + 11 200`. **The old 2e-6 GB -- 2000 bytes -- is now below the
+#: floor and refused**, correctly: it worked only because the budget was the
+#: block, which is the defect F1 names.
+ONE_POINT_PER_TILE = 0.001015900
 
-#: `tile_side = 2` at the same geometry: `floor(sqrt(5368/1322)) = 2`.
-TWO_POINTS_PER_TILE = 5e-6
+#: `tile_side = 2` at the same geometry.
+TWO_POINTS_PER_TILE = 0.001020258
 
 NOT_ATTEMPTED = Outcome.NOT_ATTEMPTED.code
 
@@ -571,7 +578,19 @@ def test_a_preempted_command_exits_aborted_early_and_resumes(tmp_path: Path) -> 
     resuming script the store is finished) and death by unhandled signal (-15,
     which would leave the tile in flight unfinished).
     """
-    config = _config(tmp_path, _input(tmp_path), budget=ONE_POINT_PER_TILE)
+    # **SIXTEEN TILES, NOT FOUR, AND THE MARGIN IS THE POINT.** The assertion
+    # below is that the signal landed MID-loop: `partial.any()` and
+    # `not partial.all()`. On a 2x2 grid the window between "the first tile is
+    # done" and "every tile is done" is three tiles wide, and the parent's poll
+    # sleeps 20 ms while competing with its own child for four cores -- so a
+    # scheduling hiccup lets the run finish before the signal is sent and the
+    # test fails for a reason that has nothing to do with signals. **Observed
+    # once in a full sweep on 2026-08-15 and not reproducible in isolation, nor
+    # under six busy loops**, which is what an order-of-milliseconds race looks
+    # like. A 4x4 grid makes the window fifteen tiles wide for ~2x the runtime.
+    config = _config(
+        tmp_path, _input(tmp_path, n_y=4, n_x=4), budget=ONE_POINT_PER_TILE
+    )
     store = tmp_path / "out.zarr"
     command = [sys.executable, "-m", "metamer", str(config), str(store)]
     child = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)

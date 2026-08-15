@@ -54,11 +54,20 @@ pytestmark = pytest.mark.filterwarnings("ignore::UserWarning")
 #: `tile_side = 1` at this fixture's geometry, so a 2x2 grid is four tiles --
 #: enough for a kill to land between them and for a resume to have something to
 #: skip. See `test_completion.py` for the measurement.
-ONE_POINT_PER_TILE = 2e-6
+#: **RE-DERIVED 2026-08-15 AT PHASE 2b TASK 2**, where the budget stopped being
+#: the block. `block = (budget - floor) x (1 - 0.15)` and the floor here is
+#: `tests/conftest.py`'s 1 MB stub, in-process and through `METAMER_FLOOR_BYTES`
+#: for a subprocess. At `d=1, k_beta=4, p_max=3, N=60, M=2` the per-series cost
+#: is **926 B** (was 1322 before Task 0 corrected the formula) and the live
+#: solver working set is **11 200 B**, so a side of `s` needs a block of
+#: `s^2 x 926 + 11 200`. **The old 2e-6 GB -- 2000 bytes -- is now below the
+#: floor and refused**, correctly: it worked only because the budget was the
+#: block, which is the defect F1 names.
+ONE_POINT_PER_TILE = 0.001015900
 
 #: `tile_side = 2`: the same grid in one tile, which is criterion 2's second
 #: memory budget.
-FOUR_POINTS_PER_TILE = 5e-6
+FOUR_POINTS_PER_TILE = 0.001020258
 
 _CONFIG = """
 data_uri = "{uri}"
