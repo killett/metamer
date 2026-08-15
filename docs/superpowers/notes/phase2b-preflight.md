@@ -199,3 +199,127 @@ bytes** — a constant headroom would be right at one B and wrong at every other
   **is** F2's magnitude.
 - **(k)** nothing here depends on process-local state; the formula is arithmetic. The
   measurement functions already spawn per point.
+
+---
+
+## Task 1 — the floor, cgroup-aware total RAM, `tile_side_basis`, `SCHEMA_VERSION` 4
+
+Run 2026-08-15 against the task brief, `core/machine.py`, `batch/store.py`, `batch/resume.py`,
+`batch/threads.py`, design doc §11.4 and §13.4, and this machine's `/sys/fs/cgroup`. **Nine
+findings; three change the interface and two are other tasks' to own.**
+
+### (i3) EVERY test the brief lists for the floor is a relation, and relations pass on two absences
+
+*"The post-warm floor exceeds the pre-warm floor"* and *"the floor with the input open exceeds
+the floor without it"* are both `a > b`. Each is satisfied by two readings that are absent, two
+that are zero, and two that are wrong in the same direction — which is exactly the shape that let
+`assert fit_moved == compat_moved` pass against a payload flattening that dropped the field.
+
+**Every rung is asserted against its own absolute band first**, from the ladder recorded on
+2026-08-14 (73.8 / 162.4 / 170.7 / 213.9 / 221.5 MB), `machine`-marked, and the relations are
+kept as additional checks rather than as the evidence.
+
+### The floor is measured with the WRONG INSTRUMENT if it is measured the way the brief argues
+
+The brief requires *"every floor measurement runs behind a bare launcher"* and justifies it by
+watermark inheritance — **which is a property of `peak_rss_bytes` alone.** The recorded ladder is
+`current_rss`, and current RSS is not a watermark and not inherited, so under that instrument the
+launcher buys nothing and the stated reason is wrong.
+
+**But the launcher is still required, for the opposite reason.** Exit criterion 7 asserts **peak**
+RSS at or below the budget, and Task 2 computes `block = budget − floor − headroom`. The quantity
+that must come out of the budget is therefore the **peak** of everything that is not the tile —
+import transients, numba's JIT, zarr's decompression buffers on the first chunk read — and a
+current-RSS floor omits exactly those and overcommits by their size.
+
+**Deviation: `FloorReport` carries both instruments.** The ladder stays in current RSS, so it is
+comparable to the recorded series and to §11.4's own figures; `peak_bytes` is the child's own
+high-water and is what Task 2 subtracts. The bare launcher is mandatory because of the second,
+and the docstring says which instrument answers which question.
+
+### (a2) `total_ram_bytes()` and `ram_basis()` are two functions over one fact, and nothing couples them
+
+The brief's interface has them separate. Two independent readers of `/sys/fs/cgroup` can
+disagree — a divergent implementation, a limit written between the two calls, a caller that
+computes the basis on one machine and the bytes on another — and the failure is silent: the
+store's provenance records **a basis that did not produce the number beside it.**
+
+**This is (a2)'s fourth fact turned around.** That fact says the thing that populates an identity
+must not be the thing being identified; this says **the label must be produced by the same
+computation as the value**, or it is a name rather than a report.
+
+**Deviation: one private `_resolve_total_ram() -> tuple[int, str]`**, with both public functions
+delegating to it. The test is that on a constructed cgroup limit **both move together** — a
+mutation that lets `ram_basis` read the filesystem independently bites.
+
+### (i2) "the floor is never cached" has no positive control at this task, and the obvious test is unfalsifiable
+
+No cache exists until Task 5, so *"no cache entry was written"* is satisfied by a caching
+mechanism that does not exist. The falsifiable form is **"two calls re-measure"**: count the child
+spawns and assert the second call spawns again. **Memoization is the mutation and it bites**,
+which *"no file appeared"* never could.
+
+### (g)/(a5) the cgroup change moves `run_hash`, and this machine cannot see it
+
+`machine.fingerprint()` is `machine_fingerprint(cpu_model(), physical_cores(),
+total_ram_bytes())`, and it reaches `run_hash`. Making `total_ram_bytes` cgroup-aware therefore
+**changes `run_hash` for every store built inside a memory-limited container** — correctly, since
+that is the gap the brief names, and it is a behaviour change rather than a refinement.
+
+**And it is invisible here.** `/sys/fs/cgroup/memory.max` is `max` on this box, measured
+2026-08-15, so the host and cgroup readings coincide, no golden hash moves, and **every test in
+this suite would pass against a `total_ram_bytes` that ignored cgroups entirely.** That is the
+same shape as the defect being fixed: the environment cannot express it, so the fixture must.
+Recorded, with `psutil` reporting **16 535 728 128 B** total and **5 053 812 736 B** available
+today against 7.13 GB on 2026-08-14 — available varies, total does not.
+
+### (c) exits enumerated
+
+`measure_floor`: one `RuntimeError`, when the child exits non-zero, with its stderr attached —
+including the case where the input cannot be opened, since the open happens **inside** the child.
+A silent zero here reads as a floor of nothing, which is a plausible number that would make the
+whole budget available to the tile. `_resolve_total_ram`: **no raise** — an unreadable or absent
+cgroup file is the host basis, not an error, because the absence is the common case.
+
+### Blast radius of `SCHEMA_VERSION` 4, counted rather than estimated
+
+`REQUIRED_ATTRS` gains `tile_side_basis`; `provenance_attrs` gains a parameter and has **six call
+sites** (`batch/run.py`, its own definition, four in `tests/test_store.py`, plus
+`tests/test_resume.py`'s fixtures); `tests/test_write.py:484` pins `SCHEMA_VERSION == 3` by name;
+`resume._check_schema` needs no change but its test at `test_resume.py:307` uses
+`SCHEMA_VERSION - 1` and keeps working by construction.
+
+### Found during implementation, not by the audit: Task 1 breaks 2a's exit criterion 1
+
+**The pre-flight did not find this and the full sweep did**, which is the honest record.
+*"The floor is measured fresh every run"* plus *"both floors are recorded in provenance"* against
+2a's criterion 1, *"a killed and resumed run is byte-identical to a clean one"* — two runs of one
+configuration measure two different floors, the root `zarr.json` differs, and every array, chunk
+and other attr is identical.
+
+**(a5) with a new shape: the conflicting constraint is an exit criterion from an EARLIER
+SUB-PHASE.** Nobody is reading 2a's closing table while writing a 2b brief, so the conflict had no
+reviewer. Promoted into the handoff under (a5).
+
+Repair: files still compared byte for byte; root attrs compared key by key against a named
+`_MEASURED_ATTRS = {"floor"}`; **and the excluded key asserted present in both stores**, so the
+exclusion cannot decay into an absence.
+
+### Found during implementation: a recompute has no basis of its own
+
+`--reuse-fits-from` reads the tile side back out of the source rather than deriving one, so
+writing `DEFAULT` would claim a derivation that did not happen. The new store copies the source's
+basis. **Its test is (i7)-flagged in its own docstring** — until Task 5, `DEFAULT` is the only
+writable basis, so "copy the source's" and "write DEFAULT" agree on every store this suite can
+build, and Task 5 owns moving the fixture off that point.
+
+### Two findings that belong to other tasks, reported rather than carried
+
+- **Design doc §11.4 says the calibration cache has *"an explicit expiry"*; the 2b plan settled
+  NO expiry**, on the ground that time does not cause the change it stands in for — (a2) at a
+  cache key. **A live disagreement between the design doc and an approved plan, recorded
+  nowhere.** Task 5 implements it; **resolved in the document now** rather than left for an
+  implementer to discover, per the precedence rule.
+- **§13.4 quotes `28 882 B/series` and `tile_side` 186 for the per-point regime** — a cascade site
+  Task 0's count did not list, because the count was of `338`. The corrected pair is **28 434 and
+  187**. Task 9's to fix; recorded here so its count is right when it runs.

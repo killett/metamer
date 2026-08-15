@@ -1423,9 +1423,20 @@ not affect bytes-per-series).
 - **The calibration cache lives with the store, not in local scratch** (§15.5). On a
   preemptible instance anything in local temp is gone on restart, and the two-pass barrier
   means losing pass 1's warm starts costs a full re-run of it.
-- The cache has an explicit expiry and a `--recalibrate` flag. A cached measurement
+- The cache has ~~an explicit expiry and~~ a `--recalibrate` flag. A cached measurement
   surviving a hardware change silently produces a bad RSS projection against a hard memory
   constraint.
+
+  > **AMENDED 2026-08-15 (Phase 2b Task 1's pre-flight, resolving a disagreement with the
+  > approved 2b plan rather than carrying it into an implementation). NO EXPIRY, and not even
+  > as a backstop.** The hazard is *"the thing measured has changed"* — hardware, or an
+  > installed distribution. **Time does not cause that**, so an expiry is (a2) at a cache key:
+  > a gate made of a name for the real condition. A backstop firing on a schedule unrelated to
+  > the hazard **re-measures when nothing changed and stays silent when something did, and its
+  > presence makes the real gate look optional.** The real gates are the machine fingerprint
+  > and a digest over **every installed distribution**; `--recalibrate` is the manual override
+  > and is honest, because it fires exactly when a human has reason to believe the measurement
+  > is stale, which is the only signal an expiry was ever approximating.
 
 ### 11.5 Consequences if path B wins
 

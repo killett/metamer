@@ -288,6 +288,31 @@ in `PROGRESS.md`, which is now a stated, unverified claim instead of an unasked 
 **The tell is a figure that supports a conclusion nobody disputes.** Nothing was riding on
 whether the number was 1.7 or 1712, so neither reader had a reason to divide.
 
+#### AND THE THIRD REGISTER: A CORRECTION IS AN UNVERIFIED CLAIM
+
+> **A correction arrives with the authority of the error it fixes, so its own arithmetic is
+> the least likely to be checked.** Where a correction states both a **derivation** and a
+> **magnitude**, verify they agree before accepting either.
+
+**This is the same rule in its third register — brief, report, correction — and the third is
+the one with a defence mechanism.** A brief's number invites suspicion because the brief is
+what you are auditing. A report's number is checkable because the report is under review. A
+correction's number arrives having just demonstrated that the *previous* number was wrong,
+which is the strongest possible credential and says nothing at all about the new one.
+
+Worked instance, Phase 2b F3, found at Task 0 by an implementer rebuilding the inventory. The
+finding **named four omissions** — `theta_unconstrained` (+32 B), `n` (+8), an object-array
+`init_rung` pointer (+8), and `n_iter` as int64 rather than uint16 (+6) — and **recorded the
+magnitude as +46 B/candidate**. The four sum to **+54**. Both numbers sat inside one finding,
+two lines apart, through planning and review, **and nobody divided.** The derivation was right,
+the magnitude was wrong, and the correction was accepted on the strength of the defect it
+exposed.
+
+The check is one subtraction and it is available for free wherever a correction is written in
+this project's idiom, because the idiom already requires the derivation to be stated beside the
+number. **State both, then compare them** — a correction that gives only a magnitude has
+discarded the one thing that could have caught it.
+
 ### (a5) CROSS-CHECK A BRIEF'S REQUIREMENTS AGAINST ITS OWN CONSTRAINTS
 
 > **A requirement and the constraint that forbids it can sit paragraphs apart and both read
@@ -312,6 +337,33 @@ entirely.
 signal x noise search lands** -- design-stage outcomes are constant across the model axis by
 construction. Fitting `white + matern12` to white noise leaves the correlated candidate
 degenerate at most points while `white` fits (measured: 3 of 4).
+
+#### AND THE CONFLICT CAN BE WITH A CRITERION THAT IS ALREADY MET
+
+> **A MEASUREMENT OF THE PROCESS CANNOT BE PART OF A BYTE-IDENTITY CLAIM ABOUT THE OUTPUT.**
+> They are claims about different subjects, and a store that records both is a store whose
+> reproducibility test now fails for a correct reason. **Where both are wanted, name the measured
+> keys and exclude them explicitly** — never drop the comparison wholesale, and never quietly
+> remove the measurement.
+
+The first half of (a5) is about two requirements inside one brief. This is about a new
+requirement and an **already-satisfied exit criterion from an earlier sub-phase**, which is worse
+in one specific way: nobody is reading the old criterion while writing the new brief, so the
+conflict has no reviewer at all.
+
+Worked instance, Phase 2b Task 1. The floor is *"measured fresh every run and never cached"* and
+*"both floors are recorded in provenance"*; Phase 2a's exit criterion 1 is *"a killed and resumed
+run is byte-identical to a clean one"*. Two runs of one configuration measure two different
+floors, so the root document differs — **while every array, every chunk and every other attr is
+identical.** Both requirements are right. Stated together, they are unsatisfiable.
+
+**And it was invisible to the task's own tests**, because the suite stubs the probe while
+criterion 1 drives the CLI in a subprocess where the stub does not reach. The full sweep caught
+it — the third time it has caught what a task's own tests could not.
+
+The repair keeps the criterion's force: files compared byte for byte, attrs compared key by key
+against a **named** exclusion set, and **the excluded key asserted present in both stores**, so
+"excluded" cannot decay into "absent".
 
 #### THE SAME RULE WITHOUT A CONFLICT: TWO BEHAVIOURS OVER ONE CRITICAL SECTION
 
@@ -375,9 +427,47 @@ driver hands the engine B = 1.
 subject of F2 — also charged a *"dense quasi-Newton trust-region model"* optimizer term for the
 same deleted §8.3 design, while production runs scipy L-BFGS-B for **both** engines, whose
 workspace is dominated by `11·maxcor²` doubles that do not depend on the parameter count at all.
-The constant was understated **11.3×**. **So: after deleting an implementation, sweep the
-function you are already editing before sweeping the tree** — the survivor nearest the defect is
-the one a reader's eye has already accepted.
+The constant was understated **11.3×** — and it is (a7) as well as (a6).
+
+> **SO THE SWEEP IS TWO MECHANICAL STEPS, NOT A READING.** A reading finds what the reader
+> already suspects, which is how a sweep comes out at half the true count.
+>
+> 1. **`rg` for every importer of the deleted name**, and count them. The 2b plan's Watch named
+>    two; there were four in `src/` and three more test modules.
+> 2. **Enumerate every function in the DEFINING module** and ask of each whether its subject
+>    still exists. Four more descriptions of the deleted architecture were in `memory.py` —
+>    `bytes_per_series`, `tile_bytes`, `thread_state_bytes`, `streaming_overhead_bytes` — and
+>    the worst was inside the very function the finding was about.
+>
+> **The descriptions cluster where the subject was defined**, which is exactly the region a
+> reader's eye has already accepted as understood.
+
+### (a7) A CONSTANT CHARGED AS IF IT SCALED IS A SHAPE ERROR, NOT A CONSTANT ERROR
+
+> **Before correcting a term's MAGNITUDE, verify its VARIABLES.** A term with the wrong
+> dependence produces a plausible number at the fixture's parameter values and diverges
+> everywhere else — **and fitting a coefficient to the fixture makes it worse**, because the
+> fit is now anchored at the one point where the wrong shape was right.
+
+**(a) is about a term that cancels; this is about a term that varies with the wrong thing.**
+The failure modes differ: a cancelling term is invisible to every differential check, while a
+mis-shaped term is visible to *any* check run at a second parameter value and to none run at
+one. The tell is a term whose docstring names a quantity its formula does not contain, or
+contains one the code never varies.
+
+Worked instance, Phase 2b Task 0. `memory._solver_state` charged an L-BFGS history as
+**`22 * p * 8`** — 704 B at p = 4. scipy's `_minimize_lbfgsb` allocates
+`wa = 2*m*n + 5*n + 11*m*m + 8*m` float64, and **`11*m*m` dominates: 1100 doubles that depend
+only on `maxcor` and not on the parameter count at all.** The term was wrong in its
+*dependence*: it charged per parameter for something that does not vary with parameters, and
+the whole constant came out **11.3× low**.
+
+**And it would have survived the obvious repair.** Every fixture in this project sits at
+p = 4, and every candidate the shipped registry can build has p between 1 and 4, so a
+coefficient tuned to make 704 into 11 144 at p = 4 would have read as a successful correction
+and been wrong at every other `p` — and *right* for the wrong reason at the only `p` anyone
+measures. **The question is never "is this number too small"; it is "what is this number a
+function of".**
 
 ### (b) Batch vs series
 

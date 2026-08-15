@@ -8,9 +8,10 @@ criteria met, two with reduced scope. **This plan closes those two.**
 
 1. [`docs/superpowers/notes/phase1-to-phase2-handoff.md`](../notes/phase1-to-phase2-handoff.md)
    §1 — the pre-flight. It has grown during this brainstorm and now carries **(a0), (a1),
-   (a6), (a)–(k) with (a2)–(a5), (c2), (c3), (g2), (i2)–(i8), (j2), (j3) and (k2)**, the five
-   causes of a surviving mutation, and the standing rules. **Read it there; this line is an
-   index, not a copy.**
+   (a6), (a7), (a)–(k) with (a2)–(a5), (c2), (c3), (g2), (i2)–(i8), (j2), (j3) and (k2)**, the
+   five causes of a surviving mutation, and the standing rules. **Read it there; this line is
+   an index, not a copy.** (a7) and (a4)'s third register were promoted out of Task 0,
+   2026-08-15.
 2. `PROGRESS.md`, whole file. Its 2b brainstorm section carries the reasoning behind every
    decision below; this plan carries only the decisions.
 3. Design doc §9.4, §11.1, §11.1.1, §11.3, §11.4, §11.5, §12.7, §13.3, §13.4, §15.5.
@@ -365,6 +366,27 @@ tile side.
     machine.total_ram_bytes() -> int          # now cgroup-aware
     machine.ram_basis() -> str                # "host" | "cgroup_v1" | "cgroup_v2"
     store.TileSideBasis           # StrEnum: CACHED | MEASURED | DEFAULT
+
+> **AMENDED 2026-08-15, BY THE IMPLEMENTATION.** Two deviations, both reported in
+> `PROGRESS.md` with their reasons.
+>
+> **`FloorReport` gained `peak_bytes`.** This task's bare-launcher requirement is justified in
+> the brief by watermark inheritance, which is a property of `peak_rss_bytes` alone — while the
+> recorded ladder is `current_rss`, which is neither a watermark nor inherited. The launcher is
+> still required, for the opposite reason: criterion 7 asserts **peak** RSS, so the quantity
+> Task 2 subtracts is the peak of everything that is not the tile. Both instruments ship, and
+> `peak_bytes` is floored at the largest rung because `ru_maxrss` updates lazily and was measured
+> **below** a current reading taken an instant earlier.
+>
+> **`total_ram_bytes()` and `ram_basis()` delegate to one private
+> `_resolve_total_ram() -> (int, RamBasis)`.** Two independent readers of `/sys/fs/cgroup` can
+> disagree, and provenance would then record a basis that did not produce the number beside it —
+> (a2)'s fourth fact turned around. `machine.RamBasis` is a `StrEnum`, so the `-> str` signature
+> above still holds.
+>
+> **And `run()` grew a `floor: FloorReport | None = None` seam**, on the `observed_thread_limits`
+> precedent, with `tests/conftest.py` stubbing it by default and a `real_floor` marker plus one
+> paired control exercising the measured path.
 
 **Tests, and the bug each catches.**
 

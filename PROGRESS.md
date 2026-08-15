@@ -8,16 +8,17 @@
    Tasks 0–13 — the whole sub-phase**, and open questions 1, 4, 9, 11, **12**. **The signal-term blocker carried since
    Task 6 is CLOSED**: `config.signal_spec()` builds a `SignalSpec`, `signal.k_beta` gives the
    column count, and `run()` sizes tiles, fits and writes them.
-3. **PHASE 2a IS COMPLETE. THE 2b PLAN IS APPROVED. 2b TASK 0 IS DONE. NEXT ACTION: 2b TASK 1 —
-   the floor — AND ITS FIRST STEP IS THE PRE-FLIGHT AGAINST ITS OWN BRIEF.** All sixteen 2a exit
+3. **PHASE 2a IS COMPLETE. THE 2b PLAN IS APPROVED. 2b TASKS 0 AND 1 ARE DONE. NEXT ACTION: 2b
+   TASK 2 — `block_bytes = budget − floor − headroom` and the smooth-base rounding — AND ITS
+   FIRST STEP IS THE PRE-FLIGHT AGAINST ITS OWN BRIEF.** All sixteen 2a exit
    criteria are met, two with reduced scope; **2b closes both**.
    **Read [What 2b's first tasks inherit](#what-2bs-first-tasks-inherit-2026-08-14) before
    anything else** — it carries the findings (F1–F5) that changed what 2b is, and every
    measured number 2b rests on. Then the plan.
-4. **Tests: 947 passed, measured 2026-08-15 after 2b Task 0** (940 before it). This is the only
-   statement of the **current** count; the sweep-timing series below carries a size per run
-   because **a duration without its test count is not a measurement**, which is a different fact
-   and not a restatement of this one.
+4. **Tests: 967 passed, measured 2026-08-15 after 2b Task 1** (947 after Task 0, 940 before it).
+   This is the only statement of the **current** count; the sweep-timing series below carries a
+   size per run because **a duration without its test count is not a measurement**, which is a
+   different fact and not a restatement of this one.
 5. **`pixi run test` is the full sweep and is what every end-of-task verification must run.
    It took 302–606 s across nine runs, 2026-08-12 to 2026-08-14, at 822, 845, 847, 880, 880,
    897, 910, 924 and 940 tests.** **THE ATTRIBUTION TRIGGER HAS NOW FIRED AND THE PASS IS
@@ -26,9 +27,11 @@
    test opens a doc file), came in at **777.8 s and 782.7 s — agreeing to 5 s and sitting
    176 s above 606.1 s.** The first was labelled *contaminated by concurrent load*; **the
    second was run with nothing else started and falsified that label.** Do not quote 302–606
-   as current until the pass is done. **The 2026-08-15 run after 2b Task 0 is the FIRST with
-   its machine state recorded: 1004.4 s at 947 tests, load average 7.63/6.53/5.03 before and
-   7.72/8.11/7.30 after, CPU 2299.9 MHz before and 2400.0 MHz after, 4 cores.**
+   as current until the pass is done. **Two 2026-08-15 runs are the first with their machine
+   state recorded** — after 2b Task 0, **1004.4 s at 947 tests** (load 7.63/6.53/5.03 before,
+   7.72/8.11/7.30 after; 2299.9 → 2400.0 MHz), and after 2b Task 1, **961.2 s at 967 tests**
+   (load 6.18/6.87/6.00 before, 6.78/6.19/5.94 after; 2696.1 → 1008.4 MHz). 4 cores throughout.
+   **The second is 43 s FASTER on 20 more tests**, so the +222 s step now reads as scatter.
 6. **`pixi run test-fast` deselects `slow` and is for iteration only — a green fast run is NOT
    evidence a task is done.** `pixi run test-ci` reproduces CI (`-m 'not machine'`) and is not
    evidence either, because `machine` covers exactly the tests that pin the RSS shim's units and
@@ -42,8 +45,9 @@
    only for its closing exit-criteria table.
 9. **THE METHOD IS THE PRE-FLIGHT AND IT LIVES IN EXACTLY ONE PLACE:**
    [`docs/superpowers/notes/phase1-to-phase2-handoff.md`](docs/superpowers/notes/phase1-to-phase2-handoff.md)
-   §1 — **(a0), (a1), (a6), (a)–(k) with (a2)–(a5), (c2), (c3), (g2), (i2)–(i8), (j2), (j3) and
-   (k2)**, the **five** causes of a surviving mutation, the standing rules and the fixture
+   §1 — **(a0), (a1), (a6), (a7), (a)–(k) with (a2)–(a5), (c2), (c3), (g2), (i2)–(i8), (j2),
+   (j3) and (k2)**, the **five** causes of a surviving mutation, the standing rules and the
+   fixture
    facts. **Run it against each 2b task brief before writing code** and append what it finds to
    [`docs/superpowers/notes/phase2b-preflight.md`](docs/superpowers/notes/phase2b-preflight.md),
    as every 2a task did to its own note. **Do not restate the pre-flight here** — the two
@@ -328,6 +332,138 @@ At B = 50 the difference between "the solver state is a constant" and "it is per
 B where it is resolvable the run costs hours at ~5.4 s/series. **So it is asserted as a shape and
 labelled as one**, which is the honest form and is what the plan asked for.
 
+### What Task 1 established (done 2026-08-15 — read before touching the floor, RAM or the schema)
+
+**The floor is a measured, per-run quantity and the store records which basis produced its
+side.** `memory.FloorReport` / `memory.measure_floor(*, data_uri, variable)`,
+`machine.total_ram_bytes()` / `machine.ram_basis()`, `store.TileSideBasis`,
+`store.SCHEMA_VERSION` 4.
+
+**THE LADDER, RE-MEASURED 2026-08-15 BY THE SHIPPED PROBE**, current RSS, MB — every recorded
+number is a claim to recompute, including this file's own:
+
+| rung | 2026-08-14 | 2026-08-15 |
+|---|---|---|
+| interpreter + numpy | 73.8 | 74.0 |
+| + xarray, zarr | 162.4 | 163.0 |
+| + `metamer.batch.run` | 170.7 | 171.2 |
+| + numba imported, threading layer launched | 213.9 | 214.4 |
+| + Kalman kernel warm | **221.5** | **216.9** |
+| + input open, one chunk read | — | **228.2** |
+
+**The first four rungs reproduce to under 1%. The warm rung does not, and the cause is the
+instrument rather than the machine**: the shipped probe warms with a one-series `white` fit at
+N = 16 — the smallest thing that drives `KalmanEngine.score` end to end — while the 2026-08-14
+ladder used a heavier spec. **So `post_warm_bytes` is a LOWER BOUND**, said so in the docstring
+and in the test. Tuning the warm until it reproduced 221.5 would have measured the tuning.
+
+**THE INPUT'S OWN RESIDENCY IS 11.3 MB** on a 24×4×4 store — handles, consolidated metadata and
+one decompression buffer — and it scales with the store rather than with the tile. Measured
+before the open, those bytes are charged to the tile term and `tile_side` comes out too large,
+which is the unsafe direction.
+
+**TWO INSTRUMENTS, AND THE BRIEF'S ARGUMENT FOR THE BARE LAUNCHER WAS THE WRONG ONE.** The brief
+required the launcher and justified it by watermark inheritance — **a property of
+`peak_rss_bytes` alone**, while the recorded ladder is `current_rss`, which is neither a
+watermark nor inherited. **The launcher is still required, for the opposite reason**: criterion 7
+asserts *peak* RSS and Task 2 computes `block = budget − floor − headroom`, so what must come
+out of the budget is the **peak** of everything that is not the tile. `FloorReport` therefore
+carries both — the ladder in current RSS, comparable to every recorded figure, and `peak_bytes`
+as the budget-safe number Task 2 subtracts.
+
+**AND `peak_bytes` IS FLOORED AT THE LARGEST RUNG, WHICH IS NOT BELT-AND-BRACES.** `ru_maxrss` is
+`mm->hiwater_rss` and the kernel updates it **lazily**: measured here at **227.7 MB against a
+current 228.2 MB read an instant earlier** (and previously 470.8 against 471.3). **The watermark
+can sit below a current reading from the same process**, so a floor trusting it alone subtracts
+less than the process demonstrably held.
+
+**THE VALUE AND ITS LABEL COME OUT OF ONE COMPUTATION.** The brief's interface had
+`total_ram_bytes()` and `ram_basis()` as two functions; two independent readers of
+`/sys/fs/cgroup` can disagree, and the failure is silent — provenance records **a basis that did
+not produce the number beside it**. **Deviation: one private `_resolve_total_ram() ->
+(bytes, RamBasis)`**, both public functions delegating. **That is (a2)'s fourth fact turned
+around**: the label must be produced by the thing it labels.
+
+The rule is `min(host, any readable limit)`, which handles cgroup v1's no-limit sentinel
+(`9223372036854771712`) and a generous limit by the same arithmetic rather than by naming either.
+**This machine has no limit** — `/sys/fs/cgroup/memory.max` is `max`, measured 2026-08-15, and
+`psutil` reports **16 535 728 128 B** total, **5 053 812 736 B** available today against 7.13 GB
+on 2026-08-14. **So every test here would pass against a `total_ram_bytes` that ignored cgroups
+entirely**, and the seven constructed cases are the only evidence. A test exists whose whole
+purpose is to record that.
+
+**AND IT MOVES `run_hash` INSIDE A CONTAINER.** `machine.fingerprint()` takes
+`total_ram_bytes()`, so two containers of different sizes on one host previously shared a
+fingerprint — (a2)'s third fact failing — and now do not. **A behaviour change, not a
+refinement**, and invisible on this box.
+
+**`tile_side_basis` and `SCHEMA_VERSION` 4.** Task 11's precedent exactly: a v3 store cannot
+answer *"was your side analytic, measured this session, or cached?"*, and Task 6's refusal needs
+the answer, so **its silence must be a refusal rather than a default**. The vocabulary is
+§13.4's, which predates the need for it. `DEFAULT` is the only reachable value until Task 5.
+Provenance also carries the whole floor ladder, so the 30% import-time gap is legible in a store.
+
+**THE SCHEMA-VERSION ASSERTION HAD ITS OWN DEFECT AND IT WAS THE ASSERTION.**
+`test_write.py`'s outcome-vocabulary test pinned `SCHEMA_VERSION == 3` — it had already been
+re-pointed from `== 2` — so it **failed at every bump for a reason unrelated to its subject**,
+which teaches the next author that editing the number is the fix. It now bounds (`>= 2`, the
+version that introduced the members), and the current value has one home:
+`test_store.py::test_the_schema_version_records_every_bump_and_what_it_was_for`, with the ledger
+of what each bump bought.
+
+**`run(floor=None)` MEASURES BY DEFAULT, AND THE SUITE STUBS IT — WITH A PAIRED CONTROL.** The
+probe is a child that imports numba and opens the input; there are ~80 `run()` call sites and
+almost none are about the floor, so `tests/conftest.py` carries an autouse fixture replacing
+`batch.run.measure_floor` unless a test is marked **`real_floor`**. **A default-stubbed seam is
+the (i2) hazard in person**, so it is paired: `test_memory.py` drives the real `measure_floor`
+directly, and `test_runner.py::test_a_run_measures_its_own_floor_when_none_is_supplied` carries
+the marker and asserts the **default** path produces a plausible ladder and that it is **not**
+the stub. The stub's values are round hundreds of megabytes precisely so they cannot be mistaken
+for a measurement.
+
+**Twelve mutations, all of which bite** (2026-08-15): ignore the cgroup limit; make `ram_basis`
+read independently; keep a host-only RAM reading inside `fingerprint`; drop `tile_side_basis`
+from `REQUIRED_ATTRS`; leave `SCHEMA_VERSION` at 3; record only the post-warm floor; take the
+input rung before the open; trust the watermark alone for `peak_bytes`; memoize `measure_floor`;
+ignore the probe's return code; ignore a supplied `floor`; write `CACHED` as the basis.
+
+**A RECOMPUTE COPIES THE SOURCE'S BASIS RATHER THAN CLAIMING `DEFAULT`**, which the brief did not
+consider. `--reuse-fits-from` **reads the side back** out of the source (a1) rather than deriving
+one, so the side in the new store is literally the source's and so is its provenance. Writing
+`DEFAULT` would claim this run derived it analytically when it derived nothing — and Task 6,
+comparing bases across a resume, would read a basis change that never happened. **Its test is
+(i7)-flagged in its own docstring**: nothing before Task 5 can write a basis other than
+`DEFAULT`, so "copy the source's" and "write DEFAULT" agree on every store this suite can build.
+**Task 5 owns moving that fixture off the point where the two agree.**
+
+### AND TASK 1 BROKE 2a's EXIT CRITERION 1, WHICH IS (a5) AND IS THE MOST IMPORTANT THING HERE
+
+**A per-run measurement in provenance and a byte-identity claim about the store cannot both hold
+as stated.** Criterion 1 — *"a killed and resumed run is byte-identical to a clean one"* — failed
+on 2026-08-15 with the root `zarr.json` differing and **every array, every chunk and every other
+attr identical**. The cause is correct behaviour: `floor` is **measured fresh every run and
+deliberately never cached**, so two runs of one configuration record two different byte counts.
+
+**It was invisible until the full sweep ran.** The suite stubs the probe, but criterion 1 drives
+`python -m metamer` in a subprocess, where the stub does not reach — **the third time the full
+sweep has caught what a task's own tests could not.**
+
+**The resolution keeps the criterion's force rather than its sentence.** Every file is still
+compared byte for byte, including the root document's structure; the root **attrs** are then
+compared key by key against a named `_MEASURED_ATTRS = {"floor"}`, and **the excluded key is
+asserted present in both stores**, so "excluded" cannot silently become "absent". Any other key
+that varies still fails.
+
+**The general rule, and it is worth carrying past this project:** *a measurement of the PROCESS
+cannot be part of a byte-identity claim about the RUN'S OUTPUT.* The two are different subjects.
+Where both are wanted, the measured keys are named and excluded explicitly — never dropped from
+the comparison wholesale, and never quietly removed from the store.
+
+**What Task 1 does NOT do**, so Task 2 is not surprised: **nothing subtracts the floor from the
+budget yet.** `tile_side_for` still divides the whole budget by the per-series cost. That is F1
+and it is Task 2's, deliberately — this task is a measurement with no consumer, so a wrong number
+at Task 2 has exactly one new input.
+
 ---
 
 ## Things a cold session cannot re-derive
@@ -435,6 +571,37 @@ Task 13 of 2a set and the one this series exists to keep.
 **The trigger's condition is unchanged and is now cheap to satisfy**: the next same-tree run
 decides, and every run from here carries its state, so the comparison the 2026-08-14 pair could
 not support is available the first time it is needed.
+
+**AND LOAD AVERAGE IS THE LEAST INDEPENDENT VARIABLE IN THE SET — RECORD IT ACCORDINGLY.** The
+sweep generates load, so load measured *during* a sweep is partly the sweep, and a correlation
+between "sweep duration" and "load during sweep" is guaranteed whether or not load is the
+mechanism. **The discriminating quantity is load from OTHER processes at start**, which is what
+the before-reading is for; the after-reading is context, not evidence. State which one any
+future comparison uses.
+
+**TWO CHEAP MEASUREMENTS COME BEFORE A FULL ATTRIBUTION PASS, AND THEY SPLIT THE QUESTION IN
+TWO.** *"The tests got slower"* and *"the suite got slower"* are different problems with
+different fixes, and the series could not tell them apart. **Both were run on 2026-08-15 and
+both answer.**
+
+- **`--collect-only`: 5.10 s for 966 tests — 0.5% of the sweep.** So collection and its scaling
+  are **not** the story, and the superlinear-setup hypothesis is dead.
+- **`--durations=25`: the 25 slowest account for 525.7 s of 961.2 s — 55%.** The other 942 tests
+  average **0.46 s**. So the sweep is a small number of expensive tests, and a per-module
+  attribution pass would spend its time on the 45% that is already cheap.
+
+**THE STEP ITSELF NOW LOOKS LIKE SCATTER.** After Task 1 the sweep is **961.2 s at 967 tests**
+against **1004.4 s at 947** — **43 s DOWN while adding 20 tests**, four of which spawn child
+processes and whose own standalone cost is ~65 s. A sweep that gets faster while its work grows
+is scatter, and −43 s sits inside the ±38 s same-tree disagreement already on record.
+
+**AND THE FREQUENCY READING IS A NEARLY USELESS INSTRUMENT, WHICH IS ITS OWN FINDING.** The same
+sweep read **2696 MHz before and 1008 MHz after** — a 2.7× swing inside one run. **A spot reading
+of `cpu MHz` is a sample of a quantity that varies by more than the effect being attributed**, so
+it cannot support the inference the 2026-08-14 note tried to draw from it. Keep recording it,
+because it is free, but a claim that rests on it needs a mean over the run or a throttle counter
+instead. **Load average is the surviving candidate and its before-reading is the only
+independent half** — the sweep generates its own load, so the after-reading is context.
 
 **So: 302–427 s over six runs was the range, and it is NOT current.** Treat a step inside it as
 scatter only once the pass above has explained the 176 s.
@@ -606,9 +773,11 @@ was the actual defect the leak exposed.
 | **Phase 2b implementation plan** | [`docs/superpowers/plans/2026-08-14-metamer-phase2b.md`](docs/superpowers/plans/2026-08-14-metamer-phase2b.md) — 11 tasks, 16 exit criteria, **approved 2026-08-14. Task 0 landed 2026-08-15.** Its head carries findings F1–F4, which are why 2b begins with a correction task rather than with the calibration tile |
 | **Phase 2b pre-flight, per task** | [`docs/superpowers/notes/phase2b-preflight.md`](docs/superpowers/notes/phase2b-preflight.md) — carries the pre-plan audit and Task 0's; per-task entries are appended **before** each task |
 
-**Next action:** Task 1 — the floor, `total_ram_bytes`'s cgroup branch, `tile_side_basis` and
-`SCHEMA_VERSION` 4. Its first step is the pre-flight against its own brief, appended to
-`phase2b-preflight.md`.
+**Next action:** Task 2 — `block_bytes = budget − floor − headroom`, the refusal below the floor,
+and the smooth-base rounding. Its first step is the pre-flight against its own brief, appended to
+`phase2b-preflight.md`. **It inherits three things from Task 1**: `peak_bytes` is the figure to
+subtract, the uncharged per-candidate temporaries mean the headroom must be a *fraction*, and the
+budget's `10**9`-versus-`1024**3` split is Task 2's and Task 3's to resolve.
 
 **THIS TABLE SAID "AWAITING REVIEW; NO CODE YET" WHILE THE COLD-START HEAD TWELVE HUNDRED LINES
 ABOVE SAID "APPROVED 2026-08-14".** Found at Task 0's start, 2026-08-15. Same shape as the
