@@ -38,8 +38,13 @@ INHERITS*, design doc §9.4/§11.1/§11.4, and the live code — **before** any 
 were written. It found four defects, and they are the reason this plan begins with a
 correction task rather than with the calibration tile.
 
-**Every number in this section is hand-recomputed and dated. Each is a claim to re-measure,
-not a result to transcribe.** That includes the ones this plan is built on.
+**THE MAGNITUDES LIVE IN EXACTLY ONE PLACE AND IT IS NOT HERE.** `PROGRESS.md`'s
+**What 2b's first tasks inherit** section carries every measured and hand-recomputed number
+below — the floor ladder, the formula's error terms, the tile-side cascade's site count, the
+divisor measurement, and the three closure boundaries — each dated and each a claim to
+re-measure. **This section states the structural findings**, which are verifiable by reading the
+source rather than by measuring, and points there for the sizes. Two copies of a measurement
+drift the moment one is updated; this project has paid for that four times.
 
 ### F1 — nothing maps the budget to `block_bytes`, and exit criterion 7 is unsatisfiable because of it
 
@@ -48,12 +53,10 @@ Design doc §11.1 derives the tile from **`block_bytes`**:
 `int(config.memory_budget_gb * 1024**3)` in as that argument. **So the budget *is* the block,
 and nothing in any document defines the mapping between them.**
 
-At a 1 GB budget the derived side is 338, so B = 114 244, and 114 244 × 8722 B = **996 MB of
-tile against a 1.07 GB budget — 92.8% of it.** Measured 2026-08-14, the interpreter with
-numpy, xarray, zarr and numba holds **221.5 MB** before a tile exists. Exit criterion 7
-asserts **peak RSS** at or below the budget. It is met today only because the suite fits four
-series; at any tile size where the tile is the dominant term it fails, and it fails by the
-floor rather than by the formula.
+Exit criterion 7 asserts **peak RSS** at or below the budget, and a tile sized to the whole
+budget leaves nothing for the interpreter, which holds hundreds of MB before a tile exists. The
+criterion is met today only because the suite fits four series; at any tile size where the tile
+is the dominant term it fails, and **it fails by the floor rather than by the formula**.
 
 **Settled:** `--memory-budget` bounds **process peak RSS**.
 `block_bytes = budget − floor − headroom`. A budget at or below the floor is refused, naming
@@ -64,8 +67,7 @@ the floor, its components, and a budget that would work.
 `fit.py:223` is `for b in range(batch): optimize_series(obj, y[b:b+1], mask[b:b+1], t, one, warm, max_iter)`.
 So `P`/`F`/`Q`/`P∞` and the workspace copies, the augmented row, the normal-equation
 accumulators, the optimizer workspace and the Hessian are **live for one series at a time**.
-`memory.bytes_per_series` multiplies all of it by B — **1056 B/series of 8722, 12.1%, and
-120 MB at B = 114 244**, which is 12% of a 1 GB budget the code never spends.
+`memory.bytes_per_series` multiplies all of it by B.
 
 Design doc §9.4's path-A shape `B × (… + c_A(d, k_β, p))` was correct for the **batched
 trust-region of §8.3**, which the stage-1 spike deleted (Task 19, deleted not deferred, under
@@ -86,10 +88,10 @@ each; `loglik`, `k`, **`n`**, `n_eff_bic`, `n_eff_trend` as float64; `outcome` a
 **`init_rung` as an `object` array** — one pointer per cell; and **`n_iter` as int64**, not
 the uint16 the formula charges.
 
-`out(M, p, k_β) = M(2p + 2k_β + 4)×8 + 3M` names none of the three emphasized. Hand-recomputed
-at p = 4, k_β = 4: **209 B per candidate against the formula's 163, +28%.**
+`out(M, p, k_β) = M(2p + 2k_β + 4)×8 + 3M` names none of the three emphasized.
 
 **F2 and F3 have opposite signs and partially cancel**, which is why neither has been noticed.
+That is (a) inside a sum: **verify each term, never the total.**
 That is the cancellation rule (a) inside a sum: two errors of opposite sign are invisible to
 any check on the total. **Verify each term, never the total.**
 
@@ -109,11 +111,11 @@ the code.
 
 **The consequence that keeps the distinction alive rather than deleting it:** the day a driver
 hands an engine a real batch, the engine's own workspace becomes a per-series term and **it is
-engine-dependent** — `CompiledEngine`'s `accum`, `sum_log_s`, `n_used`, `degenerate` are
-~217 B/series at k_β = 4, and a batched `KalmanEngine` would hold ~432 B/series. So the
-placement belongs in the calibration key **before** the driver that needs it exists, on Task
-16's `shared_with` precedent: *unreachable today is never a reason to leave an identity
-function incomplete.*
+engine-dependent** — `CompiledEngine` allocates `accum`, `sum_log_s`, `n_used` and `degenerate`
+per series, and a batched `KalmanEngine` would hold its `(B, d, d)` block. So the placement
+belongs in the calibration key **before** the driver that needs it exists, on Task 16's
+`shared_with` precedent: *unreachable today is never a reason to leave an identity function
+incomplete.*
 
 **And `EngineId` must not be reused for it.** `CompiledEngine.engine_id` is `EngineId.KALMAN`
 deliberately, because the two compute the same likelihood by the same recursion and must stay
@@ -123,22 +125,15 @@ same pair**, so the key carries a memory-relevant engine label of its own.
 
 ### What the four findings do to the published number
 
-`tile_side` **338** is quoted in design doc §9.4, §11.1 and §13.4, in the 2a plan, and in
-`PROGRESS.md`. Hand-recomputed at §9.4's worked example (d = 3, k_β = 4, p = 4, N = 630,
-M = 12, 1 GiB), each step a claim to measure:
+**The published `tile_side` moves, and the step-by-step recomputation is in `PROGRESS.md`'s
+inherit section.** Two properties of it belong here, because they govern how the tasks are
+read:
 
-| step | per-series | side |
-|---|---|---|
-| as published | 8722 B | 338 |
-| F3: output slots as `fit` holds them | +552 B | — |
-| F2/F4: solver state is a constant, not a slope term | −1056 B | — |
-| corrected | **≈ 8218 B** | **361** |
-| F1: floor of 221.5 MB out of the budget | — | **≈ 286** |
-| Q6: rounded down to the smooth base | — | **≈ 272** |
-
-**The side getting smaller at the same nominal budget is the correct direction and is
-expected.** It is recorded here so it is not read as a regression. This is the **fourth**
-instance of this project's design-doc cascade, and Task 9 exists so there is not a fifth.
+- **The side gets SMALLER at the same nominal budget, and that is the correct direction.**
+  Recorded so it is not read as a regression when Task 2 lands.
+- **This is the FOURTH instance of this project's design-doc cascade**, after `n_eff_*`'s
+  `[y,x]`, the output-slot `+2`, and §11.1's superseded `tile_side` formula. **Task 9 exists so
+  there is not a fifth**, and its repair is a test rather than a sweep.
 
 ---
 
@@ -283,12 +278,18 @@ first and alone.
 **Watch.** `Backend` is imported by `batch/tiling.py` and `batch/run.py`. Removing it is a
 signature change those tasks bind against, so (g) is live here rather than clean.
 
-**And this task breaks five live assertions on the published tile side** —
-`test_memory.py:582`, `test_tiling.py:188`, `test_validation.py:391` and `:429` — because they
-pin 338 and 186. **They are correct to fail.** Re-derive each expected value by hand from the
-corrected formula and record the derivation beside it; **do not paste the new number from the
-failure.** Task 9 then removes the duplication. See its site count, which was measured rather
-than assumed and is larger than a documentation sweep would suggest.
+**And this task breaks live assertions on the published tile side** — `test_memory.py:582`,
+`test_tiling.py:188`, `test_validation.py:391` and `:429` pin 338 and 186. **They are correct
+to fail.** Re-derive each expected value **by hand** from the corrected formula and record the
+derivation beside it; **do not paste the new number from the failure.** Task 9 then removes the
+duplication; its site count is in `PROGRESS.md` and is larger than a documentation sweep would
+suggest.
+
+**THE COMMIT IS NOT SPLITTABLE, AND THAT IS NOT AN EXCEPTION TO THE SEPARATE-COMMITS RULE.**
+Deleting `Backend` and fixing its two importers is **one change with a mechanical
+consequence**, not two changes that could each explain a wrong number — so the standing rule
+does not reach it. Landing the deletion without the import fixes would leave the tree
+uncompilable, which is a worse property than either half is worth.
 
 ---
 
@@ -300,16 +301,14 @@ tile side.
 **Behaviour.**
 
 - **The floor is measured post-warm, not at import.** Task 5 established that numba's threading
-  layer is invisible to `threadpool_info()` until something parallel has executed; the same
-  argument applies to its residency. **Measured 2026-08-14 behind a bare launcher on this
-  machine** (`current_rss`, MB): interpreter + numpy **73.8**; + xarray, zarr **162.4**;
-  + `metamer.batch.run` **170.7**; + numba imported and layer launched **213.9**; + Kalman
-  kernel warm **221.5**; + compiled kernel JIT-compiled **264.3**. **A floor taken at import
-  understates by 50.8 MB — 30%** — and by 54% if the compiled kernel is ever reached.
-- **Record the production floor, which is 221.5 MB and not 264.3.** Under F4 production never
-  reaches the compiled kernel. **That choice is a claim about F4** and is pinned by Task 0's
-  reachability assertion, so the floor and the assertion move together the day a batched driver
-  lands.
+  layer is invisible to `threadpool_info()` until something parallel has executed; **the same
+  argument applies to its residency.** The measured ladder is in `PROGRESS.md`'s inherit
+  section, and it confirms the hazard by measurement rather than by argument: an import-time
+  floor understates materially.
+- **Record the production floor — the WARM one, WITHOUT the compiled kernel's JIT.** Under F4
+  production never reaches the compiled kernel. **That choice is a claim about F4** and is
+  pinned by Task 0's reachability assertion, so the floor and the assertion move together the
+  day a batched driver lands.
 - **Measured with the input open.** A zarr store's handles, consolidated metadata and
   decompression buffers are resident and scale with the store rather than with the tile.
   Measuring before the open attributes them to the tile term and makes `tile_side` wrong in the
@@ -390,12 +389,11 @@ construction.
   **its consequence is asymmetric: too small kills the process, too large costs runtime.** That
   asymmetry is the justification for choosing conservatively, and it belongs in the docstring.
 - **The derived side is rounded down to a multiple of a smooth base.** Rounding down is always
-  budget-safe. **Measured 2026-08-14, and this measurement is the justification for the base
-  existing at all:** `CHUNK_TARGET_BYTES` is 4 000 000; at side **338** (= 2·13²) the divisors
-  are {1, 2, 13, 26, 169, 338}, one row of a `theta` shard at `P_total = 40` float32 is 54 080 B,
-  the target needs ≥ 74 rows, and the smallest admissible divisor is **169 — a 9.1 MB chunk,
-  2.3× the target.** At **336** (= 2⁴·3·7) it is 84 and the chunk is **4.5 MB**. **"Prefer a
-  composite side" is wrong in both directions**: 338 is composite and still bad.
+  budget-safe. **"Prefer a composite side" — this file's own earlier phrasing — is wrong in both
+  directions**: 338 is composite and still has no admissible divisor near the chunk target,
+  while its neighbour 336 does. The divisor measurement that establishes it is in `PROGRESS.md`'s
+  inherit section, and it is **the justification for the base existing at all** — without it the
+  base reads as an arbitrary constant and will be tuned away.
 - **The base is a policy constant chosen with the measured divisor structure in front of you.**
   16 gives a set dense low and sparse high; 12 is denser in the middle. **The admissible window
   decides, not elegance**, and the window differs per array. Loss to state: 338 → 336 is 1.2%
@@ -460,9 +458,9 @@ default, and the default comes from the machine.
   **within one cache key**, so the cached slope and the derived budget would disagree about what
   machine they are on.
 - **The fraction is a POLICY constant** with the same asymmetry as the headroom: too high kills
-  the process, too low costs runtime. Sanity-check the derived budget against **7.13 GB
-  available (measured 2026-08-14)**, not against PROGRESS's stale "~10 GB free", and record
-  which figure the check used.
+  the process, too low costs runtime. **Sanity-check the derived budget against this machine's
+  measured available RAM — the figure in `PROGRESS.md`'s Hardware table, not the stale "~10 GB
+  free" it replaced — and record which figure the check used.**
 - **The RESOLVED value reaches `run_hash`; the request is recorded separately.** The `None` must
   not reach the payload. **The same config file therefore yields different `run_hash`es on two
   machines — correct, and stated so it does not read as nondeterminism.** `memory_budget_gb`
@@ -702,7 +700,7 @@ calibration assumes is established once and pinned.
   measurement of F2's magnitude, not a second opinion** — stating it in advance is what stops
   someone reconciling them.
 - Marked `slow` and `machine`. **Cost estimate, to be re-measured:** B ≈ 3 000–12 000 keeps the
-  tile term resolvable at ~50 MB against the 221.5 MB floor, for roughly 1.5 h.
+  tile term resolvable at ~50 MB against the measured floor, for roughly 1.5 h.
 
 **Tests, and the bug each catches.**
 
@@ -728,8 +726,8 @@ subject.
   a 10⁴-point grid at the same budget. **PROGRESS's stated closer — "one run at 10⁶–10⁷ points" —
   is the wrong quantity for two of the three claims**, and that is why the criterion looked
   unclosable and is not. The three claims decompose:
-  - **Peak under a budget.** One capped run at side ≥ 192 under a 0.5 GiB budget, against 7.13 GB
-    available — *well below*, as the criterion asks. ~1.7 h.
+  - **Peak under a budget.** One capped run at side ≥ 192 under a 0.5 GiB budget, which is *well
+    below* this machine's measured available RAM, as the criterion asks. ~1.7 h.
   - **The slope against the formula.** Task 7.
   - **No accumulation across tiles.** This is the only one that genuinely needs grid size, and it
     has an instrument nobody had noticed: **`--reuse-fits-from` is the tile loop with the fit
@@ -746,13 +744,12 @@ subject.
 - **One budget below the floor is in the test set**, asserting Task 2's refusal. The boundary is
   cheap to test and it is the one a user with 16 GB and a large model will actually hit.
 - **The three boundaries are recorded as measured numbers with instruments named**, which is what
-  makes this a specification rather than a hedge:
-
-  | not established | number | instrument that would close it | machine |
-  |---|---|---|---|
-  | a converged fit at memory-relevant B | 5.4 s/series × 57 000 = **86 h** | the production path, uncapped | none — not runnable anywhere |
-  | the per-thread placement | — | a batched driver over series (F4); landing condition recorded | any, once it exists |
-  | a 10⁷-point run | 5.4 s/series × 10⁷ = 5.4e7 s ÷ 3.156e7 s/yr = **1.71 years** here, single-threaded | the production path at scale; §9.3's 10 h is a **64-core claim, unverified on any machine** | the 64-core box, whose RAM is still open question 5 |
+  makes this a specification rather than a hedge. **The numbers, the arithmetic and the
+  unverified §9.3 gap live in `PROGRESS.md`'s
+  [what 2b's first tasks inherit](../../../PROGRESS.md) section and are not restated here** — one
+  home per measurement, which is the rule this sub-phase's own cascade exists to teach. What
+  this task owes is that each boundary is written down **with the instrument that would close it
+  and the machine that could run it**, so "reduced scope" is a specification rather than a hedge.
 
 **Tests, and the bug each catches.**
 
@@ -777,24 +774,17 @@ a test recomputes it.
 7 has run; amending the sites to a number that then moves again is the cascade repeating at
 higher speed.
 
-**THE SPREAD WAS COUNTED, 2026-08-14, AND IT IS NOT FIVE DOCUMENTS.** `rg '\b338\b'` returns:
+**THE SPREAD WAS COUNTED RATHER THAN ESTIMATED, AND IT IS NOT FIVE DOCUMENTS.** The count, by
+category, is in `PROGRESS.md`'s inherit section — four categories, twenty-plus occurrences,
+including **five source docstrings** and **live test assertions**, and **§9.4 is not among them
+because it quotes 339**, the model figure.
 
-| where | occurrences | kind |
-|---|---|---|
-| design doc **§2.5, §11.1 (×2), §13.4** | 4 | prose. **§9.4 is NOT among them — it quotes 339**, the model, and 338 is the resident figure |
-| `src/metamer/core/memory.py:283`, `src/metamer/batch/tiling.py` (×4) | 5 | **source docstrings** |
-| `tests/test_memory.py`, `test_tiling.py`, `test_validation.py`, `test_store.py` | 13 | **five are live assertions**, the rest fixture values and docstrings |
-| 2a plan | 1 | prose |
-| `PROGRESS.md` | 13 | prose |
-
-**So the correction breaks tests, and that is the tests working.** `test_memory.py:582`
-(`tile_side(10**9, resident) == 338`), `test_tiling.py:188`, and `test_validation.py:391`/`:429`
-(`== [338, 186]`, reached through the per-point layer-3 refusal) all pin the old number.
-**This is (i5) and the repair must be named in advance**: when those assertions will not go
-green, the thing that would have to change is *the published constant*, and the correct move is
-to **re-derive the expected value by hand and record the derivation beside it** — never to paste
-the new number from the failure, which is the discipline the three `GOLDEN_*` constants already
-carry.
+**THE (i5) REPAIR IS MANDATORY, NOT ADVISORY, AND THIS IS THE ONE PLACE IN THIS PLAN WHERE THE
+TEMPTING FIX IS BOTH EASY AND UNDETECTABLE.** When those assertions will not go green, the thing
+that would have to change is *the published constant*. **Re-derive every expected value by hand
+from the corrected formula and record the derivation beside it. Never paste a number from the
+failure** — the same discipline the three `GOLDEN_*` constants carry, and for the same reason: a
+value copied from a failing run proves only that the code agrees with itself.
 
 **Behaviour.**
 

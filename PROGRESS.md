@@ -8,36 +8,36 @@
    Tasks 0–13 — the whole sub-phase**, and open questions 1, 4, 9, 11, **12**. **The signal-term blocker carried since
    Task 6 is CLOSED**: `config.signal_spec()` builds a `SignalSpec`, `signal.k_beta` gives the
    column count, and `run()` sizes tiles, fits and writes them.
-3. **PHASE 2a IS COMPLETE. NEXT: sub-phase 2b — the memory formula, the floor, the calibration
-   tile and `--memory-budget`.** The brainstorm is done and
-   **[the 2b plan exists](docs/superpowers/plans/2026-08-14-metamer-phase2b.md)** — 11 tasks,
-   16 exit criteria, **awaiting review; no code yet.** Read
-   **[WHAT SUB-PHASE 2b INHERITS](#what-sub-phase-2b-inherits--read-this-before-the-task-sections-below)**
-   and then the **[2b brainstorm section](#phase-2b-brainstorm--settled-decisions-2026-08-14)**,
-   which carries four findings (F1–F4) that changed what 2b is. All sixteen 2a exit criteria
-   are met, two with reduced scope; the table is at the end of the 2a plan, and **2b closes
-   both**.
-4. **Tests: 940 passed, measured 2026-08-14 after Task 13.** This is the only statement of the
-   count in this file; do not restate it elsewhere.
+3. **PHASE 2a IS COMPLETE. THE 2b PLAN IS APPROVED. NEXT ACTION: 2b TASK 0 — the memory formula
+   corrected — AND ITS FIRST STEP IS THE PRE-FLIGHT AGAINST ITS OWN BRIEF.** No 2b code has been
+   written. All sixteen 2a exit criteria are met, two with reduced scope; **2b closes both**.
+   **Read [What 2b's first tasks inherit](#what-2bs-first-tasks-inherit-2026-08-14) before
+   anything else** — it carries the four findings (F1–F4) that changed what 2b is, and every
+   measured number 2b rests on. Then the plan.
+4. **Tests: 940 passed, measured 2026-08-14 after Task 13, and re-run green on 2026-08-14 after
+   the 2b plan landed.** This is the only statement of the **current** count; the sweep-timing
+   series below carries a size per run because **a duration without its test count is not a
+   measurement**, which is a different fact and not a restatement of this one.
 5. **`pixi run test` is the full sweep and is what every end-of-task verification must run.
-   It takes 302–606 s on the mini PC — nine runs, 2026-08-12 to 2026-08-14, at 822, 845,
-   847, 880, 880, 897, 910, 924 and 940 tests.** Quote the range, never one end of it; see
-   the note below, which includes **two runs of the identical tree 38 s apart** and one step
-   that is only two-thirds attributed. **A tenth run, 2026-08-14, came in at 777.8 s at 940
-   tests on a byte-identical test tree — and is DELIBERATELY EXCLUDED from the range**,
-   because `typecheck`, `lint`, `pre-commit --all-files` and a subprocess RSS probe were
-   running concurrently. **It is recorded rather than dropped, and it does not fire the
-   attribution trigger**: a contaminated measurement labelled at the time is worth more than
-   a clean-looking one whose confound is discovered later.
+   It took 302–606 s across nine runs, 2026-08-12 to 2026-08-14, at 822, 845, 847, 880, 880,
+   897, 910, 924 and 940 tests.** **THE ATTRIBUTION TRIGGER HAS NOW FIRED AND THE PASS IS
+   OWED — see [the sweep-timing note](#things-a-cold-session-cannot-re-derive).** Two further
+   runs on 2026-08-14, on a **byte-identical test tree** (the 2b work is markdown only, and no
+   test opens a doc file), came in at **777.8 s and 782.7 s — agreeing to 5 s and sitting
+   176 s above 606.1 s.** The first was labelled *contaminated by concurrent load*; **the
+   second was run with nothing else started and falsified that label.** Do not quote 302–606
+   as current until the pass is done.
 6. **`pixi run test-fast` deselects `slow` and is for iteration only — a green fast run is NOT
    evidence a task is done.** `pixi run test-ci` reproduces CI (`-m 'not machine'`) and is not
    evidence either, because `machine` covers exactly the tests that pin the RSS shim's units and
    the per-core bandwidth claim.
 7. **Verify a fresh checkout with `pixi run test && pixi run typecheck && pixi run lint`**, plus
    `pixi run pre-commit run --all-files` before every commit.
-8. **The plan:**
-   [`docs/superpowers/plans/2026-08-11-metamer-phase2a.md`](docs/superpowers/plans/2026-08-11-metamer-phase2a.md)
-   — 14 tasks, dependencies, sixteen exit criteria.
+8. **The plan is
+   [`docs/superpowers/plans/2026-08-14-metamer-phase2b.md`](docs/superpowers/plans/2026-08-14-metamer-phase2b.md)**
+   — 11 tasks, dependencies, 16 exit criteria, **approved 2026-08-14**. Its predecessor,
+   [the 2a plan](docs/superpowers/plans/2026-08-11-metamer-phase2a.md), is complete and is read
+   only for its closing exit-criteria table.
 9. **THE METHOD IS THE PRE-FLIGHT AND IT LIVES IN EXACTLY ONE PLACE:**
    [`docs/superpowers/notes/phase1-to-phase2-handoff.md`](docs/superpowers/notes/phase1-to-phase2-handoff.md)
    §1 — **(a0), (a1), (a6), (a)–(k) with (a2)–(a5), (c2), (c3), (g2), (i2)–(i8), (j2), (j3) and
@@ -48,6 +48,148 @@
    copies drifted once already.
 10. **Precedence: the design doc is authoritative on INTENT; a measured, dated number supersedes
     an unmeasured one wherever it lives, including in the design doc.** Full statement below.
+
+---
+
+## What 2b's first tasks inherit (2026-08-14)
+
+**THE ONE HOME FOR EVERY MEASURED AND HAND-RECOMPUTED NUMBER 2b RESTS ON.** The plan states the
+decisions and the structural findings and **points here for the sizes**; nothing below is
+restated there. Two copies of a measurement drift the moment one is updated, and this project
+has paid for that four times.
+
+**Every number here is dated and is a claim to RE-MEASURE, not a result to transcribe** —
+including the ones taken during the brainstorm that produced the plan.
+
+### The four findings, and their magnitudes
+
+The pre-flight was run against 2b's **inherited brief** before any task was written. All four
+are structural claims about the live code, verifiable by reading it; the magnitudes are
+arithmetic over the formula and were hand-recomputed on 2026-08-14.
+
+| # | finding | magnitude |
+|---|---|---|
+| **F1** | `run.py:348` passes the budget in as `block_bytes`; **no document defines the mapping** | at a 1 GB budget the tile is **996 MB, 92.8% of it**, against a **221.5 MB** floor. Exit criterion 7 asserts *peak RSS* and is unsatisfiable wherever the tile dominates |
+| **F2** | `memory.bytes_per_series` multiplies solver state by B; `fit.py:223` loops one series at a time. The formula describes §8.3's batched trust-region, **deleted at Task 19** | **1056 B/series of 8722 — 12.1%, and 120 MB at B = 114 244** |
+| **F3** | the output-slot term omits `theta_unconstrained`, `n`, an object-array `init_rung` pointer, and an int64 (not uint16) `n_iter` | **209 B/candidate against the formula's 163, +28%** |
+| **F4** | `CompiledEngine` pranges over the one series `fit` hands it, so **B = 1**; both `Backend` values describe unbuilt architectures | corrected, the two placements differ **in a constant, not in the slope** |
+
+**F2 and F3 have opposite signs and partially cancel**, which is why neither was noticed and why
+the total sat within 0.5% of a measurement while **neither term was right**. Verify each term,
+never the total.
+
+**And F2's validating measurement drove a different workload.**
+`memory.measure_evaluation_rss_slope` calls `unconstrained_loglik` on a **batch of B**, which
+genuinely holds `B × (d²…)`. The agreement — 8471 B/series measured against a 6382 B floor,
+ratio **1.33**, inside the then one-sided ~1.5× band — was read as confirmation. **(j2).**
+
+### The floor, measured 2026-08-14 behind a bare launcher
+
+`current_rss`, MB, on the mini PC. **This ladder is the only statement of these numbers.**
+
+| stage | current | Δ |
+|---|---|---|
+| interpreter + numpy | 73.8 | — |
+| + xarray, zarr | 162.4 | +88.6 |
+| + `metamer.batch.run` | 170.7 | +8.3 |
+| + numba imported, threading layer launched | 213.9 | +43.2 |
+| + Kalman kernel warm | **221.5** | +7.6 |
+| + compiled kernel JIT-compiled | 264.3 | +42.8 |
+
+- **An import-time floor understates by 50.8 MB — 30%** — and by 54% if the compiled kernel is
+  reached. Task 5's finding about numba's threading layer being invisible until something
+  parallel has run **applies to its residency too**, and this is the measurement of it.
+- **221.5 is the recorded production floor, not 264.3**, because under F4 production never
+  reaches the compiled kernel. **That is a claim about F4**, pinned by the same reachability
+  assertion, so the two move together the day a batched driver lands.
+- **This floor still excludes the input open**, so it is a lower bound.
+- **numba costs 43.2 MB — a fifth of the floor — for an observation of a backend production
+  never runs.** **NOT TO BE "FIXED".** Task 5 established the layer is invisible until something
+  parallel has executed and the check is load-bearing for §11.3's determinism preconditions.
+  Recorded as a measured, accepted cost **with its justification, or someone reclaims the memory
+  and silently loses the precondition.**
+
+### The machine
+
+**The RAM figures are in the [Hardware](#hardware) table, once.** What matters for 2b is what
+they mean: **total is a machine property** and is what the `--memory-budget` default reads,
+while **available is a session measurement that varies**, so it is dated and re-measured rather
+than quoted. And `/sys/fs/cgroup/memory.max` is `max` here — **no container limit** — so this
+box **cannot exercise the cgroup branch** `machine.total_ram_bytes` acquires at Task 1, and that
+test must be **constructed**. Same shape as `choose_core_count` (no SMT here) and `library_table`
+(one OpenBLAS here).
+
+### The divisor measurement that justifies the smooth base
+
+`store.CHUNK_TARGET_BYTES` is **4 000 000**. At `tile_side = 338` (= 2·13²) the divisors are
+**{1, 2, 13, 26, 169, 338}**; one row of a `theta` shard at `P_total = 40` float32 is
+338 × 40 × 4 = **54 080 B**, so the target needs ≥ 74 rows and the smallest admissible divisor is
+**169 — a 9.1 MB chunk, 2.3× the target**. At **336** (= 2⁴·3·7) it is **84**, giving **4.5 MB**.
+
+**"Prefer a composite tile side" — this file's own earlier phrasing — is wrong in both
+directions**: 338 is composite and still bad, and the property actually wanted is a **divisor
+inside the admissible window**, which differs per array. Rounding loss at the base: 338 → 336 is
+**1.2% of area**.
+
+### The published tile side moves, and it is the FOURTH cascade
+
+Hand-recomputed at §9.4's worked example (d = 3, k_β = 4, p = 4, N = 630, M = 12, 1 GiB), each
+step a claim to measure:
+
+| step | per-series | side |
+|---|---|---|
+| as published | 8722 B | **338** |
+| F3: output slots as `fit` holds them | +552 B | — |
+| F2/F4: solver state is a constant, not a slope term | −1056 B | — |
+| corrected | **≈ 8218 B** | **361** |
+| F1: the floor comes out of the budget | — | **≈ 286** |
+| the smooth-base rounding | — | **≈ 272** |
+
+**The side getting smaller at the same nominal budget is the correct direction and is expected.**
+
+**THE SPREAD WAS COUNTED, NOT ESTIMATED.** `rg '\b338\b'`, four categories, twenty-plus
+occurrences: design doc **§2.5, §11.1 ×2, §13.4** — **and NOT §9.4, which quotes 339**, the model
+figure, so the section everyone cites for this number does not contain it; **five source
+docstrings** in `core/memory.py` and `batch/tiling.py`; **13 occurrences across four test
+modules, five of them live assertions** (`test_memory.py:582`, `test_tiling.py:188`,
+`test_validation.py:391` and `:429`); the 2a plan; and this file.
+
+**So the correction fails tests, and that is the tests working.** **(i5), and the repair is
+MANDATORY rather than advisory**: the thing that would have to change to make them green is the
+published constant, so **re-derive every expected value by hand and record the derivation beside
+it — never paste one from the failure.** The `GOLDEN_*` constants carry the same discipline for
+the same reason. **The source docstrings are the half a documentation sweep misses**, and
+`tiling.py`'s is what a tiling implementer reads first — the position §11.1 held when it carried
+the superseded 445.
+
+### The three closure boundaries, with instruments and machines
+
+What 2b will **not** establish, stated as a specification rather than as a hedge.
+
+| not established | number | instrument that would close it | machine |
+|---|---|---|---|
+| a converged fit at a memory-relevant B | 5.4 s/series × 57 000 = **85.5 h** | the production path, uncapped | **none — not runnable anywhere** |
+| the per-thread placement | — | a batched driver over series (F4); its landing condition is recorded in the plan | any, once it exists |
+| a 10⁷-point run | 5.4 s/series × 10⁷ = 5.4e7 s = **1.71 years** single-threaded here (**15 000 h**) | the production path at scale | the 64-core box, whose RAM is **still open question 5** |
+
+**THE §9.3 GAP, NOW STATED RATHER THAN IMPLICIT.** 15 000 h here against §9.3's **10 h on 64
+cores** is a required wall-clock speedup of **≈ 1 500×**. Accounted for: **64 cores (64×) × path
+B (measured 3.07–4.39, call it 4×) = 256×.** **The residual is ≈ 5.9×**, and it must come from
+per-core speed — this box is an Intel N95, and a server core being 2–3× faster covers much but
+not obviously all of it. **§9.3's 10 h is unverified on any machine**, and this is the gap a
+64-core measurement would test.
+
+**AND THE COMPARISON RESTS ON A FIGURE QUOTED WITHOUT ITS PRECONDITIONS.** *"`fit` costs ~5.4 s
+per series"* appears in **seven documents and in `batch/threads.py`**, and **not one of them
+states the candidate count or N.** §9.3's budget is per *series-model fit* at M = 12, so the
+comparison above assumes the 5.4 s covered a comparable M. **If it covered fewer, the residual
+gap is worse in proportion.** Pin M and N against that measurement before quoting the gap as
+settled.
+
+**A number in a report is as unverified as one in a brief.** The 10⁷ boundary was first written
+as *"≈ 1712 years"* — wrong by 10³ — and accepted by both author and reviewer, because nothing
+either of them disputed was riding on it. The corrected figure is what makes the §9.3 gap a
+question worth asking at all. **(a4)'s review-side instance, in the handoff.**
 
 ---
 
@@ -103,7 +245,35 @@ plausibly the suite's ten subprocesses — each importing numpy, xarray and zarr
 under a loaded sweep than alone, and it is **recorded as unattributed rather than explained
 away**. The trigger stands: the next same-tree run decides whether it was scatter.
 
-**So: quote the range — 302–427 s over six runs — and treat a step inside it as scatter.**
+**THE TRIGGER FIRED ON 2026-08-14 AND THE ATTRIBUTION PASS IS OWED. Read this before quoting
+any range.** Two sweeps of a **byte-identical test tree** — the 2b planning work is markdown
+only, and no test opens a doc file — came in at **777.8 s and 782.7 s, agreeing to 5 s, against
+the 606.1 s recorded for the same tree hours earlier.** That is **+176 s, four and a half times
+the 38 s same-tree disagreement that retired the old time band**, and it is the condition the
+replacement trigger names.
+
+**AND THE FIRST EXPLANATION WAS WRONG, WHICH IS WHY THE SECOND MEASUREMENT MATTERED.** The
+777.8 s run was labelled *contaminated by concurrent load* — `typecheck`, `lint`, `pre-commit`
+and a subprocess RSS probe had run alongside it. **The 782.7 s run was taken with nothing else
+started and reproduced it to 5 s.** A labelled confound is a hypothesis, and this one was
+falsified by the cheapest possible test. **Do not restore the label.**
+
+**WHAT IS MEASURED, AND WHAT IS NOT.** Measured immediately after the second run: **load average
+5.48 over fifteen minutes on a 4-core box**, and **CPU frequency ~1.31 GHz against the N95's
+1.7 GHz base** — the machine is running *below base clock*. **Whether it was in that state when
+606.1 s was recorded is written down nowhere**, and that is the actual defect: **the sweep-timing
+series records a duration and a test count and never the machine's state.** It is a measurement
+without its preconditions, the same class as *"`fit` costs ~5.4 s per series"* carrying neither
+its candidate count nor its N.
+
+**What the pass must do, and it is not a per-module timing run first.** Re-measure the same tree
+with the machine's state recorded — load average, CPU frequency, thermal state — and only then
+decompose per module if the state does not account for it. **Recording the state alongside every
+future sweep duration is the cheap half and should land regardless**, because without it the next
+step is unattributable in exactly this way.
+
+**So: 302–427 s over six runs was the range, and it is NOT current.** Treat a step inside it as
+scatter only once the pass above has explained the 176 s.
 The estimate was wrong the same way the verdict's ±0.15 was wrong — **two points do not bound
 a spread**, and the second point being *lower* made the estimate look conservative when it was
 not. **THE ATTRIBUTION-PASS TRIGGER IS RETIRED AS A TIME BAND**, because the band was set from
@@ -153,6 +323,7 @@ was the actual defect the leak exposed.
 | **10** | macOS and Windows support | deciding what RSS accounting *means* there (peak vs current; `ru_maxrss` has no Windows equivalent), then a green run on both. What failed was never the library — it was `test_memory.py`'s RSS assertions and `test_bench.py`'s hard-coded `threads=4` against a 3-core runner |
 | **13** | the packaging guard installs `--no-deps`, so a **wrong version floor** is uncaught | an offline wheelhouse: `pip wheel` the resolved set once, install `metamer[batch]` with `--no-index --find-links`. Needs pip in the environment and a decision about where the wheelhouse lives. **Do not close it by loosening the floors** — an untested lower bound is the thing being guarded |
 | **14** | the benchmarks use a synthetic axis with `unique_dt = 1`; real monthly data has **6** | run the spike with a realistic calendar axis beside the synthetic one at the same B and thread count. **"It plausibly cancels in the ratio" is the reasoning that has failed twice** — measure it. A fixture change, not a harness change |
+| **15** | **the sweep is 176 s slower on a byte-identical tree** (777.8 and 782.7 s against 606.1 s, 2026-08-14), and the sweep-timing series **records no machine state**, so nothing can attribute it | re-measure the same tree recording load average, CPU frequency and thermal state — the box was at **~1.31 GHz against a 1.7 GHz base** and load 5.48 on 4 cores when the two slow runs were taken. Decompose per module only if state does not account for it. **Record state alongside every future duration regardless** |
 
 ---
 
@@ -525,7 +696,7 @@ Per-task pre-flight audits live in
 [`docs/superpowers/notes/phase2a-preflight.md`](docs/superpowers/notes/phase2a-preflight.md).
 Only the durable conclusions are here.
 
-### WHAT SUB-PHASE 2b INHERITS — read this before the task sections below
+### WHAT 2a HANDED TO 2b — superseded in part; read the cold-start section first
 
 **PHASE 2a IS COMPLETE.** Tasks 0–13 are done and all sixteen exit criteria are met, two of
 them with reduced scope — the closing table is at the end of the 2a plan, with what would
@@ -1662,25 +1833,9 @@ the third executable. The pre-flight now reads **(a)–(k) with (a2), (a3) and (
 which is what a cold session cannot re-derive.** F1–F4 are stated in full at the plan's head
 and are not repeated here — only what follows from them.
 
-### The four findings, in one line each
-
-The pre-flight was run against 2b's **inherited brief** before any task was written, and it is
-why 2b begins with a correction task rather than with the calibration tile.
-
-- **F1** — `run.py:348` passes the budget in as `block_bytes`, and **nothing in any document
-  defines the mapping between them**. At a 1 GB budget the tile is 996 MB, 92.8% of it, and the
-  floor is 221.5 MB. **Exit criterion 7 asserts peak RSS and is unsatisfiable at any tile size
-  where the tile dominates.**
-- **F2** — `memory.bytes_per_series` multiplies the solver state by B while `fit.py:223` loops
-  one series at a time: **1056 B/series, 120 MB at B = 114 244.** The formula describes §8.3's
-  batched trust-region, **deleted at Task 19**. And the measurement that validated it drove a
-  **batched evaluation**, which genuinely holds `B × (d²…)`.
-- **F3** — the output-slot term omits `theta_unconstrained`, `n`, an object-array `init_rung`
-  pointer and an int64 `n_iter`: **209 B/candidate against 163, +28%.**
-- **F4** — `CompiledEngine` pranges over the `y[b:b+1]` it is handed, so **B = 1**: two engines,
-  one production shape, and both `Backend` values describe unbuilt architectures.
-
-**F2 and F3 have opposite signs and partially cancel, which is why neither was noticed.**
+**The four findings and every magnitude are in
+[What 2b's first tasks inherit](#what-2bs-first-tasks-inherit-2026-08-14)** and are not repeated
+here. This section carries the **decisions** and the reasoning behind them.
 
 ### What was promoted, and it is in the handoff rather than here
 
@@ -1760,53 +1915,13 @@ defects; and **two changes that could each explain a wrong result land in separa
   which basis produced its side. **2a-written stores will not resume**; harmless now for the same
   reason the 2026-08-07 golden regeneration was.
 
-### The floor, measured 2026-08-14 behind a bare launcher
+### Where the numbers live
 
-`current_rss`, MB, on the mini PC:
-
-| stage | current | Δ |
-|---|---|---|
-| interpreter + numpy | 73.8 | — |
-| + xarray, zarr | 162.4 | +88.6 |
-| + `metamer.batch.run` | 170.7 | +8.3 |
-| + numba imported, threading layer launched | 213.9 | +43.2 |
-| + Kalman kernel warm | 221.5 | +7.6 |
-| + compiled kernel JIT-compiled | 264.3 | +42.8 |
-
-**A floor taken at import understates by 50.8 MB — 30%** — and by 54% if the compiled kernel is
-reached. **The production floor is 221.5, not 264.3**, because under F4 production never reaches
-the compiled kernel; **that is a claim about F4** and is pinned by the same reachability
-assertion, so the two move together. **This floor still excludes the input open**, so it is a
-lower bound.
-
-**numba costs 43.2 MB — a fifth of the floor — for an observation of a backend production never
-runs.** Not to be "fixed": Task 5 established the layer is invisible until something parallel has
-executed, and the check is load-bearing for §11.3's determinism preconditions. **Recorded as a
-measured, accepted cost with its justification, or someone reclaims the memory and silently
-loses the precondition.**
-
-### The published tile side moves, and it is the FOURTH cascade
-
-Hand-recomputed at §9.4's worked example, each step a claim to measure: **8722 → 8218 B/series**
-(F3 +552, F2/F4 −1056), so the side goes **338 → 361**, then **≈ 286** once F1's floor comes out
-of the budget, then **≈ 272** after Q6's rounding.
-
-**THE SPREAD WAS COUNTED RATHER THAN ESTIMATED, 2026-08-14, AND "five documents" WAS WRONG
-TWICE.** `rg '\b338\b'`: design doc **§2.5, §11.1 ×2, §13.4** — and **not §9.4, which quotes
-339**, the model figure, so the section everyone cites for this number does not contain it;
-**five source docstrings** in `core/memory.py` and `batch/tiling.py`; **13 occurrences across
-four test modules, five of them live assertions** (`test_memory.py:582`, `test_tiling.py:188`,
-`test_validation.py:391` and `:429`); the 2a plan; and this file, 13 times.
-
-**So the correction fails tests, and that is the tests working.** Per (i5), the repair is named
-in advance: the thing that would have to change is the published constant, so **re-derive each
-expected value by hand and record the derivation beside it** — never paste it from the failure,
-which is the discipline the three `GOLDEN_*` constants already carry. **The source docstrings are
-the half a documentation sweep misses**, and `tiling.py`'s is what a tiling implementer reads
-first — the position §11.1 held when it carried the superseded 445.
-
-Plan Task 9 amends every site **after** the floor is measured, states the number **once with its
-derivation and its preconditions**, and adds the only durable fix: **a test asserting the
+**The floor ladder, the machine's RAM and cgroup state, the divisor measurement, the tile-side
+cascade and the three closure boundaries are all in
+[What 2b's first tasks inherit](#what-2bs-first-tasks-inherit-2026-08-14), once each.** Plan
+Task 9 amends every cascade site **after** the floor is measured, states the number **once with
+its derivation and its preconditions**, and adds the only durable fix: **a test asserting the
 documented number equals `tile_side_for` of its documented inputs.**
 
 ---
@@ -3447,12 +3562,8 @@ cannot reconstruct them.
 | Ubuntu mini PC — 4 slow cores, **16.54 GB total / 7.13 GB available, measured 2026-08-14** | {1, 4} | primary development; correctness, oracles, memory formula. **Cannot answer the budget question.** |
 
 **The RAM figures replace "16 GB RAM (~10 GB free)", which was undated and wrong on the half
-that matters.** Total is a **machine property** and is what the `--memory-budget` default
-reads; **available is a session measurement and varies**, so it is dated and must be
-re-measured rather than quoted. `/sys/fs/cgroup/memory.max` is `max` here — **no container
-limit**, measured 2026-08-14 — so this box cannot exercise the cgroup branch that
-`machine.total_ram_bytes` acquires in 2b, and its test is therefore constructed. Same shape as
-`choose_core_count` (no SMT here) and `library_table` (one OpenBLAS here).
+that matters.** What total-versus-available means here, and the cgroup state, are in
+[What 2b's first tasks inherit](#what-2bs-first-tasks-inherit-2026-08-14) and are not repeated.
 | Linux box, 64 cores (RAM unknown — establish before use) | {1, 4, full} | **the decisive measurement**; only valid place for the 19 ms budget comparison |
 | Apple Silicon MacBook, 32 GB | {1, full} | adversarial case for path A; arm64 smoke test |
 | SkyPilot via a forthcoming `cloudify` skill | — | future; design doc §15.5 |

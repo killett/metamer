@@ -259,6 +259,26 @@ paragraph exists to prevent**, committed in its own example. (`4 + 6` is not 10 
 that went unread too.) It survived three documents and two prior audits because both 4 and
 10 are plausible sizes for that axis.
 
+#### AND THE SAME RULE ON THE REVIEW SIDE: A NUMBER IN A REPORT IS AS UNVERIFIED AS ONE IN A BRIEF
+
+> **Recompute the arithmetic in a report before accepting its conclusion.** A reviewer who
+> checks a brief's worked examples and not the implementer's own figures has applied (a4) to
+> one half of the work. **The reviewer's job includes the arithmetic**, and a number that
+> arrives inside an otherwise-careful argument is the one least likely to be checked.
+
+Worked instance, Phase 2b, 2026-08-14, **found by the author on a second pass and not by the
+review**. A closure boundary was reported as *"5.4 s/series × 10⁷ ≈ 1712 years"*; it is
+**5.4e7 s ÷ 3.156e7 s/yr = 1.71 years**, wrong by 10³, and it was accepted as a measured
+boundary by both sides of the review.
+
+**The correction changed what the boundary meant**, which is why it mattered rather than being
+a typo: 1712 years is absurd and closes the question, while **1.7 years is merely infeasible**,
+and infeasible invites the comparison that absurd does not — see the §9.3 speedup gap recorded
+in `PROGRESS.md`, which is now a stated, unverified claim instead of an unasked question.
+
+**The tell is a figure that supports a conclusion nobody disputes.** Nothing was riding on
+whether the number was 1.7 or 1712, so neither reader had a reason to divide.
+
 ### (a5) CROSS-CHECK A BRIEF'S REQUIREMENTS AGAINST ITS OWN CONSTRAINTS
 
 > **A requirement and the constraint that forbids it can sit paragraphs apart and both read
