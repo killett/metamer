@@ -82,7 +82,20 @@ _GOLDEN_TOML = """
     signal_terms = ["constant", "trend", "annual"]
     candidates = ["white", "white + matern12"]
     criteria = ["aic", "hqic"]
+    memory_budget_gb = 1.0
 """
+"""The golden config. **The budget is named explicitly since Phase 2b Task 3.**
+
+It has no effect on either golden payload above -- `memory_budget_gb` is in
+neither allowlist, which the goldens themselves demonstrate by not moving -- and
+it is here because the field became `float | None` with `None` meaning *the
+config did not say*. An unresolved config has no `run_hash`, and this module's
+`run_hash` tests are about other fields entirely; naming the budget keeps them
+about their own subjects. The omitted case has its own test.
+"""
+
+_UNSET_BUDGET_TOML = _GOLDEN_TOML.replace("memory_budget_gb = 1.0", "")
+"""The same config with the budget omitted -- the unset sentinel's fixture."""
 
 
 def _write(tmp_path: Path, text: str, name: str = "config.toml") -> Path:
@@ -167,6 +180,7 @@ def test_comments_key_order_and_explicit_defaults_do_not_move_a_hash(tmp_path):
             tmp_path,
             """
             criteria = ["aic", "hqic"]
+            memory_budget_gb = 1.0
             variable = "sla"
             candidates = ["white", "white + matern12"]
             signal_terms = ["constant", "trend", "annual"]
@@ -187,6 +201,12 @@ def test_comments_key_order_and_explicit_defaults_do_not_move_a_hash(tmp_path):
             objective = "ml"
             seed = 0
             engine = "kalman"
+            # NOT a spelling of the default, and that is the point: since Phase
+            # 2b Task 3 `memory_budget_gb` has no declared default, so omitting
+            # it means "the config did not say" and is a DIFFERENT config from
+            # this one. It is written out in all three spellings so this test
+            # stays about text that must not reach the payload.
+            memory_budget_gb = 1.0
 
             [warm_start]
             enabled = true
@@ -259,6 +279,14 @@ _WITH = """
     signal_terms = ["constant", "trend", "annual"]
     candidates = ["white", "white + matern12"]
     criteria = ["aic", "hqic"]
+    memory_budget_gb = 1.0
+"""
+"""The golden body, for tests that append a block to it.
+
+**The budget matches `_GOLDEN_TOML`'s deliberately**, because `_moved` compares
+against the golden and an unnamed budget is a real difference since Task 3 --
+one that would show up as a moved `run_hash` in every test here and be read as
+the field under test moving it.
 """
 
 
@@ -343,6 +371,7 @@ def test_the_criterion_set_moves_compat_and_not_fit(tmp_path):
         signal_terms = ["constant", "trend", "annual"]
         candidates = ["white", "white + matern12"]
         criteria = ["aic", "hqic", "bic"]
+        memory_budget_gb = 1.0
         """,
     ) == (False, True, True)
 
@@ -429,6 +458,7 @@ def test_the_candidate_set_moves_neither_gate(tmp_path):
         signal_terms = ["constant", "trend", "annual"]
         candidates = ["white", "white + matern12", "matern32"]
         criteria = ["aic", "hqic"]
+        memory_budget_gb = 1.0
         """,
     ) == (False, False, True)
 
@@ -822,6 +852,7 @@ def test_the_data_uri_moves_run_hash_alone(tmp_path):
         signal_terms = ["constant", "trend", "annual"]
         candidates = ["white", "white + matern12"]
         criteria = ["aic", "hqic"]
+        memory_budget_gb = 1.0
         """,
     ) == (False, False, True)
 
@@ -872,6 +903,47 @@ def test_the_gates_are_none_before_stage_4a_and_run_hash_still_works(tmp_path):
     assert cfg.compat_hash() is None
     assert isinstance(cfg.run_hash(), str)
     assert len(cfg.run_hash()) == 16
+
+
+def test_an_omitted_budget_is_the_unset_sentinel_and_has_no_run_identity(tmp_path):
+    """A config naming no budget reads back None, and cannot be run-hashed.
+
+    **THE FIELD MUST BE ABLE TO EXPRESS ITS OWN ABSENCE.**
+    `Field(default=1.0)` makes a config that omits the field byte-identical to
+    one that specifies 1.0, so "accepted the default" and "chose 1 GB" are the
+    same observation and a defaulting rule has nothing to fire on. That is
+    pre-flight (a0) at a config field, and it resolves the way every fill value
+    in the store does: **the sentinel is a value the writer cannot produce** --
+    `gt=0.0` refuses every number a config could name, so `None` is unforgeable.
+
+    Expected values determined independently: `memory_budget_gb` is in neither
+    `FIT_RELEVANT_FIELDS` nor `COMPAT_RELEVANT_FIELDS`, which
+    `tests/test_hashing.py` asserts directly, so an unresolved config must still
+    produce **both goldens at the top of this module unchanged**. Refusing them
+    here would assert a dependence the allowlists deny -- the same error Task 0
+    avoided when it dropped `placement` and `d` from `resident_bytes_per_series`.
+
+    Bug this catches: the `None` reaching the payload, where it hashes as JSON
+    `null` and gives a defaulted run a `run_hash` no resolved run can reproduce.
+    **Nothing downstream would notice**, because `run_hash` gates nothing; the
+    only symptom is provenance describing a run that did not happen.
+    """
+    unset = config_module.load(_write(tmp_path, _UNSET_BUDGET_TOML, "unset.toml"))
+
+    assert unset.memory_budget_gb is None
+    assert "memory_budget_gb" not in unset.to_payload(_GEOMETRY)
+    assert unset.fit_hash(_GEOMETRY) == GOLDEN_FIT_HASH
+    assert unset.compat_hash(_GEOMETRY) == GOLDEN_COMPAT_HASH
+    with pytest.raises(ValueError, match="resolved at run"):
+        unset.run_hash()
+
+    # THE POSITIVE CONTROL (i2). A refusal is an absence of a result, and an
+    # absence is produced equally well by the sentinel being caught and by
+    # `run_hash` being unreachable from this fixture at all. The same call on
+    # the same config with the field named returns a hash.
+    named = config_module.load(_golden(tmp_path))
+    assert named.to_payload(_GEOMETRY)["memory_budget_gb"] == 1.0
+    assert len(named.run_hash()) == 16
 
 
 def test_a_config_cannot_supply_the_geometry_hash(tmp_path):

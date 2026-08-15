@@ -22,18 +22,22 @@ from __future__ import annotations
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 from typing import TypedDict
 
 import numpy as np
 import pytest
 
+from metamer.core import machine as machine_module
 from metamer.core.machine import current_rss_bytes, peak_rss_bytes
 from metamer.core.memory import (
+    DEFAULT_BUDGET_FRACTION,
     LBFGS_MAXCOR,
     SLOPE_BAND_FACTOR,
     MemoryEngineLabel,
     SolverPlacement,
     data_and_workspace_bytes_per_series,
+    default_budget_gb,
     measure_evaluation_rss_slope,
     measure_floor,
     memory_engine_label,
@@ -570,6 +574,78 @@ def test_a_tile_that_does_not_fit_its_budget_is_refused():
     """
     with pytest.raises(ValueError, match="budget"):
         tile_side(1000, 8274)
+
+
+# --------------------------------------------------------------------------
+# The budget a config that names none resolves to
+# --------------------------------------------------------------------------
+
+
+def test_the_default_budget_is_a_fraction_of_total_ram_and_never_of_available(
+    monkeypatch,
+):
+    """An unset budget resolves from TOTAL RAM, with free RAM nowhere in it.
+
+    Expected values determined independently: the fraction is policy at 0.25
+    and the field is in SI gigabytes, so 0.25 x 16 000 000 000 B is **4.0 GB
+    exactly**. The available figure is set to a sixteenth of the total, so an
+    available-RAM default gives **0.25** and `min(total, available)` gives the
+    same -- both differ from the expected value by 16x, which is (i7): the
+    fixture is placed where the three candidate rules disagree rather than
+    where they happen to coincide.
+
+    Both readings are moved through `psutil.virtual_memory` rather than through
+    `machine.total_ram_bytes`, so a defect that reads `psutil` directly is
+    caught as well as one that reads the wrong helper.
+
+    Bug this catches: a default taken from available RAM. **Its symptom is not
+    an error** -- the derived tile side moves with whatever else the machine is
+    doing, so a second run against the same store derives a smaller side, hits
+    `completion.resume_tile_side`'s *stored > derived* arm and refuses. A
+    resume that fails because a browser was open defeats section 15.5's
+    burst-and-resume argument, which is the reason the budget is run-relevant
+    in the first place. The measured spread of the available figure on this one
+    machine is in `PROGRESS.md`'s *What Task 3 established*, once.
+    """
+    import psutil
+
+    monkeypatch.setattr(
+        psutil,
+        "virtual_memory",
+        lambda: SimpleNamespace(total=16_000_000_000, available=1_000_000_000),
+    )
+
+    assert DEFAULT_BUDGET_FRACTION == 0.25
+    assert default_budget_gb() == 4.0
+    # The discriminator, stated as its own value rather than left implicit: an
+    # available-RAM default is a DIFFERENT number on this fixture, so the
+    # equality above is not satisfied by a machine where the two readings agree.
+    assert machine_module.available_ram_bytes() == 1_000_000_000
+    assert 1_000_000_000 * DEFAULT_BUDGET_FRACTION / 10**9 == 0.25
+
+
+def test_the_default_budget_follows_a_cgroup_limit(tmp_path, monkeypatch):
+    """Inside a container the default is a fraction of the ALLOWANCE.
+
+    Expected value determined independently: `total_ram_bytes` is
+    `min(host, any readable limit)` since Task 1, so a 2 GB limit on this
+    16.5 GB host gives 2 000 000 000 B, and 0.25 of that is **0.5 GB**.
+    Constructed, because this machine has no cgroup limit -- see
+    `tests/test_machine.py`, where the same gap is recorded.
+
+    Bug this catches: `default_budget_gb` reading `psutil` directly rather than
+    going through the cgroup-aware helper, which sizes a 2 GB container's tiles
+    from the host's 16.5 GB. **The consequence is an OOM kill, not a slow run**,
+    and every number in the process -- budget, tile side, provenance -- would be
+    internally consistent and all wrong.
+    """
+    limit = tmp_path / "memory.max"
+    limit.write_text("2000000000\n")
+    monkeypatch.setattr(machine_module, "CGROUP_V2_PATH", str(limit))
+    monkeypatch.setattr(machine_module, "CGROUP_V1_PATH", str(tmp_path / "absent"))
+
+    assert machine_module.total_ram_bytes() == 2_000_000_000
+    assert default_budget_gb() == 0.5
 
 
 # --------------------------------------------------------------------------

@@ -132,6 +132,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     for finding in report.warnings:
         print(f"warning: identifiability: {finding.message}", file=sys.stderr)
 
+    # A WARNING, PRINTED WHERE WARNINGS GO, AND IT DOES NOT REACH THE RETURN
+    # BELOW. Availability is ambient machine state; gating on it would make a
+    # store that resumed this morning refuse this afternoon.
+    if report.budget_warning is not None:
+        print(f"warning: memory: {report.budget_warning}", file=sys.stderr)
+
     print(f"input:      {report.config.data_uri}")
     print(
         f"grid:       {report.contract.n_time} x {report.contract.n_y} x "

@@ -676,6 +676,49 @@ def test_a_budget_too_small_for_the_stored_tile_is_refused(tmp_path: Path) -> No
         )
 
 
+def test_a_store_that_cannot_say_who_asked_for_its_budget_is_not_told_it_defaulted(
+    tmp_path: Path,
+) -> None:
+    """ "Nobody asked for this budget" and "this store cannot say" stay apart.
+
+    The refusal above names the default when the store records a **null**
+    request, which is what a run that named no budget writes. A store with **no
+    such key** is a different fact -- it predates `SCHEMA_VERSION` 5 -- and
+    `attrs.get` answers `None` for both, which is the fill-value rule (a0) in a
+    reader rather than in a writer.
+
+    Expected values determined independently: with the key present and null the
+    message must say the run did not ask; with the key removed it must say
+    nothing about who asked, because it does not know.
+
+    **THE FAULT CLASS IS CONSTRUCTED HERE BECAUSE NOTHING ELSE BUILDS IT.**
+    `resume.check_resume` refuses anything below v5 before this function runs,
+    so every store the rest of the suite can produce carries the key -- and a
+    guard against a condition no fixture constructs is untested however many
+    tests run (i8). The mutation that must bite is replacing the presence check
+    with a bare `attrs.get(...) is None`, which tells the owner of a v4 store
+    that a budget they typed themselves was a machine default.
+    """
+    uri = _input(tmp_path, n_y=1, n_x=1)
+    store = tmp_path / "out.zarr"
+    run(_config(tmp_path, uri, budget=TWO_POINTS_PER_TILE), store)
+
+    root = zarr.open_group(str(store), mode="r+")
+    root.attrs["memory_budget_requested_gb"] = None
+    with pytest.raises(ValidationError) as defaulted:
+        resume_tile_side(store, derived_side=1, grid=(1, 1))
+    assert "which that run did not ask for" in str(defaulted.value)
+
+    attrs = dict(root.attrs)
+    del attrs["memory_budget_requested_gb"]
+    root.attrs.clear()
+    root.attrs.update(attrs)
+    with pytest.raises(ValidationError) as silent:
+        resume_tile_side(store, derived_side=1, grid=(1, 1))
+    assert "which that run did not ask for" not in str(silent.value)
+    assert "shards are fixed at creation" in str(silent.value)
+
+
 def test_a_bitmap_that_does_not_describe_this_grid_is_refused(
     resumable: tuple[Path, Path],
 ) -> None:

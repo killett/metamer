@@ -272,6 +272,34 @@ def total_ram_bytes() -> int:
     return _resolve_total_ram()[0]
 
 
+def available_ram_bytes() -> int:
+    """Return the memory this machine reports as free right now.
+
+    **THIS IS AMBIENT STATE AND NOTHING SIZES ANYTHING FROM IT.** It has one
+    caller -- `batch.run`'s warning that the resolved budget exceeds what is
+    free -- and the default budget is a fraction of `total_ram_bytes` precisely
+    because this figure moves by a factor of nearly three within days on one
+    machine. A default taken from it would derive a different tile side on every
+    run, so a resume would refuse because something else was running. See
+    `memory.DEFAULT_BUDGET_FRACTION`, and `PROGRESS.md`'s *What Task 3
+    established* for the readings themselves.
+
+    **AND IT IS NOT CGROUP-AWARE, UNLIKE `total_ram_bytes`.** `psutil` reads the
+    host, while a container's own headroom is `memory.max - memory.current` --
+    a different pair of files. The gap is left open deliberately rather than
+    unnoticed: inside a limit this OVERSTATES what is free, so the warning fires
+    less often than it should, and a warning that stays silent is a missing
+    warning rather than a wrong action. **A gate here would be a different
+    matter, and there is deliberately not one.**
+
+    Returns:
+        Available memory in bytes. `psutil` reports bytes, unlike `ru_maxrss`.
+    """
+    import psutil
+
+    return int(psutil.virtual_memory().available)
+
+
 def ram_basis() -> str:
     """Return which reading `total_ram_bytes` used.
 

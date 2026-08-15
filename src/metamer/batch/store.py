@@ -135,7 +135,22 @@ _GEOMETRY_KEYS = frozenset(
 #: and its silence would read as agreement -- and it lands beside Task 0's
 #: corrected arithmetic, so no store is ever written under the new formula
 #: without recording which basis produced its side.
-SCHEMA_VERSION = 4
+#:
+#: **v5 (2026-08-15, Phase 2b Task 3): root attrs gained
+#: `memory_budget_requested_gb`.** `memory_budget_gb` became `float | None` with
+#: `None` meaning *the config named no budget*, resolved at run to a fraction of
+#: total RAM -- so the recorded budget is no longer evidence that anybody asked
+#: for it, and `completion.resume_tile_side` quotes it back at a user whose
+#: resume was refused.
+#:
+#: **AND THIS BUMP'S FIELD IS THE FIRST THAT IS NOT A REQUIRED ATTR, WHICH IS
+#: WHY THE BUMP IS LOAD-BEARING RATHER THAN TIDY.** `create_store` refuses on
+#: `attrs.get(key) is None`, so a key whose `None` **is its meaning** cannot be
+#: required without refusing every defaulted run. The version is therefore the
+#: only mechanism left that makes an older store's silence a refusal: a v4 store
+#: is rejected by the gate rather than read through `attrs.get`, which would
+#: answer `None` and be indistinguishable from "nobody asked for this budget".
+SCHEMA_VERSION = 5
 
 #: Target bytes for one inner chunk, per design doc 12.7's "a few MB".
 CHUNK_TARGET_BYTES = 4_000_000
@@ -299,6 +314,7 @@ def provenance_attrs(
     unique_dt_count: int,
     tile_sides: Mapping[str, int],
     tile_side_basis: TileSideBasis,
+    memory_budget_requested_gb: float | None,
     floor: FloorReport,
     warm_start_used: bool = False,
     source: Mapping[str, Any] | None = None,
@@ -322,6 +338,17 @@ def provenance_attrs(
             self-report: the one basis a caller would omit is the one it is least
             sure of, and a store that cannot answer Task 6's question would have
             its silence read as agreement.
+        memory_budget_requested_gb: What the CONFIGURATION asked for, or None
+            when it named no budget. **A different fact from `config`'s
+            resolved budget**, which is always a number by the time a store is
+            built: a defaulted run records the machine's answer beside a null
+            request, and the pair is what lets a later reader tell "the user
+            wanted 4.13 GB" from "this box had 16.5 GB". **No default here
+            either**, and for the sharper version of the same reason: `None` is
+            a legitimate value, so an omitted argument and a deliberate `None`
+            would be one observation -- the caller has to say which it means.
+            It is deliberately **not** in `REQUIRED_ATTRS`, which refuses on
+            `None`; `SCHEMA_VERSION` 5 is what enforces its presence.
         floor: The measured process floor. **Both the pre- and post-warm
             readings go in**, not just the one the budget uses, so the 30% gap
             between them is visible in a store rather than only in a docstring --
@@ -395,7 +422,13 @@ def provenance_attrs(
         },
         "geometry_components": json.loads(hashing.canonical_json(geometry_components)),
         "geometry_hash": rollup,
+        # THE BUDGET THE RUN USED, AND -- SEPARATELY -- WHAT WAS ASKED FOR.
+        # `config` is the EFFECTIVE configuration, so the first is a number
+        # whenever a store is built at all: `run_hash` below refuses an
+        # unresolved budget, which is the guard that keeps a null out of this
+        # mapping without a second check here.
         "memory_budget_gb": config.memory_budget_gb,
+        "memory_budget_requested_gb": memory_budget_requested_gb,
         "metamer_version": metamer.__version__,
         "objective": config.objective,
         "read_amplification": float(read_amplification),

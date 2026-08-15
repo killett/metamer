@@ -102,7 +102,7 @@ from metamer.core.criteria import Criterion
 from metamer.core.engines.protocol import Engine
 from metamer.core.fit import fit
 from metamer.core.lint import Finding
-from metamer.core.memory import FloorReport, measure_floor
+from metamer.core.memory import FloorReport, default_budget_gb, measure_floor
 from metamer.core.signal import k_beta as signal_k_beta
 from metamer.core.statespace import StateSpace
 
@@ -113,8 +113,19 @@ class RunReport:
 
     Attributes:
         config: The EFFECTIVE configuration -- the file's contents with any
-            command-line override applied, because that is what the run used
-            and therefore what `run_hash` must describe.
+            command-line override applied **and the memory budget resolved**,
+            because that is what the run used and therefore what `run_hash`
+            must describe.
+        memory_budget_requested_gb: What the configuration asked for, or None
+            if it named no budget. **The request, kept apart from
+            `config.memory_budget_gb`, which is what the run used.** The two
+            differ exactly when the default fired, and only the pair can say
+            so: the resolved value alone is indistinguishable from a request
+            for the same number, and it is the machine's answer rather than
+            anyone's choice.
+        budget_warning: A warning that the resolved budget exceeds the memory
+            this machine reports free, or None. **Never moves the exit code**;
+            see `run`'s body for why availability cannot be a gate.
         config_path: Where the configuration came from.
         store_path: Where the store goes.
         contract: What stage 4a established about the input.
@@ -152,6 +163,8 @@ class RunReport:
     """
 
     config: Config
+    memory_budget_requested_gb: float | None
+    budget_warning: str | None
     config_path: Path
     store_path: Path
     contract: ContractReport
@@ -224,7 +237,7 @@ def _recompute_tile(
     )
 
 
-def _with_memory_budget(config: Config, budget_gb: float) -> Config:
+def _with_memory_budget(config: Config, budget_gb: float, *, source: str) -> Config:
     """Return `config` with its memory budget replaced, RE-VALIDATED.
 
     **`model_copy` would not re-validate**, so a budget of 0 or -1 typed on the
@@ -233,9 +246,18 @@ def _with_memory_budget(config: Config, budget_gb: float) -> Config:
     typed. Round-tripping through `model_validate` puts the override through the
     same constraint as the field.
 
+    **THE MESSAGE'S PHRASING COMES FROM THE CALLER, WHICH IS (c3).** There are
+    two callers -- the command-line override and the defaulting rule -- and
+    `--memory-budget: ...` is right for one and absurd for the other, which
+    would name a flag the user never typed. The default path cannot fire this
+    today, since a fraction of any positive RAM reading is positive; that is
+    exactly the shape of message defect that ships, so the phrasing is a
+    parameter rather than a constant.
+
     Args:
         config: The configuration as loaded.
-        budget_gb: The command-line budget, in GB.
+        budget_gb: The budget to install, in GB.
+        source: What produced `budget_gb`, for the refusal's message.
 
     Returns:
         The effective configuration.
@@ -248,9 +270,7 @@ def _with_memory_budget(config: Config, budget_gb: float) -> Config:
             {**config.model_dump(), "memory_budget_gb": budget_gb}
         )
     except ValueError as error:
-        raise ValidationError(
-            ValidationLayer.SCHEMA, f"--memory-budget: {error}"
-        ) from error
+        raise ValidationError(ValidationLayer.SCHEMA, f"{source}: {error}") from error
 
 
 FLOOR_OVERRIDE_ENV = "METAMER_FLOOR_BYTES"
@@ -383,7 +403,49 @@ def run(
     """
     config = load_config(config_path)
     if memory_budget_gb is not None:
-        config = _with_memory_budget(config, memory_budget_gb)
+        config = _with_memory_budget(config, memory_budget_gb, source="--memory-budget")
+
+    # **THE REQUEST AND THE BUDGET ARE TWO FACTS AND THE ORDER HERE IS WHAT
+    # KEEPS THEM APART.** `None` means the configuration named no budget, which
+    # `Field(default=1.0)` could not express: a config omitting the field would
+    # be byte-identical to one specifying 1.0, so a defaulting rule would have
+    # nothing to fire on. The request is read before the resolution overwrites
+    # it, and both reach provenance.
+    #
+    # **A FRACTION OF TOTAL RAM, NEVER AVAILABLE.** An available-RAM default
+    # varies with whatever else the machine is doing, so a second run against
+    # the same store derives a smaller side and `resume_tile_side` refuses --
+    # a resume failing because a browser was open, which defeats 15.5's
+    # burst-and-resume argument. See `memory.DEFAULT_BUDGET_FRACTION`.
+    requested_budget_gb = config.memory_budget_gb
+    resolved_budget_gb = requested_budget_gb
+    if resolved_budget_gb is None:
+        resolved_budget_gb = default_budget_gb()
+        config = _with_memory_budget(
+            config,
+            resolved_budget_gb,
+            source="the default memory budget (a fraction of total RAM)",
+        )
+    budget_bytes = int(resolved_budget_gb * 10**9)
+
+    # **READ AND REPORTED, NEVER A GATE.** A refusal here would make a run's
+    # success depend on ambient machine state -- a store that resumed this
+    # morning refusing this afternoon -- which is the same failure that ruled
+    # out an available-RAM default. `available_ram_bytes` is not cgroup-aware
+    # and says so, so inside a limit this warns less often than it should; a
+    # missing warning is the safe direction for something that must not act.
+    available_bytes = machine.available_ram_bytes()
+    budget_warning = None
+    if available_bytes < budget_bytes:
+        budget_warning = (
+            f"the memory budget is {resolved_budget_gb:g} GB ({budget_bytes} B) "
+            f"and this machine reports {available_bytes / 1e9:.3g} GB available "
+            "right now, so this run may swap or be killed by the OOM killer. "
+            "Set --memory-budget below the available figure to size the tile "
+            "for what is free. The budget defaults to a fraction of TOTAL RAM, "
+            "so that the tile side a resume derives does not move with whatever "
+            "else is running"
+        )
 
     # THE BUDGET IS ESTABLISHED BEFORE LAYER 3, because layer 3 is where the
     # observed-versus-requested check reports, and it can only report on limits
@@ -480,7 +542,10 @@ def run(
         else:
             try:
                 side = tile_side_for(
-                    budget_bytes=int(config.memory_budget_gb * 10**9),
+                    # THE RESOLVED VALUE, WHICH IS WHY A `None` CONFIG CANNOT
+                    # BYPASS THE REFUSAL BELOW: there is one budget in this
+                    # function and every consumer reads it.
+                    budget_bytes=budget_bytes,
                     floor=measured_floor,
                     d=max(state_dims),
                     k_beta=columns,
@@ -530,6 +595,7 @@ def run(
                 if source_attrs is None
                 else TileSideBasis(source_attrs["tile_side_basis"])
             ),
+            memory_budget_requested_gb=requested_budget_gb,
             floor=measured_floor,
             source=None
             if source_attrs is None
@@ -611,6 +677,8 @@ def run(
             interrupted=written + skipped < len(tiles),
             sigterm_armed=termination.armed,
             config=config,
+            memory_budget_requested_gb=requested_budget_gb,
+            budget_warning=budget_warning,
             config_path=Path(config_path),
             store_path=Path(store_path),
             contract=contract,

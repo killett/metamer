@@ -116,6 +116,34 @@ def test_the_ram_reading_is_a_plausible_total():
     assert total > 256 * 1024**2
 
 
+def test_available_ram_is_a_byte_reading_and_is_not_the_total():
+    """`available_ram_bytes()` reports FREE memory in bytes, for a warning only.
+
+    Expected values determined independently: `psutil` reports both figures in
+    bytes, and Linux's `MemAvailable` is strictly below `MemTotal` on any
+    running system -- the kernel's own structures are not available to anyone.
+    Both sides are read from `psutil` here rather than from
+    `machine.total_ram_bytes`, which is cgroup-aware: inside a container the
+    limit can sit below the host's free memory, and this relation is about the
+    reading rather than about the allowance.
+
+    Bug this catches: `.total` where `.available` was meant -- one attribute
+    apart on the same call, and the symptom is silence rather than an error,
+    because the budget is a fraction of total and a warning comparing total
+    against a fraction of total can never fire. And the `ru_maxrss` unit trap
+    this module exists for, one function over: a kilobyte reading passed off as
+    bytes would still be positive and still look plausible.
+    """
+    import psutil
+
+    reading = psutil.virtual_memory()
+    available = machine.available_ram_bytes()
+
+    assert isinstance(available, int)
+    assert 0 < available <= int(reading.total)
+    assert available != int(reading.total)
+
+
 @pytest.mark.machine
 def test_this_machine_has_no_cgroup_limit_so_the_fixtures_below_are_constructed():
     """The environment cannot express the defect, so it is recorded that it cannot.

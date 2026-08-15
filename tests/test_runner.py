@@ -20,6 +20,7 @@ import subprocess
 import sys
 import textwrap
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import numpy as np
@@ -31,6 +32,7 @@ from metamer.batch.run import run
 from metamer.batch.threads import NUMBA_KEY
 from metamer.batch.validation import ExitCode, ValidationError, ValidationLayer
 from metamer.core import machine
+from metamer.core.memory import default_budget_gb
 
 # `to_zarr` warns that consolidated metadata is not in the v3 spec. It is
 # xarray's default and says nothing about this code.
@@ -216,13 +218,238 @@ def test_the_memory_budget_override_reaches_the_run_hash(tmp_path):
     overridden = run(config, tmp_path / "b.zarr", memory_budget_gb=4.0)
 
     assert overridden.config.memory_budget_gb == 4.0
-    assert default.config.memory_budget_gb == 1.0
+    # **NOT 1.0 SINCE PHASE 2b TASK 3.** The field has no declared default any
+    # more -- an omitted budget is the unset sentinel and resolves from the
+    # machine -- so the value to compare against is what `default_budget_gb()`
+    # gives, and the override is asserted to have replaced it rather than to
+    # differ from a constant.
+    assert default.config.memory_budget_gb == default_budget_gb()
+    assert default.memory_budget_requested_gb is None
+    assert overridden.memory_budget_requested_gb == 4.0
     assert overridden.run_hash != default.run_hash
     # The budget is run-relevant and NOT fit-relevant, so the gates must not
     # move. Asserted as its own expected value rather than as a relation:
     # "both moved" and "neither moved" both satisfy an equality between them.
     assert overridden.fit_hash == default.fit_hash
     assert overridden.compat_hash == default.compat_hash
+
+
+def test_a_config_omitting_the_budget_hashes_as_one_naming_the_resolved_value(
+    tmp_path,
+):
+    """2b exit criterion 10, and it is two claims rather than one.
+
+    **The resolved value is what the run used, so it is what `run_hash`
+    records** -- a config that says nothing and a config that names the number
+    the machine gives are the same run and must be the same hash. **Provenance
+    still tells them apart**, because "the user asked for 4.13 GB" and "the user
+    asked for nothing and this machine offered 4.13 GB" are different facts, and
+    the second one stops being reconstructible the moment the store moves to
+    another box.
+
+    Expected values determined independently: `memory.default_budget_gb()` is
+    what an unset budget resolves to, and its own arithmetic is pinned in
+    `tests/test_memory.py` against constructed RAM readings rather than here.
+
+    Bug this catches: the `None` reaching the payload, where it hashes as JSON
+    `null` -- the two runs then disagree about a budget they both used. And the
+    resolution being applied to the tiling arithmetic alone, which leaves
+    `run_hash` describing a run that did not happen. **The third config is the
+    control**: without it, a budget dropped from the payload entirely would
+    satisfy the equality above for the wrong reason.
+    """
+    import xarray as xr
+
+    uri = _store(tmp_path)
+    resolved = default_budget_gb()
+    omitted = run(_config(tmp_path, uri, name="omitted.toml"), tmp_path / "a.zarr")
+    named = run(
+        _config(
+            tmp_path,
+            uri,
+            extra=f"memory_budget_gb = {resolved!r}\n",
+            name="named.toml",
+        ),
+        tmp_path / "b.zarr",
+    )
+    elsewhere = run(
+        _config(
+            tmp_path,
+            uri,
+            extra=f"memory_budget_gb = {resolved * 2!r}\n",
+            name="elsewhere.toml",
+        ),
+        tmp_path / "c.zarr",
+    )
+
+    assert omitted.config.memory_budget_gb == resolved
+    assert omitted.run_hash == named.run_hash
+    assert omitted.tile_side == named.tile_side
+    assert omitted.run_hash != elsewhere.run_hash
+
+    stored_omitted = xr.open_zarr(str(omitted.store_path)).attrs
+    stored_named = xr.open_zarr(str(named.store_path)).attrs
+    assert stored_omitted["memory_budget_gb"] == resolved
+    assert stored_named["memory_budget_gb"] == resolved
+    assert stored_omitted["memory_budget_requested_gb"] is None
+    assert stored_named["memory_budget_requested_gb"] == resolved
+
+
+def test_a_config_with_no_budget_cannot_bypass_the_budget_refusal(
+    tmp_path, monkeypatch
+):
+    """The floor refusal fires on the RESOLVED budget, not on the config's.
+
+    **THIS TEST WAS OWED BY TASK 2 AND COULD NOT BE WRITTEN THERE.** The field
+    still had a pydantic default of 1.0, so there was no `None` to bypass the
+    check with, and a test asserting that one could not would have been asserting
+    something about a state that could not occur.
+
+    Expected values determined independently: the constructed cgroup limit makes
+    total RAM 4 000 000 B, so the default budget is a quarter of that --
+    1 000 000 B, which is exactly `tests/conftest.py`'s stub floor. `budget -
+    floor` is then 0 and no headroom fraction can make a positive block out of
+    it, so `tiling.block_bytes_for` refuses and `run()` stages it as layer 3.
+
+    Bug this catches: the resolution happening below the tiling call, or the
+    refusal reading `config.memory_budget_gb` instead of the resolved value.
+    Either way a `None` budget is the **one** path on which a run whose budget
+    cannot hold a tile proceeds anyway -- and what it would proceed to is a
+    `TypeError` in the arithmetic at best, and a tile sized from a default
+    nobody chose at worst.
+    """
+    uri = _store(tmp_path)
+    config = _config(tmp_path, uri)
+
+    # THE POSITIVE CONTROL, FIRST: the same config on this machine's real RAM
+    # runs. Without it, a refusal below could be the cgroup patch breaking the
+    # run rather than the budget being refused.
+    assert run(config, tmp_path / "ok.zarr").tiles_written == 1
+
+    limit = tmp_path / "memory.max"
+    limit.write_text("4000000\n")
+    monkeypatch.setattr(machine, "CGROUP_V2_PATH", str(limit))
+    monkeypatch.setattr(machine, "CGROUP_V1_PATH", str(tmp_path / "absent"))
+    assert default_budget_gb() == 0.001
+
+    with pytest.raises(ValidationError) as caught:
+        run(config, tmp_path / "refused.zarr")
+
+    message = str(caught.value)
+    assert caught.value.layer is ValidationLayer.SEMANTIC
+    assert "leaves nothing for a tile" in message
+    # The refusal names the floor and a budget that would work, which is what
+    # makes it planning information rather than a wall.
+    assert "1.0 MB before a tile exists" in message
+    assert not (tmp_path / "refused.zarr").exists()
+
+
+def test_the_derived_tile_side_does_not_move_when_available_ram_does(
+    tmp_path, monkeypatch
+):
+    """Two runs on one machine derive one side, whatever else is running.
+
+    Expected values determined independently: total RAM is held at
+    16 000 000 000 B in both runs and only the available figure moves, so the
+    resolved budget is 4.0 GB both times -- 0.25 of the total -- and the side
+    follows the budget alone.
+
+    **THE THIRD RUN IS THE DISCRIMINATOR AND THE TEST IS VACUOUS WITHOUT IT
+    (i7).** "The side did not move" is satisfied for free wherever the two
+    candidate budgets happen to round to the same side, and with conftest's 1 MB
+    stub floor most pairs do. The third run asks for 0.25 GB -- exactly what an
+    available-RAM default would have produced from the first run's availability
+    figure -- and its side must be **different**, so the equality above is a
+    statement about the rule rather than about the fixture.
+
+    Bug this catches: `min(total, available)` or a straight available reading in
+    the default. Its symptom is not an error: the side moves with ambient load,
+    so a resume of a store built on a quiet machine refuses on a busy one, which
+    is the failure design doc section 15.5's burst-and-resume argument exists to
+    prevent.
+    """
+    import psutil
+
+    uri = _store(tmp_path)
+    config = _config(tmp_path, uri)
+
+    monkeypatch.setattr(
+        psutil,
+        "virtual_memory",
+        lambda: SimpleNamespace(total=16_000_000_000, available=1_000_000_000),
+    )
+    busy = run(config, tmp_path / "busy.zarr")
+    available_default = run(
+        _config(tmp_path, uri, extra="memory_budget_gb = 0.25\n", name="avail.toml"),
+        tmp_path / "avail.zarr",
+    )
+
+    monkeypatch.setattr(
+        psutil,
+        "virtual_memory",
+        lambda: SimpleNamespace(total=16_000_000_000, available=15_000_000_000),
+    )
+    quiet = run(config, tmp_path / "quiet.zarr")
+
+    assert busy.config.memory_budget_gb == 4.0
+    assert quiet.config.memory_budget_gb == 4.0
+    assert busy.tile_side == quiet.tile_side
+    assert available_default.tile_side != busy.tile_side
+
+
+def test_a_defaulted_store_resumed_on_a_smaller_machine_is_refused_by_its_side(
+    tmp_path, monkeypatch
+):
+    """The machine-dependent default reaches the (a1) re-derivation guard.
+
+    Until Task 3 the tile side was re-derived at every resume from a budget that
+    lived **in the config**, so two resumes of one config derived one side on any
+    machine. The default makes the derived side a function of the machine's total
+    RAM, so a store built where RAM is plentiful and resumed where it is not hits
+    `completion.resume_tile_side`'s *stored > derived* arm. **That arm is the
+    right answer** -- the shards were fixed at creation and adopting the larger
+    tile would exceed the budget this run was given.
+
+    Expected values determined independently: the first run resolves 4.0 GB from
+    a constructed 16 GB total; the second sees a constructed 40 MB allowance and
+    resolves 10 MB, which cannot hold a tile of the stored side.
+
+    Bug this catches, and it is the reason this task touches the refusal's text:
+    the message says *"the budget that produced them was X GB ... raise
+    --memory-budget to at least that"*, and **the user never typed a budget** --
+    X is an artefact of the other machine's RAM. A resolution naming an operation
+    the caller is not performing is worse than none, which is (c3)'s phrasing
+    rule one register over.
+    """
+    import psutil
+
+    uri = _store(tmp_path)
+    config = _config(tmp_path, uri)
+    store_path = tmp_path / "out.zarr"
+
+    monkeypatch.setattr(
+        psutil,
+        "virtual_memory",
+        lambda: SimpleNamespace(total=16_000_000_000, available=8_000_000_000),
+    )
+    first = run(config, store_path)
+    assert first.memory_budget_requested_gb is None
+
+    limit = tmp_path / "memory.max"
+    limit.write_text("40000000\n")
+    monkeypatch.setattr(machine, "CGROUP_V2_PATH", str(limit))
+    monkeypatch.setattr(machine, "CGROUP_V1_PATH", str(tmp_path / "absent"))
+
+    with pytest.raises(ValidationError) as caught:
+        run(config, store_path)
+
+    message = str(caught.value)
+    assert caught.value.layer is ValidationLayer.SEMANTIC
+    assert f"tile side of {first.tile_side}" in message
+    assert "4.0 GB" in message
+    # The store records that nobody asked for that budget, so the refusal says
+    # so rather than telling the user to raise a flag they never set.
+    assert "which that run did not ask for" in message
 
 
 @pytest.mark.slow
@@ -321,7 +548,12 @@ def test_a_run_records_the_basis_that_produced_its_tile_side(tmp_path):
 
     stored = xr.open_zarr(str(report.store_path)).attrs
     assert stored["tile_side_basis"] == "default"
-    assert stored["schema_version"] == 4
+    # **BOUNDED, NOT PINNED.** v4 is the version that introduced
+    # `tile_side_basis`, which is this test's subject; pinning the current value
+    # here made it fail at Task 3's bump for a reason unrelated to the basis,
+    # and a test that fails for the wrong reason teaches its next reader that
+    # editing the number is the fix. `test_store.py`'s ledger owns the value.
+    assert stored["schema_version"] >= 4
 
 
 def test_the_budget_is_si_gigabytes_and_not_gibibytes(tmp_path):
@@ -544,6 +776,42 @@ def test_a_clean_run_exits_zero_and_its_last_line_carries_both_hashes(tmp_path):
     assert "compat_hash=" in final
     assert str(store) in final
     assert "not computed" not in final
+
+
+def test_a_budget_above_available_ram_warns_and_still_exits_zero(tmp_path):
+    """The availability warning is a warning, through a real process boundary.
+
+    **NEVER A GATE, AND THE REASON IS THE ONE THAT RULED OUT AN AVAILABLE-RAM
+    DEFAULT.** A refusal here would make a run's success depend on ambient
+    machine state, so a store that resumed this morning would refuse this
+    afternoon -- design doc section 15.5's burst-and-resume argument again, from
+    the other side. So it prints and the code stays 0.
+
+    **The fixture moves the BUDGET rather than the availability, and that is
+    what makes the claim expressible at all (k).** An exit code is a property of
+    a process, so this has to run out of process, where no monkeypatch of
+    `psutil` survives. Availability and the budget are the two sides of one
+    inequality: 100 000 GB is above any development machine's free memory --
+    asserted below rather than assumed -- so the warning must fire with nothing
+    patched.
+
+    Bug this catches: the warning promoted to a refusal, which someone will
+    attempt on the grounds that overcommitting memory is bad. **And the second
+    invocation is the (i2) control**: "the warning does not move the exit code"
+    is satisfied for free by a warning that never fires, so the same command
+    under a budget the machine can hold must print no such line and also exit 0.
+    """
+    config = _config(tmp_path, _store(tmp_path))
+    assert machine.available_ram_bytes() < 100_000 * 10**9
+
+    warned = _invoke(str(config), str(tmp_path / "big.zarr"), "--memory-budget", "1e5")
+    assert warned.returncode == ExitCode.OK
+    assert "warning: memory:" in warned.stderr
+    assert "100000 GB" in warned.stderr
+
+    quiet = _invoke(str(config), str(tmp_path / "small.zarr"), "--memory-budget", "0.5")
+    assert quiet.returncode == ExitCode.OK
+    assert "warning: memory:" not in quiet.stderr
 
 
 @pytest.mark.parametrize(

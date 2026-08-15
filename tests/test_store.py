@@ -63,6 +63,7 @@ variable = "sla"
 signal_terms = ["constant", "trend", "annual"]
 candidates = ["white", "white + matern12"]
 criteria = ["aic", "hqic"]
+memory_budget_gb = 1.0
 """
 
 
@@ -105,6 +106,7 @@ def _fixture(tmp_path: Path, **shape_kwargs: int) -> tuple[Path, dict[str, Any]]
         unique_dt_count=2,
         tile_sides={"shared": 347, "per_point": 187},
         tile_side_basis=store.TileSideBasis.DEFAULT,
+        memory_budget_requested_gb=1.0,
         floor=_FLOOR,
     )
     shape = store.StoreShape(
@@ -643,6 +645,7 @@ def test_a_geometry_that_was_never_opened_is_refused(tmp_path):
             unique_dt_count=2,
             tile_sides={"shared": 347},
             tile_side_basis=store.TileSideBasis.DEFAULT,
+            memory_budget_requested_gb=1.0,
             floor=_FLOOR,
         )
 
@@ -704,6 +707,8 @@ def test_the_schema_version_records_every_bump_and_what_it_was_for():
             and a v2 store cannot answer
         v4  root attrs gained `tile_side_basis` and `floor`, which Phase 2b
             Task 6's refusal reads and a v3 store cannot answer
+        v5  root attrs gained `memory_budget_requested_gb`, which distinguishes
+            a budget the user asked for from one this machine's RAM supplied
 
     **THIS IS THE ONE PLACE THE NUMBER IS ASSERTED ABSOLUTELY.** It used to be
     asserted inside `test_write.py`'s outcome-vocabulary test, which then failed
@@ -711,18 +716,133 @@ def test_the_schema_version_records_every_bump_and_what_it_was_for():
     for the wrong reason teaches its next reader that editing the number is the
     fix. That test now bounds rather than pins; this one owns the value.
 
+    **AND v5 IS THE FIRST BUMP WHOSE FIELD IS NOT A REQUIRED ATTR, WHICH IS THE
+    RULE ACQUIRING ITS FIRST EXCEPTION RATHER THAN AN OVERSIGHT.**
+    `create_store` refuses on `attrs.get(key) is None`, so a key whose `None`
+    **is its meaning** -- the config named no budget -- cannot be required
+    without refusing every defaulted run. The version is therefore what makes an
+    older store's silence a refusal here: a v4 store is rejected outright rather
+    than read through `attrs.get`, which would return `None` and be
+    indistinguishable from "the budget was defaulted". That is pre-flight (a0)
+    resolved with the only mechanism left once "required" is unavailable.
+
     Bug this catches: a bump landing without its reason recorded, so a later
-    reader meeting a v5 store has no way to know what it can and cannot answer.
-    The count below is the check -- four versions, three documented bumps.
+    reader meeting a v6 store has no way to know what it can and cannot answer.
+    The count below is the check -- five versions, four documented bumps.
     """
-    assert store.SCHEMA_VERSION == 4
+    assert store.SCHEMA_VERSION == 5
     # Each bump added something a store one version older cannot answer, and
     # each of those is a REQUIRED attr -- which is what makes the older store's
-    # silence a refusal rather than a default.
+    # silence a refusal rather than a default. v5 is the exception, and the
+    # assertion is written the other way round so removing the exception fails.
     assert "detail" in store.REQUIRED_ATTRS  # v3
     assert "tile_side_basis" in store.REQUIRED_ATTRS  # v4
+    assert "memory_budget_requested_gb" not in store.REQUIRED_ATTRS  # v5
     assert Outcome.SCREENED_OUT.code == 12  # v2
     assert Outcome.NOT_APPLICABLE.code == 13  # v2
+
+
+def test_a_store_records_the_request_apart_from_the_budget_that_was_used(tmp_path):
+    """Two facts, two keys: what was asked for, and what the run used.
+
+    Expected values determined independently: `_CONFIG` names 1.0, so a store
+    built from it records 1.0 in both keys; a run that named nothing records the
+    resolved value in `memory_budget_gb` and **null** in the request, and null
+    is a value no config can produce because `gt=0.0` refuses every number that
+    could stand for "unset".
+
+    **THE NULL MUST SURVIVE THE ROUND TRIP**, which is the half a reader would
+    not think to check: zarr writes it as JSON `null` and xarray reads it back
+    as `None`, and a writer that dropped the key instead would leave a store
+    that cannot tell "nobody asked" from "this store predates the question".
+
+    Bug this catches: recording only the resolved value. The budget is then
+    indistinguishable from a request on every store, and
+    `completion.resume_tile_side` -- which quotes it back at a user whose resume
+    was refused -- would tell someone who never typed `--memory-budget` to raise
+    the flag they never set.
+    """
+    path, attrs = _fixture(tmp_path)
+    stored = xr.open_zarr(str(path)).attrs
+
+    assert attrs["memory_budget_requested_gb"] == 1.0
+    assert attrs["memory_budget_gb"] == 1.0
+    assert stored["memory_budget_requested_gb"] == 1.0
+
+    # The same input the fixture built; `_input` would refuse to create a
+    # second store at that path, and this test is not about the input.
+    uri = str(tmp_path / "in.zarr")
+    unset_path = tmp_path / "c.toml"
+    unset_path.write_text(_CONFIG.format(uri=uri).replace("memory_budget_gb = 1.0", ""))
+    unset = load(unset_path)
+    assert unset.memory_budget_gb is None
+
+    defaulted = store.provenance_attrs(
+        # The RESOLVED config is what a store is built from -- `run()` resolves
+        # before it writes anything -- so the budget here is a number and the
+        # request beside it is null.
+        unset.model_copy(update={"memory_budget_gb": 4.0}),
+        geometry_components=geometry.geometry_components(open_input(uri, "sla")),
+        thread_limits={"openblas": 1},
+        read_amplification=1.0,
+        unique_dt_count=2,
+        tile_sides={"shared": 272},
+        tile_side_basis=store.TileSideBasis.DEFAULT,
+        memory_budget_requested_gb=None,
+        floor=_FLOOR,
+    )
+    assert defaulted["memory_budget_gb"] == 4.0
+    assert defaulted["memory_budget_requested_gb"] is None
+
+    second = tmp_path / "defaulted.zarr"
+    store.create_store(
+        second,
+        specs=unset.process_specs(),
+        criteria=unset.criteria,
+        shape=store.StoreShape(n_y=4, n_x=6, n_beta=4, tile_side=2),
+        attrs=defaulted,
+    )
+    assert xr.open_zarr(str(second)).attrs["memory_budget_requested_gb"] is None
+
+
+def test_a_store_cannot_be_built_from_a_config_whose_budget_is_unresolved(tmp_path):
+    """An unset budget cannot reach a store's attrs, and `run_hash` is the guard.
+
+    **GUARDED ONE LAYER UP, DELIBERATELY.** `provenance_attrs` computes
+    `run_hash`, which refuses a config whose budget is `None`, so there is no
+    second check here -- and this test is what keeps that arrangement visible.
+    The alternative is a store recording `"memory_budget_gb": null` beside a
+    `run_hash` taken over the same null: internally consistent, and a description
+    of a run that cannot have happened, since `tile_side_for` cannot be called
+    with `None`.
+
+    Expected value determined independently: `Config.run_hash` raises
+    `ValueError` naming the field, per `tests/test_config.py`, and nothing in
+    `provenance_attrs` catches it.
+
+    Bug this catches: a future edit that makes `run_hash` tolerate the sentinel
+    -- the store would then silently record a budget nobody chose, on the one
+    path where the resolution did not happen.
+    """
+    uri = _input(tmp_path)
+    config_path = tmp_path / "unresolved.toml"
+    config_path.write_text(
+        _CONFIG.format(uri=uri).replace("memory_budget_gb = 1.0", "")
+    )
+    config = load(config_path)
+
+    with pytest.raises(ValueError, match="resolved at run"):
+        store.provenance_attrs(
+            config,
+            geometry_components=geometry.geometry_components(open_input(uri, "sla")),
+            thread_limits={"openblas": 1},
+            read_amplification=1.0,
+            unique_dt_count=2,
+            tile_sides={"shared": 272},
+            tile_side_basis=store.TileSideBasis.DEFAULT,
+            memory_budget_requested_gb=None,
+            floor=_FLOOR,
+        )
 
 
 def test_a_store_records_which_basis_produced_its_tile_side(tmp_path):
@@ -810,6 +930,7 @@ def test_warm_start_used_is_a_fact_about_the_run_not_the_config(tmp_path):
         unique_dt_count=2,
         tile_sides={"shared": 347},
         tile_side_basis=store.TileSideBasis.DEFAULT,
+        memory_budget_requested_gb=1.0,
         floor=_FLOOR,
     )
 
@@ -1002,6 +1123,7 @@ def test_the_root_attrs_are_byte_identical_across_processes(tmp_path):
             unique_dt_count=2,
             tile_sides={"shared": 347, "per_point": 187},
             tile_side_basis=store.TileSideBasis.DEFAULT,
+            memory_budget_requested_gb=1.0,
             floor=floor,
         )
         print(json.dumps(attrs, sort_keys=False))

@@ -225,6 +225,19 @@ class Config(BaseModel):
             until 2026-08-15, i.e. 7.4% more bytes than every published tile
             side; the field is named `_gb`, and a `1024**3` field is named
             `_gib`.
+            **`None` IS THE UNSET SENTINEL AND THE FIELD CANNOT DEFAULT TO A
+            NUMBER.** `Field(default=1.0)` makes a config that omits the field
+            byte-identical to one that specifies 1.0, so "accepted the default"
+            and "chose 1 GB" are the same bytes and a defaulting rule has
+            nothing to fire on. That is pre-flight (a0) at a config field, and
+            it resolves the way every fill value in the store does: the
+            sentinel is a value the writer cannot produce, which `gt=0.0`
+            guarantees. **`run()` resolves it** to
+            `memory.DEFAULT_BUDGET_FRACTION` of TOTAL RAM and hashes the
+            RESOLVED value, so the same file yields different `run_hash`es on
+            two machines -- correct, and stated here so it does not read as
+            nondeterminism: the budget is a fact about the run, and the run
+            used the number the machine gave it.
         threads: Thread count. **Run-relevant only.** If it moved `fit_hash` the
             hash boundary would be conceding that §11.3's determinism guarantee
             does not hold -- the guarantee and the boundary are the same claim
@@ -257,7 +270,7 @@ class Config(BaseModel):
     detail: Detail = Field(default_factory=Detail)
     screening: Screening = Field(default_factory=Screening)
 
-    memory_budget_gb: float = Field(default=1.0, gt=0.0)
+    memory_budget_gb: float | None = Field(default=None, gt=0.0)
     threads: int = Field(default=1, ge=1)
     output: str = "out.zarr"
 
@@ -382,11 +395,18 @@ class Config(BaseModel):
             "seed": self.seed,
             "criteria": list(self.criteria),
             "candidates": list(self.candidate_spec_hashes()),
-            "memory_budget_gb": self.memory_budget_gb,
             "threads": self.threads,
             "output": self.output,
             "metamer_version": metamer.__version__,
         }
+        # **THE UNSET SENTINEL DOES NOT REACH THE PAYLOAD**, and omitting the
+        # key is what makes that structural rather than a convention. A `None`
+        # here hashes as JSON `null`, which is a perfectly good-looking hash of
+        # a budget nobody chose -- the same shape as `geometry_hash({})` filing
+        # a well-formed rollup of nothing. `run_hash` refuses the state
+        # outright; the two guards are deliberate and each names the other.
+        if self.memory_budget_gb is not None:
+            payload["memory_budget_gb"] = self.memory_budget_gb
         for block in ("warm_start", "audit", "detail", "screening"):
             model: BaseModel = getattr(self, block)
             for name, value in model.model_dump().items():
@@ -442,13 +462,39 @@ class Config(BaseModel):
         unreachable input a degraded mode rather than an error, because sizing a
         run before staging 25 GB is `--explain`'s most valuable use.
 
+        **AN UNRESOLVED BUDGET IS REFUSED HERE AND NOWHERE ELSE, AND THE
+        ASYMMETRY IS THE ALLOWLIST BOUNDARY MADE EXECUTABLE.**
+        `memory_budget_gb` is run-relevant and in neither gate's allowlist, so
+        `fit_hash` and `compat_hash` are computable without it and refusing them
+        would assert a dependence the allowlists deny. This one reads it, so
+        this one cannot proceed without it: a `None` would hash as JSON `null`
+        and give a defaulted run a `run_hash` that the same run with the budget
+        written out cannot reproduce. **Paired with `to_payload`'s omission**,
+        which keeps the sentinel out of the mapping in the first place; neither
+        guard is redundant, because a caller can build a payload without going
+        through this method.
+
         Args:
             machine: Optional fingerprint from `hashing.machine_fingerprint`.
             geometry_hash: From stage 4a, when an input has been opened.
 
         Returns:
             The hash. **Provenance only, never a gate.**
+
+        Raises:
+            ValueError: If `memory_budget_gb` is None. The message names what
+                resolves it, because the caller's fix is to resolve the budget
+                rather than to remove the field.
         """
+        if self.memory_budget_gb is None:
+            raise ValueError(
+                "memory_budget_gb is unset, so this config has no run identity: "
+                "the budget is run-relevant and is resolved at run, from "
+                "metamer.core.memory.default_budget_gb() when a config does not "
+                "name one. Resolve it before hashing. fit_hash and compat_hash "
+                "are computable in this state deliberately -- the budget is in "
+                "neither allowlist"
+            )
         return hashing.run_hash(self.to_payload(geometry_hash), machine)
 
 

@@ -544,6 +544,24 @@ default, and the default comes from the machine.
 - *The availability warning does not move the exit code.* Catches it being promoted to a gate,
   which someone will attempt on the grounds that overcommitting is bad.
 
+**LANDED 2026-08-15, WITH THREE THINGS THIS BRIEF DID NOT ASK FOR AND ONE IT COULD NOT.** The
+findings are in `PROGRESS.md`'s *What Task 3 established*; in one line each:
+
+- **A second provenance key and `SCHEMA_VERSION` 5.** *"Provenance distinguishes them"* needs a
+  place to put the request, and `memory_budget_requested_gb` cannot join `REQUIRED_ATTRS` —
+  `create_store` refuses on `attrs.get(key) is None`, and this key's `None` **is its meaning**.
+  The version bump is the only mechanism left that stops an older store's silence reading as
+  "the budget was defaulted".
+- **`Config.run_hash` refuses an unresolved budget**, while `fit_hash` and `compat_hash` still
+  compute. That asymmetry **is** the allowlist boundary made executable: the budget is in
+  neither gate, so refusing there would assert a dependence the allowlists deny.
+- **`completion.resume_tile_side`'s message names the default** when the store records a null
+  request. The brief did not anticipate that a machine-dependent default makes the existing
+  refusal tell a user to raise a flag they never set — (c3)'s phrasing rule.
+- **The availability reading does NOT reach provenance**, which the brief left open. It is an
+  *ambient* per-run measurement with no consumer, and Task 1's (a5) instance is the precedent:
+  a per-run measurement in the root attrs broke 2a's byte-identity criterion.
+
 ---
 
 ## Task 4 — the calibration measurement

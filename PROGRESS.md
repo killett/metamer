@@ -6,18 +6,19 @@
    a stale name that never diverged and needs nothing done to it. Remote:
    https://github.com/killett/metamer — public, and every commit is pushed by a hook.
 2. **DONE:** Phase 1 Tasks 0–18 (Task 19 deleted), Phase 2 preliminaries P0–P4, **Phase 2a
-   Tasks 0–13 — the whole sub-phase**, **Phase 2b Tasks 0, 1 and 2**, and open questions 1, 4,
-   9, 11, 12 and **15**.
-3. **NEXT ACTION: 2b TASK 3 — the `--memory-budget` default and the unset sentinel — AND ITS
-   FIRST STEP IS THE PRE-FLIGHT AGAINST ITS OWN BRIEF**, appended to
+   Tasks 0–13 — the whole sub-phase**, **Phase 2b Tasks 0, 1, 2 and 3**, and open questions 1,
+   4, 9, 11, 12 and **15**.
+3. **NEXT ACTION: 2b TASK 4 — the calibration measurement — AND ITS FIRST STEP IS THE PRE-FLIGHT
+   AGAINST ITS OWN BRIEF**, appended to
    [`docs/superpowers/notes/phase2b-preflight.md`](docs/superpowers/notes/phase2b-preflight.md)
    **before** the code. All sixteen 2a exit criteria are met, two with reduced scope; **2b
    closes both**.
-4. **READ [What Tasks 3–5 inherit](#what-tasks-35-inherit-2026-08-15) FIRST**, then
+4. **READ [What Task 3 established](#what-task-3-established-done-2026-08-15--read-before-touching-the-budget-provenance-or-the-schema)
+   and [What Tasks 4–5 inherit](#what-tasks-45-inherit-2026-08-15) FIRST**, then
    [What 2b's first tasks inherit](#what-2bs-first-tasks-inherit-2026-08-14) — the findings
    F1–F5 and every measured number 2b rests on. Then the plan.
-5. **Tests: 977 passed, measured 2026-08-15 after 2b Task 2** (967 after Task 1, 947 after
-   Task 0, 940 before it). The only statement of the **current** count.
+5. **Tests: 989 passed, measured 2026-08-15 after 2b Task 3** (977 after Task 2, 967 after
+   Task 1, 947 after Task 0, 940 before it). The only statement of the **current** count.
 6. **`pixi run test` is the full sweep and is what every end-of-task verification must run**;
    **`pixi run test-fast` deselects `slow` and is for iteration only — a green fast run is NOT
    evidence a task is done.** The sweep has now caught five things a fast run could not.
@@ -585,25 +586,106 @@ erases it. **The parameter under test sat at a fixed point.** The discriminating
 block of 40 000 B, where the constant is the difference between a side of 1 and a side of 2 — the
 boundary a user with a hard constraint actually operates at.
 
-### What Tasks 3–5 inherit (2026-08-15)
+### What Task 3 established (done 2026-08-15 — read before touching the budget, provenance or the schema)
 
-**Task 3 — the `--memory-budget` default and the unset sentinel.**
+**`memory_budget_gb` is `float | None`, resolved at run to `DEFAULT_BUDGET_FRACTION` of TOTAL
+RAM.** `memory.DEFAULT_BUDGET_FRACTION = 0.25`, `memory.default_budget_gb()`,
+`machine.available_ram_bytes()`, `store.SCHEMA_VERSION` 5 and the root attr
+`memory_budget_requested_gb`, `RunReport.memory_budget_requested_gb` and
+`RunReport.budget_warning`.
 
-- **The unit is settled: `memory_budget_gb` is 10⁹ B.** Do not reopen it; the four grounds and
-  the deciding one are in *What Task 2 established*.
-- **The refusal already fires on whatever value reaches `tile_side_for`.** So Task 3's job is to
-  **route the RESOLVED budget there**, and it **owns the test that a `None` config cannot bypass
-  it** — a test that could not be written at Task 2, because `memory_budget_gb` still had a
-  pydantic default of 1.0 and there was no `None` to bypass with. Recorded as owed rather than
-  written against a state that could not occur.
-- **`machine.total_ram_bytes()` is cgroup-aware** and pairs with `machine.ram_basis()` out of one
-  computation. The default is a fraction of **TOTAL** RAM, never available: an available-RAM
-  default varies within one calibration cache key and makes a resume fail because a browser was
-  open, which defeats §15.5's burst-and-resume argument.
-- **The container fingerprint gap is closed and its consequence is stated**: `fingerprint()`
-  reads `total_ram_bytes()`, so two containers of different sizes on one host no longer share a
-  key — and a store built under a memory limit gets a different `run_hash`. **This machine cannot
-  show it** (`memory.max` is `max`), so the constructed tests are the only evidence.
+**THE AVAILABILITY SPREAD THAT DECIDES "TOTAL, NOT AVAILABLE" — THIS IS THE ONE HOME FOR THESE
+READINGS**, and the constants' docstrings point here rather than restating them:
+
+| available | when |
+|---|---|
+| 7.13 GB | 2026-08-14, the Hardware table's figure |
+| 5.05 GB | 2026-08-15, recorded at Task 1 |
+| **2.59 GB** | 2026-08-15, taken **while the full sweep was running** |
+
+**A 2.75× range in two days on one machine, against a total that does not move at all.** The
+argument for a total-RAM default was already recorded; this is the measurement under it.
+
+**THE FRACTION, SANITY-CHECKED AGAINST THE HARDWARE TABLE'S 7.13 GB** — the figure is named
+because the brief required naming it, and it is not the undated *"~10 GB free"* that entry
+replaced:
+
+| fraction | budget on this box | against 7.13 GB available |
+|---|---|---|
+| 0.5 | **8.268 GB** | above **every** availability reading ever recorded here |
+| **0.25** | **4.134 GB** | below all but the sweep-loaded 2.59 GB reading |
+| 0.125 | 2.067 GB | below all three, and half the usable tile thrown away |
+
+**0.5 is what settles the value rather than taste**: a default above availability on an *idle*
+machine warns on every run, and a warning that always fires is not a warning.
+
+**What 0.25 derives here**, hand-computed against this machine's measured 228.2 MB floor:
+`(4 133 932 031 − 228 200 000) × 0.85 = 3 319 872 226`, less the 11 984 B solver constant, over
+8274 B/series is **401 240.1 series**, and `633² = 400 689 ≤ 401 240 < 401 956 = 634²`, so the raw
+side is **633** and the base takes it to **624**. It brackets Task 2's published 4 GB → 608 and
+8 GB → 880, which is the check.
+
+**AND `int(default × 10⁹)` IS ONE BYTE BELOW `total // 4`** — 4 133 932 031 — because the budget
+round-trips through a GB float. Deterministic, invisible against 4 GB, recorded so nobody
+"fixes" it.
+
+**THE SENTINEL IS `None` AND `REQUIRED_ATTRS` CANNOT ENFORCE IT, WHICH IS WHY THE SCHEMA MOVED.**
+`create_store` refuses on `attrs.get(key) is None`, so the one key whose `None` **is its
+meaning** cannot be a required attr — "required" and "nullable" are incompatible in that guard,
+and adding it would refuse every defaulted run. **`SCHEMA_VERSION` 5 is the mechanism that
+remains**: a v4 store is refused by the gate rather than read through `attrs.get`, which would
+answer `None` and be indistinguishable from *"nobody asked for this budget"*. **The ledger's own
+rule — each bump's field is a required attr — has its first stated exception**, and the test
+asserts the exception rather than the rule.
+
+**THE DEFAULT WIDENS THE (a1) RE-DERIVATION HAZARD, AND THE REFUSAL'S WORDING WAS THE CASUALTY.**
+Until now the tile side's input lived in the config, so two resumes of one config derived one
+side on any machine. It is now a function of the machine's total RAM, so a store built where RAM
+is plentiful and resumed where it is not hits `resume_tile_side`'s *stored > derived* arm —
+correctly. But the message read *"the budget that produced them was 4.13 GB … raise
+`--memory-budget` to at least that"* **at a user who never typed a budget**, and the number is an
+artefact of the other machine's RAM. It now names the default when the store records a null
+request. **(c3)'s phrasing rule, one register over**: a resolution naming an operation the caller
+is not performing is worse than none.
+
+**AND THE READER OF THAT KEY HAS THE (a0) HAZARD IN IT.** `attrs.get` answers `None` for a null
+request *and* for a store that predates the key, so presence is checked before the value. The
+schema gate makes the second case unreachable through `run()`, so **nothing in the suite
+constructs it** — the (i8) third shape — and `test_completion.py` builds it by hand, deleting the
+key from a store's attrs.
+
+**AVAILABILITY IS READ, REPORTED, AND DELIBERATELY NOT STORED.** Task 1's (a5) instance is the
+precedent: a per-run measurement in provenance broke 2a's byte-identity criterion. Availability is
+worse on both axes — it measures *ambient* state rather than this process, and **nothing reads
+it** — so it reaches a warning and never a store. The general rule this leaves: **a stable
+machine measurement may reach a store; an ambient one may not.** The warning is never a gate,
+for the same reason the default is not available-based.
+
+**And `available_ram_bytes` is NOT cgroup-aware while `total_ram_bytes` is**, which is a stated
+hole rather than an unknown one: inside a limit it overstates what is free, so the warning fires
+**less** often than it should. For something that must never act, a missing warning is the safe
+direction.
+
+**Fourteen mutations, all of which bite** (2026-08-15): the `None` reaching the payload;
+`run_hash` tolerating the sentinel; a default from available RAM; a default from
+`min(total, available)`; a default ignoring the cgroup limit; an unset budget silently defaulting
+to 1 GB instead of reading the machine; the resolution staying local and never reaching the
+config; provenance recording only the resolved budget; the warning promoted to a refusal; the
+warning computed and never printed; the refusal no longer naming a defaulted budget; presence and
+null becoming one observation; the schema version left at 4; `available_ram_bytes` returning the
+total.
+
+**AND ONE MUTATION WAS NOT A DEFECT, WHICH IS THE FIFTH CAUSE IN THE TAXONOMY AND IS WORTH THE
+LINE.** *"The tiling call reads `config.memory_budget_gb or 1.0`"* survived — correctly, because
+the resolution happens **above** it and installs the value into the config, so the fallback is
+unreachable and the mutated expression is semantically identical on every reachable input. The
+reachable defect is different and is what the test pins: **the resolution not reading the
+machine at all.** Written the first way, the mutation says nothing about the test.
+
+**What Task 3 does NOT do**, so Task 4 is not surprised: nothing caps `run()`'s iterations, and
+`run()` still has no `max_iter` seam. The calibration needs one.
+
+### What Tasks 4–5 inherit (2026-08-15)
 
 **Task 4 — the calibration measurement.**
 
@@ -996,15 +1078,15 @@ was the actual defect the leak exposed.
 | Phase 2 preliminaries pre-flight | [`docs/superpowers/notes/phase2-preliminaries-preflight.md`](docs/superpowers/notes/phase2-preliminaries-preflight.md) — the (a)–(k) audit of the P0/P1/P2 briefs and what each finding changed |
 | **Phase 2a implementation plan** | [`docs/superpowers/plans/2026-08-11-metamer-phase2a.md`](docs/superpowers/plans/2026-08-11-metamer-phase2a.md) — **COMPLETE: Tasks 0–13, all sixteen exit criteria met** |
 | **Phase 2a pre-flight, per task** | [`docs/superpowers/notes/phase2a-preflight.md`](docs/superpowers/notes/phase2a-preflight.md) — the (a)–(k) audit of each 2a task brief and what each finding changed. **Append to it before each task, not after.** |
-| **Phase 2b implementation plan** | [`docs/superpowers/plans/2026-08-14-metamer-phase2b.md`](docs/superpowers/plans/2026-08-14-metamer-phase2b.md) — 11 tasks, 16 exit criteria, **approved 2026-08-14. Task 0 landed 2026-08-15.** Its head carries findings F1–F4, which are why 2b begins with a correction task rather than with the calibration tile |
+| **Phase 2b implementation plan** | [`docs/superpowers/plans/2026-08-14-metamer-phase2b.md`](docs/superpowers/plans/2026-08-14-metamer-phase2b.md) — 11 tasks, 16 exit criteria, **approved 2026-08-14. Tasks 0–3 landed 2026-08-15.** Its head carries findings F1–F4, which are why 2b begins with a correction task rather than with the calibration tile |
 | **Phase 2b pre-flight, per task** | [`docs/superpowers/notes/phase2b-preflight.md`](docs/superpowers/notes/phase2b-preflight.md) — carries the pre-plan audit and Task 0's; per-task entries are appended **before** each task |
 
-**Next action:** Task 3 — `memory_budget_gb: float | None = None`, resolved at run, defaulting to
-a fraction of TOTAL RAM. Its first step is the pre-flight against its own brief, appended to
-`phase2b-preflight.md`. **It inherits from Task 2**: the budget's unit is settled at 10⁹ B, the
-refusal already fires on whatever value reaches `tile_side_for` (so Task 3 must route the resolved
-value there, and owns the test that a `None` config cannot bypass it), and
-`machine.total_ram_bytes` is cgroup-aware as of Task 1.
+**Next action:** Task 4 — the calibration measurement: a **capped-iteration run of `run()`
+itself**, which needs a `max_iter` seam `run()` does not have. Its first step is the pre-flight
+against its own brief, appended to `phase2b-preflight.md`. **It inherits from Task 3**: the budget
+is resolved inside `run()` before anything else reads it, so a calibration driving `run()` gets
+the production derivation rather than constructing a budget of its own — which is why Task 4
+depends on Task 3 at all.
 
 **THIS TABLE SAID "AWAITING REVIEW; NO CODE YET" WHILE THE COLD-START HEAD TWELVE HUNDRED LINES
 ABOVE SAID "APPROVED 2026-08-14".** Found at Task 0's start, 2026-08-15. Same shape as the

@@ -71,6 +71,8 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
+from metamer.core import machine
+
 if TYPE_CHECKING:  # pragma: no cover - import cycle; only needed for the label
     from metamer.core.engines.protocol import Engine
 
@@ -154,6 +156,40 @@ interchangeable and the value is set from the expensive side.
 **Whether 0.15 is enough is a MEASUREMENT and Task 8 is what takes it.** Until
 then it is a policy constant with its components named, in
 `lint.OVERLAP_RATIO`'s idiom, and it must not be dressed as derived.
+"""
+
+DEFAULT_BUDGET_FRACTION = 0.25
+"""POLICY. The fraction of TOTAL RAM a config that names no budget resolves to.
+
+**TOTAL, NEVER AVAILABLE, AND THAT IS THE WHOLE OF THE DECISION.** The derived
+tile side is a function of the budget, and a resume compares the side it derives
+against the one the store was built with -- so a budget that moved with ambient
+load would make a second run of the same store derive a smaller side, hit
+`completion.resume_tile_side`'s *stored > derived* arm and **refuse**. A resume
+that fails because a browser was open defeats design doc section 15.5's
+burst-and-resume argument, which is the reason `memory_budget_gb` is
+run-relevant at all. `min(total, available)` is the same failure arriving less
+often and therefore harder to diagnose.
+
+Total RAM is also one of the machine fingerprint's three components, so a
+total-RAM default is stable exactly where section 11.4's calibration cache is
+valid; an available-RAM default would vary **within one cache key**.
+
+**THE VALUE WAS CHOSEN AGAINST MEASUREMENTS RATHER THAN PICKED, AND THEY LIVE IN
+ONE PLACE.** The availability spread this machine actually shows, the three
+candidate fractions against it, and the side 0.25 derives here are in
+`PROGRESS.md`'s *What Task 3 established* section -- **once**, on
+`store.TILE_SIDE_BASE`'s precedent, because a measurement restated beside its
+consumer is a measurement that drifts. What settles the value rather than taste:
+a fraction whose budget exceeds availability on an **idle** machine warns on
+every run, and a warning that always fires is not a warning. The asymmetry is
+the headroom's -- too high kills the process, too low costs runtime -- so the
+value is set from the expensive side.
+
+**And a float note, stated so nobody "fixes" it.** The budget round-trips
+through a GB float, so `int(default_budget_gb() * 10**9)` comes out **one byte
+below `total // 4`**. Deterministic, invisible against a multi-gigabyte budget,
+and not worth a special case.
 """
 
 SLOPE_BAND_FACTOR = 1.5
@@ -483,11 +519,14 @@ def tile_side(budget_bytes: int, per_series_bytes: int) -> int:
     Floors rather than rounds: rounding up overcommits a hard memory budget by
     a full tile row, and the 16 GB constraint is hard.
 
-    **THIS DIVIDES THE WHOLE BUDGET BY THE PER-SERIES COST AND SUBTRACTS
+    **THIS DIVIDES WHAT IT IS GIVEN BY THE PER-SERIES COST AND SUBTRACTS
     NOTHING** -- not the process floor, not the headroom, not
-    `solver_state_bytes`. That is F1, and Task 2 owns it: `block_bytes =
-    budget - floor - headroom` and the block is what a tile may hold. Until then
-    this function's answer is an upper bound on the side, not a budget-safe one.
+    `solver_state_bytes`. **`tiling.tile_side_for` is what does all three** and
+    has since Phase 2b Task 2 closed F1: it passes `block - solver_state` in
+    here, where `block = (budget - floor) x (1 - headroom)`. So a caller that
+    hands this function a whole budget gets an **upper bound** on the side and
+    not a budget-safe number, which is what `batch.validation`'s per-point
+    refusal does deliberately and says so.
 
     Args:
         budget_bytes: Memory budget for one tile.
@@ -508,6 +547,28 @@ def tile_side(budget_bytes: int, per_series_bytes: int) -> int:
             f"{per_series_bytes} B/series"
         )
     return side
+
+
+def default_budget_gb() -> float:
+    """Return the budget a configuration that names none resolves to.
+
+    `DEFAULT_BUDGET_FRACTION` of **total** RAM, in SI gigabytes, read through
+    `machine.total_ram_bytes` so a container gets a fraction of its **allowance**
+    rather than of the host. See `DEFAULT_BUDGET_FRACTION` for why the reading is
+    total rather than available, and for the figure the fraction was checked
+    against.
+
+    **THE ANSWER IS A PROPERTY OF THE MACHINE, SO THE SAME CONFIG FILE RESOLVES
+    DIFFERENTLY ON TWO BOXES** -- and therefore hashes differently into
+    `run_hash`. That is correct rather than nondeterministic: `run_hash` records
+    what the run used, and the run used what the machine gave it. It is also
+    already true of `run_hash` through `machine.fingerprint()`, whose RAM
+    component this shares.
+
+    Returns:
+        The budget in SI gigabytes, as `memory_budget_gb` would hold it.
+    """
+    return machine.total_ram_bytes() * DEFAULT_BUDGET_FRACTION / 10**9
 
 
 def data_and_workspace_bytes_per_series(d: int, k_beta: int, n_time: int) -> int:

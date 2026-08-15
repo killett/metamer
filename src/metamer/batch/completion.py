@@ -220,14 +220,32 @@ def resume_tile_side(
             "each of its completion bits covers cannot be established",
         )
     budget = attrs.get("memory_budget_gb")
+    # **"NOBODY ASKED FOR THIS BUDGET" AND "THIS STORE CANNOT SAY" ARE NOT ONE
+    # OBSERVATION.** The request is null for a defaulted run, so `attrs.get`
+    # alone would report a v4 store's missing key as a default. Presence is
+    # checked first; `resume.check_resume` refuses anything below v5 before this
+    # runs, so the else branch is the unreachable-by-a-gate side rather than a
+    # fallback -- and it says nothing about the request rather than guessing.
+    defaulted = (
+        "memory_budget_requested_gb" in attrs
+        and attrs["memory_budget_requested_gb"] is None
+    )
+    provenance = (
+        f"the budget that produced them was {budget} GB, which that run did not "
+        "ask for: it is the default, a fraction of the total RAM of the machine "
+        "that built the store. Either set --memory-budget to at least that here, "
+        "or write a new store"
+        if defaulted
+        else f"the budget that produced them was {budget} GB. Either raise "
+        "--memory-budget to at least that, or write a new store"
+    )
     if stored > derived_side:
         raise ValidationError(
             ValidationLayer.SEMANTIC,
             f"the store at {store_path} has a tile side of {stored} and this "
             f"run's memory budget gives {derived_side}. Its shards are fixed at "
             f"creation, so finishing it needs tiles of {stored} points a side "
-            f"and the budget that produced them was {budget} GB. Either raise "
-            "--memory-budget to at least that, or write a new store",
+            f"and {provenance}",
         )
 
     # DOUBLY GUARDED, DELIBERATELY, AND EACH GUARD NAMES THE OTHER.
