@@ -8,7 +8,7 @@ criteria met, two with reduced scope. **This plan closes those two.**
 
 1. [`docs/superpowers/notes/phase1-to-phase2-handoff.md`](../notes/phase1-to-phase2-handoff.md)
    §1 — the pre-flight. It has grown during this brainstorm and now carries **(a0), (a1),
-   (a6), (a7), (a)–(k) with (a2)–(a5), (c2), (c3), (g2), (i2)–(i8), (j2), (j3) and (k2)**, the
+   (a6), (a7), (a)–(k) with (a2)–(a5), (c2), (c3), (g2), (i2)–(i9), (j2), (j3) and (k2)**, the
    five causes of a surviving mutation, and the standing rules. **Read it there; this line is
    an index, not a copy.** (a7) and (a4)'s third register were promoted out of Task 0,
    2026-08-15.
@@ -454,6 +454,25 @@ construction.
                          n_time, n_models, per_point_design=False) -> int
     store.TILE_SIDE_BASE          # policy constant
     memory.HEADROOM_FRACTION      # policy constant
+
+> **AMENDED 2026-08-15, BY THE IMPLEMENTATION.** Landed as specified, plus:
+> `tiling.BudgetTooSmallError`, a distinct type so the caller staging it into a layer-3 refusal
+> dispatches structurally rather than on message text (c2); a `threads` parameter on
+> `tile_side_for`, since the solver constant takes one; and **`run.FLOOR_OVERRIDE_ENV`
+> (`METAMER_FLOOR_BYTES`)**, which the brief did not anticipate and which the task cannot be
+> completed without — a measured floor makes any out-of-process fixture unable to pin a tile
+> side, because the window that selects a small side is a few kB wide while the floor varies by
+> megabytes. It records itself in provenance as `components={"override": N}`.
+>
+> **Two ordering changes fall out of the refusal being reachable.** `check_resume` and
+> `check_source` now run **before** the derivation (§13.7's own order, which had nothing to
+> enforce while the tiling step could not fail), and **a recompute runs no budget arithmetic at
+> all** — its side is read back, and the budget's rule bounds a fit's resident set, which a
+> recompute does not have.
+>
+> **And the base rounds only at or above itself.** Below `TILE_SIDE_BASE` no array's shard can
+> reach the chunk target, so the divisor structure is provably irrelevant and the raw side passes
+> through; rounding it to zero would refuse a small run for no benefit.
 
 **Tests, and the bug each catches.**
 

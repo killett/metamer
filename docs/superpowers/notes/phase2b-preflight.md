@@ -313,7 +313,7 @@ basis. **Its test is (i7)-flagged in its own docstring** — until Task 5, `DEFA
 writable basis, so "copy the source's" and "write DEFAULT" agree on every store this suite can
 build, and Task 5 owns moving the fixture off that point.
 
-### Two findings that belong to other tasks, reported rather than carried
+### Two findings that belong to other tasks, reported rather than carried (Task 1)
 
 - **Design doc §11.4 says the calibration cache has *"an explicit expiry"*; the 2b plan settled
   NO expiry**, on the ground that time does not cause the change it stands in for — (a2) at a
@@ -323,3 +323,125 @@ build, and Task 5 owns moving the fixture off that point.
 - **§13.4 quotes `28 882 B/series` and `tile_side` 186 for the per-point regime** — a cascade site
   Task 0's count did not list, because the count was of `338`. The corrected pair is **28 434 and
   187**. Task 9's to fix; recorded here so its count is right when it runs.
+
+---
+
+## Task 2 — `block_bytes`, the smooth base, and the refusal
+
+Run 2026-08-15 against the task brief, `batch/store.py`'s chunk and shard machinery,
+`batch/tiling.py`, `batch/run.py`, and a measured sweep of the divisor structure. **Seven
+findings; two of them change what the task can be.**
+
+### THE DIVISOR MEASUREMENT WAS TAKEN ON A REPRESENTATIVE ARRAY AND THE WORST IS TWICE AS BAD
+
+`PROGRESS.md`'s divisor note computes on `theta` — float32 × `P_total` = 160 B per cell — and
+reports **169 rows, a 9.1 MB chunk, 2.3× the target** at side 338. The worst array is
+**`warmstart/theta_unconstrained`**, float64 × `P_total` = **320 B per cell**, and at the same
+side it takes the same 169 rows for **18.3 MB — 4.57×**. Measured, per array, at M = 12, C = 2,
+`k_β` = 4, `P_total` = 40:
+
+| side | worst array | chunk | ratio |
+|---|---|---|---|
+| 338 | `theta_unconstrained` | 18.3 MB | **4.57×** |
+| **347** (Task 0's corrected side) | `theta_unconstrained` | **38.5 MB** | **9.63×** |
+| 336 | `beta` / `delta_ic` / `log_lik` | 5.42 MB | 1.35× |
+| 272 (Task 2's derived side) | `beta` / `delta_ic` / `log_lik` | 7.10 MB | 1.78× |
+
+**This is exactly what the brief warned about, confirmed by measurement rather than by argument**,
+and it is why the test asserts the worst array rather than a representative one.
+
+### AND TASK 0's CORRECTED SIDE IS PRIME, WHICH IS THE PATHOLOGICAL CASE
+
+**347 is prime.** So is 349, and so is 353. `_chunk_side`'s own docstring names a prime tile side
+as the case with no useful subdivision — its only divisors are 1 and itself — and the corrected
+number landed on one. Without a base the published side gives a **38.5 MB chunk against a 4 MB
+target**. The base is not a nicety here; it is what makes the corrected number usable at all.
+
+### THE BASE IS 16, CHOSEN WITH THE MEASURED STRUCTURE IN FRONT OF IT
+
+Swept over every derived side from 100 to 600, worst-case ratio across all arrays whose shard can
+reach the target, against mean rounding loss in tile **area**:
+
+| base | worst | median | area loss |
+|---|---|---|---|
+| 8 | 3.41× | 1.57× | 2.3% |
+| 12 | 2.12× | 1.52× | 3.4% |
+| **16** | **1.99×** | 1.49× | **4.5%** |
+| 24 | 1.99× | 1.39× | 6.7% |
+| 32 | 1.99× | 1.47× | 8.9% |
+| 60 | 1.75× | 1.21× | 16.4% |
+
+**16 is the smallest base that reaches the 1.99× floor**, and nothing below 60 improves on it.
+24 matches its worst case with a better median and costs half again as much area. The brief's
+*"16 gives a set dense low and sparse high; 12 is denser in the middle"* is true of the bases'
+own divisors and **is not what decides** — the admissible window is set by the array, and the
+sweep is what answers.
+
+### THE TARGET IS UNREACHABLE FOR SEVEN OF THE EIGHTEEN ARRAYS, AND ASSERTING A BAND ON THEM FAILS CORRECTLY
+
+`point_outcome` is one byte per cell: a whole 336-side shard is **113 kB**, so no subdivision can
+reach 4 MB and `_chunk_side` correctly returns the whole side. `n_valid`, `selected`, `outcome`,
+`iterations` and `ic_best` are the same shape of case. **A test asserting "achieved chunk bytes
+are inside the target band" over every array fails on these for a correct reason**, so the check
+partitions: arrays whose shard reaches the target are held to the band; the rest are asserted to
+be exactly one chunk per shard, which is the right answer and not a fallback.
+
+### THE BUDGET'S UNIT IS DECIDED HERE: `memory_budget_gb` IS 10⁹ BYTES
+
+Four reasons, and the fourth is the one that settles it:
+
+1. The field is named `_gb`, and SI GB is 10⁹. A `1024**3` field is named `_gib`.
+2. Every published tile side in this project is a 10⁹ number.
+3. `PROGRESS.md`'s Hardware table already reports **16.54 GB**, which is the SI reading of this
+   machine's 16 535 728 128 B — so the project already speaks SI when it writes GB.
+4. **Changing `run.py`'s `1024**3` to `10**9` LOWERS the budget by 7.4%**, which is the safe
+   direction against a constraint the design doc calls hard. The opposite fix raises it.
+
+**Consequence, stated rather than discovered:** a store created before this change carries a
+tile side derived from 7.4% more bytes, so a resume derives a smaller side, hits
+`completion.resume_tile_side`'s *stored > derived* arm and **refuses**. Harmless today for
+exactly the reason `SCHEMA_VERSION` 4 was harmless — no store outside the suite predates either —
+and not harmless later.
+
+### THE FLOOR MAKES `tile_side` INPUT-DEPENDENT, WHICH IT HAS NEVER BEEN
+
+The floor is measured **with the input open**, so the derived side now depends on the store being
+read — its handles, its consolidated metadata, its chunk grid. `tile_side_for` therefore takes a
+`FloorReport`, and **the published number needs a pinned floor among its preconditions.** Task 9's
+precondition list grows by one, and it is the only one of them that is a measurement.
+
+### AND THE CONSEQUENCE THE BRIEF DID NOT ANTICIPATE: EVERY FIXTURE THAT PINS A TILE SIDE BY CHOOSING A BUDGET BECOMES IMPOSSIBLE
+
+Four test modules pin a tile side of 1 or 2 with `memory_budget_gb = 2e-6` — **2000 bytes** — by
+exploiting exactly the defect F1 names: the budget *was* the block. Under
+`block = (budget − floor) × (1 − headroom)` a 2000-byte budget is **below the floor and refused**,
+which is correct.
+
+**And no choice of budget can replace it.** For a side of 1 the block must land in a window about
+three series wide — ~2.6 kB on these fixtures — while the measured floor varies by megabytes
+between runs. **The window is a thousand times narrower than the jitter**, so a fixture that
+selects a tile side through a budget cannot work against a measured floor at all.
+
+In-process tests are already covered by `run(floor=...)` and conftest's stub. **The tests that
+drive `python -m metamer` in a subprocess are not**, and criterion 1 (SIGKILL between tiles),
+criterion 2 (two budgets, four tiles against one) and the preemption test all need multiple
+tiles on a 2×2 grid.
+
+**Resolution: `METAMER_FLOOR_BYTES`, read by `run()` when no floor is supplied**, documented with
+its hazard — it defeats F1's guarantee, and it exists because a measured floor makes an
+out-of-process fixture unable to pin a side. **It records itself**: the override produces
+`components = {"override": N}` in provenance, so a store built with one is identifiable from its
+own attrs with no new field. It also answers a real production case, which is why it is a
+parameter rather than a test hack: a sandbox that forbids spawning cannot run the probe at all.
+
+### (i3), (c) and (a5), briefly
+
+- **(i3)** *"a tile at the derived side plus the floor is within the budget"* is a relation and
+  passes on two zeros. The derived side is asserted against its own hand-computed value first.
+- **(c)** two refusals, and their order matters: `block_bytes_for` refuses a budget at or below
+  the floor **before** `tile_side` refuses a block that holds no series. The second must never be
+  the one a user meets, because its message names bytes per series rather than the floor.
+- **(a5)** the brief says the refusal fires on the **resolved** budget so a `None` config cannot
+  bypass it. At Task 2 `memory_budget_gb` still has a pydantic default of 1.0, so there is no
+  `None` to bypass with; **that test is Task 3's and is recorded as owed rather than written
+  here against a state that cannot occur.**

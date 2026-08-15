@@ -8,30 +8,34 @@
    Tasks 0–13 — the whole sub-phase**, and open questions 1, 4, 9, 11, **12**. **The signal-term blocker carried since
    Task 6 is CLOSED**: `config.signal_spec()` builds a `SignalSpec`, `signal.k_beta` gives the
    column count, and `run()` sizes tiles, fits and writes them.
-3. **PHASE 2a IS COMPLETE. THE 2b PLAN IS APPROVED. 2b TASKS 0 AND 1 ARE DONE. NEXT ACTION: 2b
-   TASK 2 — `block_bytes = budget − floor − headroom` and the smooth-base rounding — AND ITS
-   FIRST STEP IS THE PRE-FLIGHT AGAINST ITS OWN BRIEF.** All sixteen 2a exit
+3. **PHASE 2a IS COMPLETE. THE 2b PLAN IS APPROVED. 2b TASKS 0, 1 AND 2 ARE DONE. NEXT ACTION:
+   2b TASK 3 — the `--memory-budget` default and the unset sentinel — AND ITS FIRST STEP IS THE
+   PRE-FLIGHT AGAINST ITS OWN BRIEF.** All sixteen 2a exit
    criteria are met, two with reduced scope; **2b closes both**.
    **Read [What 2b's first tasks inherit](#what-2bs-first-tasks-inherit-2026-08-14) before
    anything else** — it carries the findings (F1–F5) that changed what 2b is, and every
    measured number 2b rests on. Then the plan.
-4. **Tests: 967 passed, measured 2026-08-15 after 2b Task 1** (947 after Task 0, 940 before it).
-   This is the only statement of the **current** count; the sweep-timing series below carries a
-   size per run because **a duration without its test count is not a measurement**, which is a
-   different fact and not a restatement of this one.
+4. **Tests: 977 passed, measured 2026-08-15 after 2b Task 2** (967 after Task 1, 947 after
+   Task 0, 940 before it). This is the only statement of the **current** count; the sweep-timing
+   series below carries a size per run because **a duration without its test count is not a
+   measurement**, which is a different fact and not a restatement of this one.
 5. **`pixi run test` is the full sweep and is what every end-of-task verification must run.
    It took 302–606 s across nine runs, 2026-08-12 to 2026-08-14, at 822, 845, 847, 880, 880,
-   897, 910, 924 and 940 tests.** **THE ATTRIBUTION TRIGGER HAS NOW FIRED AND THE PASS IS
-   OWED — see [the sweep-timing note](#things-a-cold-session-cannot-re-derive).** Two further
-   runs on 2026-08-14, on a **byte-identical test tree** (the 2b work is markdown only, and no
-   test opens a doc file), came in at **777.8 s and 782.7 s — agreeing to 5 s and sitting
-   176 s above 606.1 s.** The first was labelled *contaminated by concurrent load*; **the
+   897, 910, 924 and 940 tests, and **none of those nine was recorded with its conditions, so
+   no two of them are comparable** — see [the sweep-timing note](#things-a-cold-session-cannot-re-derive).
+   Two further runs on 2026-08-14, on a **byte-identical test tree** (the 2b work was markdown
+   only, and no test opens a doc file), came in at **777.8 s and 782.7 s — agreeing to 5 s and
+   sitting 176 s above 606.1 s.** The first was labelled *contaminated by concurrent load*; **the
    second was run with nothing else started and falsified that label.** Do not quote 302–606
-   as current until the pass is done. **Two 2026-08-15 runs are the first with their machine
-   state recorded** — after 2b Task 0, **1004.4 s at 947 tests** (load 7.63/6.53/5.03 before,
-   7.72/8.11/7.30 after; 2299.9 → 2400.0 MHz), and after 2b Task 1, **961.2 s at 967 tests**
-   (load 6.18/6.87/6.00 before, 6.78/6.19/5.94 after; 2696.1 → 1008.4 MHz). 4 cores throughout.
-   **The second is 43 s FASTER on 20 more tests**, so the +222 s step now reads as scatter.
+   as current. **Two 2026-08-15 runs are the first with their machine state recorded** — after
+   2b Task 0, **1004.4 s at 947 tests** (load 7.63/6.53/5.03 before, 7.72/8.11/7.30 after;
+   2299.9 → 2400.0 MHz), and after 2b Task 1, **961.2 s at 967 tests** (load 6.18/6.87/6.00
+   before, 6.78/6.19/5.94 after; 2696.1 → 1008.4 MHz), and after 2b Task 2, **806.5 s at 977
+   tests** (load 6.70/7.43/8.18 before, 5.01/6.20/7.25 after; 2699.8 → 1597.9 MHz). 4 cores
+   throughout. **Each run is FASTER than the last while carrying more tests — 1004 → 961 → 807 s
+   at 947 → 967 → 977.** **OPEN QUESTION 15 IS CLOSED: there was never a step to attribute, the
+   trigger is dropped, and `--durations` replaces it.** Read the total as a health check, never
+   as a measurement.
 6. **`pixi run test-fast` deselects `slow` and is for iteration only — a green fast run is NOT
    evidence a task is done.** `pixi run test-ci` reproduces CI (`-m 'not machine'`) and is not
    evidence either, because `machine` covers exactly the tests that pin the RSS shim's units and
@@ -45,7 +49,7 @@
    only for its closing exit-criteria table.
 9. **THE METHOD IS THE PRE-FLIGHT AND IT LIVES IN EXACTLY ONE PLACE:**
    [`docs/superpowers/notes/phase1-to-phase2-handoff.md`](docs/superpowers/notes/phase1-to-phase2-handoff.md)
-   §1 — **(a0), (a1), (a6), (a7), (a)–(k) with (a2)–(a5), (c2), (c3), (g2), (i2)–(i8), (j2),
+   §1 — **(a0), (a1), (a6), (a7), (a)–(k) with (a2)–(a5), (c2), (c3), (g2), (i2)–(i9), (j2),
    (j3) and (k2)**, the **five** causes of a surviving mutation, the standing rules and the
    fixture
    facts. **Run it against each 2b task brief before writing code** and append what it finds to
@@ -464,6 +468,128 @@ budget yet.** `tile_side_for` still divides the whole budget by the per-series c
 and it is Task 2's, deliberately — this task is a measurement with no consumer, so a wrong number
 at Task 2 has exactly one new input.
 
+### What Task 2 established (done 2026-08-15 — read before touching budgets, tiling or chunks)
+
+**`block_bytes = (budget − floor) × (1 − HEADROOM_FRACTION)`, and the budget bounds the
+PROCESS.** `tiling.block_bytes_for`, `tiling.tile_side_for` (now taking a `FloorReport`),
+`tiling.BudgetTooSmallError`, `memory.HEADROOM_FRACTION = 0.15`, `store.TILE_SIDE_BASE = 16`.
+
+**THE WORKED EXAMPLE, EVERY STEP, AT A 10⁹ B BUDGET AND THIS MACHINE'S FLOOR:**
+
+| step | value |
+|---|---|
+| `floor.peak_bytes` | 228 200 000 |
+| `budget − floor` | 771 800 000 |
+| `× (1 − 0.15)` = block | 656 030 000 |
+| − `solver_state` 11 984 | 656 018 016 |
+| ÷ 8274 B/series | 79 285.5 |
+| √, floored | 281 |
+| rounded down to a multiple of 16 | **272** |
+
+Per-point X gives **144**. Larger budgets: 2 GB → 416, 4 GB → 608, 8 GB → 880, 16 GB → 1264.
+
+**THE BUDGET'S UNIT IS DECIDED: `memory_budget_gb` IS 10⁹ BYTES.** `run.py` used `1024**3` until
+now — 7.4% more bytes than every published side, and than this file's own Hardware table, which
+reports 16.54 GB (the SI reading of 16 535 728 128 B). The field is named `_gb`; a `1024**3`
+field is named `_gib`. **Correcting it LOWERS the budget**, the safe direction. Consequence,
+stated: a store created under the GiB reading has a larger stored side, so a resume derives a
+smaller one, hits `resume_tile_side`'s *stored > derived* arm and refuses — harmless today for
+exactly the reason `SCHEMA_VERSION` 4 was, and not harmless later.
+
+**THE DIVISOR MEASUREMENT WAS TAKEN ON A REPRESENTATIVE ARRAY AND THE WORST IS TWICE AS BAD.**
+This file's own note computed on `theta` (float32 × `P_total`, 160 B/cell) and reported 2.3× at
+side 338. The worst array is **`warmstart/theta_unconstrained`** (float64 × `P_total`, 320 B/cell)
+and it is **4.57×** there. Measured per array at M = 12, C = 2, k_β = 4, `P_total` = 40:
+
+| side | worst array | chunk | ratio |
+|---|---|---|---|
+| 338 (composite) | `theta_unconstrained` | 18.3 MB | 4.57× |
+| **347 — Task 0's published side, and it is PRIME** | `theta_unconstrained` | **38.5 MB** | **9.63×** |
+| 336 | `beta` / `delta_ic` | 5.4 MB | 1.35× |
+| **272 — Task 2's derived side** | `beta` / `delta_ic` | 7.1 MB | 1.78× |
+
+**347 is prime**, and so are 349 and 353. `_chunk_side`'s own docstring names a prime side as the
+case with no usable subdivision, and the corrected number landed on one. **The base is what makes
+Task 0's number usable at all**, not a nicety.
+
+**AND THE BASE WAS CHOSEN BY SWEEPING, NOT BY ELEGANCE.** Over every derived side from 100 to 600,
+worst case across all arrays whose shard can reach the 4 MB target, against mean rounding loss in
+tile **area**: base 8 → 3.41× at 2.3%; 12 → 2.12× at 3.4%; **16 → 1.99× at 4.5%**; 24 → 1.99× at
+6.7%; 60 → 1.75× at 16.4%. **16 is the smallest base reaching the 1.99× floor** and nothing below
+60 improves on it.
+
+**BELOW THE BASE THE BASE IS INERT AND THE RAW SIDE PASSES THROUGH.** The widest array is
+`8 × P_total` B/cell, so a shard first reaches the target at `side ≈ sqrt(4e6/(8·P_total))` — 112
+at `P_total` = 40, and a side under 16 would need `P_total` above 2200. **Every array is already
+one chunk per shard there**, so rounding such a side to zero would refuse a small run for no
+benefit. Seven of the eighteen arrays are in that state even at 272 (`point_outcome` is one byte
+per cell: a whole shard is 74 kB), and **a chunk-band assertion over all arrays fails on them for
+a correct reason** — the test partitions.
+
+**THE ENTRY CONTRACT'S ORDER HAD TO MOVE, AND IT IS §13.7's OWN ORDER.** The tiling step was
+effectively infallible, so deriving the side above the resume gate was harmless. **Now it
+refuses**, and a run with a wrong candidate list *and* a small budget reported the budget — the
+two send a user to different places. `check_resume` and `check_source` now run **before** the
+derivation; `resume_tile_side` still runs after it, because it compares against the derived side.
+Identity first, geometry second, as §13.7 always said.
+
+**AND A RECOMPUTE RUNS NO BUDGET ARITHMETIC AT ALL.** `--reuse-fits-from` reads its side back
+from the source, and **the budget's rule bounds a FIT's resident set, which a recompute does not
+have** — so deriving anyway would refuse a legitimate recompute on a machine too small to have
+fitted the source, which is the case the feature exists to serve.
+
+**`METAMER_FLOOR_BYTES` — a new seam, with its hazard stated.** Two reasons, and both are real.
+A sandbox that forbids spawning cannot run the floor probe at all, and without an override every
+run there fails at a step unrelated to the fit. And **a measured floor makes an out-of-process
+fixture unable to pin a tile side**: the window that selects a side of 1 is a few kB wide while
+the floor varies by megabytes, so no budget can do it. In-process tests have `run(floor=...)`;
+`tests/conftest.py` now stubs both, session-scoped, at **1 MB — a floor no process importing
+numpy could hold**, so it can never be mistaken for a measurement. **The override records
+itself**: it writes `components = {"override": N}` into provenance, so a store built with one
+says so, with no new field.
+
+**THE STUB HAD TO BECOME SESSION-SCOPED, AND FINDING OUT COST A FAILURE.** A function-scoped
+autouse fixture is ordered **after** every higher-scoped one, so `test_resume.py`'s module-scoped
+store was built with the real probe while its budget had been chosen against the stub. Measured,
+and it is the ordering rule rather than a race.
+
+**Every fixture that pinned a tile side through a tiny budget had to be recomputed.** Four
+modules used `memory_budget_gb = 2e-6` — 2000 bytes — which worked only because the budget *was*
+the block. They are now derived from the stub floor with the arithmetic written beside them: at
+`d=1, k_β=4, p_max=3, N=60, M=2` the per-series cost is **926 B** and the solver constant
+**11 200 B**, so a side of `s` needs a block of `s²·926 + 11 200`.
+
+**AND A LOAD-SENSITIVE TEST SURFACED, WHICH IS A FIXTURE DEFECT RATHER THAN A REGRESSION.**
+`test_completion.py::test_a_preempted_command_exits_aborted_early_and_resumes` asserts the SIGTERM
+landed **mid-loop** — `partial.any() and not partial.all()`. On its 2×2 grid the window between
+"the first tile is done" and "every tile is done" was **three tiles wide**, and the parent polls
+every 20 ms while competing with its own child for four cores. It failed once in a sweep on
+2026-08-15 and **would not reproduce in isolation, nor under six busy loops**, which is what an
+order-of-milliseconds race looks like. The grid is now 4×4, so the window is **fifteen tiles
+wide**, for about twice the runtime. **A fixture that can only express its condition when the
+machine is quiet is a fixture that cannot express it.**
+
+**AND THE FIRST RE-DERIVATION WAS WRONG BECAUSE I COUNTED `p_max` BY EYE.** `white + matern12`
+has **three** free parameters — both sigmas and the timescale — not the two a reading of the
+candidate list suggests, and `n_time` was taken as 24 where the fixtures use 60. The fast suite
+passed; **the slow suite caught it**, at
+`test_completion.py::test_a_budget_too_small_for_the_stored_tile_is_refused`, where two budgets
+meant to straddle a side boundary landed on the same side and a refusal stopped firing. The
+ragged index is what knows `p_max`; read it rather than counting terms. **Fourth time the full
+sweep has caught what the fast run could not.**
+
+**Twelve mutations, all of which bite** (2026-08-15): budget as the block; zero headroom;
+headroom off the budget rather than off what is left; no rounding; rounding up; base 8; the
+solver constant not subtracted; a refusal without the ladder; `1024**3`; the refusal unstaged;
+the derivation above the gates; a recompute running the budget arithmetic.
+
+**AND ONE OF THEM NEEDED A NEW TEST, WHICH IS THE (i8) FINDING HERE.** *"The solver constant is
+not subtracted"* survived every test in the module: at the worked example it is **11 984 B against
+a block of 656 030 000 — 0.002%**, so it moves the raw side by less than one and the rounding
+erases it. **The parameter under test sat at a fixed point.** The discriminating fixture is a
+block of 40 000 B, where the constant is the difference between a side of 1 and a side of 2 — the
+boundary a user with a hard constraint actually operates at.
+
 ---
 
 ## Things a cold session cannot re-derive
@@ -590,10 +716,10 @@ both answer.**
   average **0.46 s**. So the sweep is a small number of expensive tests, and a per-module
   attribution pass would spend its time on the 45% that is already cheap.
 
-**THE STEP ITSELF NOW LOOKS LIKE SCATTER.** After Task 1 the sweep is **961.2 s at 967 tests**
-against **1004.4 s at 947** — **43 s DOWN while adding 20 tests**, four of which spawn child
-processes and whose own standalone cost is ~65 s. A sweep that gets faster while its work grows
-is scatter, and −43 s sits inside the ±38 s same-tree disagreement already on record.
+**THE STEP ITSELF NOW LOOKS LIKE SCATTER, AND A THIRD POINT SETTLES IT.** 1004.4 s at 947 tests
+(Task 0) → **961.2 s at 967** (Task 1) → **806.5 s at 977** (Task 2). **Three consecutive runs,
+each faster than the last while carrying more tests, ending 198 s below where they started.** A
+sweep that speeds up as its work grows is not measuring the work.
 
 **AND THE FREQUENCY READING IS A NEARLY USELESS INSTRUMENT, WHICH IS ITS OWN FINDING.** The same
 sweep read **2696 MHz before and 1008 MHz after** — a 2.7× swing inside one run. **A spot reading
@@ -602,6 +728,39 @@ it cannot support the inference the 2026-08-14 note tried to draw from it. Keep 
 because it is free, but a claim that rests on it needs a mean over the run or a throttle counter
 instead. **Load average is the surviving candidate and its before-reading is the only
 independent half** — the sweep generates its own load, so the after-reading is context.
+
+### OPEN QUESTION 15 IS CLOSED, 2026-08-15, AND THE CONCLUSION IS THAT THERE WAS NEVER A STEP
+
+**The sweep duration has scatter comparable to every step this file previously attributed to a
+change.** Six statements, and together they close it:
+
+1. **The timing series was never recorded with its conditions.** Nine runs, 302–606 s, with a
+   duration and a test count and nothing else — so no two of them were ever comparable, and the
+   whole series was a set of uncontrolled draws read as a trend.
+2. **The 176 s "step" was two draws from a distribution nobody had characterized.** The pair
+   agreeing to 5 s was read as confirmation of a step; two same-tree draws agreeing says nothing
+   about the spread between *conditions*.
+3. **Collection is 0.5%** (5.10 s at 966 tests), so the superlinear-setup hypothesis is dead.
+4. **The 25 slowest tests are 55% of the sweep** (525.7 s of 961.2 s); the other 942 average
+   0.46 s. A per-module attribution pass would spend itself on the cheap 45%.
+5. **The sweep got 43 s FASTER while gaining 20 tests** (1004.4 s at 947 → 961.2 s at 967),
+   four of which spawn child processes and cost ~65 s standalone.
+6. **The frequency instrument's noise exceeds the effect it was used to measure** — 2.7× inside
+   one run. **An instrument whose noise exceeds its effect cannot attribute anything**, and that
+   judgement is recorded here so nobody reaches for it again.
+
+**THE ATTRIBUTION TRIGGER IS DROPPED RATHER THAN REPLACED, AND THAT IS A DECISION WITH A
+REASON.** Its condition — a same-tree disagreement beyond 38 s — is **below the noise floor**, so
+it would fire on scatter forever. Deriving a replacement threshold means characterizing the
+spread, which costs repeated same-tree sweeps at ~16 minutes each, to bound a number nobody
+acts on. **`--durations` gives the quantity anyone actually cares about — a per-test
+regression — at no extra cost**, so that is the instrument from here.
+
+**What stands:** record load average (before, which is the independent half), CPU frequency
+(free, load-bearing for nothing) and the test count alongside every sweep duration; read the
+total as a health check rather than as a measurement; and use `--durations=25` when a specific
+test is suspected of having got slower. **Do not open a per-module attribution pass on a total
+that moved.**
 
 **So: 302–427 s over six runs was the range, and it is NOT current.** Treat a step inside it as
 scatter only once the pass above has explained the 176 s.
@@ -654,7 +813,7 @@ was the actual defect the leak exposed.
 | **10** | macOS and Windows support | deciding what RSS accounting *means* there (peak vs current; `ru_maxrss` has no Windows equivalent), then a green run on both. What failed was never the library — it was `test_memory.py`'s RSS assertions and `test_bench.py`'s hard-coded `threads=4` against a 3-core runner |
 | **13** | the packaging guard installs `--no-deps`, so a **wrong version floor** is uncaught | an offline wheelhouse: `pip wheel` the resolved set once, install `metamer[batch]` with `--no-index --find-links`. Needs pip in the environment and a decision about where the wheelhouse lives. **Do not close it by loosening the floors** — an untested lower bound is the thing being guarded |
 | **14** | the benchmarks use a synthetic axis with `unique_dt = 1`; real monthly data has **6** | run the spike with a realistic calendar axis beside the synthetic one at the same B and thread count. **"It plausibly cancels in the ratio" is the reasoning that has failed twice** — measure it. A fixture change, not a harness change |
-| **15** | **the sweep is 176 s slower on a byte-identical tree** (777.8 and 782.7 s against 606.1 s, 2026-08-14), and the sweep-timing series **records no machine state**, so nothing can attribute it. **Half-closed 2026-08-15**: state is now recorded with every duration, and the first state-carrying run (1004.4 s, 947 tests, load 5.03→7.30, **2.30–2.40 GHz**) shows the box **1.8× faster per core and 28% slower overall** than the 782.7 s run at ~1.31 GHz — **so "below base clock" is falsified as the cause and load average is the surviving candidate** | a **same-tree** re-measurement with state recorded, now that state is recorded. Decompose per module only if state does not account for it. The frequency hypothesis is dead; do not restore it |
+| ~~**15**~~ | ~~the sweep is 176 s slower on a byte-identical tree~~ | **CLOSED 2026-08-15. There was no step to attribute** — see below |
 
 ---
 
@@ -773,11 +932,12 @@ was the actual defect the leak exposed.
 | **Phase 2b implementation plan** | [`docs/superpowers/plans/2026-08-14-metamer-phase2b.md`](docs/superpowers/plans/2026-08-14-metamer-phase2b.md) — 11 tasks, 16 exit criteria, **approved 2026-08-14. Task 0 landed 2026-08-15.** Its head carries findings F1–F4, which are why 2b begins with a correction task rather than with the calibration tile |
 | **Phase 2b pre-flight, per task** | [`docs/superpowers/notes/phase2b-preflight.md`](docs/superpowers/notes/phase2b-preflight.md) — carries the pre-plan audit and Task 0's; per-task entries are appended **before** each task |
 
-**Next action:** Task 2 — `block_bytes = budget − floor − headroom`, the refusal below the floor,
-and the smooth-base rounding. Its first step is the pre-flight against its own brief, appended to
-`phase2b-preflight.md`. **It inherits three things from Task 1**: `peak_bytes` is the figure to
-subtract, the uncharged per-candidate temporaries mean the headroom must be a *fraction*, and the
-budget's `10**9`-versus-`1024**3` split is Task 2's and Task 3's to resolve.
+**Next action:** Task 3 — `memory_budget_gb: float | None = None`, resolved at run, defaulting to
+a fraction of TOTAL RAM. Its first step is the pre-flight against its own brief, appended to
+`phase2b-preflight.md`. **It inherits from Task 2**: the budget's unit is settled at 10⁹ B, the
+refusal already fires on whatever value reaches `tile_side_for` (so Task 3 must route the resolved
+value there, and owns the test that a `None` config cannot bypass it), and
+`machine.total_ram_bytes` is cgroup-aware as of Task 1.
 
 **THIS TABLE SAID "AWAITING REVIEW; NO CODE YET" WHILE THE COLD-START HEAD TWELVE HUNDRED LINES
 ABOVE SAID "APPROVED 2026-08-14".** Found at Task 0's start, 2026-08-15. Same shape as the

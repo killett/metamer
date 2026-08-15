@@ -45,6 +45,23 @@ carry NaN; the dtype is fixed at store creation and the array feeds no arithmeti
 therefore **exempt, named, and given a sentinel of 65535 rather than silently left at 0** --
 justified, labelled, and outside the range the writer can emit.
 
+#### AND THE SAME RULE AT A COMPARISON: "EXCLUDED" AND "MISSING" MUST NOT BE ONE OBSERVATION
+
+> **An exclusion list must assert the PRESENCE of the excluded keys in both artifacts.**
+> Otherwise the exclusion silently covers absence, and a key that vanished from one side reads
+> exactly like a key that was deliberately not compared.
+
+**This is the fill-value rule in a new register**, and it generalizes past storage to every
+comparison with a carve-out: a diff with an ignore list, a golden file with skipped fields, a
+schema check with optional keys. In each, "we chose not to compare this" and "this is not there"
+produce the identical result, and only one of them is intended.
+
+Worked instance, Phase 2b Task 1. Exit criterion 1 compares two stores byte for byte; `floor` is
+measured fresh every run and therefore differs between two runs of one configuration, so it is
+excluded by name. **Without an assertion that `floor` is present in BOTH stores**, a change that
+dropped the attr entirely would leave the criterion green — and the attr's whole purpose is to be
+readable from a store later.
+
 ### (a1) RE-DERIVATION AT RESUME IS THE HAZARD, NOT AN UNHASHED ANCESTOR
 
 > **A stored geometry READ BACK from the store is safe, however it was originally
@@ -338,10 +355,20 @@ signal x noise search lands** -- design-stage outcomes are constant across the m
 construction. Fitting `white + matern12` to white noise leaves the correlated candidate
 degenerate at most points while `white` fits (measured: 3 of 4).
 
-#### AND THE CONFLICT CAN BE WITH A CRITERION THAT IS ALREADY MET
+#### (a5) EXTENDS ACROSS DOCUMENTS, AND THE CONFLICTING CONSTRAINT CAN BE ONE NOBODY HAS OPEN
 
+> **A requirement can contradict a constraint that lives in a document nobody has open.** A
+> brief is reviewed against itself and against the design doc; **an earlier sub-phase's exit
+> criteria are neither, and they are still binding.** Before adding a per-run measurement to
+> provenance, check it against every property already asserted **of a store** — byte identity,
+> determinism, self-containment.
+>
+> **THE TELL IS SPECIFIC AND REUSABLE: any new value that is MEASURED rather than DERIVED and
+> reaches a store is a candidate.** Determinism claims are the natural enemy of fresh
+> measurement, and this project has three of them.
+>
 > **A MEASUREMENT OF THE PROCESS CANNOT BE PART OF A BYTE-IDENTITY CLAIM ABOUT THE OUTPUT.**
-> They are claims about different subjects, and a store that records both is a store whose
+> They are claims about different subjects, and a store recording both is a store whose
 > reproducibility test now fails for a correct reason. **Where both are wanted, name the measured
 > keys and exclude them explicitly** — never drop the comparison wholesale, and never quietly
 > remove the measurement.
@@ -644,6 +671,29 @@ derivative zero). A fixture at `n_eff = 12` **cannot test a floor at 2.0**. And 
 zeros cannot test a read**: zarr does not write a chunk equal to the fill value, so a
 zero-filled store serves every read from the fill value — measured, **0 bytes and 0 keys** for a
 read that returned the right number of correct-looking values (Phase 2a Task 6).
+
+### (i9) A FIXTURE WHOSE WINDOW IS NARROWER THAN THE MACHINE'S JITTER CANNOT EXPRESS ITS CONDITION
+
+> **When a test asserts that something happened DURING a window, size the window against the
+> machine rather than against the logic.** A window a few units wide is not a window on a loaded
+> box; the test then fails for a reason unrelated to its subject, and it fails **rarely**, which
+> is worse than failing always.
+
+(i) asks whether the fixture can express the defect. This asks whether it can express it **under
+the conditions it actually runs in** — and the tell is a test that passes in isolation, passes
+under synthetic load, and fails once in a full sweep.
+
+Worked instance, Phase 2b Task 2.
+`test_a_preempted_command_exits_aborted_early_and_resumes` sends SIGTERM once the store reports
+its first completed tile and asserts the run was **mid-loop**: `partial.any()` and
+`not partial.all()`. On a 2×2 grid that window is **three tiles wide**, while the parent polls
+every 20 ms and competes with its own child for four cores. It failed once in a sweep, and would
+not reproduce in isolation or under six busy loops. Widening the grid to 4×4 makes the window
+fifteen tiles wide at about twice the runtime.
+
+**The repair is the fixture, never the assertion.** Loosening it to `partial.any()` would delete
+the claim — a run that finished everything also satisfies that — which is (i5) one register over:
+the tempting fix removes the thing being tested.
 
 ### (i7) A DISCRIMINATING FIXTURE MUST BE PLACED OUTSIDE WHERE THE TWO FUNCTIONS AGREE
 
