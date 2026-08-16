@@ -1193,3 +1193,162 @@ absence is ambiguous: **nothing before Task 5 could consult a calibration at all
   what Task 1 said it was doing and what this task is here to end.
 - **(g)** four callers of `resume_tile_side`: one in `run.py`, three direct in
   `tests/test_completion.py`.
+
+---
+
+## Task 7 — criterion 6's instrument, the linearity claim
+
+Run 2026-08-16 against the task brief in
+[`../plans/2026-08-14-metamer-phase2b.md`](../plans/2026-08-14-metamer-phase2b.md), the live
+`core/memory.py`, and **against three measurements taken before any code was written** — one
+ladder point for the cost, and the evaluation instrument at two series lengths. **Six findings.
+Two of them make the brief's cross-check unusable as specified, and one of those is a number the
+module publishes about itself.**
+
+### (f) THE BRIEF'S CROSS-CHECK CONTRADICTS A DOCSTRING ALREADY IN THE TREE, AND THE DOCSTRING IS RIGHT
+
+The brief: *"the two must disagree by approximately `solver_state_bytes` per series."*
+`data_and_workspace_bytes_per_series`, in the tree since Task 0: *"the two disagree by
+approximately `_engine_workspace_bytes(d, k_beta)` per series **by construction**."*
+
+**The docstring is right and the brief is wrong, because `unconstrained_loglik` never constructs
+an optimizer.** `solver_state_bytes` is the engine workspace **plus** scipy's L-BFGS-B workspace
+**plus** the `p_max²` Hessian, and the evaluation instrument runs no optimization at all. At the
+instrument's own configuration the two differ by **14×**:
+
+| term at d = 3, k_β = 6, p_max = 5 | bytes |
+|---|---|
+| `_engine_workspace_bytes` | **880** |
+| `_optimizer_bytes` | 11 408 |
+| Hessian, `p_max²·8` | 200 |
+| **`solver_state_bytes`** | **12 488** |
+
+### AND THE DISAGREEMENT IS A DIFFERENCE OF TWO TERMS, NOT ONE, SO ITS SIGN IS NOT THE BRIEF'S EITHER
+
+Even corrected to the engine workspace, *"the evaluation instrument holds more"* is only half the
+accounting. **Each instrument holds a per-series term the other does not:**
+
+- the evaluation instrument holds the **engine workspace** per series, because it is handed a
+  batch of B — production's `fit` hands the engine one series at a time;
+- production holds the **output slots** per series — `theta`, `theta_unconstrained`, `beta`, the
+  errors, the outcome codes — which a bare likelihood evaluation never allocates.
+
+At the calibration fixture (d = 1, k_β = 4, p_max = 3, N = 60, M = 2): engine workspace **248**,
+output slots **386**, so the predicted disagreement is **production − evaluation = +138 B/series**,
+against a production per-series cost of 926. **It is small, it is positive, and the brief predicts
+a negative number eighty times larger.**
+
+### AND THE INSTRUMENT DOES NOT MATCH ITS OWN ORACLE AT SHORT SERIES — MEASURED, TWICE
+
+`measure_evaluation_rss_slope((0, 512, 1024, 2048))`, 2026-08-16, this machine:
+
+| N | measured slope | `data_and_workspace_bytes_per_series` | ratio | inside `slope_band`? | excess |
+|---|---|---|---|---|---|
+| 630 | 9286 B/series | 6550 | 1.418 | **yes** | +2736 |
+| 60 | 4036 B/series | 1420 | **2.842** | **no** | +2616 |
+
+**THE EXCESS IS ~2.7 kB/SERIES AND DOES NOT DEPEND ON N.** The oracle's N-dependent part is
+`n_time·9` — `y` at 8 B and the mask at 1 — so a term that stays at 2.7 kB while N moves by 10×
+is invisible at N = 630, where it is 42% of a figure inside a 1.5× band, and **dominant at
+N = 60, where it is 184% and outside it.** This is (a)'s cancellation rule at a parameter value:
+*a term is checked by a measurement at a second parameter value and by nothing else.*
+
+**WHAT THIS DOES TO THE BRIEF'S CROSS-CHECK: it cannot be run at the calibration fixture's
+configuration.** The quantity to be measured is 138 B/series and the instrument carries an
+unmodelled 2616 B/series at that N — **nineteen times the effect.** The cross-check is reported as
+what it is, a finding about the instrument, and **it is not used as evidence about production's
+per-series cost.**
+
+> **NOT CHASED HERE, AND THE REASON IS SCOPE RATHER THAN DIFFICULTY.** The uncharged term belongs
+> to `unconstrained_loglik`'s working set, not to `run()`'s, so it moves no tile side and no
+> memory budget. It is recorded as an open item with both measurements, because the next person
+> to quote `data_and_workspace_bytes_per_series` needs to know it is a floor at N = 630 and not
+> at N = 60.
+
+### (a4) THE MODULE PUBLISHES A NUMBER ABOUT ITSELF THAT ITS OWN FUNCTION NO LONGER RETURNS
+
+`data_and_workspace_bytes_per_series`'s docstring says *"This was 31 542 B/series until 2026-08-10
+and **is now 6382**"*. The function returns **6550** at the configuration the sentence describes.
+The difference is **168 B**, which is exactly `augmented_state = d·(1+k_β)·8 = 3·7·8` — the term
+Task 0 added when it rebuilt `_engine_workspace_bytes` field by field. **The prose is a pre-Task-0
+figure carried through a correction that moved it**, and the recorded ratio moves with it: the
+docstring's *"8471 against 6382, ratio 1.33"* is **1.29** against the corrected floor.
+
+**AND THAT IS THE FOURTH REGISTER OF (a4) FIRING ON THIS PROJECT'S OWN PROMOTION, ONE COMMIT
+LATER.** The conclusion — *"inside the band, and that agreement was read for four months as
+confirming a formula the instrument never exercised"* — survives both corrections. The numbers
+under it did not.
+
+### THE COST IS MEASURED, AND IT IS NOT TASK 4's FIGURE BECAUSE IT IS NOT THE SAME QUANTITY
+
+One ladder point, measured 2026-08-16 on a 160×160 grid at N = 60, M = 2, `max_iter = 1`:
+
+    side 32, B = 1024, peak 231.54 MB, 2048 fits attempted, 0 OK, 290.6 s
+    => 283.8 ms per series
+
+Task 4 measured **197 ms/series** for `fit` alone at the same N and cap. **The two are not in
+conflict and must not be reconciled**: Task 4 timed the optimizer's entry point, and this times a
+whole `measure_tile_peak` — child spawn, numba import, input open, tile assembly, the fit, the
+store write. **44% overhead is what a ladder point costs beyond its fits**, and the ladder is
+planned against the larger number because that is what the wall clock will do.
+
+**THE LADDER, CHOSEN AGAINST THAT MEASUREMENT: sides (16, 48, 80, 112), B = (256, 2304, 6400,
+12544).**
+
+- **The lever arm is 49× in B**, which is the property that separates the slope from the
+  intercept. A ladder whose top is a small multiple of its bottom fits the intercept and reports
+  the residue as a slope; Task 4's was 16× and this is the reason to spend the extra points at the
+  ends rather than in the middle.
+- **21 504 series at 283.8 ms is 6103 s ≈ 1.70 h**, against the brief's 1.5 h estimate at
+  B ≈ 3000–12 000. The top of the ladder is inside the brief's range; the total is 13% over its
+  time.
+- **Five points were priced and rejected**: adding side 96 costs another 9216 series — **2.42 h**,
+  a 42% increase for one more residual degree of freedom.
+- **The signal at the top is 12 544 × 926 B = 11.6 MB against ±0.3 MB of between-child scatter**,
+  a signal-to-noise of ~39, where Task 4's affordable ladder had 0.43 MB against ±0.3 MB and was
+  correctly called noise. **Predicted SE on the slope is ~32 B/series, 3.5% of 926** — so this
+  ladder is expected to resolve, and if it does not the honest output is a bound.
+
+### (a5) A 1.7 h TEST CANNOT LIVE IN A SUITE THAT RUNS BEFORE EVERY COMMIT
+
+The brief says *"marked `slow` and `machine`"*, which puts a 1.7 h measurement inside
+`pixi run test` — and the standing requirement is that the **full sweep runs before every
+commit**. The sweep is currently **942 s**; the brief's instruction would take it to **~2.2 h**,
+and every later task pays that on every commit. The two requirements are stated in different
+documents and are jointly unsatisfiable, which is (a5)'s cross-document register.
+
+**The precedent is Task 4's and it is exact**: the four-point ladder was *"the deliverable, run
+once by hand"*, and the suite asserts **structure** — the sides landed on, the batch read back,
+the fit's self-consistency — while **the value claim lives in `PROGRESS.md` with its
+uncertainty.** Task 7 does the same, and what the suite gets instead is the **analysis**: the
+residual arithmetic, the curvature bound and the resolution verdict are pure functions of a
+`CalibrationResult` and are tested against **constructed** ladders, exactly and cheaply.
+
+### RESIDUALS ARE THE DELIVERABLE, SO WHAT THE LADDER CANNOT SEE IS PART OF THE RESULT
+
+**An instrument that cannot detect curvature is not evidence of its absence**, and four points
+with two residual degrees of freedom cannot detect much. So the report carries, beside the
+residuals, **the smallest quadratic term the ladder could have excluded at 2σ** — expressed as
+the percentage by which the per-series cost may vary across the ladder without this measurement
+noticing. A linearity claim without that number is an assertion.
+
+**AND IF THE SLOPE DOES NOT RESOLVE, THE OUTPUT IS A BOUND.** Task 4's affordable ladder returned
+1666 B/series against an analytic 926 and was correctly called noise rather than a 1.80× finding.
+The report therefore states `resolved` from the slope's own standard error against the analytic
+prediction, and a slope whose SE exceeds the effect is published as *"this measurement excludes X
+and does not establish a value"*.
+
+### (c), (d), (k) and the three boundaries, briefly
+
+- **(c)** `calibrate` is unchanged: one return, one raise. The analysis function adds one return
+  and one raise (fewer than three points, where a quadratic has no residual at all).
+- **(d)** `rg`: `linearity_basis` exists on `CalibrationResult` and is a **sentence**, not an
+  analysis — nothing in the tree computes a residual pattern, a curvature bound or a resolution
+  verdict today, so none of this is being re-implemented under another name.
+- **(k)** a fresh child per point is already what `calibrate` does, behind `_BARE_LAUNCHER`, and
+  the floor is pinned across the ladder for the reason Task 4 recorded.
+- **THE THREE CLOSURE BOUNDARIES ARE UNTOUCHED BY WHATEVER THIS ESTABLISHES**, and saying so is
+  part of the deliverable: a converged fit at a memory-relevant B (85.5 h, runnable nowhere), the
+  per-thread placement (no batched driver exists — F4), and a 10⁷-point run (1.7 years here). **A
+  linearity result at N = 60 and M = 2 on one four-core box is this machine's**, and extrapolating
+  it to §9.4's configuration is exactly the step the report must decline to take.
