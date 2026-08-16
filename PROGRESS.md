@@ -16,22 +16,28 @@
    the session around it**, and read *What Task 7 established* first: its ladder took 1.73 h
    against a 1.70 h estimate, so the cost model transfers, and **its result was a bound rather
    than a value**, which is the outcome Task 8 should expect to have to report as well.
-4. **READ [What Task 4 established](#what-task-4-established-done-2026-08-15--read-before-touching-the-calibration-the-cap-or-the-tiling-inverse)
-   and [What Task 5 established](#what-task-5-established-done-2026-08-15--read-before-touching-the-cache-the-tile-side-or-provenance) FIRST**, then
+4. **READ [What Task 8 inherits](#what-task-8-inherits-2026-08-16) and
+   [What the RSS validity gate established](#what-the-rss-validity-gate-established-done-2026-08-16--read-before-writing-any-rss-assertion)
+   FIRST — the second is what stops a 1.7 h measurement being wasted — then
+   [What Task 7 established](#what-task-7-established-done-2026-08-16--read-before-quoting-the-slope-or-the-linearity-claim)**, then
    [What 2b's first tasks inherit](#what-2bs-first-tasks-inherit-2026-08-14) — the findings
    F1–F5 and every measured number 2b rests on. Then the plan. **Tasks 0–4 each have their own
    *established* section, and each was written because its task contradicted the brief.**
-5. **Tests: 1032 collected; 1030 passed and 2 failed, measured 2026-08-16 after 2b Task 7.**
-   **THE TWO FAILURES ARE `machine`-MARKED RSS TESTS AND ARE HOST CONTENTION, NOT A
-   REGRESSION** — both pass in isolation on the same box, and the Task 7 diff cannot reach
-   them; the diagnosis, the numbers and the repairs that are NOT allowed are in
-   [Gotchas discovered](#gotchas-discovered). **The suite is not green on a loaded box and
-   that is unresolved.** Earlier counts, all clean: 1024 after Task 6, 1018 after Task 5, 997
-   after Task 4, 989 after Task 3, 977 after Task 2, 967 after Task 1, 947 after Task 0. The
-   only statement of the **current** count.
+5. **Tests: 1035 passed, 0 failed, 0 indeterminate — measured 2026-08-16 after the RSS
+   validity gate, at host load ~12, which is the condition that broke the previous sweep.**
+   The two `machine` failures Task 7's sweep hit (1030 passed, 2 failed) are resolved: they
+   were host memory pressure, and the tests now assert their validity condition instead of
+   assuming it. Earlier counts: 1024 after Task 6, 1018 after Task 5, 997 after Task 4, 989
+   after Task 3, 977 after Task 2, 967 after Task 1, 947 after Task 0. The only statement of
+   the **current** count.
 
-   **Sweep durations: 1199 s (Task 5), 942 s (Task 6), 3502 s (Task 7) — and the third is a
-   measurement of the HOST, not of the suite.** Between the second and third the suite grew by
+   **EVERY RUN PRINTS AN `RSS measurement validity` SECTION, INCLUDING WHEN IT IS ZERO.** If it
+   ever reports a nonzero count, those measurements **neither passed nor failed** — read the
+   reasons, and record the stall rate, because the limit has never been checked against a
+   known-bad reading.
+
+   **Sweep durations: 1199 s (Task 5), 942 s (Task 6), 3502 s (Task 7), 2687 s (the validity
+   gate) — and the last two are measurements of the HOST, not of the suite.** Between the second and third the suite grew by
    eight tests and the wall clock nearly quadrupled, at host load average 12–16 against a
    4-core box. The Task 5→6 pair already showed the suite getting **21% faster while growing**,
    which is why the attribution trigger was dropped; the Task 7 figure is the same lesson with
@@ -1159,6 +1165,67 @@ stays (one subtraction, and the concern returns at a wider ladder than this proj
 **the justification was rewritten to say what was measured** — the fifth cause in the taxonomy,
 where the correct response is to fix the claim rather than the test.
 
+### What the RSS validity gate established (done 2026-08-16 — read before writing any RSS assertion)
+
+**AN RSS DIFFERENCE HAS A VALIDITY CONDITION AND EVERY TEST HERE ASSUMED IT.** Resident set size
+counts what a process holds *now*; **reclaim takes pages away without the process acting**, so a
+difference of two readings understates by whatever left in between. Two `machine` tests failed
+inside Task 7's sweep and passed in isolation minutes later, which is (i9) — and the repair is the
+fixture, never the assertion.
+
+**THE MECHANISM, MEASURED RATHER THAN ASSUMED.** Swap on this box was **100% full** (2047 of
+2047 MB), so anonymous pages had been evicted; and mapped shared libraries — most of what
+importing numba costs — are file-backed and leave RSS with no swap at all. **So "is there swap"
+is the wrong question.** The right one is whether the kernel was reclaiming from us, and the
+kernel answers it directly: **pressure stall information**, `full` (every runnable task stalled)
+rather than `some` (any task stalled).
+
+| window | cgroup `full` stall | rate | the answer it produced |
+|---|---|---|---|
+| 20 s idle | 17.8 ms | 0.9 ms/s | — |
+| 17.7 s `measure_floor` | 94.5 ms | **5.3 ms/s** | 45.5 MB — **correct**, against a 30 MB bound |
+
+**`machine.memory_stall_us()`** reads the **cgroup** file first and the host file second, and
+**returns `None` where neither exists** — never zero, because zero means "no pressure" and a
+missing instrument must not issue a clean bill of health (a0). `tests/conftest.py`'s
+**`rss_validity`** brackets a measurement, computes the stall **rate over the window that produced
+the number**, and on exceeding **`RSS_STALL_LIMIT_US_PER_S = 50 000`** (5% of wall clock, ~10×
+the known-good rate) records the reason and **skips**: the outcome is **INDETERMINATE — neither
+pass nor fail**, the same shape as `calibration.unusable_reason`.
+
+**THE THRESHOLD IS HALF-VALIDATED AND THAT IS STATED IN THE CONSTANT.** It separates a measured
+known-good rate from something far worse; **the rate during the failing sweep was not recorded**,
+so it has never been checked against a known-bad reading. The next failure should record its rate.
+
+**AND INDETERMINATE IS LOUD, BECAUSE A SKIP NOBODY SEES IS HOW A `machine` TEST DECAYS INTO ONE
+THAT NEVER RUNS.** A `pytest_terminal_summary` hook prints an `RSS measurement validity` section
+on **every** run — including `0 indeterminate`, because a section that appears only on failure
+teaches a reader that silence means nothing happened.
+
+**THE SURVEY — every `machine` test asserting an RSS difference, and what was done with each.**
+
+| test | window it asserts | gated? |
+|---|---|---|
+| `test_the_floor_ladder_reproduces_the_recorded_rungs` | rungs to ±25%, and two `> 30 MB` steps | **yes** — one of the two that failed |
+| `test_peak_residency_does_not_move_with_the_iteration_cap` | three peaks within **16 MB** | **yes** — the other |
+| `test_the_floor_with_the_input_open_exceeds_the_floor_without_it` | a difference **> 1 MB** | **yes** — the tightest window in the suite, and it had not failed yet |
+| `test_criteria_6_and_7_peak_rss_is_bounded_and_does_not_track_the_grid` | two peaks within **64 MB**, both under a 1 GiB budget | **yes** — and it is the one that matters most: **under reclaim criterion 7 passes for the wrong reason** |
+| `test_peak_rss_tracks_a_known_allocation` | `live - before >= 200 MB` | no — a 200 MB margin on a 256 MB allocation, and it holds the array live |
+| `test_current_rss_falls_after_a_release_and_the_watermark_does_not` | `live - released >= 200 MB` | no — same margin |
+| `test_a_child_inherits_the_parents_own_high_water_mark_and_not_its_current_rss` | 400 MiB watermarks | no — watermarks, which reclaim does not lower |
+| `test_the_inheritance_does_not_compound_across_a_generation` | 400 MiB watermarks | no — same |
+| `test_measured_peak_rss_is_at_least_the_arrays_that_provably_exist` | a fitted **slope**, floor ≤ measured ≤ 2× floor | no — a 2× band on a slope, and a fit over three batches averages the noise |
+
+**The four ungated ones are ungated for a stated reason and not by omission**: a watermark cannot
+be reduced by reclaim, and a 200 MB margin survives it. **If any of them ever fails, gate it —
+do not widen it.**
+
+**TASK 8's HARNESS NEEDS THE SAME GATE AND IT IS ALREADY ON ITS EXIT-CRITERIA TEST.** Task 8 is
+criterion 7 at scale — *"peak RSS at or below the budget"* and *"peak does not grow with tile
+count"* — and both are RSS readings on a box that swaps. **A peak understated by reclaim makes
+criterion 7 pass for the wrong reason**, so whatever Task 8 measures by hand must record its stall
+rate beside its peaks, exactly as Task 7's ladder should have.
+
 ---
 
 ## Things a cold session cannot re-derive
@@ -1512,6 +1579,34 @@ was the actual defect the leak exposed.
 | **Phase 2a pre-flight, per task** | [`docs/superpowers/notes/phase2a-preflight.md`](docs/superpowers/notes/phase2a-preflight.md) — the (a)–(k) audit of each 2a task brief and what each finding changed. **Append to it before each task, not after.** |
 | **Phase 2b implementation plan** | [`docs/superpowers/plans/2026-08-14-metamer-phase2b.md`](docs/superpowers/plans/2026-08-14-metamer-phase2b.md) — 11 tasks, 16 exit criteria, **approved 2026-08-14. Tasks 0–6 landed 2026-08-15, Task 7 on 2026-08-16.** Its head carries findings F1–F4, which are why 2b begins with a correction task rather than with the calibration tile |
 | **Phase 2b pre-flight, per task** | [`docs/superpowers/notes/phase2b-preflight.md`](docs/superpowers/notes/phase2b-preflight.md) — carries the pre-plan audit and Task 0's; per-task entries are appended **before** each task |
+
+### What Task 8 inherits (2026-08-16)
+
+**Task 8 — criterion 7's run, and accumulation across tiles. Its first step is the pre-flight
+against its own brief.** What it needs that no earlier task states:
+
+- **THE BOX MUST BE QUIET, AND "QUIET" IS MEASURED RATHER THAN DESCRIBED.** Read
+  `machine.memory_stall_us()` twice around a 20 s idle window before starting. **Idle on this box
+  is ~0.9 ms/s of cgroup full stall; a correct `measure_floor` ran at 5.3 ms/s; the gate refuses
+  above 50 ms/s.** If an idle window already exceeds ~5 ms/s, the host is loaded and a 1.7 h
+  measurement will be wasted — **check before spending the time, not after.** Swap was 100% full
+  and host load 12–16 during Task 7's sweep, and that is what corrupted two readings.
+- **RECORD THE STALL RATE BESIDE EVERY PEAK.** Task 7's ladder did not, which is why its
+  threshold is only half-validated. A peak with no stall rate beside it cannot be defended later.
+- **`rss_validity` is already on criterion 7's exit-criteria test**, and the accumulation half
+  needs it too. **Under reclaim criterion 7 passes for the WRONG REASON** — an understated peak
+  is a peak under budget.
+- **The cheap instrument is `--reuse-fits-from`** (j3): the tile loop with the fit removed, so
+  10⁵–10⁶ points run in minutes. **State what it does not cover** — it holds less than a fit
+  does, so it witnesses no accumulation in the optimizer or the engines.
+- **Expect a bound rather than a value.** Task 7's ladder returned 1021.6 ± 134.7 B/series, a
+  13.2% relative error; criterion 7's claim is an **inequality**, so it needs less precision —
+  but the accumulation claim is a difference and needs more.
+- **Two long measurements remain and this is the second**, ~1.7 h. Task 7's cost model held to
+  2% (290.3 ms/series measured against 283.8 predicted), so a per-point probe is worth running
+  before committing to a ladder.
+
+---
 
 **Next action:** Task 8 — criterion 7's run, and accumulation across tiles. Its first step is the
 pre-flight against its own brief, appended to `phase2b-preflight.md`. **It inherits from Task 7

@@ -30,7 +30,11 @@ the limit executable rather than advisory.
 
 from __future__ import annotations
 
+import contextlib
+import time
+from collections.abc import Iterator
 from dataclasses import dataclass, field
+from typing import Any
 
 import numpy as np
 import pytest
@@ -213,3 +217,114 @@ def _stub_the_floor_probe(request, monkeypatch):
 
     monkeypatch.setattr(run_module, "measure_floor", memory_module.measure_floor)
     monkeypatch.delenv(run_module.FLOOR_OVERRIDE_ENV, raising=False)
+
+
+# --------------------------------------------------------------------------
+# The validity gate for RSS-difference measurements
+# --------------------------------------------------------------------------
+
+#: POLICY. Microseconds of full memory stall per second of wall clock above
+#: which an RSS-difference reading is INDETERMINATE rather than pass or fail.
+#:
+#: **AN RSS DIFFERENCE HAS A VALIDITY CONDITION AND THESE TESTS USED TO ASSUME
+#: IT.** Resident set size counts what a process currently holds; reclaim takes
+#: pages away without the process acting, so a difference of two readings
+#: understates by whatever left in between. Observed 2026-08-16: two
+#: `machine`-marked tests failed inside a 3502 s sweep at host load 12-16 with
+#: swap **100% full** -- the floor ladder measured numba's threading layer at
+#: **5.8 MB against a recorded 43.2**, and two peaks that must agree within
+#: 16 MB came out **36.1 MB** apart -- and both passed in isolation minutes
+#: later on the same box.
+#:
+#: **THE VALUE IS SET FROM A MEASUREMENT AND ITS LIMIT IS STATED.** On this box,
+#: 20 s idle gave a cgroup full-stall rate of **0.9 ms/s**, and a 17.7 s
+#: `measure_floor` whose answer was CORRECT gave **5.3 ms/s** -- five times
+#: idle, from our own allocations. So a nonzero stall is normal and the gate
+#: must be a rate. **50 ms/s is 5% of wall clock and roughly ten times the
+#: known-good rate.** What is NOT known is the rate during the failing sweep,
+#: because it was not recorded -- so this separates "known good" from "far
+#: worse" and has **not** been validated against a known-bad reading. The next
+#: failure should record its rate, which is what the terminal summary is for.
+#:
+#: **THE ASYMMETRY IS UNUSUAL BECAUSE BOTH DIRECTIONS COST SOMETHING.** Too
+#: loose and a corrupted measurement is asserted as a fact. Too tight and these
+#: tests stop running, which is how a `machine` test decays into a test nobody
+#: notices. **The tie is broken by making INDETERMINATE loud**: a gate that is
+#: too tight announces itself in the summary and gets re-run, and a gate that is
+#: too loose is silent -- so the bias is toward tight.
+RSS_STALL_LIMIT_US_PER_S = 50_000
+
+#: Every indeterminate measurement this session, for the terminal summary.
+#: **A SKIP NOBODY SEES IS HOW A MACHINE-MARKED TEST DECAYS INTO ONE THAT NEVER
+#: RUNS**, so the count and the reasons are reported at the end of the run.
+INDETERMINATE_RSS: list[str] = []
+
+
+@contextlib.contextmanager
+def rss_validity(what: str) -> Iterator[None]:
+    """Bracket an RSS-difference measurement and refuse to judge an invalid one.
+
+    **INDETERMINATE IS NOT PASS AND NOT FAIL**, which is the same shape as
+    `calibration.unusable_reason`: a measurement outside its validity range is
+    recorded, not used. The assertions inside the block never run when the
+    condition fails, so a reading taken under reclaim can neither confirm nor
+    refute what it was measuring.
+
+    **THE CONDITION IS CHECKED ACROSS THE MEASUREMENT AND NOT BEFORE IT.** A box
+    that is quiet when a test starts and stalls during it produces exactly the
+    corrupted reading this exists to catch, so the counter is read on both sides
+    and the rate is over the window that produced the number.
+
+    Args:
+        what: What was being measured, for the summary line.
+
+    Yields:
+        Nothing; the caller's assertions run inside.
+    """
+    from metamer.core import machine
+
+    start = machine.memory_stall_us()
+    started = time.perf_counter()
+    yield
+    elapsed = max(time.perf_counter() - started, 1e-9)
+    end = machine.memory_stall_us()
+
+    if start is None or end is None:
+        # **THE KERNEL DOES NOT EXPOSE PSI, SO THE CONDITION CANNOT BE CHECKED.**
+        # Reported rather than assumed clean: "unknown" and "fine" are the same
+        # observation otherwise, which is the fill-value rule at a gate.
+        INDETERMINATE_RSS.append(f"{what}: memory-pressure counter unavailable")
+        return
+
+    rate = (end[0] - start[0]) / elapsed
+    if rate > RSS_STALL_LIMIT_US_PER_S:
+        reason = (
+            f"{what}: {rate / 1000:.0f} ms/s of full memory stall over "
+            f"{elapsed:.1f} s ({end[1]} counter), above the "
+            f"{RSS_STALL_LIMIT_US_PER_S / 1000:.0f} ms/s limit -- pages were "
+            f"being reclaimed, so an RSS difference understates by an unknown "
+            f"amount"
+        )
+        INDETERMINATE_RSS.append(reason)
+        pytest.skip(reason)
+
+
+def pytest_terminal_summary(terminalreporter: Any) -> None:
+    """Report every indeterminate RSS measurement, or say there were none.
+
+    **BOTH BRANCHES PRINT.** A section that appears only on failure trains a
+    reader to see nothing and conclude nothing happened; the line that says
+    "0 indeterminate" is what makes the silence evidence.
+    """
+    terminalreporter.write_sep("=", "RSS measurement validity")
+    if not INDETERMINATE_RSS:
+        terminalreporter.write_line(
+            "0 indeterminate: every RSS-difference measurement ran under a "
+            f"full-stall rate below {RSS_STALL_LIMIT_US_PER_S / 1000:.0f} ms/s"
+        )
+        return
+    terminalreporter.write_line(
+        f"{len(INDETERMINATE_RSS)} INDETERMINATE -- neither passed nor failed:"
+    )
+    for reason in INDETERMINATE_RSS:
+        terminalreporter.write_line(f"  - {reason}")

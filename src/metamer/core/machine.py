@@ -73,6 +73,7 @@ import platform
 import subprocess
 import sys
 from enum import StrEnum
+from pathlib import Path
 
 from metamer.core.hashing import machine_fingerprint
 
@@ -338,6 +339,61 @@ def fingerprint() -> str:
         The 16-hex-digit fingerprint.
     """
     return machine_fingerprint(cpu_model(), physical_cores(), total_ram_bytes())
+
+
+#: Where the kernel reports how long a workload was stalled waiting on memory,
+#: most specific first. **The cgroup file is preferred because it is OURS**: on
+#: a shared host the second file counts every tenant's stalls, and a reading
+#: that moves for someone else's reason cannot gate our measurement.
+MEMORY_PRESSURE_PATHS = (
+    ("cgroup", "/sys/fs/cgroup/memory.pressure"),
+    ("host", "/proc/pressure/memory"),
+)
+
+
+def memory_stall_us() -> tuple[int, str] | None:
+    """Return cumulative microseconds this workload was fully stalled on memory.
+
+    **THE VALIDITY INSTRUMENT FOR EVERY RSS-DIFFERENCE MEASUREMENT.** Resident
+    set size counts pages the process currently has; **reclaim takes pages away
+    without the process doing anything**, so a difference of two RSS readings
+    understates by whatever was reclaimed in between. Anonymous pages leave via
+    swap and file-backed pages -- mapped shared libraries, which is most of what
+    importing numba costs -- leave without it, so *"is there swap"* is not the
+    question. **The question is whether the kernel was reclaiming from us**, and
+    pressure stall information is the kernel's own answer.
+
+    `full` rather than `some`: `some` counts time *any* task was stalled, which
+    on a busy box is almost always nonzero; `full` counts time **every** runnable
+    task was stalled, which is when work actually stopped to wait for memory.
+
+    Measured 2026-08-16 on the development machine, whose swap was **100% full**
+    at the time: 20 s idle gave a cgroup `full` delta of **17.8 ms**, and a
+    17.7 s `measure_floor` gave **94.5 ms** -- five times the idle rate, from our
+    own allocations, and that measurement was still correct (45.5 MB against a
+    30 MB bound). **So a nonzero reading is not a disqualification and a
+    threshold has to be a rate**; see `tests/conftest.py`, which owns the limit
+    because it is a property of the fixtures rather than of this module.
+
+    Returns:
+        `(microseconds, source)` where source is `cgroup` or `host`, or None
+        where the kernel exposes neither -- PSI needs `CONFIG_PSI` and a
+        cgroup-v2 mount, and **the absence is reported rather than defaulted to
+        zero**, because zero is the value that means "no pressure" and a missing
+        file must not read as a clean bill of health (a0).
+    """
+    for source, path in MEMORY_PRESSURE_PATHS:
+        try:
+            text = Path(path).read_text()
+        except OSError:
+            continue
+        for line in text.splitlines():
+            if line.startswith("full "):
+                for field in line.split()[1:]:
+                    key, _, value = field.partition("=")
+                    if key == "total":
+                        return int(value), source
+    return None
 
 
 def peak_rss_bytes() -> float:

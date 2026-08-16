@@ -298,3 +298,56 @@ def test_each_of_the_three_readings_moves_the_fingerprint(changed):
         "total_ram_bytes": machine.total_ram_bytes(),
     }
     assert machine_fingerprint(**base) != machine_fingerprint(**{**base, **changed})
+
+
+# --------------------------------------------------------------------------
+# The validity instrument for RSS differences
+# --------------------------------------------------------------------------
+
+
+def test_the_memory_stall_counter_is_cumulative_and_names_its_source() -> None:
+    """A reading is microseconds since boot, and says which file it came from.
+
+    Expected values determined independently from the kernel's PSI contract:
+    `total` is a cumulative microsecond counter that never decreases, and the
+    cgroup file is preferred over the host file because **on a shared host the
+    host counter moves for other tenants' reasons** and cannot gate our
+    measurement.
+
+    Bug this catches: reading `avg10` instead of `total`. An average over a
+    fixed ten-second window cannot be differenced across a measurement that
+    took seventeen seconds or two hundred, and it would silently report the
+    wrong thing for every window that is not ten seconds long.
+    """
+    first = machine.memory_stall_us()
+    if first is None:  # pragma: no cover - kernels without PSI
+        pytest.skip("this kernel exposes no pressure stall information")
+    second = machine.memory_stall_us()
+
+    assert second is not None
+    value, source = second
+    assert source in {"cgroup", "host"}
+    assert value >= first[0]
+    assert value > 0
+
+
+def test_an_absent_pressure_file_reads_as_unknown_and_not_as_no_pressure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No counter is None, never zero.
+
+    **THIS IS THE FILL-VALUE RULE AT A GATE.** Zero is the value that means "no
+    pressure at all", so a missing file defaulting to zero would certify every
+    RSS measurement on a kernel that cannot report pressure -- the strongest
+    possible clean bill of health, issued by an instrument that read nothing.
+
+    Expected value determined independently: PSI needs `CONFIG_PSI` and a
+    cgroup-v2 mount, so its absence is a real state on real kernels rather than
+    a hypothetical.
+
+    Bug this catches: `except OSError: return 0`, which is the obvious defensive
+    line and is the one that makes the gate vacuous where it matters most.
+    """
+    monkeypatch.setattr(machine, "MEMORY_PRESSURE_PATHS", (("cgroup", "/nonexistent"),))
+
+    assert machine.memory_stall_us() is None

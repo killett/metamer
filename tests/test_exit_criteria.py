@@ -47,7 +47,7 @@ from metamer.batch.validation import ExitCode, ValidationError
 from metamer.batch.write import check_status_invariant
 from metamer.config import load
 from metamer.core.outcomes import Outcome
-from tests.conftest import RaisingStubEngine
+from tests.conftest import RaisingStubEngine, rss_validity
 
 pytestmark = pytest.mark.filterwarnings("ignore::UserWarning")
 
@@ -695,20 +695,28 @@ def test_criteria_6_and_7_peak_rss_is_bounded_and_does_not_track_the_grid(
         tiles, watermark = result.stdout.splitlines()[-2:]
         return int(tiles), float(watermark)
 
-    many_tiles, many_peak = peak(
-        _config(tmp_path, uri, name="small.toml"), tmp_path / "many.zarr"
-    )
-    one_tile, one_peak = peak(
-        _config(tmp_path, uri, name="big.toml", budget=FOUR_POINTS_PER_TILE),
-        tmp_path / "one.zarr",
-    )
+    # **THE PEAK-DIFFERENCE ASSERTION HAS A VALIDITY CONDITION AND SO DOES THE
+    # BOUND.** `abs(many_peak - one_peak) < 64e6` is an RSS difference, and
+    # reclaim shrinks an RSS reading without the process acting -- so under
+    # memory pressure this criterion can pass **for the wrong reason**, which
+    # is the specific failure to avoid in the test whose subject is peak RSS.
+    # See `tests/conftest.py`'s `rss_validity`; Phase 2b Task 7 found two other
+    # `machine` tests failing this way inside one sweep.
+    with rss_validity("criterion 7's peak against the budget and the grid"):
+        many_tiles, many_peak = peak(
+            _config(tmp_path, uri, name="small.toml"), tmp_path / "many.zarr"
+        )
+        one_tile, one_peak = peak(
+            _config(tmp_path, uri, name="big.toml", budget=FOUR_POINTS_PER_TILE),
+            tmp_path / "one.zarr",
+        )
 
-    assert many_tiles == 4
-    assert one_tile == 1
-    budget_bytes = 1.0 * 1024**3
-    assert many_peak < budget_bytes
-    assert one_peak < budget_bytes
-    assert abs(many_peak - one_peak) < 64e6
+        assert many_tiles == 4
+        assert one_tile == 1
+        budget_bytes = 1.0 * 1024**3
+        assert many_peak < budget_bytes
+        assert one_peak < budget_bytes
+        assert abs(many_peak - one_peak) < 64e6
 
 
 # --------------------------------------------------------------------------

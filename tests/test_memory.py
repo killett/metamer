@@ -28,6 +28,7 @@ from typing import TypedDict
 
 import numpy as np
 import pytest
+from _pytest.outcomes import Skipped
 
 from metamer.core import machine as machine_module
 from metamer.core.machine import current_rss_bytes, peak_rss_bytes
@@ -56,6 +57,8 @@ from metamer.core.memory import (
     solver_state_bytes,
     tile_side,
 )
+from tests import conftest
+from tests.conftest import rss_validity
 
 
 class _Case(TypedDict):
@@ -1070,28 +1073,29 @@ def test_the_floor_ladder_reproduces_the_recorded_rungs(tmp_path):
     which is the unsafe direction, since the tile is what the budget then
     oversizes.
     """
-    report = measure_floor(data_uri=_floor_input(tmp_path), variable="sla")
-    rungs = report.components
-    expected = {
-        "interpreter_numpy": 74.0e6,
-        "xarray_zarr": 163.0e6,
-        "metamer_batch_run": 171.2e6,
-        "numba_threading_layer": 214.4e6,
-        "kalman_kernel_warm": 216.9e6,
-    }
-    print("\n" + "\n".join(f"{k:28s} {v / 1e6:7.1f} MB" for k, v in rungs.items()))
-    for name, value in expected.items():
-        assert 0.75 * value <= rungs[name] <= 1.25 * value, name
+    with rss_validity("the floor ladder's rungs"):
+        report = measure_floor(data_uri=_floor_input(tmp_path), variable="sla")
+        rungs = report.components
+        expected = {
+            "interpreter_numpy": 74.0e6,
+            "xarray_zarr": 163.0e6,
+            "metamer_batch_run": 171.2e6,
+            "numba_threading_layer": 214.4e6,
+            "kalman_kernel_warm": 216.9e6,
+        }
+        print("\n" + "\n".join(f"{k:28s} {v / 1e6:7.1f} MB" for k, v in rungs.items()))
+        for name, value in expected.items():
+            assert 0.75 * value <= rungs[name] <= 1.25 * value, name
 
-    # ...and only now the relations, as additional checks rather than as the
-    # evidence. The pre/post gap is what justifies measuring post-warm at all.
-    assert report.post_warm_bytes > report.pre_warm_bytes
-    assert report.post_warm_bytes - report.pre_warm_bytes > 30e6
-    assert report.pre_warm_bytes == rungs["metamer_batch_run"]
-    assert report.post_warm_bytes == rungs["kalman_kernel_warm"]
-    # numba's threading layer is a fifth of the floor and is an ACCEPTED cost:
-    # the layer-3 determinism precondition cannot be observed until it launches.
-    assert rungs["numba_threading_layer"] - rungs["metamer_batch_run"] > 30e6
+        # ...and only now the relations, as additional checks rather than as the
+        # evidence. The pre/post gap is what justifies measuring post-warm at all.
+        assert report.post_warm_bytes > report.pre_warm_bytes
+        assert report.post_warm_bytes - report.pre_warm_bytes > 30e6
+        assert report.pre_warm_bytes == rungs["metamer_batch_run"]
+        assert report.post_warm_bytes == rungs["kalman_kernel_warm"]
+        # numba's threading layer is a fifth of the floor and is an ACCEPTED cost:
+        # the layer-3 determinism precondition cannot be observed until it launches.
+        assert rungs["numba_threading_layer"] - rungs["metamer_batch_run"] > 30e6
 
 
 @pytest.mark.slow
@@ -1114,17 +1118,18 @@ def test_the_floor_with_the_input_open_exceeds_the_floor_without_it(tmp_path):
     charged to the tile -- and `tile_side` comes out too large, which is the
     unsafe direction against a budget the design doc calls hard.
     """
-    report = measure_floor(data_uri=_floor_input(tmp_path), variable="sla")
+    with rss_validity("the floor with the input open"):
+        report = measure_floor(data_uri=_floor_input(tmp_path), variable="sla")
 
-    assert report.with_input_bytes > report.post_warm_bytes
-    assert report.with_input_bytes - report.post_warm_bytes > 1e6
-    assert report.components["input_open"] == report.with_input_bytes
-    # The peak is never below the largest current reading. `ru_maxrss` is
-    # updated lazily -- measured here at 227.7 MB against a current 228.2 read
-    # an instant earlier -- so a floor trusting the watermark alone would
-    # subtract less than the process demonstrably held.
-    assert report.peak_bytes >= max(report.components.values())
-    assert report.peak_bytes >= report.with_input_bytes
+        assert report.with_input_bytes > report.post_warm_bytes
+        assert report.with_input_bytes - report.post_warm_bytes > 1e6
+        assert report.components["input_open"] == report.with_input_bytes
+        # The peak is never below the largest current reading. `ru_maxrss` is
+        # updated lazily -- measured here at 227.7 MB against a current 228.2 read
+        # an instant earlier -- so a floor trusting the watermark alone would
+        # subtract less than the process demonstrably held.
+        assert report.peak_bytes >= max(report.components.values())
+        assert report.peak_bytes >= report.with_input_bytes
 
 
 @pytest.mark.slow
@@ -1905,27 +1910,28 @@ def test_peak_residency_does_not_move_with_the_iteration_cap(tmp_path):
     fails, the instrument is dead and must say so** rather than be patched with
     a higher cap.
     """
-    uri = _calibration_input(tmp_path, n_time=60, side=8)
-    config_path = _calibration_config(tmp_path, uri)
-    peaks = {}
-    for cap in (1, 2, 3):
-        point = measure_tile_peak(
-            config_path=config_path, side=8, floor=_PINNED_FLOOR, max_iter=cap
+    with rss_validity("peak residency across the iteration cap"):
+        uri = _calibration_input(tmp_path, n_time=60, side=8)
+        config_path = _calibration_config(tmp_path, uri)
+        peaks = {}
+        for cap in (1, 2, 3):
+            point = measure_tile_peak(
+                config_path=config_path, side=8, floor=_PINNED_FLOOR, max_iter=cap
+            )
+            # NOT `ok == 0`: a fit whose moment init already meets the gradient
+            # tolerance stops at `n_iter = 0`, which is below the cap and therefore
+            # genuinely converged. What makes the three caps comparable is that the
+            # regime is predominantly capped at all of them, and that is asserted.
+            assert point.ok * 2 < point.attempted
+            assert point.batch == 64
+            peaks[cap] = (point.peak_bytes, point.ok)
+        print(
+            "\nstep test, (cap, peak MB, ok): "
+            f"{[(cap, round(peak / 1e6, 1), ok) for cap, (peak, ok) in peaks.items()]}"
         )
-        # NOT `ok == 0`: a fit whose moment init already meets the gradient
-        # tolerance stops at `n_iter = 0`, which is below the cap and therefore
-        # genuinely converged. What makes the three caps comparable is that the
-        # regime is predominantly capped at all of them, and that is asserted.
-        assert point.ok * 2 < point.attempted
-        assert point.batch == 64
-        peaks[cap] = (point.peak_bytes, point.ok)
-    print(
-        "\nstep test, (cap, peak MB, ok): "
-        f"{[(cap, round(peak / 1e6, 1), ok) for cap, (peak, ok) in peaks.items()]}"
-    )
 
-    assert abs(peaks[2][0] - peaks[1][0]) < 16e6
-    assert abs(peaks[3][0] - peaks[2][0]) < 16e6
+        assert abs(peaks[2][0] - peaks[1][0]) < 16e6
+        assert abs(peaks[3][0] - peaks[2][0]) < 16e6
 
 
 @pytest.mark.slow
@@ -1975,3 +1981,40 @@ def test_a_converging_cap_reaches_a_regime_a_capped_one_does_not(tmp_path):
         f"\nregime: capped ok={capped.ok} peak={capped.peak_bytes / 1e6:.1f} MB, "
         f"converging ok={converging.ok} peak={converging.peak_bytes / 1e6:.1f} MB"
     )
+
+
+def test_the_validity_gate_fires_and_records_why(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The positive control: an indeterminate measurement is reachable and loud.
+
+    **"0 INDETERMINATE" IS A PURE NEGATIVE** (i2), and every sweep so far has
+    printed it. Without this, that line is satisfied equally by a quiet machine
+    and by a gate that cannot fire at all -- and the second is indistinguishable
+    from the first in the summary.
+
+    Expected values derived by hand: the stubbed counter advances by 10 s of
+    stall across a window of at most a few milliseconds, which is a rate far
+    above the 50 ms/s limit however long the block takes.
+
+    Bug this catches: a gate wired to a counter that never moves, or a
+    comparison whose sense is inverted -- both leave every run reporting zero
+    indeterminate measurements, which reads as evidence the machine was quiet.
+    """
+    from metamer.core import machine as machine_module
+
+    readings = iter([(0, "cgroup"), (10_000_000, "cgroup")])
+    monkeypatch.setattr(machine_module, "memory_stall_us", lambda: next(readings))
+    before = len(conftest.INDETERMINATE_RSS)
+
+    with pytest.raises(Skipped) as skipped:
+        with rss_validity("a constructed stall"):
+            pass
+
+    assert "a constructed stall" in str(skipped.value)
+    assert "ms/s of full memory stall" in str(skipped.value)
+    # AND IT IS RECORDED, NOT ONLY RAISED: the summary is what makes an
+    # indeterminate outcome visible rather than a skip nobody reads.
+    assert len(conftest.INDETERMINATE_RSS) == before + 1
+    assert "a constructed stall" in conftest.INDETERMINATE_RSS[-1]
+    conftest.INDETERMINATE_RSS.pop()
