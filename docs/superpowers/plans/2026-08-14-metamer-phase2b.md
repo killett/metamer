@@ -1033,7 +1033,7 @@ cache read by a process that did not write it.
 | 3 | The batched placement is unreachable through `run()`, with its arithmetic asserted through a constructed call |
 | 4 | The floor is measured post-warm with the input open, behind a bare launcher; pre- and post-warm are both recorded and differ |
 | 5 | A budget at or below the floor is refused, naming the floor, its components, and a budget that would work |
-| 6 | Measured slope and intercept match the corrected formula within a two-sided band at four or five sides, residuals reported — **closes 2a criterion 6** |
+| 6 | Measured slope and intercept match the corrected formula within a two-sided band at four or five sides, residuals reported — **closes 2a criterion 6**. **MET 2026-08-16 WITH ITS SCOPE STATED: 1021.6 ± 134.7 B/series against the analytic 926, ratio 1.103, inside the 617.3–1389.0 band — and the band is a 2.25× window while the measurement's own 2σ interval is 752–1291, nearly as wide. This criterion discriminates a gross formula error and not a marginal one. A criterion whose band is wider than its instrument's uncertainty is a criterion about the instrument** (i10). **Linearity is NOT established**: curvature +0.045 ± 0.034 (1.3σ), and the ladder could only have excluded an 82.6% variation across B |
 | 7 | A run at a formula-derived side under a budget well below available RAM has peak RSS at or below the budget — **closes 2a criterion 7** |
 | 8 | Peak RSS does not grow with tile count over 10⁵–10⁶ points, nor with tile index within a fitted run |
 | 9 | Every derived side is a multiple of the base, and the achieved chunk bytes for the **worst** array are inside the target band |

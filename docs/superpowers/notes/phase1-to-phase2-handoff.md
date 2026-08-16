@@ -890,6 +890,34 @@ zeros cannot test a read**: zarr does not write a chunk equal to the fill value,
 zero-filled store serves every read from the fill value — measured, **0 bytes and 0 keys** for a
 read that returned the right number of correct-looking values (Phase 2a Task 6).
 
+### (i10) A PASSING CRITERION CAN BE WEAKER THAN IT APPEARS, AND THE COMPARISON THAT REVEALS IT IS BAND-VERSUS-UNCERTAINTY
+
+> **When a measurement is checked against a tolerance, compare the tolerance to the
+> measurement's own uncertainty. If the band is not several times the 2σ interval, the check
+> discriminates only gross error, and "met" must be recorded with that scope.**
+
+**This is the (i) family applied to an ACCEPTANCE CRITERION rather than to a fixture.** (i)
+asks whether a fixture can express the defect; this asks whether a *criterion* can be failed
+at all by the instrument that reports on it. **A band wide enough that the instrument cannot
+fall outside it is a criterion that cannot fail**, and it passes looking exactly like a
+criterion that was tested.
+
+The tell is a criterion whose tolerance was chosen from the *quantity's* plausible range —
+"within 1.5×", "within 10%" — with no reference to how precisely the quantity can be measured.
+The two are set by different people at different times and nothing compares them.
+
+Worked instance, Phase 2b Task 7. Exit criterion 6 is *"measured slope and intercept match the
+corrected formula within a two-sided band at four or five sides, residuals reported"*. All four
+clauses hold: **1021.6 ± 134.7 B/series against an analytic 926, ratio 1.103, inside the
+617.3–1389.0 band.** But the band is a **2.25× window** and the measurement's own 2σ interval
+is **752–1291** — nearly as wide as the band it is being checked against. **The criterion
+discriminates a gross formula error and not a marginal one**, and that scope is now recorded
+beside the criterion rather than only in the task that ran it.
+
+> **AND THE SCOPE BELONGS NEXT TO THE CRITERION, NOT ONLY IN THE TASK SECTION.** A criterion
+> whose band is wider than its instrument's uncertainty is **a criterion about the
+> instrument**, and the next reader meets the criterion first.
+
 ### (i9) A FIXTURE WHOSE WINDOW IS NARROWER THAN THE MACHINE'S JITTER CANNOT EXPRESS ITS CONDITION
 
 > **When a test asserts that something happened DURING a window, size the window against the
@@ -1236,6 +1264,24 @@ it, with no symptom but a bill.
 > **precision, not accuracy** — the component held fixed outside the repeat loop is
 > invisible to them by construction, and a best-of-N over one allocation, published as
 > though it were fresh, reports a confidence the method cannot support.
+
+> **AND A PREDICTED PRECISION IS A CLAIM, WITH THE SAME PRECONDITIONS AS THE MEASUREMENT IT
+> COMES FROM.** Scatter is a property of **an instrument on a fixture**, not of an instrument.
+> Carrying a scatter figure to a different fixture is carrying a measurement without its
+> conditions, which is the rule above pointed at the error bar rather than at the value.
+>
+> Worked instance, Phase 2b Task 7. The pre-flight predicted **SE ≈ 32 B/series** for its
+> ladder, from Task 4's **±0.3 MB** between-child scatter. The measured RMS residual was
+> **0.88 MB** on a different fixture — a 160×160 grid with a larger input to open and tile —
+> so the prediction was **wrong by 4×** and the ladder returned a bound where a value was
+> expected.
+>
+> **THE COUNTERPART IS WHAT MAKES IT INSTRUCTIVE: the TIMING prediction from the same planning
+> pass was right to 2%** — 290.3 ms/series measured against 283.8 predicted. **One prediction
+> transferred and one did not, and the difference is that the timing figure was measured on
+> the fixture it was used for and the scatter figure was not.** Record a predicted precision as
+> wrong rather than absorbing it: the next estimate is only checkable if the last one's error
+> is on the record.
 
 Measured (P4): the spike's A:B spread at its worst cell is **0.13** across eight repeats
 inside one allocation and **0.82** across eight fresh processes; path A also runs ~16%

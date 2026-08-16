@@ -235,6 +235,13 @@ What 2b will **not** establish, stated as a specification rather than as a hedge
 | a converged fit at a memory-relevant B | 5.4 s/series × 57 000 = **85.5 h** | the production path, uncapped | **none — not runnable anywhere** |
 | the per-thread placement | — | a batched driver over series (F4); its landing condition is recorded in the plan | any, once it exists |
 | a 10⁷-point run | 5.4 s/series × 10⁷ = 5.4e7 s = **1.71 years** single-threaded here (**15 000 h**) | the production path at scale | the 64-core box, whose RAM is **still open question 5** |
+| **linearity of the per-series cost in B** (added 2026-08-16, Task 7) | the ladder excludes a curvature of **0.0687 B/series²**, i.e. **82.6%** variation across B ∈ [256, 12544]; **7 repeats is 12.1 h and still leaves 31% invisible** | repeats of the four-point ladder, `k` of them shrinking both errors as `1/√k` — the arithmetic is in `memory.linearity_report` | **not this one at any affordable cost.** A box with ~10× less RSS scatter, or one fast enough to afford ~50 repeats |
+
+**THE FOURTH IS THE ONE MOST EASILY MISREAD AS CLOSED**, because exit criterion 6 passes and the
+slope sits inside the band. **What passed is a bound**: 1021.6 ± 134.7 B/series, a 13.2% relative
+error, excluding 752–1291 B/series and establishing no value. The shipped calibration extrapolates
+a small-B slope to production B, and **that extrapolation rests on an assumption this ladder does
+not test.**
 
 **THE §9.3 GAP, NOW STATED RATHER THAN IMPLICIT.** 15 000 h here against §9.3's **10 h on 64
 cores** is a required wall-clock speedup of **≈ 1 500×**. Accounted for: **64 cores (64×) × path
