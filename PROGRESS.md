@@ -11,12 +11,15 @@
 3. **NEXT ACTION: 2b TASK 5 — the calibration cache — AND ITS FIRST STEP IS THE PRE-FLIGHT
    AGAINST ITS OWN BRIEF**, appended to
    [`docs/superpowers/notes/phase2b-preflight.md`](docs/superpowers/notes/phase2b-preflight.md)
-   **before** the code. All sixteen 2a exit criteria are met, two with reduced scope; **2b
+   **before** the code. **What remains is 5–10**: the cache, the resume refusal that names
+   calibration, both closure instruments (criteria 6 and 7), the five-site cascade amendment and
+   the exit-criteria suite. All sixteen 2a exit criteria are met, two with reduced scope; **2b
    closes both**.
 4. **READ [What Task 4 established](#what-task-4-established-done-2026-08-15--read-before-touching-the-calibration-the-cap-or-the-tiling-inverse)
    and [What Task 5 inherits](#what-task-5-inherits-2026-08-15) FIRST**, then
    [What 2b's first tasks inherit](#what-2bs-first-tasks-inherit-2026-08-14) — the findings
-   F1–F5 and every measured number 2b rests on. Then the plan.
+   F1–F5 and every measured number 2b rests on. Then the plan. **Tasks 0–4 each have their own
+   *established* section, and each was written because its task contradicted the brief.**
 5. **Tests: 997 passed, measured 2026-08-15 after 2b Task 4** (989 after Task 3, 977 after
    Task 2, 967 after Task 1, 947 after Task 0). The only statement of the **current** count.
 6. **`pixi run test` is the full sweep and is what every end-of-task verification must run**;
@@ -692,16 +695,19 @@ machine at all.** Written the first way, the mutation says nothing about the tes
 
 ### What Task 4 established (done 2026-08-15 — read before touching the calibration, the cap or the tiling inverse)
 
-**A calibration is a capped run of `run()` itself, and it measures 1049 ± 222 B/series against
-an analytic 926 on this fixture.** `optimize.DEFAULT_MAX_ITER`, `run(..., max_iter=…)`, the
+**A calibration is a capped run of `run()` itself, and its slope clears the two-sided band
+against the analytic formula for the first time on the production path.** The figures are the
+ladder below. `optimize.DEFAULT_MAX_ITER`, `run(..., max_iter=…)`, the
 `max_iter` root attr, `run.RunGeometry` / `run_geometry`, `tiling.budget_bytes_for_side`,
 `memory.CALIBRATION_LADDER` / `CalibrationPoint` / `CalibrationResult` / `calibrate` /
 `measure_tile_peak`.
 
 **THE LADDER IS IN SIDES BECAUSE A RUN'S BATCH IS A TILE.** `B = side²` and every derived side is
-a multiple of 16, so the reachable batches are {256, 1024, 2304, 4096, …} — and the plan's
-`B ∈ {1000, 2000, 4000}` names three batches **no tile can have** (√1000 = 31.6). A ladder in
-series would have to bypass the tiling to reach its own points, which is (j2).
+a multiple of 16, so the reachable batches are {256, 1024, 2304, 4096, …} and the plan's ladder in
+**series** named three batches no tile can have. **Promoted as (j2)'s specification-level twin —
+"a ladder specified in the wrong variable is unreachable, and hitting it requires the divergence
+the measurement exists to avoid"** — with the arithmetic and the round-trip repair in the
+handoff's §1, once. `tiling.budget_bytes_for_side` is what lands on a side.
 
 **THE MEASURED LADDER — the deliverable, run once by hand, 2026-08-15, 1769 s.** N = 60, M = 2,
 k_β = 4, p_max = 3, a 64×64 grid of white noise, `max_iter = 1`, floor pinned at 228.2 MB:
@@ -713,7 +719,8 @@ k_β = 4, p_max = 3, a 64×64 grid of white noise, `max_iter = 1`, floor pinned 
 | 48 | 2304 | 230.29 MB | 0 |
 | 64 | 4096 | 231.46 MB | 0 |
 
-**slope 1049 B/series, intercept 227.3 MB, residuals (+272, −660, +548, −160) kB.**
+**slope 1049 B/series, intercept 227.3 MB, residuals (+272, −660, +548, −160) kB — and the
+analytic per-series cost at this fixture is 926 B.**
 
 **AND THE SLOPE'S UNCERTAINTY IS THE POINT, NOT THE SLOPE.** `SE = 222 B/series` from the
 residuals (`s² = 4.18e11`, `Sxx = 8.45e6`), so the measurement is **1049 ± 222**. Against the
@@ -761,23 +768,16 @@ provenance as `max_iter`. **No schema bump**: a v5 store can already answer *"we
 capped?"* from `/primitives/iterations` and `/status/outcome`, so its silence is not a defect and
 the attr makes the answer direct rather than inferential.
 
-**A CAP OF 1 DOES NOT MEAN "NOTHING CONVERGES", AND THE PLAN'S PREMISE WAS WRONG AT CAP 3.**
+**A CAP OF 1 DOES NOT MEAN "NOTHING CONVERGES", AND CONVERGENCE BEGINS EXACTLY AT CAP 3.**
 `optimize.py:592` classifies a fit as capped when `n_iter >= max_iter`, so a fit converging in
 **fewer** iterations than the cap is genuinely `OK` — at a cap of 1 that means `n_iter = 0`, the
-moment init already inside the gradient tolerance. Measured through `run()` at side 8, N = 60:
-**0 of 128 `OK` at caps 1 and 2, and 15 at cap 3.** The pre-flight's table was measured at caps
-1, 2, 32 and 200 and **never at 3** — the brief's own middle ladder point, taken on trust between
-two measured ones. **(a4) at a gap between two measured points: the interpolated one is the only
-one nobody checks.**
-
-**AND THE CORRECTION MADE THE STEP TEST STRONGER RATHER THAN WEAKER.** Peak residency across caps
-{1, 2, 3} at side 8: **227.7, 227.8, 227.7 MB** — flat — while fifteen series at cap 3 **do**
-reach the four allocation sites `fit.py:237` skips on a non-OK outcome. That is direct evidence
-for the claim the plan made by code-reading: those sites are shape `(1, …)` **constants, not
-slope terms**. What the step test cannot see is stated with it: at B = 64 a per-series
-first-iteration allocation is kilobytes and invisible, so the band catches **constant**-scale
-allocations — a workspace, a JIT compile, an import on a converging path — and the per-series
-case would show at the ladder's top point, where 926 B/series over 4096 series is 3.8 MB.
+moment init already inside the gradient tolerance. **The step test's peak is flat across
+{1, 2, 3} while fifteen fits at cap 3 do reach the four allocation sites a non-OK outcome skips**,
+so the plan's code-reading claim — that those sites are shape `(1, …)` constants rather than slope
+terms — is now a measurement. **Promoted as (a4)'s sample-level twin, "a point between two
+measured points is not measured"**; the counts, the three peaks and the stated limit on what the
+band can see are in the handoff's §1, **once**. The pre-flight's table had been measured at caps
+1, 2, 32 and 200 and never at 3.
 
 **THE CAP-32 POINT CONFOUNDS TWO UNKNOWNS AND IS NOT AN ACCUMULATION CHECK.** At 32 the outcome
 mix changes (measured: 83 `OK` of 128 at N = 60), so the difference against cap 1 is accumulation
@@ -787,23 +787,25 @@ Task 4 ships is the **regime control**: every `CalibrationPoint` records its `ok
 reader can see which unknowns are in play at each point.
 
 **THE INVERSE IS VERIFIED AGAINST THE FUNCTION IT INVERTS, AND ITS WALK IS BOUNDED.**
-`budget_bytes_for_side` seeds a closed form and then asks `block_bytes_for` — so it cannot
-disagree with production about what a budget buys. **The bound is the guard**: an unbounded walk
-repairs *any* wrong closed form a byte at a time, and the mutation that dropped the headroom
-returned the right answer after ~10⁸ iterations while turning a 2.4 s module into a 21.5 s one —
-green, and a defect no assertion was looking at.
+`budget_bytes_for_side` seeds a closed form and then asks `block_bytes_for`, so it cannot disagree
+with production about what a budget buys, and `_INVERSE_WALK_LIMIT` is what turns the round trip
+from a repair into a check. **The measurement that shows why the bound is load-bearing is in the
+handoff's §1 with the promotion**, not here.
 
-**Nine mutations bite; three survived and each taught something different.** Bite: the cap not
-passed; a default run silently capped; the cap unrecorded; the inverse forgetting the solver
-constant; the inverse ignoring the headroom (**only after the walk was bounded**); the inverse
-rounding down; an unreachable side silently rounded (**only after the fault class was
-constructed** — nothing else builds it); the fit taken against the requested side rather than the
-achieved batch; the calibration not stopping after the first tile; each point measuring its own
-floor. Survived: *"the tiling call reads `config.memory_budget_gb or 1.0`"* (Task 3, cause 5);
-*"the sampler records nothing"* — **and that one is now documented in the code rather than
-tested**, because `run()` still holds the block and the fit results when it returns, so an
-end-of-run reading really is the peak at these scales. It stays for Task 8's regime, where the
-tile dominates the floor.
+**The mutations, enumerated rather than counted.** Biting: the cap not passed to `fit`; a default
+run silently capped at 1; the cap unrecorded in provenance; the inverse forgetting the solver
+constant; the inverse ignoring the headroom (**only after the walk was bounded** — before that it
+returned the right answer anyway); the inverse rounding down; an unreachable side silently rounded
+(**only after the fault class was constructed**, since nothing else builds one); the fit taken
+against the requested side rather than the achieved batch; the calibration not stopping after the
+first tile; each ladder point measuring its own floor.
+
+**One survivor stands, and it is DOCUMENTED IN THE CODE RATHER THAN TESTED.** *"The sampler
+records nothing"* leaves every assertion green, because `run()` still holds the block and the fit
+results in its frame when it returns — so at these scales an end-of-run reading **is** the peak,
+and the fault class is not constructible here (i8's third shape). The sampler stays for Task 8's
+regime, where the tile dominates the floor rather than the other way round, and its comment says
+exactly that.
 
 **What Task 4 does NOT do**, so Task 5 is not surprised: there is **no cache and no `calibrate=`
 flag on `run()`**. The plan's interface block lists both; a flag that parses and does nothing
@@ -812,7 +814,7 @@ them.
 
 ### What Task 5 inherits (2026-08-15)
 
-**Task 5 — the calibration cache.**
+**Task 5 — the calibration cache. Its first step is the pre-flight against its own brief.**
 
 - **Only the SLOPE is cached. The floor is measured fresh every run** and deliberately never
   cached, because keying it would need the input's chunk grid, which Task 11's (a1) sweep
@@ -820,18 +822,34 @@ them.
 - **Keyed on `(fit_hash, placement, engine label, machine fingerprint, versions digest)`**, with
   the engine label **not** `EngineId` — both shipped engines share `EngineId.KALMAN` deliberately
   so their scores stay rankable, and `memory.MemoryEngineLabel` exists for the memory question.
+  **Task 4 already puts `placement` and `engine_label` on `CalibrationResult`**, together with
+  `linearity_basis`, which is what a cache entry must carry so a later reader knows what the
+  number is licensed for.
 - **The versions digest is `importlib.metadata` over EVERY installed distribution**, excluding
   nothing for being obviously irrelevant: over-invalidating costs minutes, under-invalidating
   costs a bad projection against a hard memory constraint, and a curated list has the `cftime`
   hole by construction.
 - **No expiry, and the design doc has been amended to say so** — time does not cause the change
-  it stands in for.
-- **The second-process read-back test needs a fixture where the analytic and calibrated sides
-  differ MEASURABLY** (i7). If they agree on the fixture, every cache test passes against a cache
-  nothing reads.
-- **Task 5 also owns moving `test_the_new_store_copies_the_sources_tile_side_basis` off its fixed
-  point.** It is (i7)-flagged in its own docstring: until a calibrated source is expressible,
-  "copy the source's basis" and "write `DEFAULT`" agree on every store this suite can build.
+  it stands in for. **`--recalibrate` is the escape hatch**, and it is the only one: a cache with
+  no expiry and no override would make a wrong entry permanent.
+- **A sibling object beside the store, with the no-resolution invariant PINNED BY DELETING IT.**
+  The store never resolves through the cache — the cache is an input to store creation and
+  nothing reads it afterwards, since a resume reads the side back out of the store (a1). The
+  executable form is to delete the cache and reopen and resume the store; anything else is a
+  docstring.
+- **The second-process read-back test needs a CONSTRUCTED fixture where the analytic and
+  calibrated sides differ MEASURABLY** (i7). **Task 4 makes this concrete rather than
+  hypothetical**: on the measured ladder the analytic and calibrated figures agree **within the
+  measurement's own uncertainty** — the number is in *What Task 4 established*, once — so a
+  fixture that merely calibrates will land where the two functions coincide and every cache test
+  will pass against a cache nothing reads. The difference has to be engineered.
+- **The reachability assertions are paired or the negative is vacuous** (i2): a default run does
+  **not** write a cache entry, and `--calibrate` does. Task 4's precedent is the cap, whose pair
+  is observable in the store rather than through a stub.
+- **Task 5 owns moving `test_the_new_store_copies_the_sources_tile_side_basis` off its fixed
+  point**, because it is the task that introduces the **second writable basis**. It is
+  (i7)-flagged in its own docstring: until a calibrated source is expressible, "copy the source's
+  basis" and "write `DEFAULT`" agree on every store this suite can build.
 
 ---
 
@@ -1192,8 +1210,8 @@ version digest with no expiry. Its first step is the pre-flight against its own 
 `phase2b-preflight.md`. **It inherits from Task 4**: `memory.calibrate` returns a
 `CalibrationResult` whose `linearity_basis`, `placement` and `engine_label` are what a cache entry
 must carry, and **its second-process read-back test needs a fixture where the analytic and
-calibrated sides differ measurably** — on the measured ladder the two agree to 0.55 standard
-errors, so that fixture has to be constructed rather than found.
+calibrated sides differ measurably** — on the measured ladder they agree within the measurement's
+uncertainty, so that fixture has to be constructed rather than found.
 
 **THIS TABLE SAID "AWAITING REVIEW; NO CODE YET" WHILE THE COLD-START HEAD TWELVE HUNDRED LINES
 ABOVE SAID "APPROVED 2026-08-14".** Found at Task 0's start, 2026-08-15. Same shape as the

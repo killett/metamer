@@ -363,6 +363,33 @@ tile-side boundary landed on the same side, a refusal stopped firing, and the **
 caught it. **Where a structure in the tree computes the quantity, read it; a hand-count is an
 unverified claim in exactly the way (a4) describes.**
 
+#### A POINT BETWEEN TWO MEASURED POINTS IS NOT MEASURED
+
+> **Interpolation between measurements is inference, and a threshold can sit between any two
+> samples.** Where a brief names a specific point, **measure that point** — neighbours that
+> agree say nothing about what is between them.
+
+**This is (a4) applied to a sample rather than to a worked example**, and it is the harder half
+to notice: a worked example invites recomputation because it is arithmetic, while a sample sits
+inside a table of *measurements* and inherits their authority without having been taken.
+
+Worked instance, Phase 2b Task 4. The step test runs at caps **{1, 2, 3}**, and the table
+supporting it was measured at **1, 2, 32 and 200** — cap 3 was never taken, and was assumed to
+behave like its neighbours. It does not: **0 of 128 fits come back `OK` at caps 1 and 2 and 15
+do at cap 3**, because an `OK` needs `n_iter < max_iter` and a fit converging in two iterations
+reaches it. The threshold sits exactly on the unmeasured point.
+
+**AND THE OUTCOME WAS BETTER THAN THE DESIGN ASSUMED, WHICH IS WHY IT IS RECORDED AS EVIDENCE
+RATHER THAN AS A PASSED TEST.** Peak residency was **flat across {1, 2, 3} — 227.7, 227.8,
+227.7 MB — while fifteen fits reached the four allocation sites a non-`OK` outcome skips.** The
+plan asserted those sites were shape `(1, …)` constants by reading the code; that is now a
+**measurement**. The design had arranged the fixture to avoid the confound, and the confound
+turned out to be the experiment.
+
+**Its stated limit is what keeps it honest**: at B = 64 a *per-series* first-iteration
+allocation is kilobytes and invisible here, so what the band catches is a **constant**-scale
+allocation. The per-series case would show only at the ladder's top point.
+
 ### (a5) CROSS-CHECK A BRIEF'S REQUIREMENTS AGAINST ITS OWN CONSTRAINTS
 
 > **A requirement and the constraint that forbids it can sit paragraphs apart and both read
@@ -954,6 +981,36 @@ confirmation for four months.
 The check is one question: *what does this instrument call, and is it what the run calls?*
 Where the answer is "not quite", the instrument's disagreement with the production path is a
 **quantity to measure and name in advance**, never a discrepancy to reconcile.
+
+#### A LADDER SPECIFIED IN THE WRONG VARIABLE IS UNREACHABLE, AND HITTING IT REQUIRES THE DIVERGENCE THE MEASUREMENT EXISTS TO AVOID
+
+> **Specify a measurement's independent variable in the units the production path can actually
+> take.** A ladder in a **derived** quantity forces the instrument off the production path to
+> reach its own points — which is the failure the instrument was built to avoid.
+
+**This is (j2) one step earlier, at the specification rather than at the harness.** (j2) asks
+whether the instrument drives the production path; this asks whether the *points it was told to
+measure* are on that path at all. A brief can pass (j2) as written and still be unimplementable,
+because the divergence is smuggled in through the axis rather than through the code.
+
+Worked instance, Phase 2b Task 4. The brief's ladder was **B ∈ {1000, 2000, 4000}** — a ladder
+in **series**. A run's batch is a **tile**, so `B = side²` on a base-16 grid and the reachable
+values are {256, 1024, 2304, 4096, …}: **√1000 = 31.6**, and none of the three is a tile.
+Reaching them would have meant bypassing the tiling — **(j2) in the exact dimension under
+measurement**, since the tiling arithmetic is what the calibration exists to check.
+
+**THE REPAIR IS THE TRANSFERABLE PART: A ROUND TRIP, NOT A RE-DERIVATION.** The ladder is in
+sides, and `tiling.budget_bytes_for_side` seeds a closed form and then **asks
+`block_bytes_for`** whether that budget buys the block it needs. So the inverse cannot disagree
+with production about what a budget buys. **An inverse that re-derived the arithmetic instead
+would be a second description of one subject** — (a6)'s shape, arriving by a new route — and it
+would drift silently, because a ladder at the wrong B still runs and still fits a line.
+
+> **AND BOUND THE ROUND TRIP.** An unbounded correction loop repairs *any* wrong closed form,
+> one step at a time, and reports nothing. Measured: with the walk unbounded, a mutation that
+> dropped the headroom from the closed form still returned the right answer — after ~10⁸
+> single-byte steps, turning a 2.4 s module into a 21.5 s one, with every assertion green. The
+> bound is what turns the round trip from a repair into a **check**.
 
 ### (j3) AN EXISTING FEATURE CAN BE AN INSTRUMENT FOR A PROPERTY ITS OWN PURPOSE DOES NOT CONCERN
 

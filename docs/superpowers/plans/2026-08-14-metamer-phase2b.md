@@ -651,20 +651,21 @@ produced by the production path.
 **LANDED 2026-08-15. THREE OF THIS BRIEF'S NUMBERS DID NOT SURVIVE CONTACT AND THE FOURTH IS
 NOW MEASURED.** In full in `PROGRESS.md`'s *What Task 4 established*; in one line each:
 
-- **`B ∈ {1000, 2000, 4000}` is unreachable.** A run's batch is a tile, so `B = side²` and every
-  derived side is a multiple of 16 — √1000 = 31.6. **The ladder is in SIDES**,
+- **`B ∈ {1000, 2000, 4000}` is unreachable.** A run's batch is a tile, so `B = side²` on a
+  base-16 grid and none of the three is a tile. **The ladder is in SIDES**,
   `CALIBRATION_LADDER = (16, 32, 48, 64)`, and `tiling.budget_bytes_for_side` is what lands on
-  one.
+  one. **Promoted**, with its arithmetic, as (j2)'s specification-level twin.
 - **The outcome mix is NOT constant across {1, 2, 3}.** An `OK` needs `n_iter < max_iter`, so
-  convergence begins at cap 3: measured 0 of 128 at caps 1 and 2 and **15 at cap 3**. The step
-  test is stronger for it — the peak is flat at 227.7 / 227.8 / 227.7 MB **while** fifteen fits
-  reach the four allocation sites, which is direct evidence that those sites are constants.
+  convergence begins at cap 3 — a point this brief named and nobody measured. **The step test is
+  stronger for it**: the peak is flat across all three **while** fifteen fits reach the four
+  allocation sites, which turns "those sites are constants" from a code reading into a
+  measurement. **Promoted** as (a4)'s sample-level twin, with the counts.
 - **`calibrate=` and `recalibrate=` did not land.** There is no cache until Task 5, and a flag
   that parses and does nothing reads as supported. Only `max_iter` is here.
-- **The measured slope is 1049 ± 222 B/series against an analytic 926** — ratio 1.133, inside
-  the two-sided band, on a 29-minute hand-run ladder. **The 123 B/series excess is 0.55
-  standard errors and is not a measurement of the uncharged temporaries**, however well it
-  agrees with Task 0's ~100 B/series estimate.
+- **The slope is measured, and its uncertainty is the point**: it clears the two-sided band on
+  the production path for the first time, and the excess over the analytic figure is **inside
+  one standard error and is therefore not a measurement of the uncharged temporaries**, however
+  well it agrees with Task 0's estimate. The figures are in `PROGRESS.md`, once.
 
 **And two things the brief did not bound.** `run()` loops every tile, so a calibration on a
 production grid would fit all of it — the run is stopped after one tile through

@@ -638,10 +638,10 @@ the second makes the shipped one expensive, and neither is visible without runni
 ### (a4)/(g) THE BRIEF'S LADDER IS NOT REACHABLE THROUGH `run()` AT ALL
 
 `B ∈ {1000, 2000, 4000}` is a ladder in **series**, and a run's B is a **tile**: `B = side²`, and
-since Task 2 every derived side is a multiple of `store.TILE_SIDE_BASE` = 16. So the reachable
-values are `{256, 1024, 2304, 4096, …}` and **√1000 = 31.6 is not among them.** The brief's three
-numbers cannot be produced by any tile, so a calibration that hit them would have to bypass the
-tiling — which is (j2) and is the whole thing this task exists not to do.
+since Task 2 every derived side is a multiple of `store.TILE_SIDE_BASE` = 16. **None of the
+brief's three numbers can be produced by any tile**, so a calibration that hit them would have to
+bypass the tiling — which is (j2) and is the whole thing this task exists not to do. **Promoted,
+with the arithmetic, as (j2)'s specification-level twin in the handoff's §1.**
 
 **The ladder is therefore in SIDES**, and every side is a multiple of 16 by construction rather
 than by choice — Task 2's rounding already guarantees it, which is the property that made it
@@ -718,17 +718,17 @@ clean iteration-residency test — which is exactly why it is the discriminator 
 allocation sites `fit.py:237` skips on a non-`OK` outcome. **One measurement, two unknowns.**
 
 > **CORRECTED DURING IMPLEMENTATION, 2026-08-15: THE MIX IS NOT CONSTANT ACROSS {1, 2, 3}.**
-> Measured through `run()` at side 8, N = 60: **0 of 128 `OK` at caps 1 and 2, and 15 at cap 3.**
 > The table above was measured by calling `fit` directly at caps 1, 2, 32 and 200 and **never at
 > 3** — the brief's own ladder point, taken on trust between two measured ones. An `OK` needs
 > `n_iter < max_iter` (`optimize.py:592`), so a fit converging in two iterations is genuinely
-> converged at a cap of 3, and at a cap of 1 the only way through is `n_iter = 0`.
+> converged at a cap of 3, and at a cap of 1 the only way through is `n_iter = 0`. **Convergence
+> begins exactly at the unmeasured point.**
 >
-> **The step test is better for it rather than damaged.** Fifteen series at cap 3 **do** reach
-> the four allocation sites, and the peak does not move — 227.7, 227.8, 227.7 MB — which is
-> direct evidence that those sites are constants rather than slope terms, where the plan had
-> only a code-reading. **(a4) at a gap between two measured points**: the interpolated one was
-> the only one nobody checked.
+> **The step test is better for it rather than damaged**, and it is evidence rather than a passed
+> test: the peak is flat across all three caps **while** fifteen fits at cap 3 reach the four
+> allocation sites, where the plan had only a code-reading. **Promoted as (a4)'s sample-level
+> twin — "a point between two measured points is not measured" — and the counts and the three
+> peaks live there, once.**
 
 The separation is arithmetic rather than a second cap: **every skipped site is shape `(1, …)`**
 — `theta[b, c, :p]`, `np.linalg.inv(result.hessian)`, `delta_method_cov`, the second
