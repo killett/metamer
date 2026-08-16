@@ -6,28 +6,38 @@
    a stale name that never diverged and needs nothing done to it. Remote:
    https://github.com/killett/metamer — public, and every commit is pushed by a hook.
 2. **DONE:** Phase 1 Tasks 0–18 (Task 19 deleted), Phase 2 preliminaries P0–P4, **Phase 2a
-   Tasks 0–13 — the whole sub-phase**, **Phase 2b Tasks 0–6**, and open questions 1,
+   Tasks 0–13 — the whole sub-phase**, **Phase 2b Tasks 0–7**, and open questions 1,
    4, 9, 11, 12 and **15**.
-3. **NEXT ACTION: 2b TASK 7 — criterion 6's instrument, the linearity claim — AND ITS FIRST STEP
-   IS THE PRE-FLIGHT AGAINST ITS OWN BRIEF**, appended to
+3. **NEXT ACTION: 2b TASK 8 — criterion 7's run, and accumulation across tiles — AND ITS FIRST
+   STEP IS THE PRE-FLIGHT AGAINST ITS OWN BRIEF**, appended to
    [`docs/superpowers/notes/phase2b-preflight.md`](docs/superpowers/notes/phase2b-preflight.md)
-   **before** the code. **What remains is 7–10**: both closure instruments (criteria 6 and 7),
-   the five-site cascade amendment and the exit-criteria suite. All sixteen 2a exit criteria are
-   met, two with reduced scope; **2b closes both**. **Tasks 7 and 8 are the long-running
-   measurements — ~1.5 h and ~1.7 h — so plan the session around them.**
+   **before** the code. **What remains is 8–10**: criterion 7's run, the five-site cascade
+   amendment and the exit-criteria suite. **Task 8 is the second long measurement (~1.7 h) — plan
+   the session around it**, and read *What Task 7 established* first: its ladder took 1.73 h
+   against a 1.70 h estimate, so the cost model transfers, and **its result was a bound rather
+   than a value**, which is the outcome Task 8 should expect to have to report as well.
 4. **READ [What Task 4 established](#what-task-4-established-done-2026-08-15--read-before-touching-the-calibration-the-cap-or-the-tiling-inverse)
    and [What Task 5 established](#what-task-5-established-done-2026-08-15--read-before-touching-the-cache-the-tile-side-or-provenance) FIRST**, then
    [What 2b's first tasks inherit](#what-2bs-first-tasks-inherit-2026-08-14) — the findings
    F1–F5 and every measured number 2b rests on. Then the plan. **Tasks 0–4 each have their own
    *established* section, and each was written because its task contradicted the brief.**
-5. **Tests: 1024 passed, measured 2026-08-15 after 2b Task 6** (1018 after Task 5, 997 after
-   Task 4, 989 after Task 3, 977 after Task 2, 967 after Task 1, 947 after Task 0). The only
-   statement of the **current** count. **Sweep durations: 1199 s after Task 5 and 942 s after
-   Task 6 — the suite grew by six tests and the sweep got 21% FASTER**, which is the scatter the
-   attribution trigger was dropped over, measured twice in one session. Do not read either number
-   as a per-task cost; the earlier condition-less timings remain unquotable. **What each task
-   adds is measured standalone**: Task 5's `tests/test_calibration.py` is ~123 s (24 s fast,
-   98 s slow) and Task 6 adds ~20 s of direct-call tests plus a ~43 s end-to-end refusal.
+5. **Tests: 1032 collected; 1030 passed and 2 failed, measured 2026-08-16 after 2b Task 7.**
+   **THE TWO FAILURES ARE `machine`-MARKED RSS TESTS AND ARE HOST CONTENTION, NOT A
+   REGRESSION** — both pass in isolation on the same box, and the Task 7 diff cannot reach
+   them; the diagnosis, the numbers and the repairs that are NOT allowed are in
+   [Gotchas discovered](#gotchas-discovered). **The suite is not green on a loaded box and
+   that is unresolved.** Earlier counts, all clean: 1024 after Task 6, 1018 after Task 5, 997
+   after Task 4, 989 after Task 3, 977 after Task 2, 967 after Task 1, 947 after Task 0. The
+   only statement of the **current** count.
+
+   **Sweep durations: 1199 s (Task 5), 942 s (Task 6), 3502 s (Task 7) — and the third is a
+   measurement of the HOST, not of the suite.** Between the second and third the suite grew by
+   eight tests and the wall clock nearly quadrupled, at host load average 12–16 against a
+   4-core box. The Task 5→6 pair already showed the suite getting **21% faster while growing**,
+   which is why the attribution trigger was dropped; the Task 7 figure is the same lesson with
+   a cause attached. **Do not read any of them as a per-task cost.** What each task adds is
+   measured standalone instead: Task 5's `tests/test_calibration.py` ~123 s, Task 6 ~63 s,
+   Task 7 ~9 s (its 1.73 h ladder is deliberately NOT in the suite).
 6. **`pixi run test` is the full sweep and is what every end-of-task verification must run**;
    **`pixi run test-fast` deselects `slow` and is for iteration only — a green fast run is NOT
    evidence a task is done.** The sweep has now caught five things a fast run could not.
@@ -39,7 +49,7 @@
 8. **The plan is
    [`docs/superpowers/plans/2026-08-14-metamer-phase2b.md`](docs/superpowers/plans/2026-08-14-metamer-phase2b.md)**
    — 11 tasks, dependencies, 16 exit criteria, **approved 2026-08-14**, amended in place by each
-   task that deviated from it — **which is every one of Tasks 0–6**. Its predecessor,
+   task that deviated from it — **which is every one of Tasks 0–7**. Its predecessor,
    [the 2a plan](docs/superpowers/plans/2026-08-11-metamer-phase2a.md), is complete and is read
    only for its closing exit-criteria table.
 9. **THE METHOD IS THE PRE-FLIGHT AND IT LIVES IN EXACTLY ONE PLACE:**
@@ -1038,6 +1048,97 @@ recompute-basis fixture was moved at Task 5 into
 source whose basis is `cached`; `tests/test_reuse.py`'s original keeps the cheap `default` case
 and points at it.
 
+### What Task 7 established (done 2026-08-16 — read before quoting the slope or the linearity claim)
+
+**THE LADDER — the deliverable, run once by hand, 2026-08-16, 6242.5 s (1.73 h).** N = 60, M = 2,
+k_β = 4, p_max = 3, a 160×160 grid of white noise, `max_iter = 1`, floor pinned at 228.2 MB. Every
+side landed on the side it asked for, and every point ran in the cap-1 regime (`ok = 0`).
+
+| side | B | peak RSS | residual |
+|---|---|---|---|
+| 16 | 256 | 231.31 MB | +1201.0 kB |
+| 48 | 2304 | 231.11 MB | −1091.9 kB |
+| 80 | 6400 | 235.81 MB | −582.2 kB |
+| 112 | 12544 | 243.14 MB | +473.1 kB |
+
+**slope 1021.6 B/series, intercept 229.85 MB, SE 134.7, ratio to the analytic 926 of 1.103 —
+INSIDE the two-sided band (617.3–1389.0).**
+
+**AND IT DOES NOT RESOLVE. THAT IS THE RESULT, NOT A FAILURE OF IT.** The relative standard error
+is **13.2%**, above `SLOPE_RESOLUTION_LIMIT`, so the honest output is a **bound**: this ladder
+**excludes per-series costs outside 752–1291 B/series and establishes no value.** It rules out the
+corrected formula being wrong by more than about a third, and it rules out nothing finer.
+
+> **SO EXIT CRITERION 6 IS MET AS WRITTEN AND THE CRITERION IS WEAKER THAN IT READS.** *"Slope and
+> intercept match the formula within a two-sided band at four or five sides, residuals reported"*
+> — all four clauses hold. But the band is 617–1389, a **2.25× window**, and the measurement's own
+> 2σ interval is 752–1291, **nearly as wide as the band it is being checked against.** A criterion
+> a measurement cannot fall far outside is close to vacuous: this one discriminates a gross
+> formula error and not a marginal one, and **saying so is the difference between closing a
+> criterion and satisfying it.**
+
+**THE LINEARITY HALF IS NOT ESTABLISHED, AND THE NUMBER THAT SAYS SO IS THE DELIVERABLE.**
+Curvature **+0.0451 ± 0.0343 B/series²** — 1.3σ, not significant. But the ladder could only have
+excluded **0.0687**, which is a per-series cost varying by **82.6% across B ∈ [256, 12544]**.
+**An instrument that cannot detect curvature is not evidence of its absence**, so what this
+measurement supports is *"no curvature larger than 83% was seen"*, which is nearly no constraint
+at all. The shipped calibration's extrapolation from small B to production B rests on an
+assumption this ladder does not test.
+
+**AND A FOURTH CLOSURE BOUNDARY, WHICH THE PLAN DID NOT ANTICIPATE: LINEARITY CANNOT BE
+ESTABLISHED ON THIS MACHINE AT ANY AFFORDABLE COST.** Repeats reduce both errors as `1/√k`:
+
+| repeats | total wall clock | relative SE | detectable curvature |
+|---|---|---|---|
+| 1 (run) | 1.73 h | 13.2% | 82.6% |
+| 2 | 3.5 h | 9.3% | 58% |
+| 7 | 12.1 h | 5.0% | 31% |
+
+**Twelve hours of measurement still leaves a 31% variation invisible.** The three boundaries from
+Q7 — a converged fit at a memory-relevant B, the per-thread placement, a 10⁷-point run — are
+joined by this one, and it is the cheapest of the four to misread as closed.
+
+**MY OWN PREDICTED PRECISION WAS WRONG BY 4×, AND IT IS RECORDED BECAUSE THE METHOD IS THE POINT.**
+The pre-flight predicted SE ≈ 32 B/series from Task 4's **±0.3 MB** between-child scatter. The
+measured RMS residual is **0.88 MB**, ~3× that, at a different fixture (160×160 grid, a larger
+input to open and tile) — so the scatter figure did not transfer, and neither did the prediction
+built on it. **The |residuals| do not grow with B** (1201, 1092, 582, 473 kB); the pattern is
++,−,−,+, which is the shape a positive curvature makes, so part of the "scatter" is the
+unresolved curvature itself. **A scatter measured at one fixture is not a property of the
+instrument.**
+
+**THE COST MODEL HELD TO 2%.** Predicted 283.8 ms/series from a single probe point; measured
+**290.3 ms/series** over 21 504 series. The wall clock is **contaminated** — light test runs shared
+the box — and the RSS readings are not, because each child measures its own resident set and the
+machine never swapped (~2.8 GB available throughout). **Available RAM during the run is recorded
+as an ambient condition, not as a machine property.**
+
+**THE CROSS-CHECK THE BRIEF SPECIFIED WAS NOT RUN AGAINST PRODUCTION, AND THE PRE-FLIGHT SAYS
+WHY** — in three lines: `unconstrained_loglik` builds no optimizer, so the term is the engine
+workspace (880 B) and not `solver_state_bytes` (12 488 B), which the tree's own docstring already
+said; corrected, the two instruments differ by the **difference** of two per-series terms
+(+138 B/series here) and not by one; and the evaluation instrument carries an unmodelled
+**~2.7 kB/series independent of N**, nineteen times the effect — **open question 16**.
+
+**`data_and_workspace_bytes_per_series` PUBLISHED 6382 FOR A FUNCTION RETURNING 6550.** The
+difference is exactly `augmented_state = d·(1+k_β)·8 = 168`, the term Task 0 added, so the prose
+was a pre-correction figure carried through the correction that moved it; the recorded ratio goes
+**1.33 → 1.29**. **(a4)'s fourth register firing on this project's own promotion, one commit after
+it was written.**
+
+**WHAT SHIPPED IN CODE**: `memory.SLOPE_RESOLUTION_LIMIT`, `memory.LinearityReport`,
+`memory.linearity_report`. **The 1.73 h ladder is NOT in the suite** — the sweep is 942 s and the
+standing requirement runs it before every commit — which is Task 4's precedent exactly: the
+measurement is the deliverable and the suite tests the **analysis**, against constructed ladders,
+plus one test that reproduces Task 4's hand-computed 1049 ± 222 through the same arithmetic.
+
+**One mutation survived and it was NOT a defect.** *"The quadratic is fitted on centred B for
+conditioning"* was an assumption: measured, centred and raw recover a known −1e-4 coefficient
+identically at this ladder, at production-scale B, and at a ladder four times wider. The centring
+stays (one subtraction, and the concern returns at a wider ladder than this project can run) and
+**the justification was rewritten to say what was measured** — the fifth cause in the taxonomy,
+where the correct response is to fix the claim rather than the test.
+
 ---
 
 ## Things a cold session cannot re-derive
@@ -1389,17 +1490,18 @@ was the actual defect the leak exposed.
 | Phase 2 preliminaries pre-flight | [`docs/superpowers/notes/phase2-preliminaries-preflight.md`](docs/superpowers/notes/phase2-preliminaries-preflight.md) — the (a)–(k) audit of the P0/P1/P2 briefs and what each finding changed |
 | **Phase 2a implementation plan** | [`docs/superpowers/plans/2026-08-11-metamer-phase2a.md`](docs/superpowers/plans/2026-08-11-metamer-phase2a.md) — **COMPLETE: Tasks 0–13, all sixteen exit criteria met** |
 | **Phase 2a pre-flight, per task** | [`docs/superpowers/notes/phase2a-preflight.md`](docs/superpowers/notes/phase2a-preflight.md) — the (a)–(k) audit of each 2a task brief and what each finding changed. **Append to it before each task, not after.** |
-| **Phase 2b implementation plan** | [`docs/superpowers/plans/2026-08-14-metamer-phase2b.md`](docs/superpowers/plans/2026-08-14-metamer-phase2b.md) — 11 tasks, 16 exit criteria, **approved 2026-08-14. Tasks 0–6 landed 2026-08-15.** Its head carries findings F1–F4, which are why 2b begins with a correction task rather than with the calibration tile |
+| **Phase 2b implementation plan** | [`docs/superpowers/plans/2026-08-14-metamer-phase2b.md`](docs/superpowers/plans/2026-08-14-metamer-phase2b.md) — 11 tasks, 16 exit criteria, **approved 2026-08-14. Tasks 0–6 landed 2026-08-15, Task 7 on 2026-08-16.** Its head carries findings F1–F4, which are why 2b begins with a correction task rather than with the calibration tile |
 | **Phase 2b pre-flight, per task** | [`docs/superpowers/notes/phase2b-preflight.md`](docs/superpowers/notes/phase2b-preflight.md) — carries the pre-plan audit and Task 0's; per-task entries are appended **before** each task |
 
-**Next action:** Task 7 — criterion 6's instrument, the linearity claim. Its first step is the
-pre-flight against its own brief, appended to `phase2b-preflight.md`. **It inherits from Tasks 4
-and 6**: `memory.calibrate` already runs a four-point ladder in **sides** through the production
-path, so Task 7's question is not how to measure but what the residuals license — and Task 6
-established that a slope above the formula makes the tile **smaller**, which is the direction that
-refuses a resume, so the linearity claim is what says how far that is safe to extrapolate.
-**Budget the session for it: ~1.5 h of measurement**, and the affordable-ladder scatter recorded
-under Task 4 is why its value claim cannot come from the suite.
+**Next action:** Task 8 — criterion 7's run, and accumulation across tiles. Its first step is the
+pre-flight against its own brief, appended to `phase2b-preflight.md`. **It inherits from Task 7
+most of all, and the inheritance is a warning**: Task 7's ladder cost 1.73 h against a 1.70 h
+estimate — so the cost model transfers — and its result was a **bound rather than a value**, at
+13.2% relative error. Task 8's peak-RSS claim is an inequality (*"peak at or below the budget"*)
+rather than a fitted quantity, so it does not need the same precision; **but its accumulation
+half does**, and `--reuse-fits-from` is the cheap instrument for it (j3). **Budget the session
+for ~1.7 h of measurement**, and expect to report what the run **excludes** rather than what it
+establishes.
 
 **THIS TABLE SAID "AWAITING REVIEW; NO CODE YET" WHILE THE COLD-START HEAD TWELVE HUNDRED LINES
 ABOVE SAID "APPROVED 2026-08-14".** Found at Task 0's start, 2026-08-15. Same shape as the
@@ -4537,6 +4639,33 @@ question; compute/bandwidth roofline pair for cross-machine prediction) are in d
 
 ## Gotchas discovered
 
+- **TWO `machine`-MARKED RSS TESTS FAIL UNDER HOST CONTENTION AND PASS IN ISOLATION, AND
+  THAT IS (i9) RATHER THAN FLAKINESS.** Observed 2026-08-16 in the Task 7 sweep, which took
+  **3502 s against the 942 s the same suite took the day before**, at host load average
+  12–16 and ~2.8 GB available:
+
+  | test | asserts | measured under load |
+  |---|---|---|
+  | `test_the_floor_ladder_reproduces_the_recorded_rungs` | post-warm − pre-warm **> 30 MB** | **7.7 MB** — numba's threading layer cost 5.8 MB against the recorded 43.2 |
+  | `test_peak_residency_does_not_move_with_the_iteration_cap` | two peaks agree **within 16 MB** | **36.1 MB** apart |
+
+  **Both pass on the same box in isolation**, minutes later, at load 12. **The cause is memory
+  pressure, not a regression**: under reclaim the kernel takes pages back from the measuring
+  children, so a resident-set reading understates what the process asked for — and every
+  number these two tests assert is a resident-set difference.
+
+  **The Task 7 diff cannot reach them**: it is two hunks in `core/memory.py`, one purely
+  additive (a constant, a dataclass, a function) and one a docstring, and neither is in
+  `measure_floor`, `measure_tile_peak` or their child templates.
+
+  **DO NOT FIX THIS BY LOOSENING THE THRESHOLDS.** *"numba's threading layer costs 43.2 MB, a
+  fifth of the floor"* is the claim the 30 MB bound protects, and a bound at 5 MB asserts
+  nothing. That is (i5): the tempting repair moves the thing being tested. The honest repairs
+  are to **skip when the machine is under memory pressure** — an ambient reading these tests
+  already have the instrument for — or to **re-measure the rungs on a quiet box and state the
+  conditions**, which is a fixture change and belongs to whoever owns those tests, not to a
+  task that happened to run the sweep.
+
 - **`numba` PINS `numpy<2.5`, SO ADDING IT DOWNGRADED NUMPY 2.5.1 → 2.4.6** on all four
   platforms (Task 17, 2026-08-07). **numpy 2.4's type stubs infer `floating[Any]` where
   2.5's infer `float64`**, so `mypy` began reporting errors in `signal.py` and `fit.py` —
@@ -4929,6 +5058,33 @@ Still open. **A new session must not assume these were settled.**
     **What would close it:** run the spike with a realistic calendar axis
     (`unique_dt = 6`) beside the synthetic one at the same B and thread count, and report both
     per-pass costs and the ratio. Cheap — it is a fixture change, not a harness change.
+
+16. **THE BATCHED-EVALUATION INSTRUMENT CARRIES ~2.7 kB/SERIES THAT ITS OWN ORACLE DOES NOT
+    CHARGE, AND IT IS INVISIBLE AT THE ONLY N ANYONE MEASURED.** Opened 2026-08-16 at Task
+    7's pre-flight. `measure_evaluation_rss_slope((0, 512, 1024, 2048))` against
+    `data_and_workspace_bytes_per_series`, measured on this machine:
+
+    | N | measured | oracle | ratio | inside `slope_band`? | excess |
+    |---|---|---|---|---|---|
+    | 630 | 9286 B/series | 6550 | 1.418 | yes | +2736 |
+    | 60 | 4036 B/series | 1420 | **2.842** | **no** | +2616 |
+
+    **The excess does not depend on N**, so it hides inside `n_time*9` at 630 and dominates at
+    60 — **(a)'s cancellation rule at a parameter value**, and the reason the instrument's
+    agreement with its oracle was believed for four months at one N. 2670/8 ≈ **334 float64
+    per series**, which is the size of the thing to look for inside
+    `objective.unconstrained_loglik`'s working set.
+
+    **Why it is open rather than done:** the term belongs to a **batched evaluation** and not
+    to `run()`, so it moves no tile side, no budget and no store — the production per-series
+    cost is `resident_bytes_per_series` and is measured by Task 7's own ladder. Chasing it
+    inside a task about production linearity would be (a5) in the other direction.
+
+    **What would close it:** an allocation-by-allocation read of `unconstrained_loglik` at two
+    N and two B, against the same instrument, in the idiom Task 0 used to rebuild
+    `output_slot_bytes` field by field. **Do not close it by widening `slope_band`** — the
+    band is the formula's validation and the instrument's disagreement with its own floor is
+    the finding, not the noise.
 
 13. **THE PACKAGING GUARD CANNOT RESOLVE DEPENDENCIES, SO A WRONG VERSION FLOOR IS
     UNCAUGHT.** `tests/test_packaging.py` installs the wheel with `--no-deps --no-index`,

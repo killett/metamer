@@ -212,6 +212,236 @@ band is not evidence the terms are right** -- check the terms.
 """
 
 
+SLOPE_RESOLUTION_LIMIT = 0.10
+"""POLICY. Relative standard error above which a ladder reports a BOUND.
+
+**A NUMBER WITH A STANDARD ERROR LARGER THAN THE EFFECT IS NOT A
+MEASUREMENT**, and this project has one instance of publishing one anyway:
+Task 4's affordable ladder returned **1666 B/series against an analytic 926**
+on its first attempt -- read as a 1.80x finding, and correctly re-read as
+noise once the scatter was measured. The shipped four-point ladder came back
+at **1049 +- 222**, a relative standard error of **21%**, which is why its
+value claim lives in `PROGRESS.md` with its uncertainty and not in an
+assertion.
+
+**THE THRESHOLD IS ON THE RELATIVE ERROR AND NOT ON THE DISTANCE FROM ZERO**,
+because a slope four standard errors from zero can still be useless: at 21%
+Task 4's ladder cleared any distance-from-zero test and could not tell 926
+from 1250. What a memory budget needs is a per-series cost good enough that
+the tile it sizes is right, and 10% of the per-series cost is 5% of the tile
+side.
+
+**THE ASYMMETRY, since this is policy rather than derived**: too loose and a
+noise-dominated ladder is published as a value, which is the failure above;
+too tight and a perfectly good measurement is reported as a bound, which
+costs a sentence and no correctness. **Set from the expensive side.**
+"""
+
+
+@dataclass(frozen=True)
+class LinearityReport:
+    """What a ladder establishes about linearity, and what it cannot see.
+
+    **NOTHING HERE RESTATES A NUMBER `CalibrationResult` ALREADY CARRIES.** The
+    slope, the intercept, the residuals and the ladder live there; two copies
+    of one measurement drift the moment one is updated, and this project has
+    paid for that four times. This is read **beside** a result, never instead
+    of one.
+
+    Attributes:
+        slope_standard_error: The fitted slope's standard error, in bytes per
+            series, from the residuals of the straight-line fit.
+        relative_standard_error: The above over the measured slope. **The
+            statistic the resolution verdict is made on**; see
+            `SLOPE_RESOLUTION_LIMIT`.
+        resolved: True when the ladder measured a value rather than a bound.
+        analytic_bytes_per_series: What `resident_bytes_per_series` predicts
+            for the configuration measured -- supplied by the caller, because
+            this function does not know the candidate set.
+        ratio: Measured over analytic.
+        inside_band: Whether the ratio clears `slope_band`, which is
+            **two-sided**: a slope materially BELOW the formula is a finding
+            about the formula, never headroom.
+        curvature: The fitted `B**2` coefficient, in bytes per series squared.
+            **Reported with its sign**, since a per-series cost that falls with
+            B and one that rises are different defects.
+        curvature_standard_error: Its standard error.
+        detectable_curvature: `2 * curvature_standard_error` -- the smallest
+            quadratic term this ladder could have excluded.
+        detectable_variation: What that curvature would do to the per-series
+            cost across the ladder, as a fraction of the measured slope.
+            **THIS IS THE HALF THAT MAKES THE LINEARITY CLAIM HONEST**: an
+            instrument that cannot see curvature is not evidence of its
+            absence, so a residual pattern is worth nothing without the
+            magnitude it could have detected.
+        verdict: One sentence a reader can quote, built from the fields above.
+    """
+
+    slope_standard_error: float
+    relative_standard_error: float
+    resolved: bool
+    analytic_bytes_per_series: float
+    ratio: float
+    inside_band: bool
+    curvature: float
+    curvature_standard_error: float
+    detectable_curvature: float
+    detectable_variation: float
+    verdict: str
+
+
+def linearity_report(
+    result: CalibrationResult, *, analytic_bytes_per_series: float
+) -> LinearityReport:
+    """Say what a ladder established, and what magnitude of curvature it could see.
+
+    **THE RESIDUALS ARE THE DELIVERABLE AND THE FIT IS NOT.** Three points fit
+    a line through **one** residual and cannot falsify linearity -- they can
+    only fail to notice -- which is why the shipped ladder has four and why
+    this function refuses fewer. The question a calibration's consumer actually
+    has is *"may I extrapolate this slope"*, and the answer is a residual
+    pattern **together with** the curvature the ladder was capable of
+    detecting.
+
+    **THE STRAIGHT-LINE FIT'S ARITHMETIC IS THE ONE TASK 4 DID BY HAND**, so
+    the two agree by construction: `s**2 = SSR/(n-2)`, `SE = sqrt(s**2/Sxx)`.
+    Fed Task 4's **published** ladder -- the four peaks as printed, to 0.01 MB
+    -- this returns **1051 +- 224** against the recorded **1049 +- 222**, which
+    agrees inside the table's own rounding: a +-5 kB perturbation of each peak
+    moves the slope by up to `sum|B - Bbar| * 5000 / Sxx` = 2.7 B/series. **The
+    check is that a function and a hand computation reach the same place from
+    the same numbers**, which is what makes this arithmetic reusable rather
+    than a second opinion.
+
+    **THE QUADRATIC IS FITTED ON CENTRED B, AND THE REASON IS NOT THE ONE THAT
+    WAS WRITTEN HERE FIRST.** The expectation was conditioning: `B**2` reaches
+    1.6e8 at the top of this ladder and 6.9e10 at a production tile, so an
+    uncentred normal matrix has entries spanning 1 to `B**4` and should lose
+    digits where the whole question is a small coefficient. **Measured
+    2026-08-16, it does not**: recovering a known `-1e-4` coefficient through
+    `np.linalg.solve`, centred and raw agree to every digit printed at this
+    ladder, at production-scale B, and at a ladder four times wider. The
+    mutation that removes the centring **survives every test in this module**,
+    and that says nothing about the tests -- it says the two are the same
+    function on every input reachable here (the fifth cause in the mutation
+    taxonomy, and the one people skip diagnosing).
+
+    **It stays because it costs one subtraction and the expectation returns at
+    a wider ladder than anything this project can run**, and because a
+    justification that has been checked is worth more than one that has not.
+    **What must not happen is the sentence outliving the check**: it is dated,
+    and it says what was measured rather than what was assumed.
+
+    Args:
+        result: A measured ladder.
+        analytic_bytes_per_series: `resident_bytes_per_series` for the
+            configuration the ladder ran. **Passed in rather than derived**:
+            this module's formula needs the candidate set and the series
+            length, and a second derivation of them here would be a second
+            description of one subject.
+
+    Returns:
+        The report.
+
+    Raises:
+        ValueError: If the ladder has fewer than four points. A quadratic
+            through three points is exact, so its residual is zero whatever
+            the truth is and its standard error is undefined -- **the report
+            would claim to have excluded every curvature.** That is worse than
+            refusing, because it is a confident answer.
+    """
+    import numpy as np
+
+    if len(result.points) < 4:
+        raise ValueError(
+            f"a linearity report needs at least four ladder points and got "
+            f"{len(result.points)}: a quadratic through three is exact, so the "
+            "curvature it reports has no residual and no standard error, and "
+            "the report would claim to have excluded every curvature there is"
+        )
+
+    batches = np.asarray([point.batch for point in result.points], dtype=np.float64)
+    peaks = np.asarray([point.peak_bytes for point in result.points], dtype=np.float64)
+    count = len(batches)
+
+    # THE LINE, AND ITS STANDARD ERROR FROM ITS OWN RESIDUALS.
+    slope, intercept = np.polyfit(batches, peaks, 1)
+    line_residuals = peaks - (slope * batches + intercept)
+    centred = batches - batches.mean()
+    sxx = float((centred**2).sum())
+    line_variance = float((line_residuals**2).sum()) / (count - 2)
+    slope_error = float(np.sqrt(line_variance / sxx))
+
+    # THE QUADRATIC, ON CENTRED B, WITH THE COVARIANCE COMPUTED HERE.
+    # `np.polyfit(..., cov=True)` refuses below `order + 3` points -- five for a
+    # quadratic -- and a four-point ladder is the one this task ships, so the
+    # ordinary least-squares covariance is written out rather than borrowed.
+    design = np.stack([np.ones_like(centred), centred, centred**2], axis=1)
+    normal = design.T @ design
+    coefficients = np.linalg.solve(normal, design.T @ peaks)
+    quadratic_residuals = peaks - design @ coefficients
+    quadratic_variance = float((quadratic_residuals**2).sum()) / (count - 3)
+    curvature_error = float(np.sqrt(quadratic_variance * np.linalg.inv(normal)[2, 2]))
+    curvature = float(coefficients[2])
+
+    # A `c * B**2` term is a per-series cost of `c * B`, so across the ladder it
+    # moves the per-series figure by `c * (B_max - B_min)`. Reported against the
+    # slope, which is the quantity a consumer extrapolates.
+    detectable = 2.0 * curvature_error
+    span = float(batches.max() - batches.min())
+    detectable_variation = detectable * span / abs(slope) if slope else float("inf")
+
+    # **CAST AT THE BOUNDARY, BECAUSE NUMPY'S BOOLEAN IS NOT `bool`.** A
+    # comparison of numpy scalars returns `np.bool_`, which is falsy-correct and
+    # fails `is True` -- so a caller asserting identity against the dataclass
+    # gets a wrong answer from a right computation. The same applies to every
+    # float here: `np.float64` renders differently in a message and does not
+    # round-trip through JSON.
+    slope = float(slope)
+    slope_error = float(slope_error)
+    relative_error = slope_error / abs(slope) if slope else float("inf")
+    resolved = bool(relative_error <= SLOPE_RESOLUTION_LIMIT)
+    low, high = slope_band(analytic_bytes_per_series)
+    ratio = slope / analytic_bytes_per_series
+    inside = bool(low <= slope <= high)
+
+    if resolved:
+        head = (
+            f"{slope:.0f} +- {slope_error:.0f} B/series ({relative_error:.1%}), "
+            f"{ratio:.3f}x the formula's {analytic_bytes_per_series:.0f} and "
+            f"{'inside' if inside else 'OUTSIDE'} the "
+            f"{low:.0f}-{high:.0f} B/series band"
+        )
+    else:
+        head = (
+            f"NOT RESOLVED: {slope:.0f} +- {slope_error:.0f} B/series is "
+            f"{relative_error:.0%} error, above the {SLOPE_RESOLUTION_LIMIT:.0%} "
+            f"limit, so this ladder EXCLUDES per-series costs outside "
+            f"{slope - 2 * slope_error:.0f}-{slope + 2 * slope_error:.0f} "
+            f"B/series and establishes no value. The formula predicts "
+            f"{analytic_bytes_per_series:.0f}"
+        )
+    return LinearityReport(
+        slope_standard_error=slope_error,
+        relative_standard_error=relative_error,
+        resolved=resolved,
+        analytic_bytes_per_series=float(analytic_bytes_per_series),
+        ratio=ratio,
+        inside_band=inside,
+        curvature=curvature,
+        curvature_standard_error=curvature_error,
+        detectable_curvature=detectable,
+        detectable_variation=detectable_variation,
+        verdict=(
+            f"{head}. Curvature {curvature:+.3g} B/series^2; this ladder could "
+            f"have excluded {detectable:.3g}, which is a per-series cost "
+            f"varying by {detectable_variation:.1%} across B in "
+            f"[{batches.min():.0f}, {batches.max():.0f}] -- anything smaller "
+            f"than that it cannot see, and not seeing it is not evidence"
+        ),
+    )
+
+
 def memory_engine_label(engine: Engine) -> MemoryEngineLabel:
     """Return the memory-relevant label for an engine instance.
 
@@ -590,11 +820,38 @@ def data_and_workspace_bytes_per_series(d: int, k_beta: int, n_time: int) -> int
     This function is the right floor **for the instrument**, which is why it
     survives: Task 7 uses it as the cross-check.
 
-    **This was 31 542 B/series until 2026-08-10 and is now 6382**, because
-    25 200 of it was a materialized augmented block. Measured against it, the
-    slope of resident RSS on batch size went from 43 392 to **8471**, a ratio to
-    the floor of 1.33 -- inside `slope_band`, and that agreement was read for
-    four months as confirming a formula the instrument never exercised.
+    **This was 31 542 B/series until 2026-08-10 and is 6550 at d = 3, k = 6,
+    N = 630**, because 25 200 of it was a materialized augmented block.
+    Measured against it, the slope of resident RSS on batch size went from
+    43 392 to **8471**, a ratio to the floor of **1.29** -- inside
+    `slope_band`, and that agreement was read for four months as confirming a
+    formula the instrument never exercised.
+
+    > **THE PROSE HERE SAID 6382 UNTIL 2026-08-16, AND THE FUNCTION HAS
+    > RETURNED 6550 SINCE TASK 0.** The difference is exactly
+    > `augmented_state = d*(1+k_beta)*8` = 3*7*8 = **168**, the term Task 0
+    > added when it rebuilt `_engine_workspace_bytes` field by field -- so the
+    > sentence was a pre-correction figure carried through the correction that
+    > moved it, and the recorded ratio moved with it, 1.33 to 1.29. **The
+    > conclusion survives both and its numbers did not**, which is (a4)'s
+    > fourth register.
+
+    **AND IT IS A FLOOR AT N = 630 AND NOT AT N = 60. MEASURED, 2026-08-16, ON
+    THIS MACHINE**, `measure_evaluation_rss_slope((0, 512, 1024, 2048))`:
+
+    | N | measured | this function | ratio | inside `slope_band`? |
+    |---|---|---|---|---|
+    | 630 | 9286 B/series | 6550 | 1.418 | yes |
+    | 60 | 4036 B/series | 1420 | **2.842** | **no** |
+
+    **The excess is ~2.7 kB/series and does not depend on N at all** (+2736 and
+    +2616), so it is invisible where `n_time*9` is large and dominant where it
+    is not -- (a)'s cancellation rule at a parameter value, since a term is
+    checked by a measurement at a **second** parameter value and by nothing
+    else. **The uncharged term belongs to `unconstrained_loglik`'s working set
+    and moves no tile side**, which is why Phase 2b Task 7 recorded it rather
+    than chasing it; see `PROGRESS.md`'s open questions. **Do not quote this
+    function as the instrument's floor at short series.**
 
     Args:
         d: Composite state dimension.

@@ -876,6 +876,46 @@ calibration assumes is established once and pinned.
   linearity assumption being false, which would make every small-B calibration wrong at
   production B in a way no cheap measurement could see.
 
+**LANDED 2026-08-16. THE CROSS-CHECK THIS BRIEF SPECIFIES CANNOT BE RUN AS WRITTEN, AND THE
+MEASUREMENT LIVES WHERE TASK 4's DOES.** In full in `PROGRESS.md`'s *What Task 7 established*; in
+one line each:
+
+- **"The two disagree by approximately `solver_state_bytes` per series" is wrong three ways.**
+  `unconstrained_loglik` constructs no optimizer, so the term is the **engine workspace** — 880 B
+  against 12 488 at the instrument's configuration, and the tree's own docstring said so already
+  (f). Corrected, it is still not one term but the **difference** of two, because production holds
+  output slots the evaluation never allocates: **+138 B/series** at the calibration fixture,
+  positive and eighty times smaller. And measured, the instrument carries an **unmodelled
+  ~2.7 kB/series independent of N** — inside the band at N = 630 (1.418) and far outside it at
+  N = 60 (**2.842**) — which is nineteen times the effect. **The cross-check is reported as a
+  finding about the instrument and is not used as evidence about production.**
+- **A 1.7 h test cannot be marked `slow` and left in a suite that runs before every commit.** The
+  sweep is 942 s; that instruction takes it to ~2.2 h, forever. **Task 4's precedent is exact**:
+  the ladder is the deliverable, run once by hand, and the suite gets the **analysis** —
+  `memory.linearity_report`, whose residual arithmetic, curvature bound and resolution verdict are
+  pure functions of a `CalibrationResult` and are tested against constructed ladders.
+- **"Report the residuals" is not enough, and the missing half is what the ladder could have
+  seen.** The report carries the smallest quadratic term it could have excluded at 2σ, expressed
+  as the fraction by which the per-series cost may vary across the ladder unnoticed. **An
+  instrument that cannot detect curvature is not evidence of its absence.**
+- **A slope whose relative standard error exceeds `SLOPE_RESOLUTION_LIMIT` is published as a
+  bound**, naming what it excludes. Task 4's shipped ladder is **21%** and is exactly the case:
+  four standard errors from zero and unable to tell 926 from 1250.
+- **The ladder is sides (16, 48, 80, 112)** — a **49× lever arm** in B, priced from a measured
+  283.8 ms/series, which is not Task 4's 197 ms because that timed `fit` and this times a whole
+  ladder point.
+
+**AND THE MEASUREMENT DID NOT RESOLVE, WHICH IS THE RESULT.** Run 2026-08-16 in 1.73 h:
+**slope 1021.6 ± 134.7 B/series, ratio 1.103 to the analytic 926, inside the band** — and a
+**13.2%** relative error, so it is published as a bound: *excludes 752–1291 B/series, establishes
+no value*. **Criterion 6 is met as written and reads stronger than it is**: its band is a 2.25×
+window and the measurement's own 2σ interval is nearly as wide, so it discriminates a gross
+formula error and not a marginal one. **Linearity is not established**: curvature
+**+0.045 ± 0.034** is 1.3σ, and the ladder could only have excluded a per-series cost varying by
+**82.6%** across B. **A fourth closure boundary joins Q7's three — linearity cannot be established
+on this machine at any affordable cost**: seven repeats is 12.1 h and still leaves 31% invisible.
+The figures live in `PROGRESS.md`'s *What Task 7 established*, once.
+
 ---
 
 ## Task 8 — criterion 7's run, and accumulation across tiles

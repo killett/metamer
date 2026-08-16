@@ -19,6 +19,7 @@ keeps the maximum.
 
 from __future__ import annotations
 
+import dataclasses
 import subprocess
 import sys
 from pathlib import Path
@@ -34,13 +35,16 @@ from metamer.core.memory import (
     DEFAULT_BUDGET_FRACTION,
     LBFGS_MAXCOR,
     SLOPE_BAND_FACTOR,
+    CalibrationPoint,
     CalibrationResult,
     FloorReport,
+    LinearityReport,
     MemoryEngineLabel,
     SolverPlacement,
     calibrate,
     data_and_workspace_bytes_per_series,
     default_budget_gb,
+    linearity_report,
     measure_evaluation_rss_slope,
     measure_floor,
     measure_tile_peak,
@@ -1350,6 +1354,319 @@ def test_the_batched_placement_is_not_reachable_through_run(tmp_path):
     # different numbers here and the fixture can tell them apart.
     assert n_y * n_x == 6
     assert max(batch for batch, _, _ in recorder.batches) == 1
+
+
+# --------------------------------------------------------------------------
+# The linearity report: what a ladder establishes, and what it cannot see
+# --------------------------------------------------------------------------
+
+#: The ladder Phase 2b Task 7 ran by hand: sides (16, 48, 80, 112) on a base-16
+#: grid, so `B = side**2`. **A 49x lever arm in B**, which is what separates the
+#: slope from the intercept -- a ladder whose top is a small multiple of its
+#: bottom fits the intercept and reports the residue as a slope.
+_LADDER_BATCHES = (256, 2304, 6400, 12544)
+
+#: The analytic per-series cost at that ladder's fixture -- N = 60, M = 2,
+#: k_beta = 4, p_max = 3 -- hand-derived as `60*9 + 2*(24*3 + 16*4 + 57)`
+#: = `540 + 386`. It is the figure `resident_bytes_per_series` returns and is
+#: written out here so the tests below do not take their oracle from the
+#: function under comparison.
+_LADDER_ANALYTIC = 926
+
+
+def _ladder(
+    peaks: tuple[float, ...], batches: tuple[int, ...] = _LADDER_BATCHES
+) -> CalibrationResult:
+    """A `CalibrationResult` carrying chosen peaks, for the analysis to read."""
+    points = tuple(
+        CalibrationPoint(
+            side=int(batch**0.5),
+            derived_side=int(batch**0.5),
+            batch=batch,
+            peak_bytes=peak,
+            baseline_bytes=228_200_000.0,
+            ok=0,
+            attempted=batch * 2,
+        )
+        for batch, peak in zip(batches, peaks, strict=True)
+    )
+    return CalibrationResult(
+        slope_bytes_per_series=0.0,
+        intercept_bytes=0.0,
+        residuals=(),
+        points=points,
+        max_iter=1,
+        linearity_basis="constructed for tests/test_memory.py",
+        placement=SolverPlacement.PER_SERIES_LIVE,
+        engine_label=MemoryEngineLabel.KALMAN_NUMPY,
+        floor_peak_bytes=228_200_000,
+    )
+
+
+def _straight(
+    slope: float, intercept: float = 2.28e8, scatter: float = 0.0
+) -> tuple[float, ...]:
+    """Peaks on a line, with an alternating residual of `scatter`."""
+    signs = (1.0, -1.0, 1.0, -1.0)
+    return tuple(
+        intercept + slope * batch + scatter * sign
+        for batch, sign in zip(_LADDER_BATCHES, signs, strict=True)
+    )
+
+
+def test_a_noiseless_ladder_resolves_its_slope_and_excludes_every_curvature():
+    """The positive control: exact data gives an exact slope and no curvature.
+
+    Expected values determined independently -- the peaks are constructed from
+    `228 MB + 926 B x B`, so the slope is 926 by construction, every residual is
+    zero, and a zero residual means the ladder could have excluded a curvature
+    of zero. **That last consequence is the one worth pinning**: the detectable
+    curvature falls out of the scatter, so a noiseless instrument sees
+    everything and a noisy one sees nothing, and the report must say which it
+    was rather than reporting the residuals alone.
+
+    Bug this catches: a detectable-curvature figure that is a constant, or one
+    computed from the ladder's spacing alone. Either would report the same
+    sensitivity for a clean ladder and a hopeless one, which is exactly the
+    claim (i2) says an absence cannot support -- "no curvature was seen" is
+    satisfied by an instrument that cannot see any.
+    """
+    report = linearity_report(
+        _ladder(_straight(_LADDER_ANALYTIC)),
+        analytic_bytes_per_series=_LADDER_ANALYTIC,
+    )
+
+    assert report.slope_standard_error < 1.0
+    assert report.relative_standard_error < 1e-3
+    assert report.resolved
+    assert report.ratio == pytest.approx(1.0, abs=1e-6)
+    assert report.inside_band
+    assert report.curvature == pytest.approx(0.0, abs=1e-9)
+    assert report.detectable_curvature == pytest.approx(0.0, abs=1e-9)
+    assert report.detectable_variation == pytest.approx(0.0, abs=1e-9)
+    assert "Curvature" in report.verdict
+
+
+def test_a_curved_ladder_reports_the_curvature_with_its_sign():
+    """A quadratic term is recovered, and its sign is part of the answer.
+
+    Expected value determined independently: the peaks are built as
+    `228 MB + 926 B x B - 0.01 x B**2`, and four points determine a quadratic
+    exactly, so the fitted coefficient must be **-0.01** to float precision.
+
+    **The SIGN is asserted because the two directions are different defects.**
+    A per-series cost that falls with B is an allocator or a buffer being
+    amortized; one that rises is a term the formula does not charge, and at
+    production B it is the one that exceeds the budget. A report carrying only
+    a magnitude cannot tell a consumer which of those it is looking at.
+
+    Bug this catches: a quadratic term dropped, halved, or recovered with the
+    wrong sign -- the fit reporting the line's residual pattern rather than a
+    coefficient.
+
+    **AND THE BUG IT DOES *NOT* CATCH IS RECORDED HERE, BECAUSE THE MUTATION
+    WAS RUN.** This test was written believing it pinned the **centring** of
+    the design matrix. It does not: removing the centring leaves it green, and
+    measurement says why -- centred and raw fits recover a known `-1e-4`
+    coefficient identically at this ladder, at production-scale B, and at a
+    ladder four times wider. **The mutation is not a defect on any reachable
+    input**, which is the fifth cause in the taxonomy and the one that says
+    nothing about the test. The claim was removed from
+    `memory.linearity_report`'s docstring rather than left as an untested
+    justification.
+    """
+    curved = tuple(
+        peak - 0.01 * batch**2
+        for peak, batch in zip(
+            _straight(_LADDER_ANALYTIC), _LADDER_BATCHES, strict=True
+        )
+    )
+
+    report = linearity_report(
+        _ladder(curved), analytic_bytes_per_series=_LADDER_ANALYTIC
+    )
+
+    assert report.curvature == pytest.approx(-0.01, rel=1e-9)
+    # The straight-line fit through curved data has residuals, so its own
+    # standard error is inflated -- the line is the wrong model and says so.
+    assert report.slope_standard_error > 0.0
+
+
+def test_a_ladder_dominated_by_scatter_is_published_as_a_bound():
+    """A number whose standard error swamps the effect is not a measurement.
+
+    **THIS IS THE FAILURE THIS PROJECT HAS ALREADY MADE ONCE.** Task 4's first
+    affordable ladder returned 1666 B/series against an analytic 926 and was
+    read as a 1.80x finding; the scatter was +-0.3 MB against 0.43 MB of
+    signal, and the correct reading was noise.
+
+    Expected values computed by hand from the construction: peaks are
+    `228 MB + 926 B x B` with an alternating +-1 MB residual, which gives a
+    fitted slope of **833.0** and a standard error of **135.6** -- a relative
+    error of **16.3%**, above the 10% limit. The ladder's 2-sigma exclusion is
+    therefore 833 +- 271, i.e. **562 to 1104 B/series**, and the analytic 926
+    sits inside it: this ladder **cannot** distinguish the formula from a value
+    20% away from it.
+
+    Bug this catches: `resolved` keyed on distance from zero rather than on
+    relative error. 833 +- 136 is six standard errors from zero and still
+    useless, which is precisely how a noise-dominated ladder gets published as
+    a value.
+    """
+    report = linearity_report(
+        _ladder(_straight(_LADDER_ANALYTIC, scatter=1e6)),
+        analytic_bytes_per_series=_LADDER_ANALYTIC,
+    )
+
+    assert report.slope_standard_error == pytest.approx(135.578, rel=1e-4)
+    assert report.relative_standard_error == pytest.approx(0.16276, rel=1e-4)
+    assert not report.resolved
+    assert "NOT RESOLVED" in report.verdict
+    assert "562" in report.verdict and "1104" in report.verdict
+    assert "establishes no value" in report.verdict
+
+
+def test_the_detectable_curvature_is_set_by_the_scatter_and_not_by_the_ladder():
+    """Ten times the scatter, ten times the curvature the ladder cannot see.
+
+    Expected values computed by hand from the same construction as above: at
+    +-1 MB of scatter the curvature's standard error is **0.0551804** and at
+    +-0.1 MB it is **0.00551804**, so the detectable curvature is 0.110361 and
+    0.0110361. **Each is asserted absolutely before the relation between them**
+    -- a ratio passes when both sides are zero, both absent, or both wrong in
+    the same direction (i3), and this is the assertion that would otherwise be
+    written as `noisy > clean` and pass against a constant.
+
+    Bug this catches: a detectable curvature derived from the ladder's spacing
+    alone. The spacing is identical in both cases here, so such a figure would
+    be equal in both -- and it would report the same sensitivity for a ladder
+    that saw nothing and one that saw everything.
+    """
+    noisy = linearity_report(
+        _ladder(_straight(_LADDER_ANALYTIC, scatter=1e6)),
+        analytic_bytes_per_series=_LADDER_ANALYTIC,
+    )
+    cleaner = linearity_report(
+        _ladder(_straight(_LADDER_ANALYTIC, scatter=1e5)),
+        analytic_bytes_per_series=_LADDER_ANALYTIC,
+    )
+
+    assert noisy.curvature_standard_error == pytest.approx(0.0551804, rel=1e-4)
+    assert cleaner.curvature_standard_error == pytest.approx(0.00551804, rel=1e-4)
+    assert noisy.detectable_curvature == pytest.approx(0.110361, rel=1e-4)
+    assert cleaner.detectable_curvature == pytest.approx(0.0110361, rel=1e-4)
+    assert noisy.detectable_curvature == pytest.approx(
+        10 * cleaner.detectable_curvature, rel=1e-6
+    )
+    # And the fraction it corresponds to, which is what a reader quotes: the
+    # per-series cost may vary by this much across the ladder unnoticed.
+    assert noisy.detectable_variation == pytest.approx(1.628, rel=1e-3)
+    assert cleaner.detectable_variation == pytest.approx(0.147934, rel=1e-3)
+
+
+def test_the_band_is_two_sided_so_a_slope_below_the_formula_is_a_finding():
+    """A measured cost materially below the formula is not headroom.
+
+    Expected values derived by hand from `SLOPE_BAND_FACTOR = 1.5` against 926:
+    the band is 617.3 to 1389.0, so 926 is inside, 1500 is outside above and
+    600 is outside below.
+
+    Bug this catches: a one-sided check. A slope below the formula means the
+    formula charges for something the code does not hold, and the excess
+    capacity then hides whatever else is wrong -- which is how two errors of
+    opposite sign put F2 and F3's total within 0.5% of a measurement while
+    neither term was right.
+    """
+    for slope, inside in ((926.0, True), (1500.0, False), (600.0, False)):
+        report = linearity_report(
+            _ladder(_straight(slope)), analytic_bytes_per_series=_LADDER_ANALYTIC
+        )
+        assert report.inside_band is inside, f"{slope} B/series"
+        assert report.ratio == pytest.approx(slope / _LADDER_ANALYTIC, rel=1e-6)
+
+
+def test_a_three_point_ladder_cannot_report_a_curvature_at_all():
+    """Refused, because a quadratic through three points has no residual.
+
+    Expected value determined independently: three points determine three
+    coefficients exactly, so the residual is zero whatever the truth is and the
+    standard error is 0/0. A report built from it would say the ladder excluded
+    **every** curvature -- a confident answer, which is worse than a refusal.
+
+    Bug this catches: the guard being absent, or being written as "at least
+    two" by analogy with the slope. Two points fit a line and three fit a
+    parabola; the number that matters here is the residual degrees of freedom,
+    and it is zero at three.
+    """
+    with pytest.raises(ValueError, match="at least four"):
+        linearity_report(
+            _ladder(_straight(926.0)[:3], batches=_LADDER_BATCHES[:3]),
+            analytic_bytes_per_series=_LADDER_ANALYTIC,
+        )
+
+
+def test_the_analysis_reproduces_task_fours_hand_computed_ladder():
+    """The same numbers through a function reach where a hand computation did.
+
+    **THIS IS THE ONE PLACE THE ARITHMETIC MEETS AN INDEPENDENT DERIVATION**
+    (j). Phase 2b Task 4's ladder was fitted by hand and published in
+    `PROGRESS.md` as **1049 +- 222 B/series**; the peaks it was fitted from are
+    published beside it, to 0.01 MB. Feeding those printed peaks back through
+    this function must land in the same place, or one of the two is wrong.
+
+    Expected values, and the tolerance derived rather than chosen: from the
+    published table this returns **1050.75 +- 223.6**. That is not identical to
+    the recorded pair because the table is rounded to 0.01 MB, and a +-5 kB
+    perturbation of each peak moves the slope by at most
+    `sum|B - Bbar| * 5000 / Sxx` = `4624 * 5000 / 8.454e6` = **2.7 B/series**.
+    1050.75 is 1.75 away from 1049, inside that.
+
+    **AND THE RESOLUTION VERDICT IS THE POINT OF USING THIS LADDER HERE**: at
+    21.3% relative error it is **not resolved**, which is exactly how
+    `PROGRESS.md` reads it -- the value claim lives there with its uncertainty
+    and never in an assertion.
+
+    Bug this catches: a standard error computed with the wrong divisor. `n`,
+    `n-1` and `n-2` give 158, 182 and 224 here, all plausible, and only one is
+    the standard error of a slope fitted with two parameters.
+    """
+    peaks = (227.86e6, 227.73e6, 230.29e6, 231.46e6)
+    report = linearity_report(
+        _ladder(peaks, batches=(256, 1024, 2304, 4096)),
+        analytic_bytes_per_series=926,
+    )
+
+    assert report.slope_standard_error == pytest.approx(223.6, rel=1e-3)
+    assert abs(report.ratio * 926 - 1049) < 2.7
+    assert report.relative_standard_error == pytest.approx(0.213, rel=1e-2)
+    assert not report.resolved
+    assert report.inside_band
+
+
+def test_the_report_restates_no_measurement_the_result_already_carries():
+    """One home per measurement, enforced by a test rather than by a docstring.
+
+    The slope, the intercept, the residuals and the ladder live on
+    `CalibrationResult`. **Two copies of a measurement drift the moment one is
+    updated**, and this project has paid for that four times -- the published
+    tile side, F3's magnitude, the sweep timing, and
+    `data_and_workspace_bytes_per_series`'s own docstring, which still
+    published 6382 for a function returning 6550.
+
+    Bug this catches: a later reader adding `slope_bytes_per_series` to the
+    report "for convenience", after which a result and its report can disagree
+    about what was measured and nothing compares them.
+    """
+    fields = {field.name for field in dataclasses.fields(LinearityReport)}
+
+    assert "slope_bytes_per_series" not in fields
+    assert "intercept_bytes" not in fields
+    assert "residuals" not in fields
+    assert "points" not in fields
+    # What it does carry is derived, and every one of them is absent from
+    # `CalibrationResult` -- so the two types partition the answer.
+    result_fields = {field.name for field in dataclasses.fields(CalibrationResult)}
+    assert not (fields & result_fields)
 
 
 # --------------------------------------------------------------------------
