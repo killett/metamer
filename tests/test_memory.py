@@ -930,16 +930,27 @@ def test_measured_peak_rss_is_at_least_the_arrays_that_provably_exist():
     """Measured peak RSS grows with B at the rate the accounting predicts.
 
     Expected value determined independently: the arrays are named and their
-    shapes are known, so the per-series floor is arithmetic --
-    `y` (630*8) + mask (630) + the engine's O(d^2) working set (672) + the one
-    reused `[y | X]` row (40) = 6382 B/series. That is a FLOOR, not an
-    estimate: every one of those arrays demonstrably exists and is
-    simultaneously live during the evaluation. The upper bound is 2x, which
-    admits per-step transients and allocator rounding while still rejecting a
-    term that scales with an extra factor of N or k_beta.
+    shapes are known, so the per-series floor is arithmetic -- `y` (630*8) +
+    mask (630) + the engine's O(d^2) working set + the one reused `[y | X]`
+    row. That is a FLOOR, not an estimate: every one of those arrays
+    demonstrably exists and is simultaneously live during the evaluation. The
+    upper bound is 2x, which admits per-step transients and allocator rounding
+    while still rejecting a term that scales with an extra factor of N or
+    k_beta.
+
+    **THE ORACLE'S `k_beta` MUST BE THE ONE THE CHILD RUNS, AND IT WAS NOT
+    UNTIL 2026-08-16.** `memory._CHILD` builds
+    `SignalSpec([Constant, Trend, Annual, SemiAnnual])` -- **six** design
+    columns -- while this test computed its floor at **four**, section 9.4's
+    figure, which is the number every other fixture in this module uses. The
+    two differ by 168 B/series (712 against 880 of engine workspace), so the
+    floor is **6550** and not 6382, and the recorded ratio is **1.293** and not
+    1.33. **An oracle at a different configuration from its instrument is (h):
+    the test exercised a default rather than the thing it names**, and it
+    survived because both numbers are plausible sizes for that axis.
 
     Measured on this machine after the streaming fix: **8471 B/series against
-    the 6382 floor, a ratio of 1.33**, intercept ~77 MB. Before it, the floor
+    the 6550 floor, a ratio of 1.293**, intercept ~77 MB. Before it, the floor
     was 31 542 -- the extra 25 200 being the materialized augmented block --
     and the measured slope was 43 392. **The measurement fell by 34 921
     B/series, more than the block itself**, because the per-step temporaries
@@ -968,8 +979,12 @@ def test_measured_peak_rss_is_at_least_the_arrays_that_provably_exist():
     measured, intercept = measure_evaluation_rss_slope(
         batches=(1000, 3000, 5000), n_time=630
     )
-    floor = data_and_workspace_bytes_per_series(d=STATE_DIM, k_beta=4, n_time=630)
-    assert floor == 6382
+    # `k_beta=6`, because that is what `_CHILD`'s signal spec produces --
+    # Constant, Trend, Annual and SemiAnnual are 1 + 1 + 2 + 2 columns. Section
+    # 9.4's four is the wrong number for this instrument and was used here
+    # until 2026-08-16.
+    floor = data_and_workspace_bytes_per_series(d=STATE_DIM, k_beta=6, n_time=630)
+    assert floor == 6550
     print(
         f"\nfloor {floor} B/series, measured {measured:.0f} B/series, "
         f"intercept {intercept / 1e6:.1f} MB"
@@ -982,7 +997,7 @@ def test_measured_peak_rss_is_at_least_the_arrays_that_provably_exist():
     # `fit`, which hands the engine one series at a time. So this slope MUST
     # exceed the production per-series cost's engine content, and the amount is
     # the measurement of the deleted term's size rather than a second opinion.
-    assert floor - 630 * 9 == 712
+    assert floor - 630 * 9 == 880
     assert measured > resident_bytes_per_series(**CASE) - output_slot_bytes(
         n_models=12, p_max=4, k_beta=4
     )
@@ -1651,7 +1666,7 @@ def test_the_report_restates_no_measurement_the_result_already_carries():
     updated**, and this project has paid for that four times -- the published
     tile side, F3's magnitude, the sweep timing, and
     `data_and_workspace_bytes_per_series`'s own docstring, which still
-    published 6382 for a function returning 6550.
+    published a floor at `k_beta = 4` for an instrument running 6.
 
     Bug this catches: a later reader adding `slope_bytes_per_series` to the
     report "for convenience", after which a result and its report can disagree

@@ -112,8 +112,11 @@ description of the deleted architecture surviving in a function nobody re-read.
 
 **And F2's validating measurement drove a different workload.**
 `memory.measure_evaluation_rss_slope` calls `unconstrained_loglik` on a **batch of B**, which
-genuinely holds `B × (d²…)`. The agreement — 8471 B/series measured against a 6382 B floor,
-ratio **1.33**, inside the then one-sided ~1.5× band — was read as confirmation. **(j2).**
+genuinely holds `B × (d²…)`. The agreement — 8471 B/series measured against a **6550** B floor,
+ratio **1.293**, inside the then one-sided ~1.5× band — was read as confirmation. **(j2).**
+**The floor was recorded as 6382 until 2026-08-16**, which is this function at k_β = 4 while the
+instrument runs k_β = 6; corrected at Task 7, and the correction of the correction is in
+*What Task 7 established*.
 
 ### The floor, measured 2026-08-14 behind a bare launcher
 
@@ -1120,11 +1123,21 @@ said; corrected, the two instruments differ by the **difference** of two per-ser
 (+138 B/series here) and not by one; and the evaluation instrument carries an unmodelled
 **~2.7 kB/series independent of N**, nineteen times the effect — **open question 16**.
 
-**`data_and_workspace_bytes_per_series` PUBLISHED 6382 FOR A FUNCTION RETURNING 6550.** The
-difference is exactly `augmented_state = d·(1+k_β)·8 = 168`, the term Task 0 added, so the prose
-was a pre-correction figure carried through the correction that moved it; the recorded ratio goes
-**1.33 → 1.29**. **(a4)'s fourth register firing on this project's own promotion, one commit after
-it was written.**
+**AN ORACLE AT A DIFFERENT CONFIGURATION FROM ITS INSTRUMENT, AND MY FIRST CORRECTION OF IT WAS
+ITSELF WRONG.** `memory._CHILD` builds `SignalSpec([Constant, Trend, Annual, SemiAnnual])` —
+**six** design columns — while `data_and_workspace_bytes_per_series`'s docstring and
+`test_measured_peak_rss_is_at_least_the_arrays_that_provably_exist` both computed the floor at
+**four**, §9.4's figure and the one every other fixture here uses. The floor is **6550**, not
+6382, and the recorded ratio is **1.293**, not 1.33. **(h): the test exercised a default rather
+than the thing it names**, and it survived because both numbers are plausible sizes for that axis.
+
+> **AND THE FIRST CORRECTION SAID *"the difference is exactly `augmented_state` = 3·7·8 = 168, the
+> term Task 0 added"* — A NUMBER MATCHED TO A TERM AND A CONCLUSION DRAWN FROM THE MATCH.** The
+> 168 is the k_β 4→6 delta spread across **three** terms (augmented +48, accumulators +104, reused
+> row +16); it merely **coincides** with `augmented_state` at k_β = 6. It was committed in
+> `ec5bd95` and `a0e076d` and corrected on inspection of the test that pins the number.
+> **(a4)'s third register, on my own correction: it arrived with the authority of the error it had
+> just exposed.**
 
 **WHAT SHIPPED IN CODE**: `memory.SLOPE_RESOLUTION_LIMIT`, `memory.LinearityReport`,
 `memory.linearity_report`. **The 1.73 h ladder is NOT in the suite** — the sweep is 942 s and the
@@ -1633,7 +1646,8 @@ them landing on `2^±26` by different routes is a hazard rather than a confirmat
   the gap being small is a measurement, not a guarantee.
 - **Measured, not inferred.** Slope of resident RSS against B in a fresh process, sampled on
   a thread during the workload: **43 392 → 8471 B/series**, against an arithmetic floor that
-  went 31 542 → 6382. Ratio to floor **1.38 → 1.33**, both inside the ~1.5× the standing
+  went 31 542 → **6550** (recorded as 6382 until 2026-08-16 — that is k_β = 4 and the instrument
+  runs 6; see *What Task 7 established*). Ratio to floor **1.38 → 1.293**, both inside the ~1.5× the standing
   check allows. **The fall of 34 921 B/series is larger than the 25 200 B block itself**,
   because the per-step temporaries at peak scaled with it — a term neither formula names.
   **Note what this says about the standing check:** it would never have caught the original

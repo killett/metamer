@@ -820,26 +820,35 @@ def data_and_workspace_bytes_per_series(d: int, k_beta: int, n_time: int) -> int
     This function is the right floor **for the instrument**, which is why it
     survives: Task 7 uses it as the cross-check.
 
-    **This was 31 542 B/series until 2026-08-10 and is 6550 at d = 3, k = 6,
-    N = 630**, because 25 200 of it was a materialized augmented block.
-    Measured against it, the slope of resident RSS on batch size went from
-    43 392 to **8471**, a ratio to the floor of **1.29** -- inside
-    `slope_band`, and that agreement was read for four months as confirming a
-    formula the instrument never exercised.
+    **This was 31 542 B/series until 2026-08-10 and is 6550 at the
+    configuration `measure_evaluation_rss_slope` actually drives** -- d = 3,
+    **k_beta = 6**, N = 630 -- because 25 200 of it was a materialized
+    augmented block. Measured against it, the slope of resident RSS on batch
+    size went from 43 392 to **8471**, a ratio to the floor of **1.293** --
+    inside `slope_band`, and that agreement was read for four months as
+    confirming a formula the instrument never exercised.
 
-    > **THE PROSE HERE SAID 6382 UNTIL 2026-08-16, AND THE FUNCTION HAS
-    > RETURNED 6550 SINCE TASK 0.** The difference is exactly
-    > `augmented_state = d*(1+k_beta)*8` = 3*7*8 = **168**, the term Task 0
-    > added when it rebuilt `_engine_workspace_bytes` field by field -- so the
-    > sentence was a pre-correction figure carried through the correction that
-    > moved it, and the recorded ratio moved with it, 1.33 to 1.29. **The
-    > conclusion survives both and its numbers did not**, which is (a4)'s
-    > fourth register.
+    > **THE PROSE HERE SAID 6382 UNTIL 2026-08-16, AND THAT IS THIS FUNCTION AT
+    > `k_beta = 4` WHILE THE INSTRUMENT RUNS `k_beta = 6`.** `_CHILD` builds
+    > `SignalSpec([Constant, Trend, Annual, SemiAnnual])`, which is **six**
+    > design columns, not section 9.4's four -- so the floor the instrument
+    > should be measured against is **6550**, and the recorded ratio is
+    > **1.293** rather than 1.33.
+    >
+    > **AND THE FIRST CORRECTION OF THIS WAS ITSELF WRONG, WHICH IS WHY IT IS
+    > WRITTEN OUT.** It read *"the difference is exactly
+    > `augmented_state = 3*7*8 = 168`, the term Task 0 added"* -- a number
+    > matched to a term and a conclusion drawn from the match. The 168 is the
+    > `k_beta` 4-to-6 delta spread across **three** terms (augmented +48,
+    > accumulators +104, reused row +16) and it merely **coincides** with
+    > `augmented_state` at k = 6. **(a4)'s third register: a correction arrives
+    > with the authority of the error it just exposed, and its own arithmetic is
+    > the least likely to be checked.**
 
     **AND IT IS A FLOOR AT N = 630 AND NOT AT N = 60. MEASURED, 2026-08-16, ON
     THIS MACHINE**, `measure_evaluation_rss_slope((0, 512, 1024, 2048))`:
 
-    | N | measured | this function | ratio | inside `slope_band`? |
+    | N | measured | this function at k_beta = 6 | ratio | inside `slope_band`? |
     |---|---|---|---|---|
     | 630 | 9286 B/series | 6550 | 1.418 | yes |
     | 60 | 4036 B/series | 1420 | **2.842** | **no** |

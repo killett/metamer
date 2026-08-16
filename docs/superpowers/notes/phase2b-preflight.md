@@ -1265,19 +1265,34 @@ per-series cost.**
 > to quote `data_and_workspace_bytes_per_series` needs to know it is a floor at N = 630 and not
 > at N = 60.
 
-### (a4) THE MODULE PUBLISHES A NUMBER ABOUT ITSELF THAT ITS OWN FUNCTION NO LONGER RETURNS
+### (a4)/(h) AN ORACLE AT A DIFFERENT CONFIGURATION FROM ITS INSTRUMENT
 
-`data_and_workspace_bytes_per_series`'s docstring says *"This was 31 542 B/series until 2026-08-10
-and **is now 6382**"*. The function returns **6550** at the configuration the sentence describes.
-The difference is **168 B**, which is exactly `augmented_state = d·(1+k_β)·8 = 3·7·8` — the term
-Task 0 added when it rebuilt `_engine_workspace_bytes` field by field. **The prose is a pre-Task-0
-figure carried through a correction that moved it**, and the recorded ratio moves with it: the
-docstring's *"8471 against 6382, ratio 1.33"* is **1.29** against the corrected floor.
+> **AMENDED 2026-08-16, AND THE AMENDMENT IS THE MORE INSTRUCTIVE HALF.** This entry first read
+> *"the module publishes a number about itself that its own function no longer returns"*, and
+> attributed the 168 B gap to `augmented_state`, the term Task 0 added — a number matched to a
+> term. **It is not that.** `memory._CHILD` runs `SignalSpec([Constant, Trend, Annual,
+> SemiAnnual])`, **six** design columns, while both the docstring and
+> `test_measured_peak_rss_is_at_least_the_arrays_that_provably_exist` computed the floor at
+> **four**. The 168 is the k_β 4→6 delta across **three** terms (48 + 104 + 16) and coincides with
+> `augmented_state` at k_β = 6. **(a4)'s third register, caught on my own correction.** The floor
+> is 6550, the ratio 1.293, and the test's oracle now takes the instrument's k_β.
 
-**AND THAT IS THE FOURTH REGISTER OF (a4) FIRING ON THIS PROJECT'S OWN PROMOTION, ONE COMMIT
-LATER.** The conclusion — *"inside the band, and that agreement was read for four months as
-confirming a formula the instrument never exercised"* — survives both corrections. The numbers
-under it did not.
+**THE WRONG VERSION, KEPT STRUCK THROUGH, BECAUSE THE FAILURE MODE IS THE TRANSFERABLE PART:**
+
+> ~~`data_and_workspace_bytes_per_series`'s docstring says *"is now 6382"* and the function returns
+> **6550** at the configuration the sentence describes. The difference is **168 B**, which is
+> exactly `augmented_state = d·(1+k_β)·8 = 3·7·8` — the term Task 0 added. **The prose is a
+> pre-Task-0 figure carried through a correction that moved it.**~~
+
+**Both halves were wrong and one of them was checkable in one line.** The function does **not**
+return 6550 "at the configuration the sentence describes" — it returns 6382 at k_β = 4 and 6550 at
+k_β = 6, and the sentence named no k_β at all, which is what let a reader supply one. And the 168
+was matched to a term rather than derived: it is the k_β delta across **three** terms.
+
+**THE TELL, FOR NEXT TIME: A DIFFERENCE THAT EQUALS A NAMED TERM IS A COINCIDENCE UNTIL THE OTHER
+TERMS ARE ALSO COMPUTED.** Three terms moved and one of them happened to equal the total; checking
+the remaining two costs one line and was not done. **(a4)'s third register, on my own
+correction** — it arrived with the authority of the error it had just exposed.
 
 ### THE COST IS MEASURED, AND IT IS NOT TASK 4's FIGURE BECAUSE IT IS NOT THE SAME QUANTITY
 
