@@ -617,7 +617,10 @@ replaced:
 | 0.125 | 2.067 GB | below all three, and half the usable tile thrown away |
 
 **0.5 is what settles the value rather than taste**: a default above availability on an *idle*
-machine warns on every run, and a warning that always fires is not a warning.
+machine warns on every run. **Promoted — "a warning that always fires is equivalent to no
+warning", the same failure as a metric whose neutral value is its failure value** — and the
+transferable half is the method rather than the value: **check a new threshold against the
+measurements it will actually see before choosing it.**
 
 **What 0.25 derives here**, hand-computed against this machine's measured 228.2 MB floor:
 `(4 133 932 031 − 228 200 000) × 0.85 = 3 319 872 226`, less the 11 984 B solver constant, over
@@ -631,10 +634,10 @@ round-trips through a GB float. Deterministic, invisible against 4 GB, recorded 
 
 **THE SENTINEL IS `None` AND `REQUIRED_ATTRS` CANNOT ENFORCE IT, WHICH IS WHY THE SCHEMA MOVED.**
 `create_store` refuses on `attrs.get(key) is None`, so the one key whose `None` **is its
-meaning** cannot be a required attr — "required" and "nullable" are incompatible in that guard,
-and adding it would refuse every defaulted run. **`SCHEMA_VERSION` 5 is the mechanism that
-remains**: a v4 store is refused by the gate rather than read through `attrs.get`, which would
-answer `None` and be indistinguishable from *"nobody asked for this budget"*. **The ledger's own
+meaning** cannot be a required attr, and `SCHEMA_VERSION` 5 is what makes a v4 store's silence a
+refusal instead. **Promoted as (a0)'s third register — "required" and "nullable" are incompatible
+under a presence guard that tests for `None`** — with the repair and the reason the tempting fix
+is the damaging one; it lives in the handoff's §1 and is not restated here. **The ledger's own
 rule — each bump's field is a required attr — has its first stated exception**, and the test
 asserts the exception rather than the rule.
 
@@ -657,9 +660,11 @@ key from a store's attrs.
 **AVAILABILITY IS READ, REPORTED, AND DELIBERATELY NOT STORED.** Task 1's (a5) instance is the
 precedent: a per-run measurement in provenance broke 2a's byte-identity criterion. Availability is
 worse on both axes — it measures *ambient* state rather than this process, and **nothing reads
-it** — so it reaches a warning and never a store. The general rule this leaves: **a stable
-machine measurement may reach a store; an ambient one may not.** The warning is never a gate,
-for the same reason the default is not available-based.
+it** — so it reaches a warning and never a store. **Promoted to the handoff's standing rules as
+"a stable machine measurement may reach a store; an ambient one may not", with its test and with
+the third category the pair implies** (ambient *and* unread is a log line, not provenance); not
+restated here. The warning is never a gate, for the same reason the default is not
+available-based.
 
 **And `available_ram_bytes` is NOT cgroup-aware while `total_ram_bytes` is**, which is a stated
 hole rather than an unknown one: inside a limit it overstates what is free, so the warning fires

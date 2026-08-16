@@ -62,6 +62,31 @@ excluded by name. **Without an assertion that `floor` is present in BOTH stores*
 dropped the attr entirely would leave the criterion green — and the attr's whole purpose is to be
 readable from a store later.
 
+#### AND THE THIRD REGISTER: "REQUIRED" AND "NULLABLE" ARE INCOMPATIBLE UNDER A PRESENCE GUARD THAT TESTS FOR `None`
+
+> **A guard that treats `None` as absence cannot express a field whose `None` is meaningful.**
+> Widening the guard to accept `None` makes **every** field nullable and destroys the presence
+> check for all of them. **The correct mechanism is the schema version**: a store written before
+> the field existed is refused **by version**, not by inspection.
+
+**The tempting repair is the damaging one**, which is what earns this its own line. The guard
+looks like it has a small bug — one key it cannot handle — and the one-character fix (`key not in
+attrs` instead of `attrs.get(key) is None`) trades a per-field problem for a whole-schema one.
+The presence check is the thing protecting every *other* required key from being silently absent.
+
+Worked instance, Phase 2b Task 3. `store.create_store` refuses on `attrs.get(key) is None`, and
+`memory_budget_requested_gb` records *"the config named no budget"* as `None`. So it cannot join
+`REQUIRED_ATTRS`, and the absence of the key in an older store would be read through `attrs.get`
+as "the budget was defaulted" — the fill-value defect exactly. `SCHEMA_VERSION` 5 is what makes
+the older store's silence a refusal instead.
+
+> **AND THE LEDGER'S EXCEPTION IS DOCUMENTED WITH A TEST ASSERTING THE EXCEPTION, WHICH IS THE
+> SHAPE THAT MATTERS.** The bump ledger's rule is *"each bump's field is a required attr"*, and
+> this is the first bump where it does not hold. **An undocumented exception becomes a
+> precedent; a documented one stays an exception.** The test asserts
+> `"memory_budget_requested_gb" not in REQUIRED_ATTRS` with the reason beside it, so removing the
+> exception fails rather than passing quietly as a tidy-up.
+
 ### (a1) RE-DERIVATION AT RESUME IS THE HAZARD, NOT AN UNHASHED ANCESTOR
 
 > **A stored geometry READ BACK from the store is safe, however it was originally
@@ -1186,6 +1211,35 @@ tests could not see.** `pixi run test-fast` would have shipped both.
   > byte per cell), so one chunk per shard is the **right** answer there and not a fallback. A
   > band held over all eighteen fails on those seven; widening it to accommodate them would
   > destroy the check for the eleven it exists for.
+- **A STABLE MACHINE MEASUREMENT MAY REACH A STORE; AN AMBIENT ONE MAY NOT.**
+  > **The test is one question: does re-running on the same machine reproduce it?** Total RAM
+  > yes, availability no, the process floor no.
+
+  This generalizes Phase 2b Task 1's (a5) instance rather than restating it. A determinism claim
+  about a store's bytes and a fresh measurement of the *process* are claims about different
+  subjects, so the question to ask of any new value on its way into provenance is whether the
+  machine answers it the same way twice.
+
+  **And the floor shows the middle case, which is why the rule is about reproducibility rather
+  than about banning measurements.** It is ambient by this test and it is **kept** in provenance,
+  because Task 6 reads it — so it is **excluded by name from the byte-identity comparison**
+  instead of being kept out of the store. The pairing is the whole rule: *record it, and name it
+  in the exclusion set*, never *drop it from the comparison wholesale* and never *quietly remove
+  it from the store*.
+
+  > **THE PAIR IMPLIES A THIRD CATEGORY: a measurement that is ambient AND unread is not
+  > provenance at all — it is a log line.** Available RAM qualifies twice over, so Phase 2b
+  > Task 3 reports it and stores nothing. The question *"what reads this?"* is the second half
+  > of the test and it is cheaper than the first.
+
+- **A WARNING THAT ALWAYS FIRES IS EQUIVALENT TO NO WARNING**, and it is the same failure as a
+  metric whose neutral value is its failure value (below): the signal and its absence become
+  indistinguishable to the reader, so the guard is destroyed by the condition it was meant to
+  report. **A default whose warning condition is met on an idle machine is therefore not a
+  default**, which is what decided `memory.DEFAULT_BUDGET_FRACTION` at 0.25 rather than 0.5 —
+  0.5 exceeds every availability reading ever recorded on this box. **Check a new threshold
+  against the measurements it will actually see before choosing it**, or the warning ships
+  already worthless.
 - **A recorded measurement carries its measurement date AND ITS PRECONDITIONS**, because a
   quoted figure drifts and a stale one reads exactly like a fresh one — and a figure quoted
   without the conditions that produced it is not a measurement, it is a number. **Three
