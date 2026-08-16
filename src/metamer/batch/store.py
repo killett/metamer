@@ -143,6 +143,16 @@ _GEOMETRY_KEYS = frozenset(
 #: for it, and `completion.resume_tile_side` quotes it back at a user whose
 #: resume was refused.
 #:
+#: **v5 ALSO GAINED `calibration` (2026-08-15, Phase 2b Task 5) WITHOUT A BUMP,
+#: AND THE REASON IS RECORDED BECAUSE THE GENERAL RULE SAYS OTHERWISE.** Two v5
+#: stores from different eras are therefore distinguishable only by inspection --
+#: one written before Task 5 cannot carry the key, one written after may -- which
+#: is exactly the condition the entry below calls a defect. **It is safe here for
+#: a specific reason and not a general one: nothing before Task 5 could consult a
+#: calibration at all**, so an absent `calibration` means *"none was consulted"*
+#: in both eras and reads correctly either way. A bump is owed when an older
+#: store **cannot answer** a question a new gate asks; this one answers it.
+#:
 #: **AND THIS BUMP'S FIELD IS THE FIRST THAT IS NOT A REQUIRED ATTR, WHICH IS
 #: WHY THE BUMP IS LOAD-BEARING RATHER THAN TIDY.** `create_store` refuses on
 #: `attrs.get(key) is None`, so a key whose `None` **is its meaning** cannot be

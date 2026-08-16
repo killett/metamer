@@ -406,6 +406,32 @@ tile-side boundary landed on the same side, a refusal stopped firing, and the **
 caught it. **Where a structure in the tree computes the quantity, read it; a hand-count is an
 unverified claim in exactly the way (a4) describes.**
 
+#### AND THE FOURTH REGISTER: A CONCLUSION THAT SURVIVES ITS OWN CONTRADICTED DERIVATION MUST BE RE-DERIVED, NOT ASSUMED
+
+> **When a correction destroys the reasoning under a conclusion and the conclusion still
+> stands, RE-DERIVE it from the corrected reasoning before carrying it.** The replacement
+> derivation almost always changes what the conclusion *implies* — its magnitude, its
+> likelihood, or its regime — even when the sentence itself is unchanged.
+
+**WHAT MAKES THIS DANGEROUS IS THAT THE CORRECTION READS AS CONFIRMATION.** A conclusion whose
+derivation has just been shown wrong emerges from the correction still standing, and standing
+through an audit is the strongest evidence a reader has. **"Conclusion unchanged" is a summary
+that hides the whole finding.** The three registers above are about numbers; this one is about
+a *sentence* surviving while everything beneath it moves.
+
+**THIRD INSTANCE IN THIS PROJECT, AND EACH TIME THE REPLACEMENT REASONING CHANGED THE
+IMPLICATION:**
+
+| the conclusion that survived | the derivation that did not | what the replacement changed |
+|---|---|---|
+| `_augment` is worth keeping | it helps path A | **path B gained, not path A** — a different consumer, so a different reason to keep it |
+| the probe needs a bare launcher | `peak_rss` is inherited | the operative quantity is the **peak**, not the inheritance — so the fix is where the reading is taken, not how deep the child is |
+| *"you calibrate and your store stops resuming"* (Phase 2b Task 6) | *"the refusal fires when the calibrated side is larger"* | **the arm is the opposite one**, and the corrected direction makes the refusal the **expected experience rather than a corner case** — a slope above the formula is what Task 4 measured, and it buys a smaller tile |
+
+The third is the clearest: a reader told only that *"the conclusion survived"* would have carried
+away **the opposite impression of how often this happens.** The sentence was right and everything
+about how much it mattered was wrong.
+
 #### A POINT BETWEEN TWO MEASURED POINTS IS NOT MEASURED
 
 > **Interpolation between measurements is inference, and a threshold can sit between any two
@@ -523,6 +549,32 @@ against a **named** exclusion set, and **the excluded key asserted present in bo
 > deliberately placed in the arm where the resume proceeds, with the other arm named as the
 > next task's subject.
 
+#### AN ENUMERATION OVER STATES BEATS A CONDITION INFERRED FROM TWO
+
+> **Where a brief states a CONDITION, enumerate the state space it partitions and check the
+> condition against every cell — including the cells the brief did not name.** A condition is
+> written from the cases its author had in mind, so it is correct on those and unexamined
+> everywhere else, and the unexamined cells are where it is wrong.
+
+**This is (a5) at a predicate rather than at a requirement.** The first half of (a5) is about
+two requirements that contradict; this is about **one** requirement that is silently partial,
+which has no contradiction to notice. The tell is a condition phrased as a *difference* or a
+*change* — those are inferred from two imagined states and there are usually more.
+
+Worked instance, Phase 2b Task 6. The brief said to name calibration as a cause *"when the
+store's `tile_side_basis` differs from the current run's"*. Enumerated, the space is four cells,
+and calibration is a cause in **three** — one of which has the bases **equal**: two measurements
+of one store both read `measured` while the sides differ, which is exactly what `--recalibrate`
+produces. Since the cache has no expiry, `--recalibrate` is the **only** sanctioned route to that
+state, so the inferred condition fell silent precisely where the user has most reason to suspect
+the calibration.
+
+**AND THE CELL THAT MUST STAY SILENT IS HALF THE FINDING.** Both bases `default` means calibration
+is not a possible cause, and naming it there sends the user to a cache never involved — Task 3's
+always-firing warning in a diagnosis rather than in a warning, and a condition that fires
+everywhere carries no information. **A diagnosis that changed for every user in order to serve one
+of them would be its own defect.**
+
 #### THE SAME RULE WITHOUT A CONFLICT: TWO BEHAVIOURS OVER ONE CRITICAL SECTION
 
 > **When a brief states two behaviours governing the same critical section, derive the
@@ -600,6 +652,13 @@ The constant was understated **11.3×** — and it is (a7) as well as (a6).
 > **The descriptions cluster where the subject was defined**, which is exactly the region a
 > reader's eye has already accepted as understood.
 
+**AND THE CHEAPEST INSTANCE IS THE ONE CAUGHT BEFORE IT EXISTS.** Phase 2b Task 6 needed *"this
+run's basis, or the source's if this is a recompute"* at a **second** site; the first was an
+inline conditional in a call's argument list. The obvious implementation writes it twice, and two
+copies of one derivation drift — silently, because a wrong tile side still runs. Resolved once
+above both consumers instead. **A second description is easiest to prevent in the commit that
+would have created it**, and it costs one variable there against a sweep later.
+
 ### (a7) A CONSTANT CHARGED AS IF IT SCALED IS A SHAPE ERROR, NOT A CONSTANT ERROR
 
 > **Before correcting a term's MAGNITUDE, verify its VARIABLES.** A term with the wrong
@@ -658,6 +717,14 @@ falls the same way.
 Enumerate every `return` and every `raise`; does each pass through the outcome ladder?
 **Enumerate, never assert a count** — an asserted count is how two bypassed exits survived
 Task 8, and how a report claimed "exactly one early return" where there were four.
+
+**AND THE ENUMERATION EARNS ITS KEEP IN THE DESIGN, NOT ONLY IN THE AUDIT.** Phase 2b Task 6 had
+to decide what a *reporting* function does with a corrupt field — an unrecognized
+`tile_side_basis` from a foreign writer. Parsing it into the enum adds a **fourth raise** to a
+function whose job is to explain a refusal; reading it as a string lets the bad value appear
+**verbatim in the message**, which shows the corruption to the one person who can act on it. The
+exit count is what makes that a visible trade rather than a reflex, and the function kept **one
+return and three raises**.
 
 ### (c2) DOES DISPATCHING ON EXCEPTION TYPE ACTUALLY DISCRIMINATE?
 
