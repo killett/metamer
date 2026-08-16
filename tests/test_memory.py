@@ -34,12 +34,16 @@ from metamer.core.memory import (
     DEFAULT_BUDGET_FRACTION,
     LBFGS_MAXCOR,
     SLOPE_BAND_FACTOR,
+    CalibrationResult,
+    FloorReport,
     MemoryEngineLabel,
     SolverPlacement,
+    calibrate,
     data_and_workspace_bytes_per_series,
     default_budget_gb,
     measure_evaluation_rss_slope,
     measure_floor,
+    measure_tile_peak,
     memory_engine_label,
     output_slot_bytes,
     resident_bytes_per_series,
@@ -1343,3 +1347,296 @@ def test_the_batched_placement_is_not_reachable_through_run(tmp_path):
     # different numbers here and the fixture can tell them apart.
     assert n_y * n_x == 6
     assert max(batch for batch, _, _ in recorder.batches) == 1
+
+
+# --------------------------------------------------------------------------
+# The calibration: a capped run of the production path
+# --------------------------------------------------------------------------
+
+
+def _calibration_input(directory: Path, *, n_time: int = 24, side: int = 8) -> str:
+    """A real zarr input wide enough for the ladder's largest full tile.
+
+    White noise rather than zeros: a record of exact zeros drives sigma to its
+    lower diagnostic limit and every fit comes back `DIAGNOSTIC_LIMIT`, which is
+    a different allocation path from the `ITER_CAP_*` one a capped run is
+    supposed to exercise.
+    """
+    import xarray as xr
+
+    rng = np.random.default_rng(0)
+    dataset = xr.Dataset(
+        {
+            "sla": (
+                ("time", "y", "x"),
+                rng.standard_normal((n_time, side, side)).astype("float32"),
+            )
+        },
+        coords={
+            "time": np.array(
+                [
+                    np.datetime64("2000-01-01") + np.timedelta64(31 * i, "D")
+                    for i in range(n_time)
+                ]
+            ),
+            "y": np.arange(side),
+            "x": np.arange(side),
+        },
+    )
+    path = directory / "in.zarr"
+    dataset.to_zarr(path)
+    return str(path)
+
+
+def _calibration_config(directory: Path, uri: str) -> str:
+    path = directory / "calibration.toml"
+    path.write_text(
+        f'data_uri = "{uri}"\n'
+        'variable = "sla"\n'
+        'signal_terms = ["constant", "trend", "annual"]\n'
+        'candidates = ["white", "white + matern12"]\n'
+        'criteria = ["aic"]\n'
+    )
+    return str(path)
+
+
+#: The floor every calibration test pins. **Pinned rather than measured**, and
+#: the value is this machine's 2026-08-15 reading so a reader recognizes it: the
+#: derived side is a function of the floor, and a floor that moved by megabytes
+#: between ladder points would put each point on a different side than the one it
+#: asked for -- the fixture failure Task 2 found and that cost four modules their
+#: budgets.
+_PINNED_FLOOR = FloorReport(
+    pre_warm_bytes=171_200_000,
+    post_warm_bytes=216_900_000,
+    with_input_bytes=228_200_000,
+    peak_bytes=228_200_000,
+    components={"pinned": 228_200_000},
+)
+
+
+@pytest.fixture(scope="module")
+def small_calibration(tmp_path_factory: pytest.TempPathFactory) -> CalibrationResult:
+    """One two-point calibration, shared by the structural tests below.
+
+    Module-scoped because each point is a fresh child that imports numba and
+    fits a tile, and the tests that read it are about the ladder's STRUCTURE --
+    which sides it landed on, what it recorded about itself -- rather than about
+    any number in it.
+    """
+    directory = tmp_path_factory.mktemp("calibration")
+    uri = _calibration_input(directory)
+    return calibrate(
+        config_path=_calibration_config(directory, uri),
+        floor=_PINNED_FLOOR,
+        ladder=(4, 8),
+        max_iter=1,
+    )
+
+
+@pytest.mark.slow
+@pytest.mark.machine
+def test_the_calibration_lands_on_the_sides_it_asked_for(small_calibration):
+    """The ladder is in SIDES, and the run derives the side it was aimed at.
+
+    **THIS IS THE EXECUTABLE FORM OF "IT DRIVES THE PRODUCTION PATH" (j2).** The
+    calibration does not choose its own B: it asks
+    `tiling.budget_bytes_for_side` which budget lands on a side, hands that
+    budget to `run()`, and reads back the side `run()` actually derived. If the
+    two disagree, the calibration measured a tile the production path would not
+    have built.
+
+    Expected values determined independently: `B = side**2` for a tile that is
+    not clipped, and the fixture's grid is 8x8, so sides 4 and 8 give batches of
+    16 and 64. Below `store.TILE_SIDE_BASE` the base is inert and every side is
+    reachable, which is why a suite-affordable ladder can exist at all.
+
+    **THE `ok` COUNT IS THE REGIME CONTROL, AND IT IS ASSERTED AS A MINORITY
+    RATHER THAN AS ZERO.** A cap does not forbid convergence:
+    `optimize.py:592` classifies a fit as capped when `n_iter >= max_iter`, so a
+    series that converges in **fewer** iterations than the cap is genuinely
+    `OK` -- at a cap of 1 that means stopping at `n_iter = 0`, with the moment
+    initialization already inside the gradient tolerance. Measured through
+    `run()` on these fixtures: **0 of 128 at caps 1 and 2, and 15 of 128 at cap
+    3**, so the count is a property of the cap and the data rather than
+    something a cap of 1 guarantees. What matters for comparability is that the
+    capped regime is *predominantly* non-OK.
+
+    Bug this catches: an inverse that lands one side low or high -- silent,
+    because the ladder still runs and every point sits at a B nobody asked for,
+    and the slope then describes tiles that were never built.
+    """
+    assert [point.side for point in small_calibration.points] == [4, 8]
+    assert [point.derived_side for point in small_calibration.points] == [4, 8]
+    assert [point.batch for point in small_calibration.points] == [16, 64]
+    assert [point.attempted for point in small_calibration.points] == [32, 128]
+    assert small_calibration.max_iter == 1
+    for point in small_calibration.points:
+        assert point.ok * 2 < point.attempted
+
+
+@pytest.mark.slow
+@pytest.mark.machine
+def test_the_calibration_records_what_its_slope_is_licensed_for(small_calibration):
+    """The result states the range it was measured over and what it is not.
+
+    **A NUMBER WITHOUT ITS PRECONDITIONS IS NOT A MEASUREMENT**, and this
+    project has paid for that four times -- a `tile_side` without its backend, a
+    divisor ratio without its array, a floor without its instrument. A slope
+    measured at four small sides and cached forever is the next instance
+    waiting, so the result carries the sides it saw, the cap it ran under, and
+    the statement that linearity **beyond** them is Task 7's claim rather than
+    this one's.
+
+    **AND THE INTERCEPT IS NOT THE PRODUCTION FLOOR**, which is the half a
+    reader will get wrong: it carries what the measuring child holds and a
+    production run does not, minus the four allocation sites a capped fit never
+    reaches. That is stated in `CalibrationResult`'s own docstring and the
+    pinned floor is recorded beside the intercept so the two are comparable.
+
+    Bug this catches: a cache entry claiming more than the measurement supports
+    -- the discipline every stale number in this project has lacked.
+    """
+    basis = small_calibration.linearity_basis
+    assert "max_iter=1" in basis
+    assert "(4, 8)" in basis
+    assert "(16, 64)" in basis
+    assert "Task 7" in basis
+    # **THE FIT IS OVER THE ACHIEVED BATCH, AND THIS IS WHAT SAYS SO.** Slope,
+    # intercept and residuals are one fit or they are three numbers; asserting
+    # that they reproduce each measured peak from its own `batch` catches a fit
+    # taken against the requested SIDE instead -- which differs by a square, is
+    # silent, and would make every cached bytes-per-series figure a
+    # bytes-per-side one.
+    for point, residual in zip(
+        small_calibration.points, small_calibration.residuals, strict=True
+    ):
+        predicted = (
+            small_calibration.slope_bytes_per_series * point.batch
+            + small_calibration.intercept_bytes
+        )
+        assert predicted + residual == pytest.approx(point.peak_bytes, rel=1e-9)
+    assert small_calibration.floor_peak_bytes == _PINNED_FLOOR.peak_bytes
+    assert small_calibration.placement is SolverPlacement.PER_SERIES_LIVE
+    assert small_calibration.engine_label is MemoryEngineLabel.KALMAN_NUMPY
+    assert len(small_calibration.residuals) == len(small_calibration.points)
+
+
+def test_a_ladder_of_one_point_is_refused():
+    """Two points make a line; one makes an assumption.
+
+    Bug this catches: a single-point ladder returning a slope of whatever
+    `polyfit` does with one observation -- a number with no relation in it at
+    all, which would then be cached and reused as though it had been measured.
+    """
+    with pytest.raises(ValueError, match="at least two ladder points"):
+        calibrate(config_path="unused.toml", floor=_PINNED_FLOOR, ladder=(16,))
+
+
+@pytest.mark.slow
+@pytest.mark.machine
+def test_peak_residency_does_not_move_with_the_iteration_cap(tmp_path):
+    """The step test: caps {1, 2, 3} at one B, and what it can and cannot see.
+
+    **A STEP TEST AND NOT A SLOPE TEST, AND THE DIFFERENCE IS THE WHOLE POINT.**
+    A three-point fit through caps {1, 5, 32} would read the likelier defect --
+    an allocation on a path a cap of 1 never reaches -- as a small positive
+    slope, which the eye calls noise. A **step at 1 -> 2 that is flat at
+    2 -> 3** is a signature instead.
+
+    **WHAT THIS RESOLVES, STATED RATHER THAN IMPLIED.** At B = 64 a per-series
+    allocation is kilobytes and is invisible here; what the band catches is a
+    **constant**-scale allocation -- an optimizer workspace, a JIT compile, an
+    import triggered on a converging path -- which is what a first-iteration
+    allocation in this system actually looks like. A per-series first-iteration
+    allocation would show at the shipped ladder's top point, where 926 B/series
+    over 4096 series is 3.8 MB. The band below is 16 MB, against a spread of
+    ~0.3 MB measured between fresh children at fixed workload on 2026-08-15.
+
+    **THE OUTCOME MIX IS NOT CONSTANT ACROSS {1, 2, 3}, WHICH THE BRIEF ASSUMED
+    IT WOULD BE, AND THE MEASUREMENT IS BETTER FOR IT.** Measured 2026-08-15
+    through `run()` at side 8, N = 60: **cap 1 and cap 2 give 0 `OK` of 128 and
+    cap 3 gives 15** -- convergence begins at 3, because an `OK` needs
+    `n_iter < max_iter` and a fit converging in two iterations reaches it. So at
+    cap 3 fifteen series **do** reach the four allocation sites `fit` skips on a
+    non-OK outcome, and the peak does not move: 227.7, 227.8, 227.7 MB. That is
+    direct evidence for the claim the plan made by code-reading -- those sites
+    are shape `(1, ...)` constants rather than slope terms -- rather than an
+    assumption the fixture was arranged to protect.
+
+    Bug this catches, and it is the one that would make every calibrated slope
+    too small: an allocation reached only after the first iteration, which a
+    cap-1 calibration never pays for and a production run always does. **If this
+    fails, the instrument is dead and must say so** rather than be patched with
+    a higher cap.
+    """
+    uri = _calibration_input(tmp_path, n_time=60, side=8)
+    config_path = _calibration_config(tmp_path, uri)
+    peaks = {}
+    for cap in (1, 2, 3):
+        point = measure_tile_peak(
+            config_path=config_path, side=8, floor=_PINNED_FLOOR, max_iter=cap
+        )
+        # NOT `ok == 0`: a fit whose moment init already meets the gradient
+        # tolerance stops at `n_iter = 0`, which is below the cap and therefore
+        # genuinely converged. What makes the three caps comparable is that the
+        # regime is predominantly capped at all of them, and that is asserted.
+        assert point.ok * 2 < point.attempted
+        assert point.batch == 64
+        peaks[cap] = (point.peak_bytes, point.ok)
+    print(
+        "\nstep test, (cap, peak MB, ok): "
+        f"{[(cap, round(peak / 1e6, 1), ok) for cap, (peak, ok) in peaks.items()]}"
+    )
+
+    assert abs(peaks[2][0] - peaks[1][0]) < 16e6
+    assert abs(peaks[3][0] - peaks[2][0]) < 16e6
+
+
+@pytest.mark.slow
+@pytest.mark.machine
+def test_a_converging_cap_reaches_a_regime_a_capped_one_does_not(tmp_path):
+    """Cap 32 is a different question from caps {1, 2, 3}, and confounds two.
+
+    **THE HIGH POINT IS NOT A CLEAN ACCUMULATION CHECK AND SAYING SO IS THE
+    FINDING.** Measured 2026-08-15: at cap 32, 83 of 128 fits come back `OK`
+    where at caps 1 and 2 none do. So the difference between cap 32 and cap 1 is
+    accumulation **plus** the four allocation sites `fit.py` skips on a non-OK
+    outcome -- one measurement over two unknowns.
+
+    The separation is arithmetic rather than a second cap: every skipped site is
+    shape `(1, ...)` inside the per-series loop, so the converged path is a
+    **constant** and accumulation would scale with B. This test establishes the
+    regime change -- the control that says which unknowns are in play -- and the
+    magnitudes belong to Task 7, whose ladder can resolve them.
+
+    Expected value determined independently: `mean_iterations` is 32.5 (P3), and
+    a **mean is not a maximum**, so a cap at the mean leaves a substantial
+    fraction unconverged. Both counts are asserted, in both directions.
+
+    **AND THE CAPPED SIDE IS NOT ASSERTED TO BE ZERO**, because a cap of 1 does
+    not forbid convergence: a fit that stops at `n_iter = 0` never reaches the
+    cap. The claim is the *change* -- more fits converge at 32 than at 1, and
+    not all of them do at either.
+
+    Bug this catches: reading the cap-32 point as accumulation, which would
+    attribute a per-series constant to a slope and inflate every cached
+    bytes-per-series figure derived from it.
+    """
+    uri = _calibration_input(tmp_path, n_time=60, side=4)
+    config_path = _calibration_config(tmp_path, uri)
+    capped = measure_tile_peak(
+        config_path=config_path, side=4, floor=_PINNED_FLOOR, max_iter=1
+    )
+    converging = measure_tile_peak(
+        config_path=config_path, side=4, floor=_PINNED_FLOOR, max_iter=32
+    )
+
+    assert converging.ok > capped.ok
+    assert converging.ok > 0
+    assert converging.ok < converging.attempted
+    assert capped.attempted == converging.attempted == 32
+    print(
+        f"\nregime: capped ok={capped.ok} peak={capped.peak_bytes / 1e6:.1f} MB, "
+        f"converging ok={converging.ok} peak={converging.peak_bytes / 1e6:.1f} MB"
+    )

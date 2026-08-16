@@ -623,3 +623,175 @@ rather than assumed.
   satisfy it. The side is additionally asserted against `tile_side_for` called with the
   total-RAM budget — a second traversal of the production path, which pins the **routing**; the
   arithmetic itself is pinned by Task 2's tests and is not re-derived here.
+
+---
+
+## Task 4 — the calibration measurement
+
+Run 2026-08-15 against the task brief in
+[`../plans/2026-08-14-metamer-phase2b.md`](../plans/2026-08-14-metamer-phase2b.md), the live
+`core/fit.py`, `core/optimize.py`, `core/memory.py`, `batch/run.py` and `batch/tiling.py`, **and
+against two measurements taken before any code was written** — the capped fit's cost and the
+outcome mix at each cap. **Twelve findings. The first makes the brief's ladder unexpressible and
+the second makes the shipped one expensive, and neither is visible without running something.**
+
+### (a4)/(g) THE BRIEF'S LADDER IS NOT REACHABLE THROUGH `run()` AT ALL
+
+`B ∈ {1000, 2000, 4000}` is a ladder in **series**, and a run's B is a **tile**: `B = side²`, and
+since Task 2 every derived side is a multiple of `store.TILE_SIDE_BASE` = 16. So the reachable
+values are `{256, 1024, 2304, 4096, …}` and **√1000 = 31.6 is not among them.** The brief's three
+numbers cannot be produced by any tile, so a calibration that hit them would have to bypass the
+tiling — which is (j2) and is the whole thing this task exists not to do.
+
+**The ladder is therefore in SIDES**, and every side is a multiple of 16 by construction rather
+than by choice — Task 2's rounding already guarantees it, which is the property that made it
+"remove a footgun rather than document one".
+
+### THE COST IS SET BY THE FIT, NOT BY THE MEMORY, AND IT IS THE BINDING CONSTRAINT
+
+**Measured 2026-08-15 on this machine**, `fit` at `max_iter=1` over two candidates
+(`white`, `white + matern12`), after a warm-up call, marginal cost per series:
+
+| N | B = 32 | B = 128 |
+|---|---|---|
+| 60 | 195.4 ms | **197.3 ms** |
+| 240 | 732.6 ms | **741.2 ms** |
+
+**Linear in N, and flat in B** — the cost is per series, so the ladder's cost is its total series
+count. Against the converged cap at N = 60: **2334 ms/series, so cap 1 is 11.8× cheaper, not
+free.** The init ladder and the gradient are paid whatever the cap.
+
+**Extrapolated** (linear in N and in M, stated as an extrapolation) to §9.4's configuration —
+N = 630, M = 12 — that is **12.4 s/series**, so the four-point ladder `(16, 32, 48, 64)`,
+**7680 series**, is **≈ 26.5 h on this box**. A calibration is not a minutes-scale operation at
+production N and M, and **saying so here is cheaper than discovering it at Task 7.**
+
+> **AND THE REFRAMING THAT MAKES IT ACCEPTABLE IS ARITHMETIC, NOT REASSURANCE.** 7680 series at
+> cap 1 is **≈ 649 converged-series-equivalents**, against **one** production tile at side 272 of
+> **73 984 series** — so the whole ladder is **0.88% of a single tile**, and a run has thousands
+> of them. **Cheap relative to the job it sizes; expensive in absolute terms on this machine.**
+> Both halves are true and the second is the one that will surprise someone.
+
+### (a5) THE CALIBRATION MUST FIT ONE TILE, AND NOTHING IN THE BRIEF STOPS IT FITTING THE GRID
+
+`run()` loops **every** tile. On the 10⁷-point grid the calibration exists to size, a capped run
+fits all of it — the brief specifies the instrument and never bounds it.
+
+**The instrument that already exists is the SIGTERM path, which is (j3).** `on_tile_written`
+fires between a tile's data write and its completion bit, and the loop already stops after a
+marked tile when a SIGTERM has been recorded. So the calibration raises the signal from that
+callback and needs **no new seam and no new branch in the tile loop** — the "must not change the
+path when unset" constraint is satisfied by adding **nothing**. A `max_tiles` parameter would put
+a branch in the loop for a condition production never meets.
+
+### THE `max_iter` SEAM: RESOLVED ONCE ABOVE THE LOOP, FROM ONE SOURCE
+
+`fit(..., max_iter: int = 200)` and `optimize_series(..., max_iter: int = 200)` both carry the
+default as a literal. `run()` passing `200` of its own would be a **third** copy that drifts the
+day either moves. **One named default (`fit.DEFAULT_MAX_ITER`), used as the parameter default and
+resolved once in `run()` above the tile loop**, so the unset path passes exactly what the loop
+passes today and no branch enters the loop. **Not a config field**: a cap in the config reaches
+`fit_hash`, and the calibration would then key on a different fit identity from the run whose
+memory it measures — which destroys the cache key's meaning at Task 5.
+
+### (i2) THE CAP'S REACHABILITY PAIR IS ALREADY OBSERVABLE IN THE STORE
+
+*"The calibration used the production path"* is a pure negative. The pair needs no stub:
+`/primitives/iterations` and `/status/outcome` record it. A capped run stores iterations at the
+cap and **no `OK`**; a default run stores more and does. Measured below, so the assertion has its
+expected values before the test is written.
+
+### THE STEP TEST AND THE ACCUMULATION POINT ARE DIFFERENT EXPERIMENTS, AND CAP 32 CONFOUNDS TWO UNKNOWNS
+
+**Measured 2026-08-15**, 64 series × 2 candidates = 128 fits, N = 60, white noise:
+
+| cap | outcomes | wall |
+|---|---|---|
+| 1 | ITER_CAP_LARGE_GRAD 114, ITER_CAP_SMALL_GRAD 14, **OK 0** | 14.1 s |
+| 2 | ITER_CAP_LARGE_GRAD 110, ITER_CAP_SMALL_GRAD 18, **OK 0** | 16.9 s |
+| 32 | **OK 83**, DEGENERATE_HESSIAN 32, ITER_CAP_LARGE_GRAD 11, ITER_CAP_SMALL_GRAD 2 | 129.7 s |
+| 200 | **OK 87**, DEGENERATE_HESSIAN 41 | 149.4 s |
+
+**At caps {1, 2} the outcome mix is constant and no series converges**, so the step test is a
+clean iteration-residency test — which is exactly why it is the discriminator and a slope is not.
+**At cap 32 the mix changes**, so the difference against cap 1 is *accumulation* **plus** the four
+allocation sites `fit.py:237` skips on a non-`OK` outcome. **One measurement, two unknowns.**
+
+> **CORRECTED DURING IMPLEMENTATION, 2026-08-15: THE MIX IS NOT CONSTANT ACROSS {1, 2, 3}.**
+> Measured through `run()` at side 8, N = 60: **0 of 128 `OK` at caps 1 and 2, and 15 at cap 3.**
+> The table above was measured by calling `fit` directly at caps 1, 2, 32 and 200 and **never at
+> 3** — the brief's own ladder point, taken on trust between two measured ones. An `OK` needs
+> `n_iter < max_iter` (`optimize.py:592`), so a fit converging in two iterations is genuinely
+> converged at a cap of 3, and at a cap of 1 the only way through is `n_iter = 0`.
+>
+> **The step test is better for it rather than damaged.** Fifteen series at cap 3 **do** reach
+> the four allocation sites, and the peak does not move — 227.7, 227.8, 227.7 MB — which is
+> direct evidence that those sites are constants rather than slope terms, where the plan had
+> only a code-reading. **(a4) at a gap between two measured points**: the interpolated one was
+> the only one nobody checked.
+
+The separation is arithmetic rather than a second cap: **every skipped site is shape `(1, …)`**
+— `theta[b, c, :p]`, `np.linalg.inv(result.hessian)`, `delta_method_cov`, the second
+`obj.evaluate` — so the converged path is a **constant**, not a slope (F2 again). Accumulation
+would scale with B; the constant does not. **So the accumulation question is answered by
+B-dependence, and the constant is measured independently** by differencing cap 200 against cap 1
+at small B. **The `OK` count is recorded at every ladder point as the control**, so a reader can
+see which regime each number came from.
+
+**And the brief's own justification for the cap needs one word changed.** *"`mean_iterations` is
+32.5 (P3) against a cap of 200"* is right and is a **mean**: at a cap of 32, measured above,
+**a third of the fits are still unconverged.** The cap is a calibration knob and never a
+production one — that conclusion holds — but a reader taking 32.5 as "converged by 32" will
+misread the high point.
+
+### THE FIXTURE'S NON-OK POINT EXISTS AND IS AN OPTIMIZER-STAGE FAILURE — MEASURED, NOT ASSUMED
+
+At the converging cap the standard fixture gives **87 `OK` and 41 `DEGENERATE_HESSIAN`** out of
+128. That is a post-optimization failure, not a design-stage one, and it is **not constant across
+the model axis** — which is the condition 2a Task 9 established and the reason a design-stage
+construction cannot work (`fit.py:182` builds the design once, before the candidate loop, so a
+design failure hits every candidate and gives `n_valid = 0`).
+
+### (j) THE LADDER'S B IS CHOSEN BY THE FORMULA UNDER CALIBRATION, AND IS READ BACK FROM THE RUN
+
+To land on side `s` the calibration must invert the budget arithmetic, which uses
+`resident_bytes_per_series` — **the quantity being calibrated.** That is fixture *selection* and
+not an oracle, and the circularity is closed by taking B from **the run's achieved tile side**
+rather than from the target: if the analytic formula is wrong the achieved side differs, and the
+fit is still a fit of what actually ran. Stated, or the next reader finds (j) here and is right.
+
+### THE FLOOR IS PINNED ACROSS THE LADDER, AND `run(floor=…)` ALREADY DOES IT
+
+The derived side is a function of the measured floor, which varies by megabytes between runs,
+while the budget window that selects one multiple of 16 is narrower than that — Task 2's finding,
+which cost four modules' fixtures. So the floor is measured **once** for the whole calibration and
+passed to every point. That makes the ladder deterministic **and** makes the intercept a floor
+under stated conditions rather than an emergent number.
+
+### THE INTERCEPT IS THE FLOOR UNDER THE CALIBRATION'S CONDITIONS, AND IT IS NOT THE PRODUCTION FLOOR
+
+It carries the pinned floor **plus** what the calibration child holds and a production run does
+not — the sampling thread, the payload, a store written to a temporary path — **minus** the four
+allocation sites the cap skips. **Stated in `CalibrationResult` rather than discovered at Task 7**,
+because an intercept quoted as "the floor" is the same defect as a `tile_side` quoted without its
+backend.
+
+### (a3)/(a5) `calibrate=` AND `recalibrate=` ARE NOT THIS TASK'S
+
+The brief's interface block lists both on `run()`, and **there is no cache until Task 5**. A flag
+that parses and does nothing reads as supported — the rule `--reuse-fits-from` was held to at 2a
+Task 12 and `engine=` at 2a Task 9. **Only `max_iter` lands here**, and the deviation is reported
+rather than silently absorbed.
+
+### (k), (c) and (d), briefly
+
+- **(k)** a fresh child per ladder point, behind `memory._BARE_LAUNCHER`: `peak_rss_bytes` is
+  inherited and does not compound, so a probe two processes below pytest starts from a known
+  floor. The tile's peak is transient, so the child samples `current_rss_bytes` on a thread, as
+  `_CHILD` already does — a reading taken at the end misses the peak entirely.
+- **(c)** `calibrate` has one return and one raise (a failed child, with its stderr attached —
+  a silent zero is a perfectly flat memory curve, which is indistinguishable from a formula that
+  predicts nothing). `run(max_iter=…)` adds no exit.
+- **(d)** `rg max_iter`: present in `fit` and `optimize_series` with the literal default 200 in
+  both, and **absent from `batch/`** — so nothing in the run path mentions it today, and the seam
+  really is missing rather than misspelled.

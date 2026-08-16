@@ -648,6 +648,31 @@ produced by the production path.
 - *A capped run under-reports the converged constant, and the difference is measured.* Catches
   the four skipped allocation sites being forgotten rather than accounted for.
 
+**LANDED 2026-08-15. THREE OF THIS BRIEF'S NUMBERS DID NOT SURVIVE CONTACT AND THE FOURTH IS
+NOW MEASURED.** In full in `PROGRESS.md`'s *What Task 4 established*; in one line each:
+
+- **`B ∈ {1000, 2000, 4000}` is unreachable.** A run's batch is a tile, so `B = side²` and every
+  derived side is a multiple of 16 — √1000 = 31.6. **The ladder is in SIDES**,
+  `CALIBRATION_LADDER = (16, 32, 48, 64)`, and `tiling.budget_bytes_for_side` is what lands on
+  one.
+- **The outcome mix is NOT constant across {1, 2, 3}.** An `OK` needs `n_iter < max_iter`, so
+  convergence begins at cap 3: measured 0 of 128 at caps 1 and 2 and **15 at cap 3**. The step
+  test is stronger for it — the peak is flat at 227.7 / 227.8 / 227.7 MB **while** fifteen fits
+  reach the four allocation sites, which is direct evidence that those sites are constants.
+- **`calibrate=` and `recalibrate=` did not land.** There is no cache until Task 5, and a flag
+  that parses and does nothing reads as supported. Only `max_iter` is here.
+- **The measured slope is 1049 ± 222 B/series against an analytic 926** — ratio 1.133, inside
+  the two-sided band, on a 29-minute hand-run ladder. **The 123 B/series excess is 0.55
+  standard errors and is not a measurement of the uncharged temporaries**, however well it
+  agrees with Task 0's ~100 B/series estimate.
+
+**And two things the brief did not bound.** `run()` loops every tile, so a calibration on a
+production grid would fit all of it — the run is stopped after one tile through
+`on_tile_written` and the existing SIGTERM path, which adds no seam and no branch (j3). And the
+cap is in no hash, so a capped store shares all three hashes with an uncapped one; the resolved
+cap is written to provenance as `max_iter`, with no schema bump because the outcome codes
+already answer the question.
+
 ---
 
 ## Task 5 — the calibration cache

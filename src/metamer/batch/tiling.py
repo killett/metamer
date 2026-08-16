@@ -86,6 +86,15 @@ from metamer.core.memory import (
     tile_side,
 )
 
+_INVERSE_WALK_LIMIT = 64
+"""How far `budget_bytes_for_side` may walk from its closed form, in bytes.
+
+The closed form and `block_bytes_for` are the same arithmetic in opposite
+directions, so they can disagree only by float rounding -- a byte or two. The
+limit is generous against that and tiny against any real error, which is what
+makes it a guard: see `budget_bytes_for_side`.
+"""
+
 
 class BudgetTooSmallError(ValueError):
     """A memory budget that does not leave a usable block.
@@ -312,6 +321,105 @@ def tile_side_for(
     return (raw // TILE_SIDE_BASE) * TILE_SIDE_BASE
 
 
+def budget_bytes_for_side(
+    *,
+    side: int,
+    floor: FloorReport,
+    placement: SolverPlacement = SolverPlacement.PER_SERIES_LIVE,
+    d: int,
+    threads: int = 1,
+    k_beta: int,
+    p_max: int,
+    n_time: int,
+    n_models: int,
+    per_point_design: bool = False,
+) -> int:
+    """Return the smallest budget whose derived tile side is exactly `side`.
+
+    **`tile_side_for` INVERTED, IN THE SAME MODULE AND OFF THE SAME CONSTANTS**,
+    because a calibration cannot choose its own B. A run's batch is a **tile**,
+    so `B = side**2`, and since Task 2 every derived side is a multiple of
+    `store.TILE_SIDE_BASE` -- which is why Phase 2b's calibration ladder is a
+    ladder in **sides** and not in series, and why the brief's
+    `B in {1000, 2000, 4000}` names three batches no tile can have
+    (`sqrt(1000) = 31.6`).
+
+    **THE INVERSE LIVES BESIDE THE FORWARD FUNCTION DELIBERATELY.** Split across
+    modules the two drift, and the drift is silent: the ladder still runs and
+    every point sits at a B nobody asked for. `tests/test_tiling.py` asserts the
+    round trip rather than any hand-written budget, which is the executable form
+    of "the calibration uses the production derivation" (j2).
+
+    Args:
+        side: The tile side wanted. Below `store.TILE_SIDE_BASE` the base is
+            inert and any side is reachable; at or above it, only multiples of
+            the base are, and a non-multiple raises.
+        floor: The measured process floor. **Pin it across a ladder**: it is
+            measured fresh per run and varies by megabytes, while the budget
+            window selecting one multiple of the base is narrower than that.
+        placement: Where the live solver working set sits.
+        d: Composite state dimension, the widest candidate's.
+        threads: Worker threads. Ignored under the reachable placement.
+        k_beta: Number of design columns.
+        p_max: Widest candidate's free noise parameter count.
+        n_time: Series length.
+        n_models: Candidate count held until the tile is written.
+        per_point_design: True if any regressor is a per-point field.
+
+    Returns:
+        The budget in bytes.
+
+    Raises:
+        ValueError: If `side` is not positive, or is at or above the base and
+            not a multiple of it -- **a request no budget can satisfy**, and
+            returning the nearest reachable side instead would hand the caller a
+            B it did not ask for, which is the defect this function exists to
+            make impossible.
+    """
+    if side < 1:
+        raise ValueError(f"tile side must be positive, got {side}")
+    if side >= TILE_SIDE_BASE and side % TILE_SIDE_BASE:
+        raise ValueError(
+            f"no budget derives a tile side of {side}: every side at or above "
+            f"{TILE_SIDE_BASE} is rounded down to a multiple of it, so the "
+            f"reachable sides near {side} are "
+            f"{(side // TILE_SIDE_BASE) * TILE_SIDE_BASE} and "
+            f"{(side // TILE_SIDE_BASE + 1) * TILE_SIDE_BASE}"
+        )
+    block = side * side * resident_bytes_per_series(
+        k_beta=k_beta,
+        p_max=p_max,
+        n_time=n_time,
+        n_models=n_models,
+        per_point_design=per_point_design,
+    ) + solver_state_bytes(placement, d=d, k_beta=k_beta, p_max=p_max, threads=threads)
+    # **THE CLOSED FORM IS THE STARTING POINT AND `block_bytes_for` IS THE
+    # ARBITER.** Inverting `int((budget - floor) * (1 - headroom))` in floats
+    # gets the answer right to within a byte or two and wrong in a direction
+    # that depends on the rounding, and a byte here is a whole tile side. So the
+    # closed form seeds a walk that asks the forward function -- **the inverse
+    # is verified against the function it inverts rather than against a second
+    # piece of float reasoning** (j), and the result is exactly minimal.
+    budget = floor.peak_bytes + int(math.ceil(block / (1.0 - HEADROOM_FRACTION)))
+    for _ in range(_INVERSE_WALK_LIMIT):
+        if block_bytes_for(budget_bytes=budget, floor=floor) >= block:
+            return budget
+        budget += 1
+    # **BOUNDED, AND THE BOUND IS A GUARD RATHER THAN A SAFETY NET.** An
+    # unbounded walk repairs a closed form that is wrong by any amount -- it
+    # just takes a byte at a time, so a seed that omitted the headroom would
+    # still return the right answer after ~10**8 iterations and nothing would
+    # fail. Measured: that mutation left every round-trip test green and turned
+    # a 2.4 s module into a 21.5 s one, which is a defect no assertion here was
+    # looking at. With the bound, a closed form that disagrees with
+    # `block_bytes_for` by more than rounding says so.
+    raise ValueError(
+        f"the closed form for a tile side of {side} disagrees with "
+        f"block_bytes_for by more than {_INVERSE_WALK_LIMIT} bytes; the two are "
+        "the same arithmetic and one of them has changed"
+    )
+
+
 def chunk_shape(handle: InputHandle) -> tuple[int, ...]:
     """Return the store's own chunk shape for the handle's variable.
 
@@ -505,6 +613,7 @@ def _aligned_spans(start: int, stop: int, chunk: int) -> Iterator[tuple[int, int
 
 __all__ = [
     "Tile",
+    "budget_bytes_for_side",
     "assemble_tile",
     "assembly_spans",
     "chunk_shape",

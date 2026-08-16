@@ -35,6 +35,7 @@ from metamer.batch.tiling import (
     assemble_tile,
     assembly_spans,
     block_bytes_for,
+    budget_bytes_for_side,
     chunk_shape,
     read_amplification,
     tile_grid,
@@ -772,3 +773,81 @@ def test_the_solver_constant_comes_out_of_the_block_before_the_side_is_derived()
     budget = WORKED_FLOOR.peak_bytes + int(block / (1 - HEADROOM_FRACTION)) + 1
     assert block_bytes_for(budget_bytes=budget, floor=WORKED_FLOOR) >= block
     assert tile_side_for(budget_bytes=budget, floor=WORKED_FLOOR, **WORKED_EXAMPLE) == 1
+
+
+def test_a_budget_derived_for_a_side_derives_that_side_back():
+    """`budget_bytes_for_side` is `tile_side_for`'s inverse, exactly.
+
+    **THE CALIBRATION CANNOT CHOOSE ITS OWN B, AND THIS IS WHY IT NEEDS AN
+    INVERSE.** A run's batch is a tile, so `B = side**2`, and since Task 2 every
+    derived side is a multiple of `TILE_SIDE_BASE`. So a calibration ladder is a
+    ladder in **sides**, and to land on one the calibration has to ask what
+    budget produces it -- inverting the same arithmetic rather than a copy of
+    it, which is what keeps the measurement on the production derivation (j2).
+
+    Expected values determined independently: the round trip is the property,
+    and it is asserted at sides **below** the base (where `tile_side_for`
+    passes the raw side through), **at** the base, and at four multiples of it
+    including the published 272. A hand-written budget per side would be a
+    second derivation of the thing under test.
+
+    Bug this catches: an inverse that forgets the solver constant or the
+    headroom, which lands one side low at small budgets -- exactly the boundary
+    Task 2 found the solver constant mattering at -- and an inverse that rounds
+    the wrong way, which lands a side high and makes the calibration measure a
+    B it did not ask for. **Both are silent**: the ladder still runs, and every
+    point is at the wrong B.
+    """
+    for side in (4, 8, 16, 32, 48, 64, 272):
+        budget = budget_bytes_for_side(side=side, floor=WORKED_FLOOR, **WORKED_EXAMPLE)
+        assert (
+            tile_side_for(budget_bytes=budget, floor=WORKED_FLOOR, **WORKED_EXAMPLE)
+            == side
+        )
+        # AND IT IS THE SMALLEST SUCH BUDGET, which is what makes the ladder's
+        # cost minimal rather than merely correct: one byte less and the side
+        # drops. Asserted only at and above the base, since below it the raw
+        # side passes through and the step is one point rather than sixteen.
+        if side >= TILE_SIDE_BASE:
+            assert (
+                tile_side_for(
+                    budget_bytes=budget - 1, floor=WORKED_FLOOR, **WORKED_EXAMPLE
+                )
+                < side
+            )
+
+
+def test_a_side_no_budget_can_derive_is_refused_with_its_neighbours():
+    """A non-multiple of the base at or above it is unreachable, and says so.
+
+    **THE FAULT CLASS IS CONSTRUCTED HERE BECAUSE NOTHING ELSE BUILDS IT.**
+    Every side the ladder and the round-trip test use is reachable by
+    construction, so a guard against an unreachable one is untested however many
+    tests run -- (i8)'s third shape, and the most comfortable of the three
+    because the suite is green *and* the code is defensive.
+
+    Expected values determined independently: `tile_side_for` rounds **down** to
+    a multiple of `TILE_SIDE_BASE` = 16, so 20 rounds to 16 and no budget
+    produces 20. The reachable neighbours are 16 and 32.
+
+    Bug this catches: returning the nearest reachable side instead of refusing.
+    The calibration would then measure a tile it did not ask for, and every
+    ladder point would be silently at the wrong B -- which is exactly the
+    failure `derived_side` is recorded to detect, one layer earlier.
+    """
+    with pytest.raises(ValueError, match="no budget derives a tile side of 20"):
+        budget_bytes_for_side(side=20, floor=WORKED_FLOOR, **WORKED_EXAMPLE)
+    with pytest.raises(ValueError, match="tile side must be positive"):
+        budget_bytes_for_side(side=0, floor=WORKED_FLOOR, **WORKED_EXAMPLE)
+
+    message = str(
+        pytest.raises(
+            ValueError,
+            budget_bytes_for_side,
+            side=20,
+            floor=WORKED_FLOOR,
+            **WORKED_EXAMPLE,
+        ).value
+    )
+    assert "16" in message
+    assert "32" in message

@@ -69,7 +69,7 @@ import sys
 from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from metamer.core import machine
 
@@ -972,3 +972,439 @@ def measure_evaluation_rss_slope(
     )
     slope, intercept = np.polyfit(sizes, peaks, 1)
     return float(slope), float(intercept)
+
+
+CALIBRATION_LADDER: tuple[int, ...] = (16, 32, 48, 64)
+"""POLICY. The tile SIDES a calibration measures, in points.
+
+**SIDES AND NOT SERIES, BECAUSE A RUN'S BATCH IS A TILE.** `B = side**2`, and
+since Phase 2b Task 2 every derived side is a multiple of
+`store.TILE_SIDE_BASE` = 16 -- so the reachable batches are
+`{256, 1024, 2304, 4096, ...}` and the brief's `B in {1000, 2000, 4000}` names
+three batches no tile can have (`sqrt(1000) = 31.6`). A ladder in series would
+have to bypass the tiling to hit its own points, which is (j2) and is the
+defect this whole task exists not to repeat.
+
+**FOUR POINTS, BECAUSE THREE FIT A LINE THROUGH ONE RESIDUAL** and one residual
+cannot falsify linearity -- it can only fail to notice. The four are equally
+spaced in side, which is quadratic in B, so the top point carries most of the
+leverage; that is deliberate, since the top point is also the only one whose
+signal clears the noise floor at small per-series costs.
+
+**THE COST IS THE FIT, NOT THE MEMORY, AND IT IS THE BINDING CONSTRAINT.**
+Measured 2026-08-15 on this machine, `fit` at `max_iter=1` over two candidates:
+**197 ms/series at N = 60** and **741 ms/series at N = 240** -- linear in N, flat
+in B, and only **11.8x** cheaper than the converged cap rather than free, because
+the init ladder and the gradient are paid whatever the cap is. This ladder is
+**7680 series**, so at design doc section 9.4's configuration (N = 630, M = 12,
+extrapolated at 12.4 s/series) it is **~26.5 h here**.
+
+**AND THE REFRAMING THAT MAKES THAT ACCEPTABLE IS ARITHMETIC.** 7680 capped
+series is about **649 converged-series-equivalents**, against **one** production
+tile at side 272 of **73 984** series -- so the whole ladder is **0.88% of a
+single tile**, and a run has thousands of them. Cheap against the job it sizes;
+expensive in absolute terms on a four-core box. Both are true and the second is
+the one that surprises people.
+"""
+
+
+@dataclass(frozen=True)
+class CalibrationPoint:
+    """One ladder point: what was asked for, what ran, and what it held.
+
+    Attributes:
+        side: The tile side this point targeted.
+        derived_side: The side the run actually derived from the budget it was
+            given. **Equal to `side` unless the inverse is wrong**, and it is
+            recorded rather than assumed because the budget was chosen with
+            `resident_bytes_per_series` -- the quantity under calibration. The
+            fit uses `batch`, computed from this, so a wrong analytic formula
+            moves the ladder rather than corrupting the slope.
+        batch: Series in the first tile, `min(side, n_y) * min(side, n_x)`.
+            **The first tile, not `side**2`**: a grid smaller than the side is
+            clipped, and the calibration stops after one tile.
+        peak_bytes: Maximum resident set size sampled during the run.
+        baseline_bytes: Resident set size before the run started.
+        ok: Fits that came back `OK`. **The control for which regime this point
+            is in**: at a cap of 1 or 2 it is zero, and a nonzero count means
+            the four allocation sites `fit.py` skips on a non-OK outcome were
+            reached.
+        attempted: Fits that were attempted at all.
+    """
+
+    side: int
+    derived_side: int
+    batch: int
+    peak_bytes: float
+    baseline_bytes: float
+    ok: int
+    attempted: int
+
+
+@dataclass(frozen=True)
+class CalibrationResult:
+    """A measured per-series cost, with everything needed to judge it.
+
+    **THE INTERCEPT IS NOT THE PRODUCTION FLOOR AND MUST NOT BE READ AS ONE.**
+    It is the floor under the *calibration's* conditions: the pinned floor, plus
+    what the measuring child holds and a production run does not -- the sampling
+    thread, the temporary store, the JSON payload -- minus the four allocation
+    sites a capped fit never reaches (`theta`'s write, the Hessian inverse, the
+    delta-method covariance, and the second evaluation at the optimum). Every
+    one of those is shape `(1, ...)` inside `fit`'s per-series loop, so they are
+    **constants rather than slope terms** and they belong here rather than in
+    `slope_bytes_per_series`.
+
+    Attributes:
+        slope_bytes_per_series: The measured per-series cost, in bytes.
+        intercept_bytes: The fitted intercept. See above for what it is of.
+        residuals: Measured peak minus fitted peak, per ladder point, in bytes.
+            **Reported rather than reduced to one number**, because the question
+            the ladder answers is whether the relation is linear and a single
+            residual norm cannot say where it is not.
+        points: The ladder, in the order measured.
+        max_iter: The cap every point ran under.
+        linearity_basis: What the slope is licensed to be extrapolated over,
+            stated because the ladder is small: the sides measured, and the fact
+            that linearity **beyond** them is Task 7's claim and not this one's.
+        placement: Where the live solver working set sat.
+        engine_label: Which engine's workspace the number belongs to. **Not
+            `EngineId`** -- see `MemoryEngineLabel`.
+        floor_peak_bytes: The pinned floor every point ran against, so the
+            intercept is comparable to something.
+    """
+
+    slope_bytes_per_series: float
+    intercept_bytes: float
+    residuals: tuple[float, ...]
+    points: tuple[CalibrationPoint, ...]
+    max_iter: int
+    linearity_basis: str
+    placement: SolverPlacement
+    engine_label: MemoryEngineLabel
+    floor_peak_bytes: int
+
+
+_CALIBRATION_GEOMETRY_CHILD = """
+import json
+from metamer.batch.input import check_contract, open_input
+from metamer.batch.run import run_geometry
+from metamer.batch.tiling import budget_bytes_for_side
+from metamer.batch.validation import load_config
+from metamer.core.memory import FloorReport
+
+floor = FloorReport(pre_warm_bytes={peak}, post_warm_bytes={peak},
+                    with_input_bytes={peak}, peak_bytes={peak}, components={{}})
+config = load_config({config_path!r})
+handle = open_input(config.data_uri, config.variable)
+contract = check_contract(handle)
+model = run_geometry(config, handle, contract).tile_kwargs()
+
+# THE BUDGET PER SIDE, COMPUTED WHERE THE PRODUCTION GEOMETRY IS, AND IN A
+# PROCESS THAT MEASURES NOTHING. Doing it inside the measuring child would put
+# an extra open input and a second parse inside the number being measured.
+print(json.dumps({{
+    "budgets": {{str(side): budget_bytes_for_side(side=side, floor=floor, **model)
+                 for side in {ladder!r}}},
+    "n_y": contract.n_y, "n_x": contract.n_x, "model": model,
+}}))
+"""
+
+
+_CALIBRATION_CHILD = """
+import json, os, shutil, signal, tempfile, threading, time
+from metamer.core.machine import current_rss_bytes, peak_rss_bytes
+from metamer.core.memory import FloorReport
+
+peak_value = {peak}
+floor = FloorReport(pre_warm_bytes=peak_value, post_warm_bytes=peak_value,
+                    with_input_bytes=peak_value, peak_bytes=peak_value,
+                    components={{}})
+
+# **THE SAMPLER IS NOT LOAD-BEARING HERE TODAY, AND SAYING SO IS THE POINT.**
+# `_CHILD` above samples because a batched evaluation's working set is freed
+# the moment `score` returns, so a reading taken afterwards misses the peak
+# entirely. A tile is different: `run()` still holds the block and the fit
+# results in its frame when it returns, so an end-of-run reading is very nearly
+# the peak. Measured -- a sampler that records nothing leaves every assertion in
+# `tests/test_memory.py` green, which is (i8)'s third shape: the fault class is
+# not constructible at the scales this suite can afford. It stays because it
+# costs nothing and because the regime it guards is Task 8's, where the tile
+# dominates the floor rather than the other way round.
+high = [current_rss_bytes()]
+stop = threading.Event()
+
+
+def _sample():
+    while not stop.is_set():
+        high[0] = max(high[0], current_rss_bytes())
+        time.sleep(0.002)
+
+
+# IMPORTED INSIDE THE MEASURED PROCESS, deliberately: the run's imports are part
+# of what a production process holds, and the floor this is compared against was
+# measured the same way.
+from metamer.batch.run import run
+
+baseline = current_rss_bytes()
+workspace = tempfile.mkdtemp(prefix="metamer-calibration-")
+sampler = threading.Thread(target=_sample, daemon=True)
+sampler.start()
+try:
+    # **ONE TILE, AND THE INSTRUMENT THAT STOPS IT IS THE PREEMPTION PATH.**
+    # `run()` loops every tile, so on the grid a calibration exists to size this
+    # would fit all of it. `on_tile_written` fires between a tile's data write
+    # and its completion bit, and the loop already stops after a marked tile
+    # when a SIGTERM has been recorded -- so raising the signal here needs no
+    # new seam and puts no branch in the tile loop. (j3): an existing feature is
+    # an instrument for a property its own purpose does not concern.
+    report = run(
+        {config_path!r},
+        os.path.join(workspace, "calibration.zarr"),
+        memory_budget_gb={budget} / 10 ** 9,
+        floor=floor,
+        max_iter={max_iter},
+        on_tile_written=lambda tile: os.kill(os.getpid(), signal.SIGTERM),
+    )
+    high[0] = max(high[0], current_rss_bytes())
+    stop.set()
+    sampler.join()
+
+    import zarr
+    outcome = zarr.open_group(
+        os.path.join(workspace, "calibration.zarr"), mode="r"
+    )["status"]["outcome"][:]
+    side = int(report.tile_side)
+    print(json.dumps({{
+        "derived_side": side,
+        "batch": min(side, report.contract.n_y) * min(side, report.contract.n_x),
+        "peak": high[0],
+        "baseline": baseline,
+        "watermark": peak_rss_bytes(),
+        "ok": int((outcome == 0).sum()),
+        "attempted": int((outcome != 8).sum()),
+    }}))
+finally:
+    stop.set()
+    shutil.rmtree(workspace, ignore_errors=True)
+"""
+
+
+def _run_child(source: str, *, what: str) -> dict[str, Any]:
+    """Run one probe behind the bare launcher and return its JSON payload.
+
+    Args:
+        source: The probe's source.
+        what: What the probe was measuring, for the failure message.
+
+    Returns:
+        The parsed payload.
+
+    Raises:
+        RuntimeError: If the probe fails, with its stderr attached. **A silent
+            zero here is a perfectly flat memory curve**, which is
+            indistinguishable from a formula that predicts nothing.
+    """
+    # S603: the argv is this module's own template with literals substituted in,
+    # run under this interpreter.
+    result = subprocess.run(  # noqa: S603
+        [sys.executable, "-c", _BARE_LAUNCHER.format(probe=source)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"the calibration probe failed for {what}: {result.stderr}")
+    payload: dict[str, Any] = json.loads(result.stdout.strip().splitlines()[-1])
+    return payload
+
+
+def _budgets_for(
+    config_path: str, floor: FloorReport, ladder: tuple[int, ...]
+) -> dict[str, Any]:
+    """Return the budget landing on each side, from the production geometry.
+
+    Args:
+        config_path: The configuration being calibrated.
+        floor: The pinned floor.
+        ladder: The tile sides wanted.
+
+    Returns:
+        The geometry child's payload: budgets by side, and the grid it read.
+
+    Raises:
+        RuntimeError: If the probe fails, with its stderr attached.
+    """
+    return _run_child(
+        _CALIBRATION_GEOMETRY_CHILD.format(
+            config_path=config_path, peak=floor.peak_bytes, ladder=list(ladder)
+        ),
+        what="the ladder's budgets",
+    )
+
+
+def _measure_point(
+    *, config_path: str, side: int, budget: int, floor: FloorReport, max_iter: int
+) -> CalibrationPoint:
+    """Measure one tile's peak residency in a fresh child.
+
+    Args:
+        config_path: The configuration being calibrated.
+        side: The tile side this point targets.
+        budget: The budget that lands on that side.
+        floor: The pinned floor, passed to `run()` so the side is deterministic.
+        max_iter: The iteration cap.
+
+    Returns:
+        The measured point.
+
+    Raises:
+        RuntimeError: If the probe fails, with its stderr attached.
+    """
+    payload = _run_child(
+        _CALIBRATION_CHILD.format(
+            config_path=config_path,
+            peak=floor.peak_bytes,
+            budget=budget,
+            max_iter=max_iter,
+        ),
+        what=f"tile side {side}",
+    )
+    return CalibrationPoint(
+        side=side,
+        derived_side=int(payload["derived_side"]),
+        batch=int(payload["batch"]),
+        peak_bytes=float(payload["peak"]),
+        baseline_bytes=float(payload["baseline"]),
+        ok=int(payload["ok"]),
+        attempted=int(payload["attempted"]),
+    )
+
+
+def measure_tile_peak(
+    *, config_path: str, side: int, floor: FloorReport, max_iter: int = 1
+) -> CalibrationPoint:
+    """Measure ONE tile's peak residency, at one side and one cap.
+
+    **`calibrate` IS THIS IN A LOOP PLUS A LINE FIT**, and the two questions are
+    separate: a ladder answers *"how many bytes per series"*, while a single
+    point at a fixed side answers *"does this cap change what the process
+    holds"*. The step test needs the second and would otherwise have to run a
+    two-point ladder to get one number, paying for a point it never reads.
+
+    Args:
+        config_path: The configuration to measure against.
+        side: The tile side. It must be reachable -- below
+            `store.TILE_SIDE_BASE` any side is, at or above it only multiples.
+        floor: The pinned floor.
+        max_iter: The iteration cap. 1 by default.
+
+    Returns:
+        The measured point, including the `ok` count that says which regime it
+        is in.
+
+    Raises:
+        RuntimeError: If either probe fails, with its stderr attached.
+    """
+    geometry = _budgets_for(config_path, floor, (side,))
+    return _measure_point(
+        config_path=config_path,
+        side=side,
+        budget=int(geometry["budgets"][str(side)]),
+        floor=floor,
+        max_iter=max_iter,
+    )
+
+
+def calibrate(
+    *,
+    config_path: str,
+    floor: FloorReport,
+    ladder: tuple[int, ...] = CALIBRATION_LADDER,
+    max_iter: int = 1,
+    placement: SolverPlacement = SolverPlacement.PER_SERIES_LIVE,
+    engine_label: MemoryEngineLabel = MemoryEngineLabel.KALMAN_NUMPY,
+) -> CalibrationResult:
+    """Measure bytes per series by running the production path, capped.
+
+    **THE INSTRUMENT IS `run()` ITSELF** -- same entry point, same budget
+    derivation, same tile loop, same batch shape -- with the optimizer's
+    iteration cap lowered. A purpose-built harness would approximate the tile
+    loop and then validate the approximation, which is (j2) and is exactly the
+    defect F2 already was: the measurement that validated the old formula drove
+    a batched evaluation the production path never performs.
+
+    **THE FLOOR IS PINNED ACROSS THE LADDER AND MEASURED ONCE.** The derived side
+    is a function of the floor, which is measured fresh per run and varies by
+    megabytes, while the budget window that selects one multiple of the base is
+    narrower than that -- so an unpinned floor would land each point on a
+    different side than the one it asked for.
+
+    **EACH POINT RUNS IN A FRESH CHILD BEHIND THE BARE LAUNCHER**, because
+    `peak_rss_bytes` is inherited across `fork`/`exec` and does not compound: a
+    probe two processes below the caller starts from a known floor whatever the
+    caller allocated. The child samples `current_rss_bytes` on a thread, since
+    a tile's peak is transient and a reading taken at the end misses it.
+
+    Args:
+        config_path: The configuration to calibrate for. Its dataset, candidate
+            set and objective are what the slope belongs to.
+        floor: The pinned floor. Measure it once, with `measure_floor`.
+        ladder: Tile sides to measure. Defaults to `CALIBRATION_LADDER`.
+        max_iter: The iteration cap. **1 by default**, which is the cheapest
+            point at which every allocation the tile loop makes has been made.
+        placement: Recorded on the result; one value is reachable.
+        engine_label: Recorded on the result. Not `EngineId`.
+
+    Returns:
+        The measured slope, intercept, residuals and ladder.
+
+    Raises:
+        ValueError: If the ladder has fewer than two points, since a slope needs
+            two -- and fewer than four cannot falsify linearity, which the
+            result says in its own `linearity_basis`.
+        RuntimeError: If any probe fails, with its stderr attached.
+    """
+    if len(ladder) < 2:
+        raise ValueError(f"a slope needs at least two ladder points, got {ladder}")
+
+    import numpy as np
+
+    budgets = _budgets_for(config_path, floor, ladder)["budgets"]
+
+    points = [
+        _measure_point(
+            config_path=config_path,
+            side=side,
+            budget=int(budgets[str(side)]),
+            floor=floor,
+            max_iter=max_iter,
+        )
+        for side in ladder
+    ]
+
+    # THE FIT IS OVER THE ACHIEVED BATCH, NOT THE REQUESTED SIDE. The budget was
+    # chosen with `resident_bytes_per_series`, which is the quantity being
+    # calibrated, so a wrong analytic figure must move the LADDER and not the
+    # answer -- that is what closes the circularity (j).
+    batches = np.asarray([point.batch for point in points], dtype=np.float64)
+    peaks = np.asarray([point.peak_bytes for point in points], dtype=np.float64)
+    slope, intercept = np.polyfit(batches, peaks, 1)
+    fitted = slope * batches + intercept
+    return CalibrationResult(
+        slope_bytes_per_series=float(slope),
+        intercept_bytes=float(intercept),
+        residuals=tuple(float(value) for value in peaks - fitted),
+        points=tuple(points),
+        max_iter=max_iter,
+        linearity_basis=(
+            f"measured at tile sides {tuple(point.derived_side for point in points)}, "
+            f"i.e. batches {tuple(point.batch for point in points)}, at max_iter="
+            f"{max_iter}. Linearity BEYOND this range is not established here: "
+            "the slope is a per-series quantity and does not need production B, "
+            "while the claim that it stays linear there is Task 7's."
+        ),
+        placement=placement,
+        engine_label=engine_label,
+        floor_peak_bytes=int(floor.peak_bytes),
+    )
