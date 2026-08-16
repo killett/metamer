@@ -1063,3 +1063,133 @@ The other side is a wrong tile against a constraint the design doc calls hard, o
 in days; a re-measurement is a bounded, visible, opt-in cost and an OOM at hour forty is not. But
 *"costs minutes"* is the sentence a future reader would use to justify narrowing the digest, and
 it would be justified by a number nobody re-derived.
+
+---
+
+## Task 6 — the resume refusal that names calibration
+
+Run 2026-08-15 against the task brief in
+[`../plans/2026-08-14-metamer-phase2b.md`](../plans/2026-08-14-metamer-phase2b.md), the live
+`batch/completion.py`, `batch/resume.py`, `batch/run.py`, `batch/store.py` and the three existing
+direct callers in `tests/test_completion.py`. **Six findings. The first inverts both of the
+brief's named test cases, and it is visible by reading the brief's own previous sentence.**
+
+### (a5)/(a4) THE BRIEF INVERTS THE ARM IT QUOTES, ONE SENTENCE AFTER QUOTING IT
+
+The brief states Task 10's rule correctly — *"equal proceeds, **stored < derived** adopts the
+stored side, **stored > derived** refuses"* — and then, in the next clause: *"if the calibrated
+side is **larger** the resume **refuses**."*
+
+**A store built analytically supplies `stored`; the calibration supplies `derived`.** A larger
+calibrated side is `derived > stored`, which is the **adopt** arm. So the refusal fires when the
+calibrated side is **smaller**, and **both of the brief's first two tests name the wrong
+direction**:
+
+| brief's test | what the code does |
+|---|---|
+| *calibrated side **larger** → refuses and names calibration* | **adopts the stored side**, no refusal, no message |
+| *calibrated side **smaller** → proceeds on the stored side* | **refuses** |
+
+**THE NARRATIVE SURVIVES AND THE ARITHMETIC DOES NOT, WHICH IS WHY THIS IS WORTH THE PARAGRAPH.**
+*"You measured more accurately and now your store will not resume"* is not only reachable, it is
+the **likely** direction: Task 4 measured the slope **above** the analytic figure (1049 against
+926), and a higher per-series cost buys a **smaller** tile. The brief reached the right conclusion
+about the user's experience through arithmetic that says the opposite.
+
+Worked at Task 5's fixture, where 46 000 B is usable and the analytic cost is 602 B/series:
+
+| per-series | side | against a stored 8 |
+|---|---|---|
+| 602 (analytic) | `floor(sqrt(76.41))` = **8** | equal — proceeds |
+| 900 (calibrated high) | `floor(sqrt(51.11))` = **7** | **stored 8 > derived 7 → REFUSES** |
+| 400 (calibrated low) | `floor(sqrt(115.0))` = **10** | stored 8 < derived 10 → adopts 8 |
+
+### (a2) "THE BASES DIFFER" IS THE WRONG CONDITION, AND IT MISSES `--recalibrate` EXACTLY
+
+The brief says to name calibration *"when the store's `tile_side_basis` differs from the current
+run's"*. Enumerated over the four reachable states, that test is wrong in one cell and the cell is
+the one the cache's only override produces:
+
+| stored | this run | calibration a cause? | bases differ? |
+|---|---|---|---|
+| `default` | `default` | **no** — the budget, the floor or the formula moved | no ✓ |
+| `default` | `cached`/`measured` | yes | yes ✓ |
+| `cached`/`measured` | `default` | yes — the cache was not consulted this time | yes ✓ |
+| `measured` | `measured` | **yes** — `--recalibrate`, or a moved digest, gave a different slope | **no ✗** |
+
+**So the condition is "either basis is not `DEFAULT`", not "the bases differ".** The last row is
+not exotic: `--recalibrate` is the cache's **only** override, so it is the sanctioned way to get
+two different measurements for one store, and it leaves both bases reading `measured`.
+
+**And the first row is the half that must stay silent.** Naming calibration for two analytic runs
+sends a user to a cache that was never involved — the same defect as telling them to raise a
+budget they never typed, which is the precedent Task 3 already set in this exact function.
+
+### (c3) THE RESOLUTION MUST NAME THE OPERATION THE USER PERFORMED
+
+One refusal now has two causes, and the existing resolution — *"Either raise `--memory-budget` to
+at least that, or write a new store"* — is right for the budget and the **wrong lever** for a
+calibration: the user typed `--calibrate`, and telling them to raise a memory budget in response
+is an answer to a question they did not ask.
+
+**The calibration resolution is to make the two runs agree on a basis**: drop `--calibrate` to
+resume on the analytic side, or supply the cache the store was built with. The budget lever stays,
+because it is also true — a larger budget does buy the stored side back — but it goes second.
+**Task 3 applied this same rule to this same message once already**, which makes the precedent
+binding rather than analogous.
+
+### (a6) THE EFFECTIVE BASIS IS COMPUTED INSIDE THE `provenance_attrs` CALL, AND TASK 6 NEEDS IT EARLIER
+
+`run.py` resolves *"this run's basis, or the source's if this is a recompute"* as an inline
+conditional in the argument list of `provenance_attrs(...)`. `resume_tile_side` runs **above**
+that and needs the same value, so the obvious implementation computes it twice — **two
+descriptions of one subject, which is the shape three separate findings in this sub-phase already
+had.** Resolved once above the tiling and passed to both. Prevented rather than found, and
+recorded because the second copy is what a reader would have added without noticing.
+
+### (h)/(a0) `derived_basis` TAKES NO DEFAULT, ON `provenance_attrs`'s OWN PRECEDENT
+
+`provenance_attrs`'s `tile_side_basis` is *"required, and required with no default, because a
+default is a self-report: the one basis a caller would omit is the one it is least sure of"*. The
+argument transfers verbatim. There are **three existing direct callers** in
+`tests/test_completion.py`, and each having to state a basis is the point rather than the cost —
+a defaulted parameter would let the refusal's new half go untested by every one of them.
+
+### THE SCHEMA QUESTION, ANSWERED: NO BUMP, AND THE BASIS DOES NOT HAVE THE NULLABLE CHARACTER
+
+Task 3's finding is about a field whose **`None` is meaningful**, which therefore cannot join
+`REQUIRED_ATTRS` — because `create_store` refuses on `attrs.get(key) is None` — leaving the
+version as the only mechanism that makes an older store's silence a refusal.
+
+**`tile_side_basis` is the opposite in every respect.** It is a three-valued `StrEnum`, never
+null, **already in `REQUIRED_ATTRS` since v4**, and `resume._check_schema` refuses on **exact
+inequality** with `SCHEMA_VERSION` — so every store this code can read carries it and carries one
+of the three values. Task 6 adds **no field at all**, so there is nothing that needs a version to
+be found by.
+
+**AND THE ADJACENT QUESTION, CHECKED RATHER THAN ASSUMED, BECAUSE TASK 5 IS WHERE IT COULD HAVE
+GONE WRONG.** Task 5 added the `calibration` attr **without** a bump, so a v5 store written before
+Task 5 and one written after are distinguishable only by inspection — which is precisely the
+condition Task 3 names as a defect. It is not one here, and the test is whether either era's
+absence is ambiguous: **nothing before Task 5 could consult a calibration at all**, so an absent
+`calibration` means "none was consulted" in both eras and reads correctly either way. Task 6 reads
+`tile_side_basis` and never `calibration`, so it does not depend on the distinction.
+
+### (i7), (i2), (c), (d) and (g), briefly
+
+- **(i7)** the refusal fixture must sit where the sides differ **and** a basis differs, and Task
+  5's constructed cache is what supplies it: a store built analytically at side **8**, resumed
+  with the cache at 900 B/series giving **7**. A fixture built by calibrating for real would land
+  wherever the noise put it, including on the adopt arm.
+- **(i2)** the pair is *refuses and names calibration* against *proceeds on the stored side*, and
+  the third test — same basis, same side, unaffected — is the one that catches the real
+  regression: a new comparison that refuses the ordinary case, which is Task 11's `tuple != list`
+  defect where the natural comparison refused every resume including the correct one.
+- **(c)** `resume_tile_side` has **one return and three raises** today (no recorded tile side —
+  `pragma: no cover`, a provenance invariant; *stored > derived*; a bitmap that does not describe
+  the grid). Task 6 adds **no exit**: it changes the text of one existing raise.
+- **(d)** `rg tile_side_basis`: `store.py`, `run.py` and four test modules. **`completion.py` does
+  not mention it at all**, so the field written at Task 1 still has no reader — which is exactly
+  what Task 1 said it was doing and what this task is here to end.
+- **(g)** four callers of `resume_tile_side`: one in `run.py`, three direct in
+  `tests/test_completion.py`.
