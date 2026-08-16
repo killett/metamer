@@ -39,6 +39,7 @@ from metamer.batch.completion import (
     tile_index,
 )
 from metamer.batch.run import run
+from metamer.batch.store import TileSideBasis
 from metamer.batch.tiling import Tile
 from metamer.batch.validation import ExitCode, ValidationError
 from metamer.core.outcomes import Outcome
@@ -706,7 +707,9 @@ def test_a_store_that_cannot_say_who_asked_for_its_budget_is_not_told_it_default
     root = zarr.open_group(str(store), mode="r+")
     root.attrs["memory_budget_requested_gb"] = None
     with pytest.raises(ValidationError) as defaulted:
-        resume_tile_side(store, derived_side=1, grid=(1, 1))
+        resume_tile_side(
+            store, derived_side=1, grid=(1, 1), derived_basis=TileSideBasis.DEFAULT
+        )
     assert "which that run did not ask for" in str(defaulted.value)
 
     attrs = dict(root.attrs)
@@ -714,9 +717,205 @@ def test_a_store_that_cannot_say_who_asked_for_its_budget_is_not_told_it_default
     root.attrs.clear()
     root.attrs.update(attrs)
     with pytest.raises(ValidationError) as silent:
-        resume_tile_side(store, derived_side=1, grid=(1, 1))
+        resume_tile_side(
+            store, derived_side=1, grid=(1, 1), derived_basis=TileSideBasis.DEFAULT
+        )
     assert "which that run did not ask for" not in str(silent.value)
     assert "shards are fixed at creation" in str(silent.value)
+
+
+# --------------------------------------------------------------------------
+# The refusal names calibration when a calibration is a possible cause
+# --------------------------------------------------------------------------
+
+
+def _analytic_store(tmp_path: Path) -> Path:
+    """A finished store whose side came from the analytic formula.
+
+    Two points per tile on a 1x1 grid, so the stored side is 2 and any derived
+    side of 1 takes the *stored > derived* arm.
+    """
+    uri = _input(tmp_path, n_y=1, n_x=1)
+    store = tmp_path / "out.zarr"
+    run(_config(tmp_path, uri, budget=TWO_POINTS_PER_TILE), store)
+    assert dict(zarr.open_group(str(store), mode="r").attrs)["tile_side_basis"] == (
+        "default"
+    )
+    return store
+
+
+def test_a_refusal_after_a_calibration_names_it_and_both_bases(tmp_path: Path) -> None:
+    """The user measured more accurately; the consequence is an unresumable store.
+
+    **THE DIRECTION IS THE OPPOSITE OF THE ONE THE BRIEF NAMED, AND IT IS THE
+    LIKELY ONE.** The rule refuses on *stored > derived*, and the store supplies
+    `stored`, so the refusal fires when the calibration derives a **smaller**
+    side -- which is what a slope **above** the formula buys, and Phase 2b Task
+    4 measured the slope above the formula (1049 against 926). The brief said
+    "larger", which is the arm that adopts the stored side and refuses nothing.
+
+    Expected values determined independently: the store is built at two points
+    per tile, so its side is 2; a derived side of 1 is smaller; the store's
+    basis is `default` because no calibration was consulted; and this run's is
+    `cached`.
+
+    Bug this catches: a message that describes only the sides. The user's action
+    was `--calibrate` and the consequence is a store that will not finish, and
+    a refusal naming only the budget sends them to a knob they did not touch --
+    which is the same defect Task 3 fixed here for the defaulted budget.
+    """
+    store = _analytic_store(tmp_path)
+
+    with pytest.raises(ValidationError) as refusal:
+        resume_tile_side(
+            store, derived_side=1, grid=(1, 1), derived_basis=TileSideBasis.CACHED
+        )
+
+    message = str(refusal.value)
+    assert "calibrat" in message
+    assert "default" in message
+    assert "cached" in message
+    # Both sides, and the phrase the existing diagnosis owns.
+    assert "tile side of 2" in message
+    assert "shards are fixed at creation" in message
+    # The resolution names the operation the user performed, not the budget.
+    assert "--calibrate" in message
+
+
+def test_a_refusal_between_two_analytic_runs_says_nothing_about_calibration(
+    tmp_path: Path,
+) -> None:
+    """The half that must stay silent, and it is why the condition is not "differs".
+
+    **THE (i2) NEGATIVE, AND TASK 3's PRECEDENT IN THIS EXACT FUNCTION.**
+    Naming calibration for two analytic runs sends a user to a cache that was
+    never involved -- the same defect as telling them to raise a budget they
+    never typed, which is why this message already distinguishes a defaulted
+    budget from a requested one.
+
+    Expected values determined independently: both bases are `default`, so the
+    only causes left are the budget, the floor and the formula, and the budget
+    is what the message names.
+
+    Bug this catches: naming calibration unconditionally, which makes the new
+    half of the message noise -- and noise in a diagnosis is worse than silence,
+    because it is read as evidence.
+    """
+    store = _analytic_store(tmp_path)
+
+    with pytest.raises(ValidationError) as refusal:
+        resume_tile_side(
+            store, derived_side=1, grid=(1, 1), derived_basis=TileSideBasis.DEFAULT
+        )
+
+    message = str(refusal.value)
+    assert "calibrat" not in message
+    assert "shards are fixed at creation" in message
+    assert "--memory-budget" in message
+
+
+def test_two_measurements_of_one_store_are_named_though_the_bases_agree(
+    tmp_path: Path,
+) -> None:
+    """`--recalibrate` leaves both bases reading `measured`, and it is the cause.
+
+    **THIS IS THE CELL "THE BASES DIFFER" MISSES, AND IT IS NOT EXOTIC.** The
+    cache has no expiry, so `--recalibrate` is the *only* sanctioned way to get
+    a second measurement for one store -- and two measurements of a noisy
+    quantity need not agree. Both runs then record `measured` and the sides
+    differ, so a condition written as "the bases differ" would fall silent
+    exactly where the user has most reason to suspect the calibration.
+
+    Expected values determined independently: the store's basis is edited to
+    `measured` because nothing else in this module can calibrate; the derived
+    basis is `measured`; the sides are 2 and 1.
+
+    Bug this catches: `stored_basis != derived_basis` as the test for "a
+    calibration is a possible cause".
+    """
+    store = _analytic_store(tmp_path)
+    root = zarr.open_group(str(store), mode="r+")
+    root.attrs["tile_side_basis"] = str(TileSideBasis.MEASURED)
+
+    with pytest.raises(ValidationError) as refusal:
+        resume_tile_side(
+            store, derived_side=1, grid=(1, 1), derived_basis=TileSideBasis.MEASURED
+        )
+
+    message = str(refusal.value)
+    assert "calibrat" in message
+    assert "--recalibrate" in message
+
+
+def test_a_store_built_from_a_calibration_names_the_cache_when_this_run_has_none(
+    tmp_path: Path,
+) -> None:
+    """The third cell, and its resolution is the opposite of the first's.
+
+    A store whose side came from a cached slope, resumed by a run that consulted
+    no calibration, derives the analytic side. Where the calibrated side was the
+    **larger** one the analytic derivation is smaller and the resume refuses --
+    and the fix is to make the calibration reachable again, not to drop a flag
+    the user did not pass.
+
+    Expected values determined independently: the store's basis is edited to
+    `cached`, the derived basis is `default`, and the sides are 2 and 1.
+
+    Bug this catches: one resolution sentence for three different situations.
+    "Drop --calibrate" is advice to stop doing something this run never did, and
+    a resolution that names an operation the user is not performing is worse
+    than none -- (c3), which this project has already paid for once.
+    """
+    store = _analytic_store(tmp_path)
+    root = zarr.open_group(str(store), mode="r+")
+    root.attrs["tile_side_basis"] = str(TileSideBasis.CACHED)
+
+    with pytest.raises(ValidationError) as refusal:
+        resume_tile_side(
+            store, derived_side=1, grid=(1, 1), derived_basis=TileSideBasis.DEFAULT
+        )
+
+    message = str(refusal.value)
+    assert "calibrat" in message
+    # It tells the user to supply the calibration, never to drop a flag they did
+    # not type. The two resolutions are mutually exclusive advice.
+    assert "--calibrate" in message
+    assert "drop" not in message.lower()
+
+
+def test_a_resume_whose_basis_moved_but_whose_side_fits_is_not_refused(
+    tmp_path: Path,
+) -> None:
+    """The positive control for all three refusals above, in both arms.
+
+    **A NEW COMPARISON THAT REFUSES THE ORDINARY CASE IS THE REGRESSION THIS
+    CATCHES**, and this project has shipped that shape once already: Task 11's
+    `tuple != list` comparison refused every resume, including the correct one.
+    A basis difference is a **cause to name when the sides already disagree**,
+    never a refusal of its own.
+
+    Expected values determined independently: the stored side is 2, so a derived
+    side of 2 is the equal case and a derived side of 4 is the *stored <
+    derived* arm, which adopts the stored side. Both must return 2 whatever the
+    basis says.
+
+    Bug this catches: refusing on the basis itself, which would make every
+    `--calibrate` resume of an analytic store fail even when the calibrated
+    tile is smaller and therefore safe.
+    """
+    store = _analytic_store(tmp_path)
+
+    for derived, basis in (
+        (2, TileSideBasis.CACHED),
+        (4, TileSideBasis.MEASURED),
+        (2, TileSideBasis.DEFAULT),
+    ):
+        assert (
+            resume_tile_side(
+                store, derived_side=derived, grid=(1, 1), derived_basis=basis
+            )
+            == 2
+        )
 
 
 def test_a_bitmap_that_does_not_describe_this_grid_is_refused(
@@ -742,7 +941,9 @@ def test_a_bitmap_that_does_not_describe_this_grid_is_refused(
     _config_path, store = resumable
 
     with pytest.raises(ValidationError, match="completion bitmap"):
-        resume_tile_side(store, derived_side=1, grid=(4, 2))
+        resume_tile_side(
+            store, derived_side=1, grid=(4, 2), derived_basis=TileSideBasis.DEFAULT
+        )
 
 
 def test_a_store_without_a_bitmap_is_refused(tmp_path: Path) -> None:

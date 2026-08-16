@@ -60,6 +60,7 @@ import numpy as np
 import zarr
 from numpy.typing import NDArray
 
+from metamer.batch.store import TileSideBasis
 from metamer.batch.tiling import Tile
 from metamer.batch.validation import ValidationError, ValidationLayer
 
@@ -185,8 +186,80 @@ def mark_complete(store_path: Path | str, index: tuple[int, int]) -> None:
     _bitmap(store_path, "r+")[index] = np.uint8(COMPLETE)
 
 
+def _calibration_cause(stored_basis: str, derived_basis: TileSideBasis) -> str:
+    """Say how a calibration could have moved the side, or say nothing.
+
+    **THE CONDITION IS "EITHER SIDE CALIBRATED", NOT "THE BASES DIFFER".** The
+    four states, enumerated, because one of them is why the obvious test is
+    wrong:
+
+    | stored | this run | a cause? |
+    |---|---|---|
+    | `default` | `default` | **no** -- the budget, the floor or the formula |
+    | `default` | calibrated | yes |
+    | calibrated | `default` | yes, and the cache is what is missing |
+    | `measured` | `measured` | **yes, with the bases EQUAL** |
+
+    The last row is what `--recalibrate` produces, and it is not exotic: the
+    cache has no expiry, so `--recalibrate` is the **only** sanctioned way to
+    get a second measurement for one store, and two measurements of a noisy
+    quantity need not agree. A condition written as *"the bases differ"* falls
+    silent exactly where the user has most reason to suspect the calibration.
+
+    **AND THE FIRST ROW IS THE HALF THAT MUST STAY SILENT.** Naming calibration
+    for two analytic runs sends a user to a cache that was never involved --
+    the same defect as telling them to raise a budget they never typed, which
+    is the precedent this same message already carries.
+
+    **THE RESOLUTION IS TAKEN FROM THE OPERATION THE USER PERFORMED (c3).** One
+    refusal, three situations, and *"drop `--calibrate`"* is advice to stop
+    doing something the third of them never did.
+
+    Args:
+        stored_basis: The store's `tile_side_basis`, as written. **Read as a
+            string rather than parsed into `TileSideBasis`**: an unrecognized
+            value from a foreign writer then reads back verbatim in the message
+            -- which shows the corruption -- instead of raising a fourth exit
+            out of arithmetic that is only reporting.
+        derived_basis: What produced the side this run derived.
+
+    Returns:
+        A sentence naming calibration as a cause and how to resolve it, or the
+        empty string when no calibration was involved on either side.
+    """
+    stored_calibrated = stored_basis != str(TileSideBasis.DEFAULT)
+    derived_calibrated = derived_basis is not TileSideBasis.DEFAULT
+    if not stored_calibrated and not derived_calibrated:
+        return ""
+
+    where = (
+        f"The store's side came from {stored_basis} and this run's from "
+        f"{derived_basis}, so a calibration is a likely cause: "
+    )
+    if stored_calibrated and derived_calibrated:
+        return where + (
+            "both sides were measured and the two measurements disagree. "
+            "--recalibrate replaces the cached entry, so the side it buys need "
+            "not be the one this store was built with. "
+        )
+    if derived_calibrated:
+        return where + (
+            "this run calibrated and the store did not. Omit --calibrate to "
+            "size the tile from the formula the store was built with. "
+        )
+    return where + (
+        "the store was built from a calibration and this run used the formula. "
+        "Pass --calibrate so the cached slope sizes the tile again; if the "
+        "cache is gone, --recalibrate measures afresh and may not reproduce it. "
+    )
+
+
 def resume_tile_side(
-    store_path: Path | str, *, derived_side: int, grid: tuple[int, int]
+    store_path: Path | str,
+    *,
+    derived_side: int,
+    grid: tuple[int, int],
+    derived_basis: TileSideBasis,
 ) -> int:
     """Return the tile side a resume of `store_path` must use.
 
@@ -196,10 +269,24 @@ def resume_tile_side(
     side, and refusing on the budget would refuse a resume that is
     geometrically identical.
 
+    **A CALIBRATION MOVES THE DERIVED SIDE, AND THE REFUSING DIRECTION IS THE
+    LIKELY ONE.** The rule refuses on *stored > derived*, and the store supplies
+    `stored` -- so a calibration that derives a **smaller** side is what
+    refuses, and a smaller side is what a slope **above** the formula buys.
+    Phase 2b Task 4 measured the slope above the formula. **So "I measured more
+    accurately and now my store will not resume" is the expected experience
+    rather than a corner**, which is why this function names the cause instead
+    of leaving the user with two numbers.
+
     Args:
         store_path: An existing store.
         derived_side: The tile side this run's memory budget gives.
         grid: `(n_y, n_x)` from the input contract.
+        derived_basis: What produced `derived_side` -- the analytic formula, a
+            cached calibration, or one measured this session. **Required, with
+            no default**, on `store.provenance_attrs`'s precedent: a default is
+            a self-report, and the one basis a caller would omit is the one it
+            is least sure of.
 
     Returns:
         The stored side, which is at most `derived_side`.
@@ -239,13 +326,24 @@ def resume_tile_side(
         else f"the budget that produced them was {budget} GB. Either raise "
         "--memory-budget to at least that, or write a new store"
     )
+    # **THE CAUSE GOES BEFORE THE BUDGET, AND THE BUDGET STAYS.** A calibration
+    # is the more likely explanation when one was involved, and the budget line
+    # is still true -- a larger budget does buy the stored side back. Ordering
+    # is the whole difference between a diagnosis and a list of facts.
+    #
+    # **AND THE NO-CALIBRATION TEXT IS BYTE-FOR-BYTE WHAT IT WAS.** The tail is
+    # built rather than interpolated so that a run with no calibration on either
+    # side reads exactly as it did before this task -- a message that changed
+    # for every user in order to serve one of them would be its own defect.
+    cause = _calibration_cause(str(attrs.get("tile_side_basis")), derived_basis)
+    tail = f". {cause}And {provenance}" if cause else f" and {provenance}"
     if stored > derived_side:
         raise ValidationError(
             ValidationLayer.SEMANTIC,
             f"the store at {store_path} has a tile side of {stored} and this "
             f"run's memory budget gives {derived_side}. Its shards are fixed at "
-            f"creation, so finishing it needs tiles of {stored} points a side "
-            f"and {provenance}",
+            f"creation, so finishing it needs tiles of {stored} points a side"
+            f"{tail}",
         )
 
     # DOUBLY GUARDED, DELIBERATELY, AND EACH GUARD NAMES THE OTHER.

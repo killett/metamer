@@ -6,26 +6,28 @@
    a stale name that never diverged and needs nothing done to it. Remote:
    https://github.com/killett/metamer — public, and every commit is pushed by a hook.
 2. **DONE:** Phase 1 Tasks 0–18 (Task 19 deleted), Phase 2 preliminaries P0–P4, **Phase 2a
-   Tasks 0–13 — the whole sub-phase**, **Phase 2b Tasks 0–5**, and open questions 1,
+   Tasks 0–13 — the whole sub-phase**, **Phase 2b Tasks 0–6**, and open questions 1,
    4, 9, 11, 12 and **15**.
-3. **NEXT ACTION: 2b TASK 6 — the resume refusal that names calibration — AND ITS FIRST STEP IS
-   THE PRE-FLIGHT AGAINST ITS OWN BRIEF**, appended to
+3. **NEXT ACTION: 2b TASK 7 — criterion 6's instrument, the linearity claim — AND ITS FIRST STEP
+   IS THE PRE-FLIGHT AGAINST ITS OWN BRIEF**, appended to
    [`docs/superpowers/notes/phase2b-preflight.md`](docs/superpowers/notes/phase2b-preflight.md)
-   **before** the code. **What remains is 6–10**: the resume refusal, both closure instruments
-   (criteria 6 and 7), the five-site cascade amendment and the exit-criteria suite. All sixteen
-   2a exit criteria are met, two with reduced scope; **2b closes both**.
-4. **READ [What Task 5 established](#what-task-5-established-done-2026-08-15--read-before-touching-the-cache-the-tile-side-or-provenance)
-   and [What Task 4 established](#what-task-4-established-done-2026-08-15--read-before-touching-the-calibration-the-cap-or-the-tiling-inverse) FIRST**, then
+   **before** the code. **What remains is 7–10**: both closure instruments (criteria 6 and 7),
+   the five-site cascade amendment and the exit-criteria suite. All sixteen 2a exit criteria are
+   met, two with reduced scope; **2b closes both**. **Tasks 7 and 8 are the long-running
+   measurements — ~1.5 h and ~1.7 h — so plan the session around them.**
+4. **READ [What Task 4 established](#what-task-4-established-done-2026-08-15--read-before-touching-the-calibration-the-cap-or-the-tiling-inverse)
+   and [What Task 5 established](#what-task-5-established-done-2026-08-15--read-before-touching-the-cache-the-tile-side-or-provenance) FIRST**, then
    [What 2b's first tasks inherit](#what-2bs-first-tasks-inherit-2026-08-14) — the findings
    F1–F5 and every measured number 2b rests on. Then the plan. **Tasks 0–4 each have their own
    *established* section, and each was written because its task contradicted the brief.**
-5. **Tests: 1018 passed, measured 2026-08-15 after 2b Task 5** (997 after Task 4, 989 after
-   Task 3, 977 after Task 2, 967 after Task 1, 947 after Task 0). The only statement of the
-   **current** count. **The sweep took 1199 s**, and that figure is recorded with its conditions
-   rather than compared: no baseline was measured in this session before Task 5, and the earlier
-   condition-less timings are marked unquotable. **What Task 5 itself adds was measured
-   standalone: ~123 s** (24 s fast, 98 s slow, `tests/test_calibration.py`), so the rest of the
-   step is unattributed and is not claimed to be anything.
+5. **Tests: 1024 passed, measured 2026-08-15 after 2b Task 6** (1018 after Task 5, 997 after
+   Task 4, 989 after Task 3, 977 after Task 2, 967 after Task 1, 947 after Task 0). The only
+   statement of the **current** count. **Sweep durations: 1199 s after Task 5 and 942 s after
+   Task 6 — the suite grew by six tests and the sweep got 21% FASTER**, which is the scatter the
+   attribution trigger was dropped over, measured twice in one session. Do not read either number
+   as a per-task cost; the earlier condition-less timings remain unquotable. **What each task
+   adds is measured standalone**: Task 5's `tests/test_calibration.py` is ~123 s (24 s fast,
+   98 s slow) and Task 6 adds ~20 s of direct-call tests plus a ~43 s end-to-end refusal.
 6. **`pixi run test` is the full sweep and is what every end-of-task verification must run**;
    **`pixi run test-fast` deselects `slow` and is for iteration only — a green fast run is NOT
    evidence a task is done.** The sweep has now caught five things a fast run could not.
@@ -37,7 +39,7 @@
 8. **The plan is
    [`docs/superpowers/plans/2026-08-14-metamer-phase2b.md`](docs/superpowers/plans/2026-08-14-metamer-phase2b.md)**
    — 11 tasks, dependencies, 16 exit criteria, **approved 2026-08-14**, amended in place by each
-   task that deviated from it — **which is every one of Tasks 0–5**. Its predecessor,
+   task that deviated from it — **which is every one of Tasks 0–6**. Its predecessor,
    [the 2a plan](docs/superpowers/plans/2026-08-11-metamer-phase2a.md), is complete and is read
    only for its closing exit-criteria table.
 9. **THE METHOD IS THE PRE-FLIGHT AND IT LIVES IN EXACTLY ONE PLACE:**
@@ -964,6 +966,78 @@ NOTHING.** It exists for the **key** the production path computes; every side co
 that entry's slope to the constructed 900. A test that computed the key itself would pass against
 a run that computed a different one.
 
+### What Task 6 established (done 2026-08-15 — read before touching the resume gate or the basis)
+
+**THE BRIEF QUOTES TASK 10's RULE CORRECTLY AND INVERTS IT IN THE NEXT CLAUSE.**
+`completion.resume_tile_side` refuses on *stored > derived*; the **store** supplies `stored` and
+the **calibration** supplies `derived`; so the brief's *"if the calibrated side is larger the
+resume refuses"* names the arm that **adopts the stored side and refuses nothing**, and **both of
+its first two test cases are the wrong way round**.
+
+**AND THE CONCLUSION SURVIVES THE ARITHMETIC THAT CONTRADICTS IT, WHICH IS WHY THIS IS RECORDED
+RATHER THAN CORRECTED IN SILENCE.** The refusal needs the calibrated side to be **smaller**, which
+is exactly what a slope **above** the formula buys — and Task 4 measured the slope above the
+formula, 1049 against 926. **So *"I measured more accurately and now my store will not resume"* is
+the expected experience rather than a corner case**, and the brief reached that conclusion through
+arithmetic saying the opposite.
+
+Worked at Task 5's fixture, where 46 000 B is usable and the analytic cost is 602 B/series —
+`floor(sqrt(46000/602)) = 8`, `floor(sqrt(46000/900)) = 7`, `floor(sqrt(46000/400)) = 10` — so
+against a stored 8: the calibrated **7 refuses**, and the calibrated **10 adopts 8**.
+
+**"THE BASES DIFFER" IS THE WRONG CONDITION AND THE CELL IT MISSES IS `--recalibrate`.** Over the
+four reachable states, calibration is a possible cause in three, and in one of those three the
+bases are **equal**: two measurements of one store both read `measured` while their sides differ.
+That is not exotic — the cache has no expiry, so `--recalibrate` is the **only** sanctioned way to
+get a second measurement, and two measurements of a noisy quantity need not agree. **The condition
+is "either basis is not `DEFAULT`."** And the both-`default` cell must stay **silent**: naming
+calibration for two analytic runs sends a user to a cache that was never involved, which is the
+same defect as naming a budget nobody typed — the precedent this same message already carries from
+Task 3.
+
+**THREE SITUATIONS, THREE RESOLUTIONS, AND THAT IS (c3) RATHER THAN POLISH.** *"Omit
+`--calibrate`"* is right for a run that calibrated over an analytic store, and it is advice to
+stop doing something the run that **lost its cache** never did — that one is told to pass
+`--calibrate`, with the warning that `--recalibrate` measures afresh and may not reproduce the
+entry. The both-calibrated case names `--recalibrate` as what replaced the entry.
+
+**THE EFFECTIVE BASIS IS RESOLVED ONCE ABOVE THE TILING**, and read by the gate and by provenance.
+It was computed inline inside the `provenance_attrs(...)` argument list, so the obvious
+implementation computes it twice — **two descriptions of one subject, the shape three separate
+findings in this sub-phase already had.** Prevented rather than found, and recorded because the
+second copy is what a reader would have added without noticing. A recompute's basis is the
+**source's**, because it derives nothing and reads the side back (a1).
+
+**THE SCHEMA QUESTION, ANSWERED RATHER THAN ASSUMED: NO BUMP.** Task 3's *required-and-nullable*
+finding is about a field whose `None` is meaningful and which therefore cannot join
+`REQUIRED_ATTRS`, leaving the version as the only mechanism. **`tile_side_basis` is the opposite in
+every respect** — a three-valued `StrEnum`, never null, in `REQUIRED_ATTRS` since v4 — and
+`resume._check_schema` refuses on **exact** inequality with `SCHEMA_VERSION`, so every store this
+code reads carries one of the three values. Task 6 adds no field at all. **And the adjacent
+question was checked**: Task 5 added `calibration` without a bump, so two v5 stores from different
+eras differ only by inspection — safe here for a different reason, that nothing before Task 5
+could consult a calibration, so an absent key means "none was consulted" in both eras.
+
+**THE NO-CALIBRATION MESSAGE IS BYTE-FOR-BYTE WHAT IT WAS**, because the tail is built rather than
+interpolated. A diagnosis that changed for every user in order to serve one of them would be its
+own defect, and every existing assertion on that text is untouched.
+
+**AN UNRECOGNIZED BASIS READS BACK VERBATIM RATHER THAN RAISING.** The stored value is compared as
+a **string** against `DEFAULT`, so a foreign writer's garbage appears in the message — which shows
+the corruption — instead of adding a fourth exit out of a function that is only reporting.
+`resume_tile_side` keeps **one return and three raises**.
+
+**The mutations, enumerated rather than counted.** Biting: the cause firing only when the bases
+differ (the brief's condition); the cause named unconditionally; a basis change refusing on its
+own; one resolution sentence for all three situations; the gate handed a constant basis instead of
+the run's.
+
+**And Task 5's (i7) obligation is discharged**, confirmed here rather than assumed: the
+recompute-basis fixture was moved at Task 5 into
+`tests/test_calibration.py::test_a_recompute_copies_a_calibrated_sources_basis`, which builds a
+source whose basis is `cached`; `tests/test_reuse.py`'s original keeps the cheap `default` case
+and points at it.
+
 ---
 
 ## Things a cold session cannot re-derive
@@ -1315,18 +1389,17 @@ was the actual defect the leak exposed.
 | Phase 2 preliminaries pre-flight | [`docs/superpowers/notes/phase2-preliminaries-preflight.md`](docs/superpowers/notes/phase2-preliminaries-preflight.md) — the (a)–(k) audit of the P0/P1/P2 briefs and what each finding changed |
 | **Phase 2a implementation plan** | [`docs/superpowers/plans/2026-08-11-metamer-phase2a.md`](docs/superpowers/plans/2026-08-11-metamer-phase2a.md) — **COMPLETE: Tasks 0–13, all sixteen exit criteria met** |
 | **Phase 2a pre-flight, per task** | [`docs/superpowers/notes/phase2a-preflight.md`](docs/superpowers/notes/phase2a-preflight.md) — the (a)–(k) audit of each 2a task brief and what each finding changed. **Append to it before each task, not after.** |
-| **Phase 2b implementation plan** | [`docs/superpowers/plans/2026-08-14-metamer-phase2b.md`](docs/superpowers/plans/2026-08-14-metamer-phase2b.md) — 11 tasks, 16 exit criteria, **approved 2026-08-14. Tasks 0–5 landed 2026-08-15.** Its head carries findings F1–F4, which are why 2b begins with a correction task rather than with the calibration tile |
+| **Phase 2b implementation plan** | [`docs/superpowers/plans/2026-08-14-metamer-phase2b.md`](docs/superpowers/plans/2026-08-14-metamer-phase2b.md) — 11 tasks, 16 exit criteria, **approved 2026-08-14. Tasks 0–6 landed 2026-08-15.** Its head carries findings F1–F4, which are why 2b begins with a correction task rather than with the calibration tile |
 | **Phase 2b pre-flight, per task** | [`docs/superpowers/notes/phase2b-preflight.md`](docs/superpowers/notes/phase2b-preflight.md) — carries the pre-plan audit and Task 0's; per-task entries are appended **before** each task |
 
-**Next action:** Task 6 — the resume refusal that names calibration. Its first step is the
-pre-flight against its own brief, appended to `phase2b-preflight.md`. **It inherits from Task 5**:
-`tile_side_basis` now takes all three of §13.4's values, the store carries a `calibration` attr
-whenever a calibration was consulted (**including one the band refused**, whose basis is
-`default` — so the basis alone does not answer "did this run calibrate"), and
-`completion.resume_tile_side`'s *stored > derived* arm is the refusal Task 6 has to name: it is
-reachable exactly when the calibrated slope came in **below** the analytic one, which makes the
-stored side larger. Task 5's delete-the-cache test is deliberately placed in the *other* arm and
-says so.
+**Next action:** Task 7 — criterion 6's instrument, the linearity claim. Its first step is the
+pre-flight against its own brief, appended to `phase2b-preflight.md`. **It inherits from Tasks 4
+and 6**: `memory.calibrate` already runs a four-point ladder in **sides** through the production
+path, so Task 7's question is not how to measure but what the residuals license — and Task 6
+established that a slope above the formula makes the tile **smaller**, which is the direction that
+refuses a resume, so the linearity claim is what says how far that is safe to extrapolate.
+**Budget the session for it: ~1.5 h of measurement**, and the affordable-ladder scatter recorded
+under Task 4 is why its value claim cannot come from the suite.
 
 **THIS TABLE SAID "AWAITING REVIEW; NO CODE YET" WHILE THE COLD-START HEAD TWELVE HUNDRED LINES
 ABOVE SAID "APPROVED 2026-08-14".** Found at Task 0's start, 2026-08-15. Same shape as the

@@ -958,6 +958,60 @@ def test_a_calibration_alongside_a_recompute_is_refused(tmp_path):
         )
 
 
+@pytest.mark.slow
+def test_calibrating_a_store_built_analytically_refuses_the_resume_and_says_why(
+    calibrated, tmp_path
+):
+    """End to end: measure more accurately, and the store will not finish.
+
+    **THE REFUSING DIRECTION IS THE ONE A CALIBRATION USUALLY PRODUCES, WHICH IS
+    WHY THIS IS THE CASE WORTH WIRING END TO END.** `resume_tile_side` refuses
+    on *stored > derived*, and the store supplies `stored` -- so the refusal
+    needs the calibrated side to be **smaller**, which is what a slope **above**
+    the formula buys, and Phase 2b Task 4 measured the slope above the formula
+    (1049 against 926).
+
+    Expected values derived by hand and recorded on `_BUDGET_BYTES`: the store
+    is built analytically at 602 B/series, side **8**, one tile on an 8x8 grid.
+    The resume consults the cache at the constructed 900 B/series and derives
+    **7**, so 8 > 7 and the gate refuses.
+
+    **THE PAIR IS THE OTHER HALF** (i2): the same store, resumed with no
+    calibration, derives 8 again and proceeds. Without it, "the resume refuses"
+    is satisfied by a store that was never resumable.
+
+    Bug this catches: the basis reaching neither the gate nor the message, so a
+    user who typed `--calibrate` is told to raise a memory budget they did not
+    change. It also catches the gate being handed the wrong basis -- this run's
+    where a recompute's source basis belongs, or a constant.
+    """
+    store = tmp_path / "analytic.zarr"
+    config = _config(tmp_path, calibrated["uri"])
+
+    built = run(config, store, floor=_FLOOR, max_iter=1)
+    assert built.tile_side == _ANALYTIC_SIDE
+    assert xr.open_zarr(str(store)).attrs["tile_side_basis"] == "default"
+
+    # THE CONTROL FIRST, so a refusal below cannot be a store that was already
+    # unresumable for some other reason.
+    again = run(config, store, floor=_FLOOR, max_iter=1)
+    assert again.tile_side == _ANALYTIC_SIDE
+
+    cache = calibration.cache_path(store)
+    cache.write_text(calibration.cache_path(calibrated["store"]).read_text())
+    _rewrite_slope(cache, _CONSTRUCTED_SLOPE)
+
+    with pytest.raises(ValidationError) as refusal:
+        run(config, store, floor=_FLOOR, max_iter=1, calibrate=True)
+
+    message = str(refusal.value)
+    assert f"tile side of {_ANALYTIC_SIDE}" in message
+    assert f"gives {_CALIBRATED_SIDE}" in message
+    assert "calibrat" in message
+    assert "default" in message and "cached" in message
+    assert "--calibrate" in message
+
+
 @pytest.mark.parametrize("flag", ["--calibrate", "--recalibrate"])
 def test_both_command_line_flags_reach_the_run(tmp_path, flag):
     """The flags are wired through, and `--recalibrate` implies `--calibrate`.

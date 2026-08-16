@@ -848,8 +848,38 @@ def run(
         # bits index -- were fixed when it was created, so its tile side is what
         # a resume must use, and the derived side is only what that is compared
         # against.
+        # **THE BASIS IS 13.4's THREE-STATE VOCABULARY AND ALL THREE ARE
+        # REACHABLE SINCE TASK 5**: `cached` when this run read a calibration
+        # out of the cache, `measured` when it took one this session, `default`
+        # when the analytic formula sized the tile -- which includes a run whose
+        # measurement the band refused.
+        #
+        # **RESOLVED ONCE AND READ TWICE, WHICH IS THE POINT OF THE VARIABLE.**
+        # The resume gate names calibration as a cause and the store records
+        # which basis produced its side; both need the same answer, and
+        # computing it inline at each site would be two descriptions of one
+        # subject -- the shape three separate findings in this sub-phase had.
+        #
+        # **A RECOMPUTE COPIES THE SOURCE'S BASIS, AND THAT IS NOT A THIRD
+        # STATE.** `--reuse-fits-from` READS the side back out of the source
+        # (a1) rather than deriving one, so the side in this store is literally
+        # the source's and so is its provenance. Writing DEFAULT would claim
+        # this run derived the side analytically when it derived nothing -- and
+        # the resume gate, comparing bases, would read a basis change that never
+        # happened. A valid source is v5 by `check_source`'s schema gate, so the
+        # key is always there.
+        effective_basis = (
+            tile_side_basis
+            if source_attrs is None
+            else TileSideBasis(source_attrs["tile_side_basis"])
+        )
         if Path(store_path).exists():
-            side = resume_tile_side(store_path, derived_side=side, grid=grid)
+            side = resume_tile_side(
+                store_path,
+                derived_side=side,
+                grid=grid,
+                derived_basis=effective_basis,
+            )
         tiles = list(tile_grid(grid[0], grid[1], side))
         amplification = read_amplification(handle, tiles[0])
 
@@ -860,27 +890,9 @@ def run(
             read_amplification=amplification,
             unique_dt_count=contract.unique_dt,
             tile_sides={"shared": side},
-            # **THE BASIS IS 13.4's THREE-STATE VOCABULARY AND ALL THREE ARE
-            # NOW REACHABLE**: `cached` when this run read a calibration out of
-            # the cache, `measured` when it took one this session, `default`
-            # when the analytic formula sized the tile -- which includes a run
-            # whose measurement the band refused. It is written rather than
-            # left out: a store that cannot say which basis produced its side
-            # has its silence read as agreement by Task 6's refusal.
-            #
-            # **A RECOMPUTE COPIES THE SOURCE'S BASIS, AND THAT IS NOT A THIRD
-            # STATE.** `--reuse-fits-from` READS the side back out of the source
-            # (a1) rather than deriving one, so the side in this store is
-            # literally the source's and so is its provenance. Writing DEFAULT
-            # here would claim this run derived the side analytically when it
-            # derived nothing -- and Task 6, comparing bases across a resume,
-            # would then read a basis change that never happened. A valid source
-            # is v4 by `check_source`'s schema gate, so the key is always there.
-            tile_side_basis=(
-                tile_side_basis
-                if source_attrs is None
-                else TileSideBasis(source_attrs["tile_side_basis"])
-            ),
+            # Resolved above, once, and read by the resume gate as well. See
+            # `effective_basis` for why a recompute carries the SOURCE's.
+            tile_side_basis=effective_basis,
             calibration=calibration_record,
             memory_budget_requested_gb=requested_budget_gb,
             max_iter=iteration_cap,

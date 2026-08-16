@@ -813,6 +813,31 @@ is Task 6** — which is the evidence the broad claim was wrong.
   refusing the ordinary case — Task 11's `tuple != list` lesson, where the natural comparison
   refused every resume including the correct one.
 
+**LANDED 2026-08-15. THIS BRIEF INVERTS THE ARM IT QUOTES, ONE CLAUSE AFTER QUOTING IT.** In full
+in `PROGRESS.md`'s *What Task 6 established*; in one line each:
+
+- **The refusal fires when the calibrated side is SMALLER, not larger.** The store supplies
+  `stored` and the calibration supplies `derived`, so *"if the calibrated side is larger the resume
+  refuses"* names the **adopt** arm — and both of this brief's first two tests are the wrong way
+  round. **The conclusion survives**: a smaller side is what a slope **above** the formula buys,
+  and Task 4 measured the slope above the formula, so *"I measured more accurately and my store
+  will not resume"* is the expected experience rather than a corner.
+- **"When the store's basis differs from the current run's" is the wrong condition**, and the cell
+  it misses is `--recalibrate`: two measurements of one store both read `measured` while the sides
+  differ. **The condition is "either basis is not `DEFAULT`"**, and the both-`default` case must
+  stay silent, on the same grounds that stopped this message naming a budget nobody typed.
+- **Three situations, three resolutions (c3).** "Omit `--calibrate`" is advice to stop doing
+  something the run that lost its cache never did.
+- **The effective basis is resolved once above the tiling** and read by the gate and by provenance,
+  rather than computed inline at each — the second copy is what a reader would have added.
+- **No schema bump, and the check is recorded rather than assumed:** `tile_side_basis` is a
+  non-nullable required attr since v4 and this task adds no field, so Task 3's *required-and-
+  nullable* mechanism does not apply. The adjacent question — Task 5 adding `calibration` without
+  a bump — is safe for a different reason, that nothing before Task 5 could consult a calibration,
+  so an absent key means the same thing in both eras.
+- **The no-calibration message is byte-for-byte what it was.** A diagnosis that changed for every
+  user in order to serve one of them would be its own defect.
+
 ---
 
 ## Task 7 — criterion 6's instrument: the linearity claim
