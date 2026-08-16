@@ -795,3 +795,232 @@ rather than silently absorbed.
 - **(d)** `rg max_iter`: present in `fit` and `optimize_series` with the literal default 200 in
   both, and **absent from `batch/`** — so nothing in the run path mentions it today, and the seam
   really is missing rather than misspelled.
+
+---
+
+## Task 5 — the calibration cache
+
+Run 2026-08-15 against the task brief in
+[`../plans/2026-08-14-metamer-phase2b.md`](../plans/2026-08-14-metamer-phase2b.md), design doc
+§11.4 (twice amended), the live `core/memory.py`, `core/machine.py`, `core/hashing.py`,
+`batch/run.py`, `batch/tiling.py`, `batch/store.py` and `batch/completion.py`, **and against two
+measurements taken before any code was written** — the cost of the versions digest, and a
+recomputation of Task 4's published ladder from its own table. **Twelve findings. The first says
+the brief's five interfaces cannot move a tile side at all, and the second says the first consumer
+of a measured number has no rule for a bad one.**
+
+### (g)/(a5) NOTHING IN THE BRIEF'S INTERFACE BLOCK CAN MOVE A TILE SIDE
+
+`cache_path`, `cache_key`, `versions_digest`, `load` and `store` produce and persist a
+`CalibrationResult`. **No one of them, and no combination of them, changes any number a run
+uses.** `tiling.tile_side_for` calls `memory.resident_bytes_per_series` **internally**
+(`tiling.py:292`) and takes no per-series argument, so a slope loaded out of the cache has nowhere
+to go.
+
+The brief's own last test names the consequence without noticing it: *"a stale entry under a
+changed digest is **not used**"* presupposes an entry that **is** used, and the brief specifies no
+path by which one could be. **The seam is `tile_side_for(..., per_series_bytes=None)`**, resolved
+where the analytic figure is computed today, so the calibrated and the analytic paths differ in
+**one argument** and not in a second derivation of the side — (a6)'s shape arriving by a new route
+is what a separate calibrated derivation would be. **Reported as a deviation from the brief.**
+
+**And the variable substituted is the SLOPE and never the intercept**, which is (b) at a
+regression: `CalibrationResult`'s own docstring records that the intercept is *not* the production
+floor — it carries the sampling thread, the temporary store and the JSON payload, minus the four
+allocation sites a capped fit never reaches. The floor stays measured fresh (Task 1). Only the
+per-series term is a per-series term.
+
+### (a5)/(i9)/(i2) THE FIRST CONSUMER OF A MEASURED SLOPE HAS NO RULE FOR A BAD ONE
+
+The brief has no acceptance criterion for the number it caches, and **two failure modes are
+reachable, not hypothetical**:
+
+- **A non-positive slope.** `memory.tile_side` computes `sqrt(budget / per_series)`; at a
+  negative slope that is a domain error and at zero a division error, so the symptom is a
+  traceback from arithmetic rather than a diagnosis. Task 4 measured **±0.3 MB of scatter between
+  fresh children against 0.43 MB of signal** at the sides a suite can afford, and its published
+  ladder's first two peaks *decrease* with B (227.86 → 227.73 MB). **A two-point ladder there is a
+  coin flip on the sign.**
+- **A small positive slope**, which raises no error at all and sizes an enormous tile against a
+  constraint the design doc calls hard. This is the dangerous half: 5 B/series is a plausible
+  number and nothing in the arithmetic objects to it.
+
+**THE RULE ALREADY EXISTS AND IS THE DESIGN DOC'S OWN.** §11.4 requires the calibration to be
+*"validated against §9.4's analytic formula"*, and `memory.slope_band` is that validation — the
+two-sided 1.5× band Task 4 passed for the first time against the production path. **So a
+calibrated slope outside the band is not used**: the run falls back to the analytic formula,
+records `TileSideBasis.DEFAULT`, and warns naming both numbers.
+
+> **FALLBACK RATHER THAN REFUSAL, AND THE REASON IS NOT KINDNESS.** A refusal after a
+> multi-hour measurement, on a criterion the user cannot influence, converts a
+> usable-but-conservative outcome into no outcome — and **the fallback target is exactly what the
+> same run does without `--calibrate`**, so nothing is degraded relative to every run shipped so
+> far. **The decisive half is (i9) at the RULE rather than at a window**: under a refusal, a
+> suite-affordable `--calibrate` run fails on roughly half of executions on the sign of a
+> noise-dominated slope, and (i2)'s positive control — *"`--calibrate` produces an entry"* —
+> becomes a test that cannot be written deterministically. A rule whose outcome is set by the
+> machine's jitter is not a rule.
+
+**THE COST OF THE BAND IS STATED RATHER THAN HIDDEN: a calibration can move the per-series cost by
+at most 1.5× and therefore the tile side by at most √1.5 = 1.22×.** A genuine disagreement larger
+than that is a finding about the formula — Task 7's subject — and not a tile size. It reaches the
+user as a warning, which is where a finding belongs.
+
+### (a0) "NEVER CALIBRATED" AND "CALIBRATED AND REJECTED" MUST NOT BE ONE OBSERVATION
+
+Under the fallback above, `tile_side_basis` reads `default` in **both** cases, so **a store that
+spent 26.5 h measuring is byte-indistinguishable from one that measured nothing** — the fill-value
+rule in its fourth register, arriving through a repair rather than through a schema.
+
+The repair is the `source_*` precedent: **a `calibration` provenance block is written whenever a
+calibration was CONSULTED**, carrying the measurement, the key, the contributing versions and —
+when the band refused it — the reason. **Its absence is what means "no calibration was
+consulted"**, and that absence is a fact about the run rather than a gap. `rejected` is not
+redundant with the basis: the basis says which arithmetic produced the side, and this says why the
+other one did not.
+
+**No `SCHEMA_VERSION` bump, and the ledger's own test is why.** A bump is owed when an older store
+**cannot answer a question a new gate asks**. Task 6's refusal reads `tile_side_basis`, which every
+v4+ store carries. A v5 store's silence about `calibration` is unambiguous — **nothing before this
+task could consult a calibration at all** — so its absence is correct rather than unanswerable.
+
+### (a5) "DELETING THE CACHE CAN NEVER BREAK A STORE" IS TRUE OF A STORE AND FALSE OF A RESUME
+
+The brief requires that sentence in a docstring. `completion.resume_tile_side` refuses when
+**stored > derived**, and a calibrated slope **below** the analytic one gives a **larger** stored
+side — so a later resume that cannot reach the cache derives a smaller side and is refused. The
+claim is too strong as written, **and Task 6 exists because it is**: *"the resume refusal that
+names calibration"* is precisely this case.
+
+The narrowed claim, which is what goes in the docstring: **deleting the cache never makes a store
+unreadable, incomplete or unresumable-in-principle, and it costs a re-measurement; where the
+calibrated side was larger than the analytic one, a resume that cannot reach the cache is refused
+by the tile-side gate, and naming that refusal is Task 6's.**
+
+**So the delete-the-cache test must be placed in the direction where the resume proceeds** —
+calibrated side **smaller** than analytic, where the gate's *"stored < derived → adopt the stored
+side"* arm runs. (i7) a second time in one task: the two arms of the gate agree nowhere, and a
+fixture that landed in the other one would test Task 6's subject under Task 5's name.
+
+### (i7) THE CONSTRUCTED FIXTURE, WITH ITS ARITHMETIC DERIVED BY HAND
+
+Task 4 makes the (i7) hazard concrete: on the measured ladder the analytic and calibrated figures
+agree to **0.55 standard errors**, so a fixture that merely calibrates lands where the two
+functions coincide and every cache test passes against a cache nothing reads. **The difference is
+engineered, and the band above caps how far it can be engineered.**
+
+Fixture: an 8×8 grid, N = 24, `["white", "white + matern12"]`, `["constant", "trend", "annual"]`.
+
+| step | value |
+|---|---|
+| per-series, by hand: `24·9 + 2·(24·3 + 16·4 + 57)` | `216 + 386` = **602 B** |
+| floor, pinned via `METAMER_FLOOR_BYTES` / `run(floor=…)` | **228 200 000 B** |
+| budget | **228 267 295 B** (0.228267295 GB, which round-trips through `int(gb·10⁹)`) |
+| available | 67 295 |
+| block = `int(67 295 × 0.85)` | 57 200 |
+| minus the solver constant at d = 1, k_β = 4, p_max = 3 | 57 200 − 11 200 = **46 000 usable** |
+| **analytic**: `√(46 000 / 602)` = √76.41 = 8.74 | **side 8** — one tile on an 8×8 grid |
+| **constructed slope 900**: `√(46 000 / 900)` = √51.11 = 7.15 | **side 7** — 2×2 = **four tiles** |
+
+**900 / 602 = 1.495, inside the band and deliberately not on its edge** (the inclusive bound is
+903.0). The difference is measurable twice over — `tile_sides` in the attrs, and the tile count in
+the report — and it is the largest the band admits.
+
+### (a2) THE KEY'S FIVE COMPONENTS, CLASSIFIED BEFORE THEY ARE CHECKED
+
+| component | kind | what makes it right |
+|---|---|---|
+| `fit_hash` | identity + request | already populated by reading the data (`geometry_hash`) and the fit-relevant request. The regressor regime rides inside it by construction — §11.4 checked that rather than assuming it |
+| placement | request | one reachable value; in the key on the `shared_with` precedent |
+| engine label | request | **`MemoryEngineLabel`, never `EngineId`** — both shipped engines share `EngineId.KALMAN` so their scores stay rankable |
+| machine fingerprint | **identity** | **the live example of a field whose classification changes with its consumer.** Harmless self-reported provenance while it reached `run_hash` alone; an identity the moment this key reads it. `machine.fingerprint()` reads the platform, wired at Task 1 **for exactly this** |
+| versions digest | **identity** | read from the environment through `importlib.metadata`, never from `pixi.toml`, whose ranges give one digest across every version they permit |
+
+**The fourth fact for an identity — the thing that populates it is not the thing being identified —
+holds for the digest:** `importlib.metadata` reads what is installed, not what metamer declares.
+That is the same distinction that made `registry_version` a self-reported identity.
+
+**AND THE CAP IS NOT IN THE KEY, WHICH IS A CARDINALITY OF ONE RATHER THAN A DECISION.** Every
+calibration runs at `max_iter = 1` today, so two measurements at different caps cannot collide.
+The result records its own cap, so the collision is diagnosable the day a second cap exists —
+recorded here rather than guarded, because a guard over a one-element set is untestable.
+
+### (k) THE DIGEST'S ORDER IS PROCESS-LOCAL AND THE WHOLE ARTIFACT IS CROSS-PROCESS
+
+`importlib.metadata.distributions()` yields in `sys.path` and directory order, so a digest taken
+over that order is stable within a process and unstable between them — invisible to every
+same-process test **and to mutation testing**, which is (k)'s defining shape and how
+`json.dumps(default=repr)` shipped. **Sorted `(name, version)` pairs through
+`hashing.canonical_json`**, which already refuses a `set` for this exact reason.
+
+**Measured 2026-08-15 on this machine: 194 distributions, no duplicate names, no nameless
+distribution, 1.99 s cold.** Two consequences: the digest is computed **only when a calibration is
+consulted** and never on an ordinary run; and a duplicate name is not constructible here, so the
+join rule for one is written and exercised against a **constructed** mapping rather than against
+the environment — (i8)'s third shape, a fault class no fixture here can build.
+
+### (c3)/(a3) `--calibrate` WITH `--reuse-fits-from` IS REFUSED RATHER THAN IGNORED
+
+A recompute **derives no side**: `run.py:661` reads it back from the source (a1), and the budget
+arithmetic is skipped entirely because the rule bounds a **fit's** resident set. A calibration
+alongside it would measure for hours and change nothing. **Refused at layer 3**, on the precedent
+that a flag which parses and does nothing reads as supported — the rule `--reuse-fits-from` itself
+was held to at 2a Task 12 and `engine=` at 2a Task 9.
+
+### (a6) SIX DESCRIPTIONS IN `src/` AND `tests/` SAY THIS CACHE DOES NOT EXIST
+
+Counted with `rg`, not read for: `store.py:242` (`DEFAULT` is *"the only reachable value until
+Phase 2b Task 5"*), `store.py:132` (the v4 ledger entry), `machine.py:323` (*"before the cache
+exists"*), `run.py:696` (*"DEFAULT IS THE ONLY BASIS AN ORDINARY RUN CAN REACH UNTIL TASK 5"*),
+`tests/test_runner.py:617`, `tests/test_reuse.py:663`, `tests/test_memory.py:1116`. Each is
+re-pointed rather than deleted, because each records **why** the state was unreachable.
+
+`tests/test_memory.py:1116` is the one that stays almost as it is: a cache now exists, and **the
+floor still has none, deliberately** — so counting child spawns remains the falsifiable form and
+only its justifying clause moves.
+
+### (f) `store._chunk_side`'s DOCSTRING CONTRADICTS `TILE_SIDE_BASE`'s, IN THE SAME FILE
+
+`_chunk_side` (line 481) still says a prime side is *"a reason for 2b's calibration to prefer a
+composite tile side"*. `TILE_SIDE_BASE` (line 172), 300 lines above, says that phrasing **is wrong
+in both directions** — 338 is composite and still 4.57× the target — and that the property wanted
+is a divisor inside the admissible window. **And the calibration does not choose a side at all**:
+it asks for one, and `budget_bytes_for_side` lands on it, always a multiple of 16 since Task 2.
+The advice names an agent that does not exist and recommends a property that does not help.
+Repaired here, pointing at the base.
+
+### (a4) TASK 4's PUBLISHED LADDER, RECOMPUTED FROM ITS OWN TABLE
+
+The number Task 5's (i7) placement rests on is *"the two agree to 0.55 standard errors"*, so it is
+recomputed rather than transcribed. Least squares over the four published points:
+
+| quantity | recomputed | recorded |
+|---|---|---|
+| slope | 1050.75 B/series | 1049 |
+| SE | 223.6 | 222 |
+| residuals | +273.4, −663.5, +551.5, −161.4 kB | +272, −660, +548, −160 |
+| excess over the analytic 926 | 124.8 B = **0.558 SE** | 123 B = 0.55 SE |
+| ratio | 1.1347 | 1.133 |
+
+**Consistent.** The peaks are published to 0.01 MB, and a ±5 kB perturbation of each moves the
+slope by up to `Σ|B−B̄|·5000/Sxx` = 2.7 B — every difference above is inside the table's own
+rounding. **The check is recorded as having been run**, which is the point: the figure supports a
+conclusion nobody disputes, and that is exactly the shape (a4)'s review-side register describes.
+
+### (i2), (c), (d) and (h), briefly
+
+- **(i2)** the pure negative is *"a default run writes no cache entry"*, and its control is
+  *"`--calibrate` writes one"* **through the same wiring** — which is what the fallback rule above
+  makes deterministic. A second pair: *"the store never resolves through the cache"* is a negative
+  whose control is that the same store, with the cache present, derives the calibrated side.
+- **(c)** `load` returns an entry or `None` and raises nothing — an unreadable or unparseable
+  cache is a **miss**, because re-measuring is the safe direction and a truncated cache is exactly
+  what §15.5's preemptible instance produces. `store` writes through a temporary and `os.replace`,
+  and **replaces an unparseable file wholesale**, which is the asymmetry stated rather than
+  discovered: the entries it would be preserving are unreadable anyway.
+- **(d)** `rg` for the vocabulary: `cache_path`, `cache_key`, `versions_digest`, `recalibrate` and
+  `importlib.metadata` appear **nowhere** in `src/` outside `core/registry.py`'s `entry_points`,
+  so nothing is being re-implemented under another name.
+- **(h)** every cache test threads a real budget, a pinned floor and a real config through `run()`;
+  the analytic side must be **asserted as 8** in the same fixture that asserts the calibrated 7,
+  or the comparison is a relation between two derived values with no absolute anchor — (i3).
