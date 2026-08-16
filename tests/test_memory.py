@@ -1113,10 +1113,13 @@ def test_the_floor_is_measured_fresh_every_call_and_never_cached(tmp_path):
     """Two calls both measure. Counting the probes is what makes it falsifiable.
 
     **"NOTHING WAS CACHED" IS A PURE NEGATIVE, AND THE OBVIOUS TEST FOR IT IS
-    UNFALSIFIABLE HERE** -- no cache exists until Task 5, so *"no cache entry
-    appeared"* is satisfied by a caching mechanism that does not exist. Counting
-    child spawns is the form that can fail: **memoization is the mutation, and
-    under it the second call spawns nothing.**
+    UNFALSIFIABLE HERE** -- **the floor has no cache of its own and deliberately
+    never will**, so *"no cache entry appeared"* is satisfied by a caching
+    mechanism that does not exist. Phase 2b Task 5's cache does not change that:
+    it holds the calibration's SLOPE and nothing else, and looking in it for a
+    floor entry would be looking in the wrong place. Counting child spawns is
+    the form that can fail: **memoization is the mutation, and under it the
+    second call spawns nothing.**
 
     Expected value determined independently: `measure_floor` runs exactly one
     child per call, so two calls run two.

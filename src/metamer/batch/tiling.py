@@ -234,6 +234,7 @@ def tile_side_for(
     n_time: int,
     n_models: int,
     per_point_design: bool = False,
+    per_series_bytes: float | None = None,
 ) -> int:
     """Return the square tile side a memory budget allows.
 
@@ -272,6 +273,14 @@ def tile_side_for(
         n_time: Series length.
         n_models: Candidate count held until the tile is written.
         per_point_design: True if any regressor is a per-point field.
+        per_series_bytes: A **measured** per-series cost to use instead of the
+            analytic one. **THE ONE SEAM A CALIBRATION REACHES A TILE SIDE
+            THROUGH**, and it is a parameter here rather than a second
+            derivation at the calibration's own call site: a calibrated path
+            that re-did this arithmetic would be a second description of one
+            subject (a6), and it would drift silently because a wrong side still
+            runs. Only the **slope** belongs here -- a calibration's intercept
+            is not the process floor and `memory.CalibrationResult` says so.
 
     Returns:
         The tile side in grid points: a multiple of `store.TILE_SIDE_BASE`, or a
@@ -284,17 +293,37 @@ def tile_side_for(
             the user -- "your budget is too small, here is one that works" --
             and dispatching on which arithmetic step ran out is the caller's
             problem rather than theirs.
+        ValueError: If `per_series_bytes` is not positive. **DOUBLY GUARDED,
+            DELIBERATELY, AND EACH GUARD NAMES THE OTHER**:
+            `calibration.unusable_reason` refuses a non-positive slope by the
+            band -- whose lower bound is positive -- so nothing in the run path
+            reaches this. It is not dead code, because this function is public
+            and this parameter is the seam a caller that skipped the band
+            arrives through, and without it the symptom is a domain error out of
+            `math.sqrt` that names nothing. Removing either guard on the grounds
+            that the other covers it removes the coverage as well.
     """
     block = block_bytes_for(budget_bytes=budget_bytes, floor=floor)
     constant = solver_state_bytes(
         placement, d=d, k_beta=k_beta, p_max=p_max, threads=threads
     )
-    per_series = resident_bytes_per_series(
-        k_beta=k_beta,
-        p_max=p_max,
-        n_time=n_time,
-        n_models=n_models,
-        per_point_design=per_point_design,
+    if per_series_bytes is not None and per_series_bytes <= 0:
+        raise ValueError(
+            f"a per-series cost of {per_series_bytes:g} B says a tile gets "
+            "cheaper as it grows, which no measurement means; see "
+            "metamer.batch.calibration.unusable_reason for the band a measured "
+            "slope has to clear before it sizes anything"
+        )
+    per_series: float = (
+        resident_bytes_per_series(
+            k_beta=k_beta,
+            p_max=p_max,
+            n_time=n_time,
+            n_models=n_models,
+            per_point_design=per_point_design,
+        )
+        if per_series_bytes is None
+        else per_series_bytes
     )
     if block - constant < per_series:
         raise BudgetTooSmallError(

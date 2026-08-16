@@ -610,17 +610,21 @@ def test_the_iteration_cap_reaches_the_fits_and_an_uncapped_run_does_not_cap(tmp
 
 
 def test_a_run_records_the_basis_that_produced_its_tile_side(tmp_path):
-    """No calibration exists yet, so the only honest basis is the shipped default.
+    """A run that did not calibrate says the shipped default sized its tile.
 
     Expected value determined independently from design doc 13.4's vocabulary:
     a constant is (a) cached, (b) measured this session, or (c) a shipped
-    default. Phase 2b Task 5 is what makes (a) and (b) reachable; until then a
-    run that used the analytic formula must say so.
+    default. **All three have been reachable since Phase 2b Task 5**, so this is
+    no longer the only expressible answer -- it is the correct answer for a run
+    that was not asked to calibrate, and the positive controls for (a) and (b)
+    are in `tests/test_calibration.py`.
 
     Bug this catches: the attr defaulting to `cached` or `measured`, which would
     make Task 6's refusal name calibration for a run that never calibrated --
-    sending the user to a cache that does not exist while the real cause was the
-    budget.
+    sending the user to a cache that was never consulted while the real cause
+    was the budget. The pairing that makes it bite is the calibrated run in
+    `tests/test_calibration.py`: without one, "it says default" is satisfied by
+    a field that is a constant.
     """
     import xarray as xr
 

@@ -92,6 +92,26 @@ def _build_parser() -> _Parser:
             "source's and its compat_hash and run_hash do not"
         ),
     )
+    parser.add_argument(
+        "--calibrate",
+        action="store_true",
+        help=(
+            "measure bytes per series before tiling, reusing a cached "
+            "measurement filed under this run's key. Opt-in because it is "
+            "expensive: the shipped ladder is hours at production sizes. "
+            "Without it the tile is sized by the analytic formula and the "
+            "store records that as its basis"
+        ),
+    )
+    parser.add_argument(
+        "--recalibrate",
+        action="store_true",
+        help=(
+            "measure even if the cache has an entry, and overwrite it. Implies "
+            "--calibrate. The cache has no expiry -- time does not cause the "
+            "change an expiry stands in for -- so this is the only override"
+        ),
+    )
     parser.add_argument("--version", action="version", version=f"metamer {__version__}")
     return parser
 
@@ -113,6 +133,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             arguments.store,
             memory_budget_gb=arguments.memory_budget,
             reuse_fits_from=arguments.reuse_fits_from,
+            calibrate=arguments.calibrate,
+            recalibrate=arguments.recalibrate,
         )
     except (ValidationError, InputContractError) as error:
         # LAYER 4's TYPE CARRIES NO LAYER PREFIX OF ITS OWN, so the naming
@@ -137,6 +159,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     # store that resumed this morning refuse this afternoon.
     if report.budget_warning is not None:
         print(f"warning: memory: {report.budget_warning}", file=sys.stderr)
+
+    # A MEASUREMENT THE BAND REFUSED IS REPORTED AND NEVER FATAL. The run used
+    # the analytic formula, which is what it would have used without
+    # `--calibrate`, so nothing is degraded and there is nothing to abort for --
+    # but a user who waited for a measurement has to learn it was discarded.
+    if report.calibration_warning is not None:
+        print(f"warning: calibration: {report.calibration_warning}", file=sys.stderr)
 
     print(f"input:      {report.config.data_uri}")
     print(

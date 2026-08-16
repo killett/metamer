@@ -659,21 +659,24 @@ def test_the_new_store_copies_the_sources_tile_side_basis(
 
     The side is read back from the source (a1), so the basis that produced it is
     the source's too. Expected value determined independently: the source was
-    written by an ordinary run, which can only use the shipped analytic formula
-    until Phase 2b Task 5, so both stores must read `default`.
+    written by an ordinary run over the analytic formula, so both stores must
+    read `default`.
 
-    **THIS FIXTURE CANNOT YET FAIL FOR THE RIGHT REASON AND THAT IS RECORDED
-    HERE**, not left for a reader to discover: nothing in 2b before Task 5 can
-    write a basis other than `default`, so `copy the source's` and `write
-    DEFAULT` agree on every store this suite can build -- (i7), a fixture
-    sitting exactly where the two functions agree. **Task 5 is what moves it off
-    that point**, by making a calibrated source expressible, and it owns
-    strengthening this to a source whose basis is `cached`.
+    **THIS FIXTURE SITS WHERE THE TWO FUNCTIONS AGREE, AND THE DISCRIMINATING
+    ONE IS ELSEWHERE** (i7). With a `default` source, `copy the source's` and
+    `write DEFAULT` return the same string, so nothing here can fail for its own
+    reason. Phase 2b Task 5 made a second basis writable and put the
+    discriminating case where the calibration cache fixture lives:
+    `tests/test_calibration.py::test_a_recompute_copies_a_calibrated_sources_basis`
+    builds a source whose basis is `cached` and asserts the recompute carries
+    it. This one is kept because it is the cheap half -- it runs without a
+    calibration -- and because a change that broke the `default` case would
+    otherwise be caught only by a `slow` test.
 
-    Bug this catches once that lands: a recompute claiming it derived the side
-    analytically when it derived nothing, which makes Task 6 read a basis change
-    across a resume that never happened -- and send the user to a cache that was
-    never involved.
+    Bug the pair catches: a recompute claiming it derived the side analytically
+    when it derived nothing, which makes Task 6 read a basis change across a
+    resume that never happened -- and send the user to a cache that was never
+    involved.
     """
     uri, src = ready
     new = tmp_path / "new.zarr"

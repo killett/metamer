@@ -59,6 +59,7 @@ import numpy as np
 import zarr
 from numpy.typing import NDArray
 
+from metamer.batch import calibration as calibration_cache
 from metamer.batch import reuse
 from metamer.batch.completion import (
     completed_tiles,
@@ -100,10 +101,20 @@ from metamer.config.model import Config
 from metamer.core import machine
 from metamer.core.capability import Objective
 from metamer.core.criteria import Criterion
+from metamer.core.engines.kalman import KalmanEngine
 from metamer.core.engines.protocol import Engine
 from metamer.core.fit import fit
 from metamer.core.lint import Finding
-from metamer.core.memory import FloorReport, default_budget_gb, measure_floor
+from metamer.core.memory import (
+    CALIBRATION_LADDER,
+    FloorReport,
+    SolverPlacement,
+    default_budget_gb,
+    measure_floor,
+    memory_engine_label,
+    resident_bytes_per_series,
+)
+from metamer.core.memory import calibrate as measure_calibration
 from metamer.core.optimize import DEFAULT_MAX_ITER
 from metamer.core.signal import SignalSpec
 from metamer.core.signal import k_beta as signal_k_beta
@@ -130,6 +141,13 @@ class RunReport:
         budget_warning: A warning that the resolved budget exceeds the memory
             this machine reports free, or None. **Never moves the exit code**;
             see `run`'s body for why availability cannot be a gate.
+        calibration_warning: Why a consulted calibration did not size the tile,
+            or None -- None both when none was consulted and when the one that
+            was is what sized it. **The store tells those two apart**, through
+            the presence of its `calibration` attr beside `tile_side_basis`;
+            here they are one because a report says what a caller has to act
+            on, and there is nothing to act on in either case. Never moves the
+            exit code, on `budget_warning`'s grounds.
         config_path: Where the configuration came from.
         store_path: Where the store goes.
         contract: What stage 4a established about the input.
@@ -169,6 +187,7 @@ class RunReport:
     config: Config
     memory_budget_requested_gb: float | None
     budget_warning: str | None
+    calibration_warning: str | None
     config_path: Path
     store_path: Path
     contract: ContractReport
@@ -453,6 +472,10 @@ def run(
     reuse_fits_from: Path | str | None = None,
     floor: FloorReport | None = None,
     max_iter: int | None = None,
+    calibrate: bool = False,
+    recalibrate: bool = False,
+    calibration_cache_path: Path | str | None = None,
+    calibration_ladder: tuple[int, ...] | None = None,
 ) -> RunReport:
     """Validate a configuration, fit every tile, and write the store.
 
@@ -512,19 +535,73 @@ def run(
             payload -- so the resolved value is written into provenance as
             `max_iter`, which is the only thing that tells the two apart without
             reading every outcome code.
+        calibrate: Measure bytes per series before tiling, reusing a cached
+            measurement when one is filed under this run's key. **OPT-IN, AND
+            THE COST IS WHY**: at design doc 9.4's configuration the shipped
+            ladder is ~26.5 h on the development machine (Phase 2b Task 4), and
+            13.4 is explicit that a run which silently spends a long time
+            measuring before it starts is behaviour a user cannot predict.
+            Without it the corrected analytic formula sizes the tile and the
+            store records `TileSideBasis.DEFAULT` -- 13.4's case (c), which
+            since Task 2 is an honest estimate rather than a guess.
+        recalibrate: Measure even if the cache has an entry, and overwrite it.
+            Implies `calibrate`. **It is the ONLY override, and a cache with no
+            expiry needs exactly one**: time does not cause the change an expiry
+            stands in for, so `--recalibrate` fires when a human has reason to
+            believe the measurement is stale, which is the only signal an expiry
+            was ever approximating.
+        calibration_cache_path: Where the cache lives, defaulting to
+            `calibration.cache_path(store_path)` -- a sibling in the store's own
+            prefix. Overridable because 15.5 puts the store in object storage
+            and a caller may have a different arrangement for the sibling.
+        calibration_ladder: Tile sides to measure, defaulting to
+            `memory.CALIBRATION_LADDER`. **The seam that makes a calibration
+            affordable in a test**: the shipped ladder is 7680 fitted series,
+            and a suite that could not choose its own could not exercise this
+            path at all -- which would leave *"a default run does not
+            calibrate"* as a pure negative with no positive control (i2).
 
     Returns:
         What the run established.
 
     Raises:
-        ValidationError: Layers 1-3 -- the config, and a resume whose stored
-            tile side this run's budget cannot hold. Exit code 3.
+        ValidationError: Layers 1-3 -- the config, a resume whose stored tile
+            side this run's budget cannot hold, and a calibration asked for
+            alongside a recompute or an injected engine. Exit code 3.
         InputContractError: Layer 4 -- the data. Exit code 4.
     """
     # RESOLVED ONCE, ABOVE EVERYTHING, so the tile loop keeps exactly the call
     # it had before the seam existed. A branch inside the loop would put a
     # condition on the production path for the sake of a calibration.
     iteration_cap = DEFAULT_MAX_ITER if max_iter is None else max_iter
+
+    # **REFUSED RATHER THAN IGNORED, AND BOTH REFUSALS ARE THE SAME RULE**: a
+    # flag that parses and does nothing reads as supported, which is what
+    # `--reuse-fits-from` was held to at 2a Task 12 and `engine=` at 2a Task 9.
+    #
+    # A recompute DERIVES no side -- it reads the source's back (a1) and skips
+    # the budget arithmetic entirely, because the rule bounds a FIT's resident
+    # set and a recompute has none -- so a calibration alongside one would
+    # measure for hours and change nothing. An injected engine is worse than
+    # useless: the calibration re-runs the production path in child processes,
+    # which build their own engine, so the measurement would be filed under the
+    # injected engine's label having measured the default one.
+    wants_calibration = calibrate or recalibrate
+    if wants_calibration and reuse_fits_from is not None:
+        raise ValidationError(
+            ValidationLayer.SEMANTIC,
+            "a recompute derives no tile side -- it reads the source store's "
+            "back -- so there is nothing for a calibration to size. Drop "
+            "--calibrate, or fit rather than recompute",
+        )
+    if wants_calibration and engine is not None:
+        raise ValidationError(
+            ValidationLayer.SEMANTIC,
+            "a calibration re-runs this configuration in child processes, "
+            "which build their engine themselves, so an injected engine would "
+            "not reach the measurement and its slope would be filed under that "
+            "engine's calibration key having measured another one",
+        )
 
     config = load_config(config_path)
     if memory_budget_gb is not None:
@@ -634,6 +711,90 @@ def run(
         if Path(store_path).exists():
             check_resume(store_path, config, geometry_hash=rollup)
 
+        # **THE CALIBRATION RUNS AFTER THE IDENTITY GATES AND BEFORE THE
+        # GEOMETRY, WHICH IS 13.7's ORDER AND MATTERS MORE HERE THAN ANYWHERE
+        # ELSE.** It is the geometry step's input -- it produces the per-series
+        # cost the side derives from -- and it is the most expensive thing this
+        # function can do, ~26.5 h at 9.4's configuration on the development
+        # box. A run with a wrong candidate list must be refused before it
+        # spends that, not after.
+        tile_side_basis = TileSideBasis.DEFAULT
+        calibration_record: dict[str, Any] | None = None
+        calibration_warning: str | None = None
+        calibrated_bytes_per_series: float | None = None
+        if wants_calibration:
+            fit_identity = config.fit_hash(rollup)
+            if fit_identity is None:  # pragma: no cover - narrowing
+                raise ValidationError(
+                    ValidationLayer.SEMANTIC,
+                    "a calibration keys on fit identity and this run has none",
+                )
+            versions_rollup, versions = calibration_cache.versions_digest()
+            key = calibration_cache.cache_key(
+                fit_hash=fit_identity,
+                placement=str(SolverPlacement.PER_SERIES_LIVE),
+                # THE SAME RESOLUTION `fit` MAKES. An injected engine is refused
+                # above, so this reads the engine the calibration's children
+                # will build rather than one this run was handed.
+                engine_label=str(memory_engine_label(KalmanEngine())),
+                # **READ FROM THE PLATFORM, NEVER FROM THE CONFIG.** The
+                # fingerprint is self-reported at its own boundary and that is
+                # harmless while it reaches `run_hash` alone; the moment this
+                # key reads it, it is an identity, and a config-supplied one
+                # would let one machine's calibration be reused on another.
+                machine=machine.fingerprint(),
+                versions=versions_rollup,
+            )
+            cache = (
+                calibration_cache.cache_path(store_path)
+                if calibration_cache_path is None
+                else Path(calibration_cache_path)
+            )
+            cached = None if recalibrate else calibration_cache.load(cache, key)
+            calibration_result = cached
+            if calibration_result is None:
+                calibration_result = measure_calibration(
+                    config_path=str(config_path),
+                    floor=measured_floor,
+                    ladder=(
+                        CALIBRATION_LADDER
+                        if calibration_ladder is None
+                        else calibration_ladder
+                    ),
+                )
+                calibration_cache.store(
+                    cache, key, calibration_result, versions=versions
+                )
+            # **THE REFERENCE IS THE FIGURE THE TILING WOULD HAVE USED**, taken
+            # from the same `tile_kwargs()` the derivation below reads, not
+            # reassembled from the geometry's fields. Two spellings of the
+            # analytic per-series cost would eventually be two numbers, and the
+            # band would then be checked against one the run never uses.
+            model = geometry.tile_kwargs()
+            calibration_warning = calibration_cache.unusable_reason(
+                calibration_result,
+                analytic=resident_bytes_per_series(
+                    k_beta=model["k_beta"],
+                    p_max=model["p_max"],
+                    n_time=model["n_time"],
+                    n_models=model["n_models"],
+                ),
+            )
+            if calibration_warning is None:
+                calibrated_bytes_per_series = calibration_result.slope_bytes_per_series
+                tile_side_basis = (
+                    TileSideBasis.CACHED
+                    if cached is not None
+                    else TileSideBasis.MEASURED
+                )
+            calibration_record = calibration_cache.provenance(
+                key=key,
+                result=calibration_result,
+                digest=versions_rollup,
+                versions=versions,
+                rejected=calibration_warning,
+            )
+
         # **p_max IS THE WIDEST CANDIDATE'S FREE PARAMETER COUNT AND d IS THE
         # WIDEST CANDIDATE'S STATE DIMENSION, NEITHER THE FIRST'S.** The tile
         # holds whichever candidate is being fitted and `fit` sizes every output
@@ -667,6 +828,12 @@ def run(
                     # function and every consumer reads it.
                     budget_bytes=budget_bytes,
                     floor=measured_floor,
+                    # None on every path but a calibration whose slope cleared
+                    # the band, and then it is the ONE thing the measurement
+                    # changes. The intercept stays out: it is the floor under
+                    # the calibration's conditions and not the production one,
+                    # which `memory.CalibrationResult` says in its own docstring.
+                    per_series_bytes=calibrated_bytes_per_series,
                     **geometry.tile_kwargs(),
                 )
             except BudgetTooSmallError as error:
@@ -693,10 +860,13 @@ def run(
             read_amplification=amplification,
             unique_dt_count=contract.unique_dt,
             tile_sides={"shared": side},
-            # DEFAULT IS THE ONLY BASIS AN ORDINARY RUN CAN REACH UNTIL TASK 5,
-            # and it is written rather than left out: a store that cannot say
-            # which basis produced its side has its silence read as agreement by
-            # Task 6's refusal.
+            # **THE BASIS IS 13.4's THREE-STATE VOCABULARY AND ALL THREE ARE
+            # NOW REACHABLE**: `cached` when this run read a calibration out of
+            # the cache, `measured` when it took one this session, `default`
+            # when the analytic formula sized the tile -- which includes a run
+            # whose measurement the band refused. It is written rather than
+            # left out: a store that cannot say which basis produced its side
+            # has its silence read as agreement by Task 6's refusal.
             #
             # **A RECOMPUTE COPIES THE SOURCE'S BASIS, AND THAT IS NOT A THIRD
             # STATE.** `--reuse-fits-from` READS the side back out of the source
@@ -707,10 +877,11 @@ def run(
             # would then read a basis change that never happened. A valid source
             # is v4 by `check_source`'s schema gate, so the key is always there.
             tile_side_basis=(
-                TileSideBasis.DEFAULT
+                tile_side_basis
                 if source_attrs is None
                 else TileSideBasis(source_attrs["tile_side_basis"])
             ),
+            calibration=calibration_record,
             memory_budget_requested_gb=requested_budget_gb,
             max_iter=iteration_cap,
             floor=measured_floor,
@@ -797,6 +968,7 @@ def run(
             config=config,
             memory_budget_requested_gb=requested_budget_gb,
             budget_warning=budget_warning,
+            calibration_warning=calibration_warning,
             config_path=Path(config_path),
             store_path=Path(store_path),
             contract=contract,

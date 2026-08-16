@@ -513,7 +513,7 @@ def slope_band(formula_bytes_per_series: float) -> tuple[float, float]:
     )
 
 
-def tile_side(budget_bytes: int, per_series_bytes: int) -> int:
+def tile_side(budget_bytes: int, per_series_bytes: float) -> int:
     """Square spatial tile side from a byte budget and the full accounting.
 
     Floors rather than rounds: rounding up overcommits a hard memory budget by
@@ -530,7 +530,10 @@ def tile_side(budget_bytes: int, per_series_bytes: int) -> int:
 
     Args:
         budget_bytes: Memory budget for one tile.
-        per_series_bytes: From `resident_bytes_per_series`.
+        per_series_bytes: From `resident_bytes_per_series`, or a **measured**
+            slope out of `calibrate`, which is a float. Neither is checked here
+            -- `tiling.tile_side_for` is the caller that owns the seam and the
+            guard on it.
 
     Returns:
         Tile side in grid points.

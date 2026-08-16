@@ -749,6 +749,40 @@ thing that actually changes it.
 - *A stale entry under a changed digest is not used.* Catches the key being computed and then
   ignored, which is the `observed`-recorded-and-ignored shape Task 5 of 2a already found once.
 
+**LANDED 2026-08-15. THE INTERFACE BLOCK ABOVE CANNOT MOVE A TILE SIDE, AND THE FIRST CONSUMER
+OF A MEASURED NUMBER NEEDED A RULE FOR A BAD ONE.** In full in `PROGRESS.md`'s *What Task 5
+established*; in one line each:
+
+- **`tiling.tile_side_for(..., per_series_bytes=None)` is the seam, and it is a deviation.**
+  Nothing in the five interfaces changes any number a run uses: `tile_side_for` computes the
+  per-series cost internally. **Only the SLOPE goes through it** — the intercept is the floor
+  under the calibration's conditions and not the production floor.
+- **A measured slope outside `memory.slope_band` is NOT USED**: the run falls back to the
+  analytic formula, records `DEFAULT`, and warns. §11.4 already requires the calibration to be
+  *validated against §9.4's analytic formula*, and two failure modes make it necessary rather
+  than tidy — a non-positive slope is a domain error out of `sqrt`, and a small positive one
+  sizes an enormous tile with no error at all. **Fallback rather than refusal**, because a
+  refusal after a multi-hour measurement makes (i2)'s positive control depend on the sign of a
+  noise-dominated number.
+- **The cost of that band, stated:** a calibration moves the per-series cost by at most 1.5× and
+  therefore the side by at most √1.5 = **1.22×**, which is what places the (i7) fixture at 8
+  against 7 rather than anywhere wider.
+- **A `calibration` provenance block is written whenever a calibration was CONSULTED**, used or
+  not. Without it a store that spent 26.5 h measuring and one that measured nothing both read
+  `tile_side_basis = default` — the fill-value shape at a provenance key. **No schema bump**: a
+  v5 store's silence is unambiguous, because nothing before this task could consult one.
+- **metamer is not an installed distribution in a source tree**, measured, so *"every installed
+  distribution"* omits the package being measured. The map is built from the distributions **and**
+  from `metamer.__version__`.
+- **`--calibrate` is refused alongside `--reuse-fits-from` and alongside an injected engine.** A
+  recompute derives no side, and a calibration's children build their own engine.
+
+**And one thing this brief asserted that is not true as written.** *"Deleting the cache can never
+break a store, only cost a re-measurement"* is true of the **store** and false of a **resume**:
+where the calibrated side was larger than the analytic one, `completion.resume_tile_side` refuses
+on its *stored > derived* arm. The docstring carries the narrow claim, and **naming that refusal
+is Task 6** — which is the evidence the broad claim was wrong.
+
 ---
 
 ## Task 6 — the resume refusal that names calibration

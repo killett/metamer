@@ -235,11 +235,18 @@ class TileSideBasis(StrEnum):
     analytic path is conservative rather than optimistic, so `DEFAULT` is an
     honest estimate and not a guess dressed as one.
 
+    **ALL THREE ARE REACHABLE SINCE PHASE 2b TASK 5**, through `--calibrate`
+    and `--recalibrate`.
+
     Attributes:
         CACHED: Derived from a calibration read out of the cache.
         MEASURED: Derived from a calibration measured in this session.
-        DEFAULT: Derived from the shipped analytic formula, which is the only
-            reachable value until Phase 2b Task 5 lands the cache.
+        DEFAULT: Derived from the shipped analytic formula. **It is also what a
+            run whose measurement was REFUSED records** -- see
+            `batch.calibration.unusable_reason` -- which is why the store's
+            `calibration` attr exists beside this field: without it, a run that
+            spent hours measuring and a run that never measured would be one
+            observation.
     """
 
     CACHED = "cached"
@@ -319,6 +326,7 @@ def provenance_attrs(
     floor: FloorReport,
     warm_start_used: bool = False,
     source: Mapping[str, Any] | None = None,
+    calibration: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build the root attrs of a store.
 
@@ -371,6 +379,22 @@ def provenance_attrs(
             equals the recorded `source_fit_hash` -- and never as a pointer a
             reader must follow. The keys are absent for a run that fitted its
             own primitives, and that absence is itself the fact.
+        calibration: `batch.calibration.provenance`'s mapping, or None for a
+            run that consulted no calibration. **Written whenever one was
+            CONSULTED, used or not**: a measurement the band refused leaves
+            `tile_side_basis` at `default`, which is also what a run that never
+            calibrated writes, so without this key a store that spent 26.5 h
+            measuring is indistinguishable from one that measured nothing --
+            the fill-value shape at a provenance key. **The absence of the key
+            is what means "no calibration was consulted"**, on `source`'s
+            precedent, and the `rejected` field inside it says why a consulted
+            measurement did not produce the side.
+
+            **No `SCHEMA_VERSION` bump, and the ledger's own test is why.** A
+            bump is owed when an older store cannot answer a question a new gate
+            asks; Task 6's refusal reads `tile_side_basis`, which every v4+
+            store carries, and a v5 store's silence here is unambiguous because
+            nothing before Phase 2b Task 5 could consult a calibration at all.
 
     Returns:
         The attrs mapping, JSON-safe and with sorted keys throughout.
@@ -460,6 +484,8 @@ def provenance_attrs(
         "unique_dt_count": int(unique_dt_count),
         "warm_start_used": bool(warm_start_used),
     }
+    if calibration is not None:
+        attrs["calibration"] = json.loads(hashing.canonical_json(calibration))
     if source is not None:
         attrs.update(
             {
@@ -478,8 +504,17 @@ def _chunk_side(tile_side: int, other: int, itemsize: int) -> int:
     Zarr requires the shard shape to be a whole number of chunks, so the choice
     is over **divisors** of `tile_side` and not over any row count. **A prime
     tile side therefore has no useful subdivision** -- its only divisors are 1 and
-    itself -- which is a reason for 2b's calibration to prefer a composite tile
-    side, recorded here because nothing else will notice.
+    itself.
+
+    **AND "PREFER A COMPOSITE SIDE" -- WHAT THIS DOCSTRING SAID UNTIL
+    2026-08-15 -- IS WRONG IN BOTH DIRECTIONS**, which `TILE_SIDE_BASE` above
+    records with the measurement: 338 is composite and still gives 4.57x the
+    target. The property wanted is a **divisor inside the admissible window**,
+    and that window differs per array, which is why the base is chosen by a
+    sweep rather than by elegance. It also named an agent that does not exist:
+    a calibration does not choose a side, it asks `tiling.budget_bytes_for_side`
+    for the budget that lands on one, and every derived side is a multiple of
+    the base by construction.
 
     Args:
         tile_side: Shard side in points.

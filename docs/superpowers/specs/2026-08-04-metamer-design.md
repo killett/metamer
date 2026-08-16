@@ -1391,6 +1391,15 @@ bytes-per-series for this dataset and model set, validated against §9.4's analy
 **Cache key: `fit_hash` + backend + machine fingerprint** (§13.3 — the criterion set does
 not affect bytes-per-series).
 
+> **AMENDED 2026-08-15 (Phase 2b Task 5, which built it). THE KEY HAS FIVE COMPONENTS, NOT
+> THREE**, and the two additions each have a reason this section already contains but did not
+> gather into the key: the **solver placement**, on `shared_with`'s precedent — one value is
+> reachable today, and the day a batched driver lands the engine's workspace becomes a per-series
+> term, so a key that could not tell the placements apart would serve the old slope to the new
+> driver — and the **versions digest**, which is the amendment two bullets below made into a key
+> component rather than only a rationale. "Backend" is `memory.MemoryEngineLabel`, per the
+> amendment immediately following.
+
 - **The regressor regime is in the key by construction, and that was checked rather than
   assumed.** It is expressed inside `signal_terms`, which is already fit-relevant — a
   per-point regressor changes the design matrix and therefore `θ̂` and `log_lik` — so a

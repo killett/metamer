@@ -320,8 +320,10 @@ def fingerprint() -> str:
     `run_hash` alone -- provenance, never a gate -- and it becomes an **identity**
     the moment section 11.4's calibration cache key reads it, because a
     config-supplied fingerprint would let one machine's calibration be reused on
-    another. Wiring it from the platform before the cache exists is what avoids
-    invalidating whatever the cache already holds.
+    another. Wiring it from the platform before the cache existed is what
+    avoided invalidating whatever the cache already held; **the cache landed at
+    Phase 2b Task 5 and `batch.calibration.cache_key` is now that reader**, so
+    the classification is no longer prospective.
 
     **THE RAM COMPONENT BECAME CGROUP-AWARE ON 2026-08-15, AND THAT MOVES THIS
     VALUE INSIDE A CONTAINER.** Two containers of different sizes on one host
