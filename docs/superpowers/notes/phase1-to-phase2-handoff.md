@@ -87,6 +87,27 @@ the older store's silence a refusal instead.
 > `"memory_budget_requested_gb" not in REQUIRED_ATTRS` with the reason beside it, so removing the
 > exception fails rather than passing quietly as a tidy-up.
 
+#### AND THE FOURTH REGISTER: A FALLBACK MAKES "DID NOT HAPPEN" AND "HAPPENED AND WAS DISCARDED" ONE OBSERVATION
+
+> **Any rule that falls back to a default on failure erases the distinction between "the
+> expensive thing was never attempted" and "it was attempted and rejected".** Both leave the
+> default behind, and the default is what a fresh run writes. **Record that a mechanism was
+> CONSULTED, separately from whether it produced the answer.**
+
+**This is the fill-value rule with the fill supplied by a fallback rather than by a format**,
+and it is the same class as `NOT_ATTEMPTED` versus `SCREENED_OUT` and as "excluded" versus
+"missing": one observation standing in for two facts, only one of which is intended.
+
+Worked instance, Phase 2b Task 5. A calibrated slope outside its validation band is not used
+and the run records `tile_side_basis = default` — which is also what a run that never
+calibrated records. **A store that spent 26.5 h measuring would have been
+byte-indistinguishable from one that measured nothing.** The repair is a `calibration`
+provenance block written whenever a calibration was **consulted**, carrying the measurement and
+a `rejected` reason; its **absence** is what means "none was consulted", on the `source_*`
+precedent. **And no schema bump is owed**, which is the other half worth recording: a bump is
+for a question an older store *cannot answer*, and every earlier store's silence here is
+unambiguous because nothing before that task could consult a calibration at all.
+
 ### (a1) RE-DERIVATION AT RESUME IS THE HAZARD, NOT AN UNHASHED ANCESTOR
 
 > **A stored geometry READ BACK from the store is safe, however it was originally
@@ -215,6 +236,18 @@ else is a request. The table is in
 [`phase2a-preflight.md`](phase2a-preflight.md); the rule to apply to a *new* field is the
 classification above, not the table.
 
+**AND THE FOURTH FACT IS THE ONE THAT NEARLY FAILED SILENTLY AT THE ONE PLACE IT MATTERS
+MOST.** Phase 2b Task 5's cache key digests *"every installed distribution, excluding nothing"*.
+**Measured, not assumed: `[d for d in importlib.metadata.distributions() if "metamer" in
+d.name]` is EMPTY in a source-layout tree** — metamer runs from `src/` and is not an installed
+distribution — so the digest omitted **the package whose behaviour is being measured**. An
+instrument whose coverage depends on how a package reached the path reports what is *installed*
+and is read as reporting what is *there*, which is the complete-looking-table rule below in a
+new place; and "metamer did not change" and "metamer is invisible to this instrument" produce
+the identical digest, which is (a0). The map is now built from the distributions **and** from
+`metamer.__version__`. **Only running the enumeration would have found it**, which is why the
+rule is to measure the instrument's coverage rather than to reason about it.
+
 The check generalizes past hashes to every gate made of a name — a completion bitmap, a
 calibration cache key, a warm-start cache key. **`machine_fingerprint` is the live example
 of a field whose classification changes with its consumer**: self-reported at its own
@@ -329,6 +362,16 @@ in `PROGRESS.md`, which is now a stated, unverified claim instead of an unasked 
 
 **The tell is a figure that supports a conclusion nobody disputes.** Nothing was riding on
 whether the number was 1.7 or 1712, so neither reader had a reason to divide.
+
+**AND THE FIRST RECOMPUTATION THAT CONFIRMED RATHER THAN CORRECTED IS ITSELF INFORMATION.**
+Phase 2b Task 5 re-fitted Task 4's published ladder from Task 4's own table and got slope
+**1050.75** against the recorded 1049, SE **223.6** against 222, excess **0.558 SE** against
+0.55, ratio **1.1347** against 1.133 — every difference inside the rounding of the table's own
+0.01 MB peaks, since a ±5 kB perturbation moves the slope by at most 2.7 B. **Recording a clean
+check matters because the register's whole point is that nobody re-derives these**: an
+unbroken run of corrections would say the practice is finding defects, and a confirmation says
+what the earlier work was worth. **The check is only evidence if the negative result is
+published too.**
 
 #### AND THE THIRD REGISTER: A CORRECTION IS AN UNVERIFIED CLAIM
 
@@ -465,6 +508,20 @@ it — the third time it has caught what a task's own tests could not.
 The repair keeps the criterion's force: files compared byte for byte, attrs compared key by key
 against a **named** exclusion set, and **the excluded key asserted present in both stores**, so
 "excluded" cannot decay into "absent".
+
+> **AND A REASSURING SENTENCE IN A BRIEF IS A REQUIREMENT LIKE ANY OTHER: CHECK IT AGAINST THE
+> GATES IT PROMISES TO SURVIVE.** The tell is a claim of the form *"X can never break Y"* —
+> universally quantified, comforting, and written by whoever also wrote Y's exceptions.
+>
+> Worked instance, Phase 2b Task 5. The brief required the docstring sentence *"deleting the
+> cache can never break a store, only cost a re-measurement"*. It is true of a **store** and
+> false of a **resume**: `completion.resume_tile_side` refuses on its *stored > derived* arm,
+> reachable exactly when the calibrated slope came in **below** the formula and the stored side
+> is therefore the larger one. **The proof the claim was too broad is that the next task in the
+> same plan exists to name that refusal.** The docstring now carries the narrow claim — never
+> unreadable, incomplete or unopenable, and it costs a re-measurement — and the test of it is
+> deliberately placed in the arm where the resume proceeds, with the other arm named as the
+> next task's subject.
 
 #### THE SAME RULE WITHOUT A CONFLICT: TWO BEHAVIOURS OVER ONE CRITICAL SECTION
 
@@ -789,6 +846,33 @@ fifteen tiles wide at about twice the runtime.
 the claim — a run that finished everything also satisfies that — which is (i5) one register over:
 the tempting fix removes the thing being tested.
 
+#### AND THE SAME RULE ONE LEVEL UP: A RULE WHOSE TEST CANNOT BE WRITTEN DETERMINISTICALLY IS NOT A RULE YOU CAN HOLD
+
+> **When choosing between a refusal and a fallback for a MEASURED quantity, ask what the test
+> for each looks like.** A refusal keyed on a value the machine's noise controls fires on some
+> runs and not others, so the behaviour cannot be asserted at all — and an unassertable rule
+> decays into whatever the code happens to do.
+
+(i9) asks whether a **fixture's window** is wider than the machine's jitter. This asks the same
+question of a **decision rule**, and the answer decides the design rather than the test. The
+tell is a rule whose input is a measurement rather than a request.
+
+Worked instance, Phase 2b Task 5. A calibrated slope that fails its validation band could
+refuse the run or fall back to the analytic formula. At the ladder sizes a suite can afford the
+slope is noise — Task 4 measured ±0.3 MB of scatter against 0.43 MB of signal — so **under a
+refusal roughly half of suite-affordable `--calibrate` runs fail on the SIGN of the slope**, and
+(i2)'s positive control for *"`--calibrate` produces an entry"* could not be written. The
+fallback's target is what the same run does without the flag, so nothing is degraded, and the
+behaviour is deterministic in both directions.
+
+> **RECORD THE COST WITH THE DECISION, AND CROSS-REFERENCE IT, BECAUSE IT IS A CONSEQUENCE OF A
+> CONSTANT SOMEONE MAY LATER MOVE.** The band is `memory.SLOPE_BAND_FACTOR = 1.5`, so a
+> calibration can move the per-series cost by at most 1.5× and the tile side by at most
+> **√1.5 = 1.22×**. That is why the (i7) fixture in `tests/test_calibration.py` sits at **8
+> against 7** and cannot sit wider. **If the band ever widens, that fixture must be
+> rechecked** — it is placed against the band, not against the arithmetic, and nothing else
+> connects them.
+
 ### (i7) A DISCRIMINATING FIXTURE MUST BE PLACED OUTSIDE WHERE THE TWO FUNCTIONS AGREE
 
 > **When a fixture must distinguish two functions, first identify where they AGREE** — fixed
@@ -945,6 +1029,37 @@ Three further shapes this covers, so it is not read as being about stubs:
 | a completion bit is not set after an injected interruption | the same injection point, not triggered, does set it |
 | a value edit does not move `geometry_hash` | a geometry edit through the same fingerprint call does move it |
 | a resume refits nothing | the same resume with one outstanding tile refits exactly that tile |
+
+#### AN INTERFACE BLOCK THAT PRODUCES A VALUE NO CONSUMER TAKES IS A MECHANISM WITH NO EFFECT
+
+> **Before implementing a brief, trace its output to the consumer that reads it. If no
+> existing signature can accept the value, the brief describes a producer with no consumer,
+> and every test of it will pass while the mechanism does nothing.** The tell is a brief whose
+> tests all concern the artifact's **contents** rather than its **effect**.
+
+**This is (i2) applied to a TASK rather than to a test**, and the two failures are the same
+one at different scales. (i2) says an absence is produced equally well by correct suppression
+and by a thing never wired in. This says a *presence* — a file, a record, a well-formed
+artifact — is produced equally well by a mechanism that works and by one that is connected to
+nothing, and a suite that only opens the artifact cannot tell them apart.
+
+Worked instance, Phase 2b Task 5. The brief specified `cache_path`, `cache_key`,
+`versions_digest`, `load` and `store`, which between them produce and persist a
+`CalibrationResult`. **`tiling.tile_side_for` computes the per-series cost internally and takes
+no per-series argument**, so no slope out of that cache could reach any number a run uses.
+Every one of the brief's tests would have passed.
+
+**The sharpest form of the tell was inside the brief's own test list, and it is worth quoting
+verbatim**: *"a stale entry under a changed digest is **not used**"* — an assertion that
+presupposes an entry that **is** used, in a brief that describes no path by which one could
+be. **A brief that tests the negative of an effect it never provides is telling you the effect
+is missing.**
+
+The repair is a **parameter on the existing consumer**, not a second derivation at the
+producer's call site: a calibrated path that re-did the arithmetic would drift silently,
+because a wrong tile side still runs. **That is the third time (a6)'s shape has arrived by a
+new route** — after `Backend` outliving its architecture and the inverse that could have
+re-derived rather than round-tripped — and the routes keep differing while the shape does not.
 
 ### (j) Does the oracle share a derivation path with the thing it checks?
 
