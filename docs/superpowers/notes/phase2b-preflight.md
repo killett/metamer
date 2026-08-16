@@ -1024,3 +1024,42 @@ conclusion nobody disputes, and that is exactly the shape (a4)'s review-side reg
 - **(h)** every cache test threads a real budget, a pinned floor and a real config through `run()`;
   the analytic side must be **asserted as 8** in the same fixture that asserts the calibrated 7,
   or the comparison is a relation between two derived values with no absolute anchor — (i3).
+
+### (a0)/(a2) THE PACKAGE UNDER MEASUREMENT IS THE ONE DISTRIBUTION `importlib.metadata` CANNOT SEE
+
+**Measured 2026-08-15: `[d for d in importlib.metadata.distributions() if "metamer" in d.name]`
+is EMPTY in this tree.** metamer runs from `src/` on the path and is not an installed
+distribution, so *"every installed distribution, excluding nothing"* excludes **the one package
+whose memory behaviour is being measured** — the `cftime` hole the brief warns about, in the
+mirror: not a dependency reached through another library, but the subject itself, invisible for a
+different reason.
+
+**It is the (a0) shape at a digest**: "metamer did not change" and "metamer is not visible to this
+instrument" produce the identical digest, and only one of them is intended. And it is (a2)'s
+fourth fact — *the thing that populates the field must not be the thing being identified* —
+holding in an awkward direction: the only available reading of metamer's version is metamer's own
+`__version__`.
+
+**So the map is built from the distributions AND from `metamer.__version__`**, through the same
+duplicate-name join rule, so an installed metamer shadowed by a source tree shows **both** values
+rather than one of them silently winning.
+
+**AND THE COST IS REAL AND IS RECORDED RATHER THAN GLOSSED.** `metamer.__version__` here is
+`0.1.1.dev63+gde10b6a7c.d20260816` — VCS-derived, so **it moves on every commit** and a developer
+re-measures after each one. That is the correct side to fail on: a slope measured by a different
+build of the thing being measured is exactly the under-invalidation the brief calls unacceptable,
+`--calibrate` is opt-in, and in a released install the version is stable, so the churn is a
+development-tree artifact rather than shipped behaviour.
+
+### (a4) THE ASYMMETRY THAT DECIDED THE DIGEST'S BREADTH IS PRICED AT "MINUTES", AND TASK 4 MEASURED 26.5 h
+
+The brief settles the digest's breadth with *"over-invalidating costs **minutes**; under-invalidating
+costs a bad projection against a hard memory constraint"*. **Task 4 measured the ladder at ~26.5 h
+at §9.4's configuration on this box** — the figure lives in *What Task 4 established*, once — so
+the cheap side of the asymmetry is wrong by three orders of magnitude.
+
+**The conclusion survives and the reasoning does not, which is the register (a4) says to check.**
+The other side is a wrong tile against a constraint the design doc calls hard, on a run measured
+in days; a re-measurement is a bounded, visible, opt-in cost and an OOM at hour forty is not. But
+*"costs minutes"* is the sentence a future reader would use to justify narrowing the digest, and
+it would be justified by a number nobody re-derived.
