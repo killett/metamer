@@ -315,6 +315,7 @@ def provenance_attrs(
     tile_sides: Mapping[str, int],
     tile_side_basis: TileSideBasis,
     memory_budget_requested_gb: float | None,
+    max_iter: int,
     floor: FloorReport,
     warm_start_used: bool = False,
     source: Mapping[str, Any] | None = None,
@@ -349,6 +350,12 @@ def provenance_attrs(
             would be one observation -- the caller has to say which it means.
             It is deliberately **not** in `REQUIRED_ATTRS`, which refuses on
             `None`; `SCHEMA_VERSION` 5 is what enforces its presence.
+        max_iter: The iteration cap the run's fits used. **Recorded because it
+            is in no hash**: a run capped for Phase 2b's calibration shares
+            `fit_hash`, `compat_hash` and `run_hash` with an uncapped run over
+            the same config, while its fits are all `ITER_CAP_*`. Not required
+            and not a schema bump -- the outcome codes already answer the
+            question, and this answers it without reading them.
         floor: The measured process floor. **Both the pre- and post-warm
             readings go in**, not just the one the budget uses, so the 30% gap
             between them is visible in a store rather than only in a docstring --
@@ -429,6 +436,15 @@ def provenance_attrs(
         # mapping without a second check here.
         "memory_budget_gb": config.memory_budget_gb,
         "memory_budget_requested_gb": memory_budget_requested_gb,
+        # **THE CAP IS IN NO HASH, SO THIS IS THE ONLY DIRECT RECORD OF IT.**
+        # A capped run and an uncapped one over one config share all three
+        # hashes and produce entirely different fits, and the cap is a `run()`
+        # argument rather than a config field deliberately -- see `run`. **No
+        # schema bump**: a v5 store can already answer "were these fits capped?"
+        # from `/primitives/iterations` and `/status/outcome`, so its silence is
+        # not a defect and this key makes the answer direct rather than
+        # inferential.
+        "max_iter": int(max_iter),
         "metamer_version": metamer.__version__,
         "objective": config.objective,
         "read_amplification": float(read_amplification),

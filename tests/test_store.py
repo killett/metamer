@@ -107,6 +107,7 @@ def _fixture(tmp_path: Path, **shape_kwargs: int) -> tuple[Path, dict[str, Any]]
         tile_sides={"shared": 347, "per_point": 187},
         tile_side_basis=store.TileSideBasis.DEFAULT,
         memory_budget_requested_gb=1.0,
+        max_iter=200,
         floor=_FLOOR,
     )
     shape = store.StoreShape(
@@ -646,6 +647,7 @@ def test_a_geometry_that_was_never_opened_is_refused(tmp_path):
             tile_sides={"shared": 347},
             tile_side_basis=store.TileSideBasis.DEFAULT,
             memory_budget_requested_gb=1.0,
+            max_iter=200,
             floor=_FLOOR,
         )
 
@@ -789,6 +791,7 @@ def test_a_store_records_the_request_apart_from_the_budget_that_was_used(tmp_pat
         tile_sides={"shared": 272},
         tile_side_basis=store.TileSideBasis.DEFAULT,
         memory_budget_requested_gb=None,
+        max_iter=200,
         floor=_FLOOR,
     )
     assert defaulted["memory_budget_gb"] == 4.0
@@ -841,6 +844,7 @@ def test_a_store_cannot_be_built_from_a_config_whose_budget_is_unresolved(tmp_pa
             tile_sides={"shared": 272},
             tile_side_basis=store.TileSideBasis.DEFAULT,
             memory_budget_requested_gb=None,
+            max_iter=200,
             floor=_FLOOR,
         )
 
@@ -931,6 +935,7 @@ def test_warm_start_used_is_a_fact_about_the_run_not_the_config(tmp_path):
         tile_sides={"shared": 347},
         tile_side_basis=store.TileSideBasis.DEFAULT,
         memory_budget_requested_gb=1.0,
+        max_iter=200,
         floor=_FLOOR,
     )
 
@@ -1124,6 +1129,7 @@ def test_the_root_attrs_are_byte_identical_across_processes(tmp_path):
             tile_sides={"shared": 347, "per_point": 187},
             tile_side_basis=store.TileSideBasis.DEFAULT,
             memory_budget_requested_gb=1.0,
+            max_iter=200,
             floor=floor,
         )
         print(json.dumps(attrs, sort_keys=False))

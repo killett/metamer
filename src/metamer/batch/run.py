@@ -53,10 +53,11 @@ import os
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict
 
 import numpy as np
 import zarr
+from numpy.typing import NDArray
 
 from metamer.batch import reuse
 from metamer.batch.completion import (
@@ -67,9 +68,9 @@ from metamer.batch.completion import (
     tile_index,
 )
 from metamer.batch.geometry import geometry_components, geometry_hash
-from metamer.batch.input import ContractReport, open_input
+from metamer.batch.input import ContractReport, InputHandle, open_input
 from metamer.batch.input import check_contract as check_input_contract
-from metamer.batch.ragged import build_ragged_index, noise_extent
+from metamer.batch.ragged import RaggedIndex, build_ragged_index, noise_extent
 from metamer.batch.resume import check_resume, check_source
 from metamer.batch.store import (
     StoreShape,
@@ -103,8 +104,11 @@ from metamer.core.engines.protocol import Engine
 from metamer.core.fit import fit
 from metamer.core.lint import Finding
 from metamer.core.memory import FloorReport, default_budget_gb, measure_floor
+from metamer.core.optimize import DEFAULT_MAX_ITER
+from metamer.core.signal import SignalSpec
 from metamer.core.signal import k_beta as signal_k_beta
 from metamer.core.statespace import StateSpace
+from metamer.core.terms import ProcessSpec
 
 
 @dataclass(frozen=True)
@@ -237,6 +241,103 @@ def _recompute_tile(
     )
 
 
+class TileModelKwargs(TypedDict):
+    """The five model numbers the tiling arithmetic takes.
+
+    A `TypedDict` rather than a plain mapping so `**geometry.tile_kwargs()`
+    type-checks against `tile_side_for`'s keyword-only signature -- otherwise
+    mypy has to assume an `int` might land in the `placement` or
+    `per_point_design` slot, which is the same narrowing `test_memory.py`'s
+    `_Case` exists for.
+    """
+
+    d: int
+    k_beta: int
+    p_max: int
+    n_time: int
+    n_models: int
+
+
+@dataclass(frozen=True)
+class RunGeometry:
+    """What a run derives from its config and its input, before it tiles.
+
+    **ONE DERIVATION, TWO CALLERS, AND THAT IS THE WHOLE REASON THIS IS A TYPE.**
+    `run()` needs all of it; Phase 2b's calibration needs `tile_kwargs()` to ask
+    `tiling.budget_bytes_for_side` which budget lands on a given tile side. A
+    calibration that assembled those five numbers itself would be a **second**
+    derivation of the production geometry -- and a calibration measuring a tile
+    the production run would not build is (j2) with extra steps.
+
+    Attributes:
+        years: The decimal-year axis, converted once. The conversion is under
+            `ALGORITHM_VERSION`, so doing it twice is two derivations of fit
+            identity.
+        signal: The signal specification.
+        k_beta: Design COLUMN count, not the term count.
+        specs: The candidate set, in config order.
+        index: The ragged noise index, which is what knows `p_max`.
+        state_dims: Composite state dimension per candidate.
+    """
+
+    years: NDArray[np.float64]
+    signal: SignalSpec
+    k_beta: int
+    specs: list[ProcessSpec]
+    index: RaggedIndex
+    state_dims: list[int]
+    n_time: int
+
+    def tile_kwargs(self) -> TileModelKwargs:
+        """Return the model arguments `tile_side_for` and its inverse take.
+
+        **`p_max` AND `d` ARE THE WIDEST CANDIDATE'S, NOT THE FIRST'S.** The
+        tile holds whichever candidate is being fitted and `fit` sizes every
+        output slot to the widest, so a budget taken from `white` (d = 0, p = 1)
+        would size a tile the `white + matern12` pass cannot hold. **And `p_max`
+        is read off the ragged index rather than counted by eye** -- Task 2
+        counted `white + matern12` as two free parameters and it is three, which
+        the slow suite caught two fixtures later.
+
+        Returns:
+            `d`, `k_beta`, `p_max`, `n_time` and `n_models`.
+        """
+        return {
+            "d": max(self.state_dims),
+            "k_beta": self.k_beta,
+            "p_max": max(self.index.extents),
+            "n_time": self.n_time,
+            "n_models": len(self.specs),
+        }
+
+
+def run_geometry(
+    config: Config, handle: InputHandle, contract: ContractReport
+) -> RunGeometry:
+    """Derive the model geometry a run tiles against.
+
+    Args:
+        config: The effective configuration.
+        handle: An opened input, past the stage-4a contract.
+        contract: What stage 4a established.
+
+    Returns:
+        The geometry.
+    """
+    years = to_decimal_years(handle.dataset["time"].values)
+    signal = config.signal_spec()
+    specs = list(config.process_specs())
+    return RunGeometry(
+        years=years,
+        signal=signal,
+        k_beta=signal_k_beta(signal, years),
+        specs=specs,
+        index=build_ragged_index(specs, noise_extent),
+        state_dims=[StateSpace.from_spec(spec).state_dim for spec in specs],
+        n_time=contract.n_time,
+    )
+
+
 def _with_memory_budget(config: Config, budget_gb: float, *, source: str) -> Config:
     """Return `config` with its memory budget replaced, RE-VALIDATED.
 
@@ -351,6 +452,7 @@ def run(
     on_tile_written: Callable[[Tile], None] | None = None,
     reuse_fits_from: Path | str | None = None,
     floor: FloorReport | None = None,
+    max_iter: int | None = None,
 ) -> RunReport:
     """Validate a configuration, fit every tile, and write the store.
 
@@ -392,6 +494,24 @@ def run(
             import and an open, and a test that is not about the floor should not
             pay for one. **The default path is exercised by its own test**, or
             the seam would make every floor assertion vacuous.
+        max_iter: Iteration cap per series, defaulting to
+            `optimize.DEFAULT_MAX_ITER`. **THE SEAM PHASE 2b's CALIBRATION IS,
+            AND IT IS A `run()` ARGUMENT RATHER THAN A CONFIG FIELD ON PURPOSE.**
+            The calibration is a capped run of *this* function -- same entry
+            point, same tile loop, same budget derivation -- because a
+            purpose-built harness would approximate the loop and then validate
+            the approximation, which is (j2) and is the defect F2 already was.
+            A cap in the config would reach `fit_hash`, and the calibration
+            would then key on a different fit identity from the run whose memory
+            it measures.
+            **The unset path is the default value and not a branch**: it is
+            resolved once, above the loop, into the same argument `fit` already
+            takes, so a run that does not cap allocates and orders exactly what
+            it did before the seam existed. **The cost is that a capped store
+            shares all three hashes with an uncapped one** -- the cap is in no
+            payload -- so the resolved value is written into provenance as
+            `max_iter`, which is the only thing that tells the two apart without
+            reading every outcome code.
 
     Returns:
         What the run established.
@@ -401,6 +521,11 @@ def run(
             tile side this run's budget cannot hold. Exit code 3.
         InputContractError: Layer 4 -- the data. Exit code 4.
     """
+    # RESOLVED ONCE, ABOVE EVERYTHING, so the tile loop keeps exactly the call
+    # it had before the seam existed. A branch inside the loop would put a
+    # condition on the production path for the sake of a calibration.
+    iteration_cap = DEFAULT_MAX_ITER if max_iter is None else max_iter
+
     config = load_config(config_path)
     if memory_budget_gb is not None:
         config = _with_memory_budget(config, memory_budget_gb, source="--memory-budget")
@@ -480,18 +605,13 @@ def run(
         # `ContractReport` carries only its endpoints, so it is converted once
         # here rather than per tile -- the conversion is under ALGORITHM_VERSION
         # and doing it twice would be two derivations of fit identity.
-        years = to_decimal_years(handle.dataset["time"].values)
-        signal = config.signal_spec()
-        columns = signal_k_beta(signal, years)
-        specs = list(config.process_specs())
-        index = build_ragged_index(specs, noise_extent)
+        geometry = run_geometry(config, handle, contract)
+        years = geometry.years
+        signal = geometry.signal
+        columns = geometry.k_beta
+        specs = geometry.specs
+        index = geometry.index
 
-        # **p_max IS THE WIDEST CANDIDATE'S FREE PARAMETER COUNT, NOT THE
-        # FIRST'S.** The tile holds whichever candidate is being fitted and
-        # `fit` sizes every output slot to the widest, so a budget taken from
-        # `white` would size a tile the `white + matern12` pass cannot hold.
-        #
-        state_dims = [StateSpace.from_spec(spec).state_dim for spec in specs]
         # MEASURED AFTER THE OPEN AND BEFORE THE STORE, in a child of its own:
         # the input's handles, consolidated metadata and decompression buffers
         # are resident and scale with the store rather than with the tile, so a
@@ -547,11 +667,7 @@ def run(
                     # function and every consumer reads it.
                     budget_bytes=budget_bytes,
                     floor=measured_floor,
-                    d=max(state_dims),
-                    k_beta=columns,
-                    p_max=max(index.extents),
-                    n_time=contract.n_time,
-                    n_models=len(specs),
+                    **geometry.tile_kwargs(),
                 )
             except BudgetTooSmallError as error:
                 # STAGED AS LAYER 3, NOT LEFT AS A ValueError. It is a
@@ -596,6 +712,7 @@ def run(
                 else TileSideBasis(source_attrs["tile_side_basis"])
             ),
             memory_budget_requested_gb=requested_budget_gb,
+            max_iter=iteration_cap,
             floor=measured_floor,
             source=None
             if source_attrs is None
@@ -640,6 +757,7 @@ def run(
                             mask=np.isfinite(block),
                             objective=Objective(config.objective),
                             engine=engine,
+                            max_iter=iteration_cap,
                         )
                     write_tile(
                         store_path,

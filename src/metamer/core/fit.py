@@ -65,7 +65,7 @@ from metamer.core.engines.kalman import KalmanEngine
 from metamer.core.engines.protocol import Engine
 from metamer.core.gradients import resolve_gradient_mode
 from metamer.core.objective import ConcentratedObjective
-from metamer.core.optimize import InitRung, optimize_series
+from metamer.core.optimize import DEFAULT_MAX_ITER, InitRung, optimize_series
 from metamer.core.outcomes import Outcome
 from metamer.core.signal import SignalSpec
 from metamer.core.statespace import StateSpace
@@ -140,7 +140,7 @@ def fit(
     objective: Objective = Objective.ML,
     engine: Engine | None = None,
     x0: NDArray[np.float64] | None = None,
-    max_iter: int = 200,
+    max_iter: int = DEFAULT_MAX_ITER,
 ) -> FitResult:
     """Fit a candidate set to a batch of series and rank the candidates.
 
@@ -160,7 +160,10 @@ def fit(
             2 supplies these; the signature is fixed now because it constrains
             everything downstream.
         max_iter: Iteration cap per series. Call-level, so it cannot vary
-            within a batch.
+            within a batch. Defaults to `optimize.DEFAULT_MAX_ITER`, which is
+            the one place the production cap is written down -- see there for
+            why it is not a config field and why Phase 2b's calibration lowers
+            it.
 
     Returns:
         A `FitResult`.

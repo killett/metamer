@@ -33,6 +33,7 @@ from metamer.batch.threads import NUMBA_KEY
 from metamer.batch.validation import ExitCode, ValidationError, ValidationLayer
 from metamer.core import machine
 from metamer.core.memory import default_budget_gb
+from metamer.core.outcomes import Outcome
 
 # `to_zarr` warns that consolidated metadata is not in the v3 spec. It is
 # xarray's default and says nothing about this code.
@@ -527,6 +528,85 @@ def test_a_supplied_floor_is_used_instead_of_a_measurement(tmp_path):
     assert stored["with_input_bytes"] == 33_000_000
     assert stored["peak_bytes"] == 44_000_000
     assert stored["components"] == {"constructed": 33_000_000}
+
+
+def test_the_iteration_cap_reaches_the_fits_and_an_uncapped_run_does_not_cap(tmp_path):
+    """The `max_iter` seam, with the positive control that makes it falsifiable.
+
+    **THE CALIBRATION'S WHOLE CLAIM IS "IT DRIVES THE PRODUCTION PATH", WHICH IS
+    A PURE NEGATIVE** -- nothing observable says a harness was *not* used. What
+    is observable is the cap arriving at the optimizer through `run()`, and the
+    store already records it: `/primitives/iterations` per candidate and
+    `/status/outcome`, whose `ITER_CAP_*` members are what a stopped fit gets.
+
+    Expected values determined independently, measured 2026-08-15 before this
+    test was written: at `max_iter=1` over `white` and `white + matern12` on
+    white noise, 128 fits give `ITER_CAP_LARGE_GRAD` 114 and
+    `ITER_CAP_SMALL_GRAD` 14 and **no `OK` at all**; at the default cap they
+    give 87 `OK` and 41 `DEGENERATE_HESSIAN`. So "no OK, iterations at the cap"
+    and "some OK, iterations above the cap" are the two regimes, and they are
+    asserted separately rather than as a difference (i3).
+
+    Bug this catches: `run()` accepting `max_iter` and not passing it, which
+    makes every calibration a full-cost converged run reporting itself as
+    capped -- and, in the other direction, a default run silently capped, which
+    would ship a product that never converges. **The pair is what separates
+    them**: neither assertion alone can tell a seam that does nothing from a
+    seam that does everything.
+    """
+    import xarray as xr
+
+    # **WHITE NOISE, NOT THE MODULE'S ZERO-FILLED INPUT.** A record of exact
+    # zeros drives sigma to its lower diagnostic limit and comes back
+    # `DIAGNOSTIC_LIMIT` for every point at every cap -- measured -- so the
+    # uncapped half of the pair could never produce an `OK` and the control
+    # would be vacuous. This is the handoff's fixture fact about
+    # `DIAGNOSTIC_LIMIT` reached through sigma rather than through rho, met from
+    # the other side.
+    dataset = xr.Dataset(
+        {
+            "sla": (
+                ("time", "y", "x"),
+                np.random.default_rng(0).standard_normal((60, 2, 3)).astype("float32"),
+            )
+        },
+        coords={"time": _months(60), "y": np.arange(2), "x": np.arange(3)},
+    )
+    uri = str(tmp_path / "noise.zarr")
+    dataset.to_zarr(uri)
+    config = _config(tmp_path, uri)
+    capped = run(config, tmp_path / "capped.zarr", max_iter=1)
+    default = run(config, tmp_path / "default.zarr")
+
+    capped_iterations = xr.open_zarr(
+        str(capped.store_path), group="primitives"
+    ).iterations.values
+    default_iterations = xr.open_zarr(
+        str(default.store_path), group="primitives"
+    ).iterations.values
+    capped_outcome = xr.open_zarr(str(capped.store_path), group="status").outcome.values
+    default_outcome = xr.open_zarr(
+        str(default.store_path), group="status"
+    ).outcome.values
+
+    assert capped_iterations.max() == 1
+    assert not (capped_outcome == Outcome.OK.code).any()
+    assert (capped_outcome == Outcome.ITER_CAP_LARGE_GRAD.code).any()
+
+    assert default_iterations.max() > 1
+    assert (default_outcome == Outcome.OK.code).any()
+
+    # **THE CAP IS NOT IN ANY HASH, AND THAT IS DELIBERATE AND DANGEROUS.** It
+    # is a `run()` argument rather than a config field, because a cap in the
+    # config would move `fit_hash` and a calibration would then key on a
+    # different fit identity from the run whose memory it measures -- which
+    # destroys the cache key at Task 5. The cost is that these two stores, whose
+    # CONTENTS differ completely, agree on all three hashes. Provenance is what
+    # tells them apart, and this asserts both halves.
+    assert capped.fit_hash == default.fit_hash
+    assert capped.run_hash == default.run_hash
+    assert xr.open_zarr(str(capped.store_path)).attrs["max_iter"] == 1
+    assert xr.open_zarr(str(default.store_path)).attrs["max_iter"] == 200
 
 
 def test_a_run_records_the_basis_that_produced_its_tile_side(tmp_path):

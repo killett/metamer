@@ -173,6 +173,30 @@ question 9: a white-noise series fitted with white + Matern 1/2 measured
 having been calling a near-degenerate series healthy by 28x.
 """
 
+DEFAULT_MAX_ITER: int = 200
+"""The production iteration cap, and the ONE place it is written down.
+
+**IT HAS TWO CALLERS AND IS ABOUT TO HAVE A THIRD**, which is why it stopped
+being a literal. `optimize_series` and `fit` both carried `max_iter: int = 200`,
+and Phase 2b Task 4 adds `run(..., max_iter=...)`: a third copy would drift the
+day any one of them moved, and the drift would be silent -- a run capped at a
+stale default converges to the same optimum for most series and to a different
+one for the hard ones, which is the failure mode section 11.1 calls the worst in
+the system.
+
+**IT IS A CALIBRATION KNOB AND NEVER A PRODUCTION ONE.** Convergence is well
+inside it -- P3 measured `mean_iterations` at **32.5** at d = 3 -- so lowering it
+is how Phase 2b's calibration makes a real tile affordable. **A MEAN IS NOT A
+MAXIMUM**, and the difference is what a reader taking 32.5 as "converged by 32"
+gets wrong: measured 2026-08-15 at a cap of 32 over 128 fits, **83 came back
+`OK` and 45 did not**. At a cap of 1 or 2, **none** do.
+
+**And it is not a config field**, deliberately. A cap in the config would reach
+`fit_hash`, so a capped calibration would key on a different fit identity from
+the run whose memory it measures -- which is precisely what section 11.4's cache
+key must not do.
+"""
+
 _RATIO_FLOOR: float = 1.0
 """Smallest admissible `|f| / |f''''|`, so a degenerate scale cannot give h = 0."""
 
@@ -453,7 +477,7 @@ def optimize_series(
     t: NDArray[np.float64],
     design: DesignInfo | None,
     x0: NDArray[np.float64] | None = None,
-    max_iter: int = 200,
+    max_iter: int = DEFAULT_MAX_ITER,
     hessian_cond_limit: float = HESSIAN_COND_LIMIT,
 ) -> SeriesFit:
     """Fit one series. The batch driver in `fit.py` loops over this.
