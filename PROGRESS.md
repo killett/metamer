@@ -3,14 +3,14 @@
 ## Start here (cold-start summary)
 
 1. **Branch `main`, everything on it, every commit pushed by a hook** — https://github.com/killett/metamer.
-2. **DONE:** Phase 1 (0–18), Phase 2 preliminaries P0–P4, **Phase 2a (0–13)**, **Phase 2b Tasks 0–8**, open questions 1, 4, 9, 11, 12, 15.
-3. **NEXT ACTION: 2b TASK 9 IS BLOCKED — read [What Task 9 inherits](#what-task-9-inherits-2026-08-16) FIRST and decide before writing anything.** Task 8 left a per-series figure two instruments disagree about by 1.86×, and Task 9 publishes tile sides derived from it.
-4. **Tests: 1047 passed, 0 failed, 0 indeterminate — 2026-08-16, 773 s, on a box measured quiet (0.000 ms/s cgroup full stall over 20 s idle).** The only statement of the current count; earlier counts and sweep durations are in [Task 8's section](#what-task-8-established-done-2026-08-16--read-before-quoting-the-per-series-cost-criterion-6-or-criterion-7).
+2. **DONE:** Phase 1 (0–18), Phase 2 preliminaries P0–P4, **Phase 2a (0–13)**, **Phase 2b Tasks 0–8 and Task 9 NARROWED**, open questions 1, 4, 9, 11, 12, 15.
+3. **NEXT ACTION: 2b TASK 8a — the three-arm discriminator** (added 2026-08-17; the plan's own Task 8a section is the brief). Task 8 left a per-series figure two instruments disagree about by 1.86×; **Task 9's mechanism landed ahead of it and the published value is frozen at 272 carrying its dispute.** Execution order is **9 (narrowed) → 8a → 8b → 9's value freeze → 10.**
+4. **Tests: 1052 passed, 0 failed, 0 indeterminate — 2026-08-17, 1041 s, at a full-stall rate of 2.04 ms/s over the sweep's own window** (host load 12 falling to 2 on a 4-core box; the rate is the sweep's, not an idle reading, and is 4% of `RSS_STALL_LIMIT_US_PER_S`). The only statement of the current count; earlier counts and sweep durations are in [Task 8's section](#what-task-8-established-done-2026-08-16--read-before-quoting-the-per-series-cost-criterion-6-or-criterion-7).
 5. **`pixi run test` is the full sweep and every end-of-task verification must run it; `test-fast` and `test-ci` are not evidence.** It has caught **seven** things a fast run could not, two of them in Task 8. **Every run prints `RSS measurement validity`, including at zero** — a nonzero count is INDETERMINATE, neither pass nor fail.
 6. **Verify a fresh checkout with `pixi run test && pixi run typecheck && pixi run lint`**, plus `pixi run pre-commit run --all-files` before every commit.
 7. **THE METHOD IS THE PRE-FLIGHT AND IT LIVES IN EXACTLY ONE PLACE:** [`phase1-to-phase2-handoff.md`](docs/superpowers/notes/phase1-to-phase2-handoff.md) §1 — (a0)–(a8), (a)–(k), **(j4) new at Task 8**, the five causes of a surviving mutation, the standing rules, the fixture facts. **Run it against the task brief before code**, append to [`phase2b-preflight.md`](docs/superpowers/notes/phase2b-preflight.md). **Do not restate it here** — the two copies drifted once already.
 8. **The plan is [`2026-08-14-metamer-phase2b.md`](docs/superpowers/plans/2026-08-14-metamer-phase2b.md)** — 11 tasks, 16 exit criteria, approved 2026-08-14, **amended in place by every one of Tasks 0–8, because every one contradicted its brief.**
-9. **Read, in order:** [What Task 9 inherits](#what-task-9-inherits-2026-08-16), [What Task 8 established](#what-task-8-established-done-2026-08-16--read-before-quoting-the-per-series-cost-criterion-6-or-criterion-7), [the RSS validity gate](#what-the-rss-validity-gate-established-done-2026-08-16--read-before-writing-any-rss-assertion), [What Task 7 established](#what-task-7-established-done-2026-08-16--read-before-quoting-the-slope-or-the-linearity-claim), then [What 2b's first tasks inherit](#what-2bs-first-tasks-inherit-2026-08-14).
+9. **Read, in order:** [What Task 9 (narrowed) established](#what-task-9-narrowed-established-done-2026-08-17--read-before-quoting-the-tile-side-the-floor-or-the-blocker) — **and the tile side is `batch.tiling.PUBLISHED_TILE_SIDE`, in code, not in any document** — [What Task 9 inherited](#what-task-9-inherited-and-what-was-decided-2026-08-16-resolved-2026-08-17), [What Task 8 established](#what-task-8-established-done-2026-08-16--read-before-quoting-the-per-series-cost-criterion-6-or-criterion-7), [the RSS validity gate](#what-the-rss-validity-gate-established-done-2026-08-16--read-before-writing-any-rss-assertion), [What Task 7 established](#what-task-7-established-done-2026-08-16--read-before-quoting-the-slope-or-the-linearity-claim), then [What 2b's first tasks inherit](#what-2bs-first-tasks-inherit-2026-08-14).
 10. **Precedence: the design doc is authoritative on INTENT; a measured, dated number supersedes an unmeasured one wherever it lives, including in the design doc. Any measurement stated twice has one copy DELETED, never reconciled.**
 
 ---
@@ -145,8 +145,10 @@ the last two are projections Tasks 2 and 3 will replace with derivations.
 Bracketing squares for the per-series step, so the next reader can check rather than trust:
 `347² = 120 409 ≤ 10⁹/8274 = 120 860.5 < 121 104 = 348²`, and `187² = 34 969 ≤ 10⁹/28 434 =
 35 169.9 < 35 344 = 188²`. **347 and 187 are intermediate values, not answers** — they divide the
-whole budget into the per-series cost, which is F1. **The current number is 272 / 144 and it
-lives with its preconditions in the handoff's §3, once.**
+whole budget into the per-series cost, which is F1. **The current number lives with its
+preconditions in `batch.tiling.PUBLISHED_TILE_SIDE`, once, since Task 9 — and a test recomputes
+it from `tile_side_for` rather than a reader checking it.** The handoff's §3 and this table's
+last row pointed at each other and at nothing executable until 2026-08-17.
 
 **The side getting smaller at the same nominal budget is the correct direction and is expected.**
 
@@ -450,9 +452,10 @@ PROCESS.** `tiling.block_bytes_for`, `tiling.tile_side_for` (now taking a `Floor
 | √, floored | 281 |
 | rounded down to a multiple of 16 | **the published side** |
 
-**This is the arithmetic; the answer and its full precondition list live in the handoff's §3,
-once.** Larger budgets, which are stated nowhere else: 2 GB → 416, 4 GB → 608, 8 GB → 880,
-16 GB → 1264.
+**This is the arithmetic; the answer and its full precondition list live in
+`batch.tiling.PUBLISHED_TILE_SIDE`, once — in code, since Task 9, because the handoff's §3 was
+prose and no test could read it.** Larger budgets, which are stated nowhere else: 2 GB → 416,
+4 GB → 608, 8 GB → 880, 16 GB → 1264.
 
 **THE BUDGET'S UNIT IS DECIDED: `memory_budget_gb` IS 10⁹ BYTES.** `run.py` used `1024**3` until
 now — 7.4% more bytes than every published side, and than this file's own Hardware table, which
@@ -1286,11 +1289,13 @@ register, which is where the reasoning lives.
 
 #### THE SUITE'S COUNTS AND THE SWEEP'S DURATIONS, WHICH THE HEAD POINTS HERE FOR
 
-**Counts:** 1047 after Task 8, 1035 after the RSS validity gate, 1024 after Task 6, 1018 after
+**Counts:** 1052 after Task 9 (narrowed), 1047 after Task 8, 1035 after the RSS validity gate, 1024 after Task 6, 1018 after
 Task 5, 997 after Task 4, 989 after Task 3, 977 after Task 2, 967 after Task 1, 947 after Task 0.
 
 **Sweep durations: 1199 s (Task 5), 942 s (Task 6), 3502 s (Task 7), 2687 s (the validity gate),
-773 s (Task 8) — and they measure the HOST, not the suite.** Between Tasks 6 and 7 the suite grew
+773 s (Task 8), 1041 s (Task 9 narrowed) — and they measure the HOST, not the suite.** Task 9's
+run started at host load 12 and finished at 2, which is why it is 35% above Task 8's on a suite
+five tests larger; **a sweep duration is a measurement of the box that hour**. Between Tasks 6 and 7 the suite grew
 by eight tests and the wall clock nearly quadrupled at host load 12–16 on a 4-core box; Task 8
 added twelve tests and came in at **22% of Task 7's time on a quiet one**. The Task 5→6 pair
 already showed the suite getting **21% faster while growing**, which is why the attribution
@@ -1323,6 +1328,104 @@ nothing finer; **the 45 B/tile figure is reachable only by the 400-tile hand run
 
 **The measurements are NOT in the suite** — Task 4's and Task 7's precedent — and the suite tests
 the **analysis** against constructed ladders plus that one 16-tile recompute.
+
+---
+
+### What Task 9 (narrowed) established (done 2026-08-17 — read before quoting the tile side, the floor, or the blocker)
+
+**THE MECHANISM LANDED AND THE VALUE DID NOT MOVE.** Task 9 was blocked as written because it
+amends twenty-plus sites to a number two instruments disagree about by 1.86×. It was **narrowed**
+rather than deferred: the single-source machinery and the sites wrong under *every* hypothesis
+landed now, the value stays **272 / 144** carrying its dispute, and Task 8b freezes it.
+**Sequence: Task 9 narrow → 8a → 8b → Task 9 value frozen → Task 10.**
+
+#### `batch.tiling.PUBLISHED_TILE_SIDE` IS THE NUMBER, AND IT IS A VALUE SO A TEST CAN READ IT
+
+The record carries the budget, the pinned floor **and what was open when it was measured**, the
+headroom, the base, §9.4's model, both sides, and the dispute. Five tests: criterion 16
+(`documented == tile_side_for(documented inputs)`), the argument list bound against
+`tile_side_for`'s **whole** signature, the model bound against `resident_bytes_per_series`'s, the
+dispute's hypothesis sides recomputed, and the dispute's direction/owner/spread. **All four
+mutations bite** — value moved, precondition dropped, a defaulted parameter added, a hypothesis
+side transcribed.
+
+> **CRITERION 16 IS A CONSISTENCY TEST, NOT A CORRECTNESS TEST, AND THAT IS WRITTEN INTO IT.**
+> Its oracle is the implementation, so both sides move together and a **wrong formula passes it**.
+> What it catches is this cascade: the next correction orphaning four documents and five
+> docstrings. `test_the_worked_example_derives_272_from_the_whole_chain`'s hand-derivation is the
+> independent oracle and stays.
+
+**Three copies of §9.4's model existed and are now one**: `validation.py:_WORKED_EXAMPLE`,
+`tests/test_tiling.py:WORKED_EXAMPLE`/`WORKED_FLOOR`, and the record. Both former copies are
+**aliases into it**. **What is not shared is the answer** — layer 3 runs before the floor is
+measured, so its sides divide the whole budget and are deliberately a **ratio**; unifying them
+would publish a fifth tile side, which `_WORKED_EXAMPLE_BUDGET`'s own docstring already refuses.
+
+**Re-pointed, and the strikes carry their dates:** design doc §2.5, §9.4's table (every figure
+struck), §11.1 (including the backend pair), §12.6's shard table (a 272 row computed, the 445 row
+struck) and §13.4; the handoff's §3 table, **deleted rather than reconciled**; `tiling.py`'s
+module and `tile_side_for` docstrings; `assemble_tile`'s worked figures, recomputed at 272 —
+**186 MB float32, 373 MB float64, 559 MB for the one-call form**, superseding 303/607/910 at 347;
+`store.py`'s `TILE_SIDE_BASE` rationale, whose *argument* is untouched because it rests on a prime
+side being **reachable**, not on which side was published that day.
+
+#### AND THE FLOOR CORRECTION THIS TASK WAS ASKED TO LAND DOES NOT REPRODUCE
+
+`WORKED_FLOOR` pins **228 200 000** and Task 8 measured **232.00 MB ± 0.468 over ten runs**, so
+the narrowed brief included updating it — a stale constant that changes nothing today (**272
+either way**, the base-16 round-down absorbs it) and would matter later. **Checked before it was
+made, and the premise fails.** Measured 2026-08-17, box quiet (20 s idle at 0.0397 ms/s, every
+probe window 0.0000, swap 100% full, 5094 MB available), three `measure_floor` runs per fixture:
+
+| fixture opened | `peak_bytes`, MB | span |
+|---|---|---|
+| 12 × 16 × 16 | 228.37, 228.68, 228.93 | 0.56 |
+| 60 × 160 × 160 | 228.66, 228.54, 228.63 | 0.11 |
+| 630 × 64 × 64 | 229.95, 229.83, 229.89 | 0.11 |
+
+**`measure_floor` TAKES A `data_uri`, SO THE FLOOR IS INPUT-DEPENDENT BY CONSTRUCTION**, and
+neither 232.00 nor 228.2 was recorded with its input. The input moves it by **1.28 MB**, eleven
+times the within-fixture span — real, and **not 3.8**. Nine readings today bracket 228.37–229.95;
+**Task 8's own five-point ladder intercept is 228.042 MB, measured the day it recorded 232.00.**
+**Three lines land at 228–230 and one at 232, so `WORKED_FLOOR` is not established stale and does
+not move.** The 232.00 reading is **not withdrawn** — ten runs at σ = 0.468 is not scatter around
+228.6 — what is withdrawn is the inference: *"the floor has moved"* was drawn from two numbers
+whose common precondition was never recorded. **A pinned floor needs its input beside it**, which
+is `floor_basis`, and it is the same rule as *a published side needs its floor* one level down.
+
+#### THE BLOCKER'S OWN FRAMING WAS WRONG, AND IT IS (a4) ON THE REVIEW SIDE
+
+*What Task 9 inherits* said the two explanations *"both predict exactly what was observed, because
+the observation is a single line through peak against B and either term moves it."*
+**`HEADROOM_FRACTION` does not move peak.** Task 8's ladder forced `grid = side`, so the tile
+geometry is fixed by the fixture and not by the budget; **1900.9 ± 84.1 B/series is a fit through
+peak RSS** and the headroom enters only the budget column. The headroom explanation survives
+**only if the excess is a transient** — a different claim, with a cheaper discriminator. **The
+blocker was written from the task's conclusion rather than from its method, and the method fixes
+the geometry the alternative hypothesis would have needed to move.**
+
+#### AND THE "~33%" IMPLIED HEADROOM DOES NOT RECONCILE — IT IS 51.29%
+
+The blocker put the asymptotic requirement at *"~33% against the shipped 15%"*. **No derivation
+reproduces it.** Criterion 7 asymptotically needs the budget's slope to reach the peak's:
+`926 / (1 − h) ≥ 1900.9`, so `h ≥ 1 − 926/1900.9 = ` **0.5129**. At §9.4's preconditions that
+gives a side of **208**, against 240 for the quoted 33%. **The spread is unchanged at 192–272**,
+because the multiplicative reading is still the extreme, so nothing downstream moves — which is
+exactly why it survived. `PerSeriesDispute.headroom_fraction_required` carries the derived value
+and a test recomputes it from the two slopes. **(a4): a number in a report is as unverified as one
+in a brief, fourth instance.**
+
+#### THE ONE-SIDED BOUND, AND THE DIRECTION IS THE WHOLE VALUE OF IT
+
+Task 8's side-96 watermark sits **1.4 MB above the end-of-tile current reading** at B = 9216. If
+the whole 974.9 B/series excess were transient that gap would be **8.99 MB**. Since
+`peak − current_end ≥ transient`, the transient is **≤ 152 B/series — an UPPER bound**, at most
+**15.6%** of the excess. **It excludes the headroom explanation as *sufficient* without
+establishing it as zero**, and it must be quoted with its direction or it becomes a measurement of
+152. Recorded as `transient_bound_is_an_upper_bound`, asserted by a test. **(j4) firing on its
+first opportunity after promotion.** Open question 16's N-independent excess (+2736 at N = 630,
++2616 at N = 60) is a **prior for the additive reading, not evidence for it** — different
+instrument, different magnitude — and stays open rather than being folded in (a5).
 
 ---
 
@@ -1678,9 +1781,17 @@ was the actual defect the leak exposed.
 | **Phase 2b implementation plan** | [`docs/superpowers/plans/2026-08-14-metamer-phase2b.md`](docs/superpowers/plans/2026-08-14-metamer-phase2b.md) — 11 tasks, 16 exit criteria, **approved 2026-08-14. Tasks 0–6 landed 2026-08-15, Task 7 on 2026-08-16.** Its head carries findings F1–F4, which are why 2b begins with a correction task rather than with the calibration tile |
 | **Phase 2b pre-flight, per task** | [`docs/superpowers/notes/phase2b-preflight.md`](docs/superpowers/notes/phase2b-preflight.md) — carries the pre-plan audit and Task 0's; per-task entries are appended **before** each task |
 
-### What Task 9 inherits (2026-08-16)
+### What Task 9 inherited, and what was decided (2026-08-16, resolved 2026-08-17)
 
-**TASK 9 IS BLOCKED AND THE FIRST THING IT OWES IS A DECISION, NOT A PRE-FLIGHT.**
+> **RESOLVED 2026-08-17. Task 9 was NARROWED, not deferred, and its mechanism has landed; two
+> tasks were added to own what no task owned.** The decision, the three-arm measurement and the
+> ownership are in the plan (Tasks 8a, 8b and Task 9's narrowing note) and what landed is in
+> [What Task 9 (narrowed) established](#what-task-9-narrowed-established-done-2026-08-17--read-before-quoting-the-tile-side-the-floor-or-the-blocker).
+> **Two claims below are corrected there and are struck where they stand:** the two explanations
+> are **not** symmetric, and the implied headroom is **51.29%, not ~33%.** The section is kept
+> because the reasoning that produced the block is the transferable part.
+
+**TASK 9 WAS BLOCKED AND THE FIRST THING IT OWED WAS A DECISION, NOT A PRE-FLIGHT.**
 
 **THE BLOCK.** Task 9 is the tile-side cascade amendment: it publishes a tile side derived from a
 per-series cost. **Two instruments now disagree about that cost by 1.86×** — Task 7's ladder did
@@ -1699,10 +1810,16 @@ convenient reading win because it is the one that unblocks the task.
 
 - **the per-series formula understates by ~49%** — the measured slope against an analytic 926; or
 - **`HEADROOM_FRACTION` is too small**, the asymptotic requirement implied by criterion 7's
-  crossover being **~33%** against the shipped 15%.
+  crossover being ~~**~33%**~~ **51.29%** against the shipped 15% — corrected 2026-08-17, and no
+  derivation reproduces the 33%.
 
-**Both predict exactly what was observed**, because the observation is a single line through peak
-against B and either term moves it. **Task 8 changed neither, on purpose**, and one reproduction
+~~**Both predict exactly what was observed**, because the observation is a single line through
+peak against B and either term moves it.~~ **STRUCK 2026-08-17: the headroom does not move that
+line.** The ladder forces `grid = side`, so the fit is through **peak RSS** and the headroom
+enters only the budget column. The headroom explanation survives only if the excess is a
+**transient**, which is a different claim with a cheaper discriminator — and Task 8's own side-96
+reading already bounds the transient at **≤ 152 B/series** of the 975, an **upper** bound that
+excludes the headroom as *sufficient* without establishing it as zero. **Task 8 changed neither, on purpose**, and one reproduction
 of each instrument is not grounds to choose. **Do not touch `HEADROOM_FRACTION` or
 `resident_bytes_per_series` on this evidence.** What would separate them is a measurement that
 varies one without the other — the headroom is a pure multiplier on the budget and the formula is
@@ -1710,9 +1827,9 @@ a term in the peak, so a ladder at a **second fixture** (different N, different 
 the formula's error scales with the configuration and the headroom's does not.
 
 **AND EXIT CRITERION 6 IS IN QUESTION BECAUSE OF IT.** Its published ratio of 1.103 inside the
-band becomes 2.05 outside it on the better instrument. **This is an open defect that NO TASK IN
-THE PLAN OWNS.** It is not Task 9's subject and it is not Task 10's; whoever picks it up decides
-whether it is a new task or a Phase 2c one. **It must not be inherited silently.**
+band becomes 2.05 outside it on the better instrument. ~~**This is an open defect that NO TASK IN
+THE PLAN OWNS.**~~ **OWNED SINCE 2026-08-17: criterion 6 is Task 8a's, criterion 7 is Task 8b's**,
+and both are recorded in the plan's exit-criteria table rather than only here.
 
 **WHAT TASK 9 GETS FOR FREE, AND SHOULD NOT RE-MEASURE.** Everything in *What Task 8 established*
 — the ladder, criterion 7's crossover at B ≈ 4893 predicted then observed, the accumulation
@@ -1728,9 +1845,10 @@ effect an instrument says is absent. **Read them there, not here.**
 
 ---
 
-**Next action:** Task 9 — the tile-side cascade amendment — **and it is BLOCKED.** What blocks
-it, the two surviving explanations, and what would separate them are in
-[What Task 9 inherits](#what-task-9-inherits-2026-08-16), once. **No long measurement remains.**
+**Next action:** **Task 8a — the three-arm discriminator.** Arms A and C run regardless (~17 min
+together); Arm B runs only if A says resident (~1 h). **Its predictions are committed before the
+run, and "neither excluded — report and stop" is a permitted outcome.** The arms, their costs and
+what each separates are in the plan, once. Then 8b, then Task 9's value freeze, then Task 10.
 
 **THIS TABLE SAID "AWAITING REVIEW; NO CODE YET" WHILE THE COLD-START HEAD TWELVE HUNDRED LINES
 ABOVE SAID "APPROVED 2026-08-14".** Found at Task 0's start, 2026-08-15. Same shape as the

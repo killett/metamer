@@ -1742,7 +1742,7 @@ tests could not see.** `pixi run test-fast` would have shipped both.
 
 ## 3. The number every Phase 2 tile calculation inherits
 
-**`tile_side` IS 272, AND IT HAS NOW BEEN WRONG FOUR TIMES.** 171 for the whole of Phase 1;
+**`tile_side` IS `batch.tiling.PUBLISHED_TILE_SIDE`, AND IT HAS BEEN WRONG FOUR TIMES.** 171 for the whole of Phase 1;
 338 from 2026-08-10 (P2); 347 after Phase 2b Task 0 corrected the per-series formula; and **272
 since Phase 2b Task 2 stopped treating the budget as the block.** Every superseded figure is
 struck rather than deleted, so a reader meeting one in an old note can date it: ~~171~~ (while
@@ -1750,21 +1750,25 @@ struck rather than deleted, so a reader meeting one in an old note can date it: 
 charging one live solver working set to every series), ~~347~~ (the corrected per-series cost
 divided into the **whole** budget).
 
-**THE CURRENT NUMBER AND ITS PRECONDITIONS, WHICH IT IS NOT A NUMBER WITHOUT:**
+**THE CURRENT NUMBER AND ITS PRECONDITIONS LIVE IN CODE, AND THIS DOCUMENT NO LONGER CARRIES A
+COPY OF EITHER** — `batch.tiling.PUBLISHED_TILE_SIDE`, since Phase 2b Task 9. The table that
+stood here (budget, floor, headroom, base, model, answer) is now that record's fields, and
+`tests/test_tiling.py` **recomputes the answer from `tile_side_for`** and **binds the
+precondition list against its signature**. That is exit criterion 16, and it is the only repair
+that survives the next correction: this table was a copy, every copy of this number has gone
+stale, and a copy cannot be tested.
 
-| precondition | value |
-|---|---|
-| budget | **10⁹ B** — `memory_budget_gb = 1.0`, and **the unit is SI, not `1024**3`** |
-| **process floor** | `peak_bytes` = **228 200 000** — measured, with the input open |
-| headroom | `memory.HEADROOM_FRACTION` = 0.15, of what is left after the floor |
-| smooth base | `store.TILE_SIDE_BASE` = 16, rounding **down** |
-| model | d = 3, k_β = 4, p_max = 4, N = 630, M = 12, shared X |
-| **answer** | **272** shared, **144** per-point |
+**AND THE PER-SERIES COST IS UNDER DISPUTE BY 1.86× — the record says so in the same sentence
+that states the value**, with the live readings spanning 192 to 272 and Phase 2b Task 8a owning
+the measurement that separates them. When 8a and 8b resolve it, the `dispute` field is deleted
+in the edit that moves the value, because a test recomputes every figure in it.
 
-**THE FLOOR IS THE ONLY PRECONDITION THAT IS A MEASUREMENT**, and it is measured **with the
-input open**, so the derived side depends on the store being read. A published side therefore
-needs a **pinned** floor beside it or it is not reproducible; `tests/test_tiling.py`'s
-`WORKED_FLOOR` is that pin.
+**THE FLOOR IS THE ONLY PRECONDITION THAT IS A MEASUREMENT**, it is measured **with the input
+open**, and — measured 2026-08-17 — **it depends on which input**: 228.61 MB opening a
+60 × 160 × 160 store against 229.89 MB opening a 630 × 64 × 64 one, 1.28 MB apart against a
+0.11 MB within-fixture span, at 0.0000 ms/s of full stall. So a pinned floor needs its **input**
+recorded beside it, exactly as a published side needs its floor; `PublishedTileSide.floor_basis`
+is where that goes.
 
 **AND THE SIDE DOES NOT CARRY A BACKEND.** The per-series cost is the data tile plus the output
 slots, neither of which knows which engine is running, so the two published pairs

@@ -1540,8 +1540,10 @@ extrapolated at 12.4 s/series) it is **~26.5 h here**.
 
 **AND THE REFRAMING THAT MAKES THAT ACCEPTABLE IS ARITHMETIC.** 7680 capped
 series is about **649 converged-series-equivalents**, against **one** production
-tile at side 272 of **73 984** series -- so the whole ladder is **0.88% of a
-single tile**, and a run has thousands of them. Cheap against the job it sizes;
+tile at `tiling.PUBLISHED_TILE_SIDE.shared` -- 272 when this was written, so
+**73 984** series -- and the whole ladder is **0.88% of a single tile**, and a
+run has thousands of them. **The percentage moves with the record**; the
+conclusion survives any side this project has published. Cheap against the job it sizes;
 expensive in absolute terms on a four-core box. Both are true and the second is
 the one that surprises people.
 """

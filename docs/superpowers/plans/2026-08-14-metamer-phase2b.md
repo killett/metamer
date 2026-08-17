@@ -178,8 +178,17 @@ read:
 | 6 | The resume refusal that names calibration | 1, 2, 5 |
 | 7 | Criterion 6's instrument — the linearity claim | 4 |
 | 8 | Criterion 7's run, and accumulation via `--reuse-fits-from` | 2, 7 |
-| 9 | The five-site cascade amendment | 7, 8 |
-| 10 | The 2b exit-criteria suite | 0–9 |
+| **9 (narrowed)** | The cascade **mechanism**: one source, N pointers, and the tests that recompute it. **Landed 2026-08-17 ahead of 8a**, value not frozen | 7, 8 |
+| **8a** | The discriminator — resident vs transient, additive vs multiplicative. **Added 2026-08-17.** Owns criterion 6's restated verdict. Changes no constant | 8, 9 |
+| **8b** | The correction, one term per commit, and the value freeze. **Added 2026-08-17.** Owns criterion 7 | 8a |
+| 10 | The 2b exit-criteria suite | 0–9, 8a, 8b |
+
+**THE NUMBERING IS OUT OF ORDER ON PURPOSE AND IS NOT TIDIED.** 8a and 8b are Task 8's
+unfinished business — they resolve a disagreement Task 8 produced and deliberately did not
+choose between — and renumbering 9 and 10 would break every reference in `PROGRESS.md`, the
+pre-flight and eight commit messages. **The execution order is 9 (narrowed) → 8a → 8b →
+9's value freeze → 10**, and it is written here because the table's own order no longer implies
+it.
 
 **Three dependency decisions worth their reasons.**
 
@@ -993,7 +1002,74 @@ subject.
 
 ---
 
+## Task 8a — the discriminator: resident or transient, additive or multiplicative
+
+**Added 2026-08-17, after Task 8 blocked Task 9.** Two instruments disagree about the per-series
+cost by 1.86× and **no task in this plan owned the resolution**. This one does, and it **changes
+no constant**: its deliverable is a verdict with its predictions **committed before the run**.
+
+**What it must separate.** The measured peak slope is 1900.9 ± 84.1 B/series against an analytic
+926 at the ladder fixture. `HEADROOM_FRACTION` **cannot** explain that — the ladder forces
+`grid = side`, so the tile geometry is fixed by the fixture and the fit is through peak RSS, which
+the headroom does not enter. The headroom explanation survives only if the excess is a
+**transient**, and Task 8's own side-96 reading already bounds the transient at **≤ 152 B/series**
+of the 975 — an **upper** bound, so it excludes the headroom as *sufficient* without establishing
+it as zero.
+
+**Three arms, cheapest and highest-information first. Total under 1.5 h.**
+
+- **Arm A — resident vs transient (~11 min).** Sides 16/32/48 on Task 8's instrument, recording
+  **both `VmHWM` and end-of-tile current RSS**, stall rate per point. Current-slope ≈ 926 with
+  peak-slope ≈ 1900 ⇒ transient; both ≈ 1900 ⇒ resident. **Design around the bias:**
+  `current_end` understates resident-during-tile if the tile's arrays are released before the
+  read, which biases toward "transient" — so Arm A's job is **confirming resident**, which the
+  §2 bound already points at, rather than choosing between two live options.
+- **Arm B — additive vs multiplicative (~1 h, only if Arm A says resident).** A second fixture
+  with the predictions written down first: at analytic A₂, additive predicts A₂ + 975 and
+  multiplicative predicts 2.053·A₂. **`n_models` is the lever** — it raises signal per unit B, so
+  the ladder stays at small sides. At N = 60, M = 12, k_β = 4, p_max = 3 the analytic is 2856 and
+  the two predict **3831 vs 5863**. **Check `per_point_design`'s reachability through `run()`
+  before relying on it** — Q7 deferred the feature and declared the regime, so the formula branch
+  exists and the path may not.
+- **Arm C — the masked-source decomposition (~6 min). Run it regardless of A and B.** A
+  mostly-masked ladder short-circuits the fit, so its slope is the data tile plus output slots
+  plus the store path alone: ≈ 926 puts the excess in the fit path, ≈ 1900 in the tile/store path.
+  **Naming the location is what stops 8b from being a coefficient fitted to a fixture**, which is
+  (a7) and Task 0's F5 exactly — `22p·8` was wrong in its *dependence*, not its magnitude.
+
+**Permitted outcome: "neither excluded — report and stop."** Granted in advance, so the
+convenient reading does not win because it is the one that unblocks the sequence.
+
+**It also owns exit criterion 6's restated verdict.** Criterion 6's *"MET as written"* rests on
+Task 7's rung 48, which does not reproduce. 8a is the instrument that decides, so it restates the
+verdict rather than leaving it for Task 10 to discover.
+
+---
+
+## Task 8b — the correction, gated on 8a
+
+**One term moves, alone, in its own commit** — the standing rule that two changes which could each
+explain a wrong number land separately. Re-checks criterion 6's band against the corrected
+formula, and **freezes `PUBLISHED_TILE_SIDE`'s value, deleting the `dispute` field in the same
+edit.** A test recomputes every figure in that field, so a caveat left behind fails rather than
+reading as current.
+
+**It owns exit criterion 7**, whose crossover at B ≈ 4893 is either fixed by whichever term moves
+or **recorded as a known limitation with the failing regime named**. It must not close silently.
+
+---
+
 ## Task 9 — the tile-side cascade amendment
+
+**NARROWED 2026-08-17 AND ITS MECHANISM HAS LANDED.** The single-source record, its five tests and
+the re-pointing of every site went in ahead of 8a; **the value stays 272 / 144 carrying its
+dispute**, and 8b freezes it. Three reasons the mechanism goes first: criterion 16's test is what
+turns 8b's change from twenty edits into one, so building it afterwards does the cascade twice;
+the sites quoting 338, 361 and the backend pairs are wrong **under every hypothesis**, and leaving
+known-wrong numbers in place while waiting for a different number is this cascade's own failure
+mode; and the risk of publishing under dispute has a repair better than waiting — **the sentence
+that states the value states the dispute**, names its owner and gives the spread. What remains
+for the value freeze is in Task 8b. **What follows is the original brief, unchanged.**
 
 **Goal.** The published tile side is stated once, with its derivation and its preconditions, and
 a test recomputes it.
@@ -1058,8 +1134,8 @@ cache read by a process that did not write it.
 | 3 | The batched placement is unreachable through `run()`, with its arithmetic asserted through a constructed call |
 | 4 | The floor is measured post-warm with the input open, behind a bare launcher; pre- and post-warm are both recorded and differ |
 | 5 | A budget at or below the floor is refused, naming the floor, its components, and a budget that would work |
-| 6 | Measured slope and intercept match the corrected formula within a two-sided band at four or five sides, residuals reported — **closes 2a criterion 6**. **MET 2026-08-16 WITH ITS SCOPE STATED: 1021.6 ± 134.7 B/series against the analytic 926, ratio 1.103, inside the 617.3–1389.0 band — and the band is a 2.25× window while the measurement's own 2σ interval is 752–1291, nearly as wide. This criterion discriminates a gross formula error and not a marginal one. A criterion whose band is wider than its instrument's uncertainty is a criterion about the instrument** (i10). **Linearity is NOT established**: curvature +0.045 ± 0.034 (1.3σ), and the ladder could only have excluded an 82.6% variation across B |
-| 7 | A run at a formula-derived side under a budget well below available RAM has peak RSS at or below the budget — **closes 2a criterion 7** |
+| 6 | Measured slope and intercept match the corrected formula within a two-sided band at four or five sides, residuals reported — **closes 2a criterion 6**. **MET 2026-08-16 WITH ITS SCOPE STATED: 1021.6 ± 134.7 B/series against the analytic 926, ratio 1.103, inside the 617.3–1389.0 band — and the band is a 2.25× window while the measurement's own 2σ interval is 752–1291, nearly as wide. This criterion discriminates a gross formula error and not a marginal one. A criterion whose band is wider than its instrument's uncertainty is a criterion about the instrument** (i10). **Linearity is NOT established**: curvature +0.045 ± 0.034 (1.3σ), and the ladder could only have excluded an 82.6% variation across B. **AND THAT VERDICT IS NOW IN QUESTION AND IS OWNED BY TASK 8a**: it rests on Task 7's rung 48, which does not reproduce — re-run on Task 7's own instrument it measured 4.19 MB higher, and the same-instrument pair then implies 1787.9 B/series rather than 1021.6. On the better instrument the ratio is **2.05, outside the band**. Reported, not reconciled |
+| 7 | A run at a formula-derived side under a budget well below available RAM has peak RSS at or below the budget — **closes 2a criterion 7**. **IN QUESTION, AND OWNED BY TASK 8b.** Task 8 measured a **crossover at B ≈ 4893, side ≈ 70**, predicted from the two slopes and then bracketed: it holds for small tiles and fails for large ones, which is the production regime. Either 8b's correction closes it or it is recorded as a known limitation **with the failing regime named** |
 | 8 | Peak RSS does not grow with tile count over 10⁵–10⁶ points, nor with tile index within a fitted run |
 | 9 | Every derived side is a multiple of the base, and the achieved chunk bytes for the **worst** array are inside the target band |
 | 10 | A config omitting `memory_budget_gb` and one naming the resolved value produce the same `run_hash`, and provenance distinguishes them |
@@ -1068,7 +1144,7 @@ cache read by a process that did not write it.
 | 13 | The versions digest moves when any installed distribution's version moves |
 | 14 | Deleting the cache leaves the store openable and resumable |
 | 15 | A store records `tile_side_basis`, and a resume across a basis change names calibration in its refusal |
-| 16 | The documented tile side equals `tile_side_for` of its documented inputs |
+| 16 | The documented tile side equals `tile_side_for` of its documented inputs — **MET 2026-08-17 by `batch.tiling.PUBLISHED_TILE_SIDE` and five tests, WITH ITS SCOPE STATED: the oracle is the implementation, so a wrong formula passes it.** What it catches is the cascade — a correction orphaning four documents and five docstrings — and the hand-derivation in `test_the_worked_example_derives_272_from_the_whole_chain` remains the independent oracle |
 
 ---
 

@@ -105,7 +105,8 @@ This is the most seductive failure mode in the system and requires a mandatory a
 
 An earlier estimate in discussion put a `theta[tile, tile, P_total]` chunk at 150–600 MB.
 The correct figure at `tile_side ≈ 445` (from `sqrt(1 GB / (630 × 8))` — **that tile side is
-superseded; see §9.4 and §11.1, where the full accounting gives 338. The conclusion of this
+superseded; the current value and its preconditions are `batch.tiling.PUBLISHED_TILE_SIDE`,
+and this section quoted its own copy of 338 until 2026-08-17. The conclusion of this
 section does not move: a smaller tile makes the chunk smaller, and 32 MB was already above the
 read target**), `P_total ≈ 40`,
 float32 is **≈ 32 MB**; at `tile_side = 200` it is 6.4 MB. Still above a few-MB read
@@ -960,9 +961,19 @@ counts only the float64 data and therefore **overestimates**:
 
 | accounting | bytes/series | `tile_side` at a 1 GB budget |
 |---|---|---|
-| prompt formula (data only) | 5040 B | 445 |
-| this section, shared X | 8682 B | 339 |
-| this section, per-point X | 28 842 B | 186 |
+| prompt formula (data only) | 5040 B | ~~445~~ |
+| this section, shared X | ~~8682 B~~ | ~~339~~ |
+| this section, per-point X | ~~28 842 B~~ | ~~186~~ |
+
+**EVERY FIGURE IN THAT TABLE IS SUPERSEDED, STRUCK 2026-08-17 RATHER THAN DELETED**, because a
+reader meeting one in an old note needs to be able to date it. Two things moved: Phase 2b
+Task 0 rebuilt the per-series accounting field by field — the solver working set is a constant
+and not a per-series term (F2/F4/F5), the output slots were understated (F3) — and Task 2
+stopped dividing the **whole** budget, which is F1: the process floor and the headroom come out
+first. **The current per-series costs, the current sides and the full precondition list are in
+`batch.tiling.PUBLISHED_TILE_SIDE`, and a test recomputes them from `tile_side_for`.** The
+shape of this table is the part that survives: the prompt's data-only formula overestimates,
+and the per-point regime is the expensive one by roughly 3.4×.
 
 ---
 
@@ -1061,11 +1072,19 @@ Tiling generalizes synesthesia's `timeseries2color.py` pattern:
   `tile_side = sqrt(block_bytes / resident_bytes_per_series)` — **corrected 2026-08-12.** This
   bullet read `sqrt(block_bytes / (n_time × itemsize))`, which is the prompt's formula that
   §9.4 explicitly rejects two sections earlier: it counts only the float64 data and
-  **overestimates**, giving 445 against 338. Budget against
-  `memory.resident_bytes_per_series`, never against `bytes_per_series` — the two agree to 0.5%
-  today and that is a measurement, not a guarantee. **And a tile side carries its backend:**
-  measured 2026-08-12 at §9.4's worked example, `NUMPY_BATCHED` gives 338 shared / 186
-  per-point and `COMPILED` gives 361 / 189.
+  **overestimates**, giving ~~445~~ against the full accounting. Budget against
+  `memory.resident_bytes_per_series`, never against ~~`bytes_per_series`~~ — deleted at
+  Phase 2b Task 0, because it described the batched trust-region §8.3 specified and Task 19
+  removed. **THE SIDE AND ITS PRECONDITIONS ARE NOT QUOTED HERE:** they live in
+  `batch.tiling.PUBLISHED_TILE_SIDE`, which a test recomputes from `tile_side_for`. This
+  bullet quoted its own copy until 2026-08-17, and copies are what made the number wrong four
+  times.
+- ~~**And a tile side carries its backend:** measured 2026-08-12 at §9.4's worked example,
+  `NUMPY_BATCHED` gives 338 shared / 186 per-point and `COMPILED` gives 361 / 189.~~ **Struck
+  2026-08-14: it does not.** The per-series cost is the data tile plus the output slots,
+  neither of which knows which engine is running; `fit` drives one series at a time, so the
+  solver working set is a **constant** and the placement moves it, not the slope. The two
+  pairs differed only because the formula charged that set to every series.
 - Outer Python loop over tiles; materialize one tile at a time. Peak RAM is one tile plus
   ~~one dask chunk~~ **`W` dask chunks, where `W` is the assembly concurrency — corrected
   2026-08-11.** The original sentence is true at `W = 1` and false otherwise, and **if `W`
@@ -1823,7 +1842,13 @@ Computed shard sizes (float32, `P_total = 40`):
 | `tile_side` | `theta` shard | `delta_ic` shard (M=12, C=3) |
 |---|---|---|
 | 200 | 6.4 MB | 5.8 MB |
-| 445 | 31.7 MB | 28.5 MB |
+| **`PUBLISHED_TILE_SIDE.shared`** — 272 as this table was computed | **11.8 MB** | **10.7 MB** |
+| ~~445~~ | ~~31.7 MB~~ | ~~28.5 MB~~ |
+
+Recomputed 2026-08-17: a `theta` shard is `side² × P_total × 4` and a `delta_ic` shard is
+`side² × M × C × 4`, so at 272 they are 73 984 × 160 = 11.8 MB and 73 984 × 144 = 10.7 MB. The
+445 row is the prompt formula's superseded side and is struck rather than deleted. **The rows
+are illustrative sides; the derived one is the record's, and it moves when the record moves.**
 
 Chunk subdivision targets a few MB. Compression: zstd + shuffle.
 
@@ -2243,10 +2268,13 @@ and it is the difference between a configuration fitting in the available RAM an
 
 **And it reports BOTH regimes' numbers while the per-point feature is still refused
 (2026-08-11).** Per-point regressors are deferred, and the *regime* is not: the feature is
-refused at layer 3 while the config field, the memory formula's branch and this report all
-ship. Measured at d=3, k_β=4, p=4, N=630, M=12, 1 GB — shared X is 8 722 B/series and
+ship. ~~Measured at d=3, k_β=4, p=4, N=630, M=12, 1 GB — shared X is 8 722 B/series and
 `tile_side` 338; per-point X is 28 882 B/series and `tile_side` 186, a **3.3× change in tile
-area from one config field**. The formula already branches, so printing both costs nothing,
+area from one config field**.~~ **Struck 2026-08-17**: the per-series figures are Task 0's
+superseded ones and the sides divide the whole budget, which is F1. The regime change is what
+this section is about and it survives — `batch.tiling.PUBLISHED_TILE_SIDE` carries both current
+sides, and `batch.validation._per_point_tile_sides` **computes** the pair the refusal quotes
+rather than quoting a stored one, so the message cannot date. The formula already branches, so printing both costs nothing,
 and **a sizing tool that is only correct in the easy regime is worse than none, because it
 will be trusted.** The layer-3 refusal names the field *and* both tile sizes, because layer
 3 knows them and "not implemented" wastes context the user needs to plan.

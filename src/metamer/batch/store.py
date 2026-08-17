@@ -172,8 +172,12 @@ CHUNK_TARGET_BYTES = 4_000_000
 #: achievable chunk sizes are set by the side's factorization -- and this
 #: function's own docstring has warned since 2a that **a prime side has no useful
 #: subdivision**, with no instance to point at. Phase 2b Task 0's formula
-#: correction then moved the published side to **347, which is prime**; so are
-#: 349 and 353. **Two independent lines meeting on the same pathological case is
+#: correction then moved the published side to ~~**347, which is prime**~~ --
+#: superseded by Task 2, and the current value with its preconditions is
+#: `tiling.PUBLISHED_TILE_SIDE`; the argument below is unchanged by that, because
+#: what it rests on is the *reachability* of a prime side and not on which one
+#: was published the day it was written. So are 349 and 353.
+#: **Two independent lines meeting on the same pathological case is
 #: evidence, not coincidence**, and the measurement at the meeting is that the
 #: worst array's chunk goes from 18.3 MB at side 338 to **38.5 MB at 347 --
 #: 9.63x the 4 MB target**. Without the base, the corrected arithmetic is not
