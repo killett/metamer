@@ -662,6 +662,20 @@ def test_criteria_6_and_7_peak_rss_is_bounded_and_does_not_track_the_grid(
     Catches a tiling loop that accumulates per-tile state instead of releasing
     it, which is the defect the budget exists to prevent and the one that only
     a multi-tile run can show.
+
+    **AND THE BUDGET HERE IS GENEROUS, WHICH MAKES THIS ARM OF CRITERION 7
+    VACUOUS -- MEASURED 2026-08-16, PHASE 2b TASK 8.** `peak < 1 GiB` is
+    cleared by 274 MB at this fixture, of which 228 MB is block the four-point
+    grid never fills, so nothing short of a catastrophic regression could
+    breach it. **At the MINIMAL budget for each tile side the criterion has a
+    crossover**: met at sides 16-64 and failed at side 96 by 3.31 MB, because
+    the budget grows at `926 / 0.85 = 1089` B/series while the measured peak
+    grows at **1900.9 +- 84.1**. The five-point ladder, the crossover
+    arithmetic and the disagreement it opens with criterion 6 are in
+    `PROGRESS.md`'s *What Task 8 established*; they are **not** restated here
+    and this test is **not** widened to reach them -- a suite that fits four
+    series cannot, and pretending otherwise is what "reduced scope" exists to
+    prevent.
     """
     _base, uri, _config_path, _store = fitted
     program = textwrap.dedent(

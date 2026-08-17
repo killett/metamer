@@ -918,6 +918,33 @@ cannot be established on this machine at any affordable cost.** Every figure liv
 
 ## Task 8 — criterion 7's run, and accumulation across tiles
 
+> **AMENDED IN PLACE 2026-08-16, AFTER THE TASK RAN. Five of this brief's numbers were wrong and
+> the run's result is not the one it anticipated.** The audit is
+> [`../notes/phase2b-preflight.md`](../notes/phase2b-preflight.md) and every measurement is in
+> [`PROGRESS.md`](../../../PROGRESS.md)'s *What Task 8 established*; neither is restated here.
+>
+> - **"one capped run at side ≥ 192 under a 0.5 GiB budget" names two different runs.** At
+>   0.5 GiB the derived tile side is **528**, so a 192×192 grid is ONE tile and *"assert peak
+>   against tile index"* has no subject. The budget is the number that is right — a 528-point tile
+>   is 258 MB, finally above the floor — and the grid is wrong by 2.75×.
+> - **"~1.7 h" is a side-144 run's cost.** Side 192 is 2.97 h and the budget's own side 528 is
+>   22.5 h, at Task 7's rate. **And that rate did not transfer either**, three times over.
+> - **The tile outweighs the interpreter only at side ≥ 512 — 21 h for ONE tile.** That is a fifth
+>   closure boundary and it is this task's own goal sentence.
+> - **`--reuse-fits-from` reads its tile side from the SOURCE**, and `check_source` demands a full
+>   completion bitmap, so a 10⁵-point recompute needs a complete 10⁵-point **fit** — 8.1 h. The
+>   instrument is cheap and its input is not. **Repair: a mostly-masked input**, which
+>   short-circuits before any optimizer exists and builds the source in minutes.
+> - **"A budget below the floor is refused" was already covered three times** — `test_tiling.py`
+>   at both arms and `test_runner.py` end-to-end at layer 3. No fourth copy was written.
+>
+> **What replaced them:** five one-tile production runs at `grid = side` (16, 32, 48, 64, 96) plus
+> a repeat, a 36-tile fit-path run, and a 400-tile recompute over 102 400 points. **Criterion 7
+> has a crossover, not an answer** — met below a tile of ~4 900 series and failed above it — and
+> the per-series cost measures **twice the formula and outside `slope_band`**, which puts
+> **criterion 6's "met as written" in question**. Recorded, not reconciled; the figures are in
+> PROGRESS.md and nowhere else.
+
 **Goal.** Close exit criteria 6 and 7 at a scale where the tile, not the interpreter, is the
 subject.
 
