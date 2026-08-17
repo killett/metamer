@@ -31,17 +31,21 @@ import pytest
 from _pytest.outcomes import Skipped
 
 from metamer.core import machine as machine_module
+from metamer.core import memory as memory_module
 from metamer.core.machine import current_rss_bytes, peak_rss_bytes
 from metamer.core.memory import (
+    ACCUMULATION_TRANSIENT_FACTOR,
     DEFAULT_BUDGET_FRACTION,
     LBFGS_MAXCOR,
     SLOPE_BAND_FACTOR,
+    AccumulationReport,
     CalibrationPoint,
     CalibrationResult,
     FloorReport,
     LinearityReport,
     MemoryEngineLabel,
     SolverPlacement,
+    accumulation_report,
     calibrate,
     data_and_workspace_bytes_per_series,
     default_budget_gb,
@@ -2018,3 +2022,357 @@ def test_the_validity_gate_fires_and_records_why(
     assert len(conftest.INDETERMINATE_RSS) == before + 1
     assert "a constructed stall" in conftest.INDETERMINATE_RSS[-1]
     conftest.INDETERMINATE_RSS.pop()
+
+
+# --------------------------------------------------------------------------
+# The accumulation report: what a tile loop's peaks exclude, and what they do not
+# --------------------------------------------------------------------------
+
+
+def _peaks(
+    growth: float, tiles: int = 4, intercept: float = 2.31e8, scatter: float = 0.0
+) -> tuple[float, ...]:
+    """Per-tile peaks on a line, with a residual pattern that fits a flat line.
+
+    The signs are `(+, -, -, +)` and not `(+, -, +, -)` deliberately: an
+    alternating pattern over an EVEN number of points correlates with the index
+    and shifts the fitted slope, so a fixture meant to be flat would arrive
+    tilted. This pattern is orthogonal to the index, so the slope it produces is
+    exactly `growth`.
+
+    Args:
+        growth: Bytes per tile.
+        tiles: How many tiles.
+        intercept: Peak at tile zero.
+        scatter: Residual magnitude.
+
+    Returns:
+        One peak per tile.
+    """
+    signs = [1.0, -1.0, -1.0, 1.0]
+    return tuple(
+        intercept + growth * index + scatter * signs[index % 4]
+        for index in range(tiles)
+    )
+
+
+def test_a_flat_run_reports_no_growth_and_the_leak_it_could_have_excluded():
+    """Zero growth is not the answer on its own; the sensitivity is.
+
+    Expected values derived by hand from the four peaks, not from the code.
+    Indices 0-7 have mean 3.5, so `Sxx = 2*(3.5^2 + 2.5^2 + 1.5^2 + 0.5^2) =
+    42`. The residual pattern `(+1, -1, -1, +1)` repeated twice is orthogonal
+    to the index, so `Sxy = 0` and the slope is exactly 0. The residuals are
+    then the pattern itself: `SSR = 8e10`, `s^2 = SSR / (8 - 2)`, and
+    `SE = sqrt(8e10 / (6 * 42)) = 17 817.42` B/tile. Twice that is **35 634.83**
+    B/tile, and across the run's seven-tile span it is **249 443.8 B**.
+
+    Bug this catches: a detectable-leak figure computed from the tile count or
+    from the peaks' spread instead of from the fit's own residuals. A four-tile
+    run and a four-hundred-tile run would then advertise the same sensitivity,
+    and the accumulation claim would be strongest exactly where it rests on
+    least evidence.
+    """
+    report = accumulation_report(_peaks(0.0, tiles=8, scatter=1e5))
+
+    assert report.growth_bytes_per_tile == pytest.approx(0.0, abs=1e-6)
+    assert report.standard_error == pytest.approx(17_817.416, rel=1e-6)
+    assert report.detectable_growth == pytest.approx(35_634.832, rel=1e-6)
+    assert report.excluded_total_bytes == pytest.approx(249_443.82, rel=1e-6)
+    assert report.consistent_with_zero is True
+    # The bound is two-sided and centred on the fit, which is what makes it an
+    # exclusion rather than a one-sided reassurance.
+    assert report.lower_bound_bytes_per_tile == pytest.approx(-35_634.832, rel=1e-6)
+    assert report.upper_bound_bytes_per_tile == pytest.approx(35_634.832, rel=1e-6)
+    # The second half is four points with Sxx = 5 and the same +-1e5 residual,
+    # so `SE = sqrt(4e10 / (2 * 5)) = 63 245.55` -- a flat run is not saturating
+    # because there is nothing for the steady state to fall short of.
+    assert report.tail_tiles == 4
+    assert report.tail_growth_bytes_per_tile == pytest.approx(0.0, abs=1e-6)
+    assert report.tail_standard_error == pytest.approx(63_245.553, rel=1e-6)
+    assert report.tail_consistent_with_zero is True
+    assert report.saturating is False
+
+
+def test_a_leaking_run_reports_the_leak_and_clears_its_own_noise():
+    """A leak larger than the scatter is reported as a leak, with its sign.
+
+    Expected values derived by hand over eight tiles. The `(+, -, -, +)`
+    pattern repeated twice is orthogonal to the index across eight points, so
+    the fitted slope is exactly the constructed 65 536 B/tile. Then
+    `Sxx = 2*(3.5^2 + 2.5^2 + 1.5^2 + 0.5^2) = 42`, `SSR = 8 * (1e5)^2 = 8e10`,
+    `s^2 = 8e10/6`, and `SE = sqrt(8e10 / (6 * 42)) = 17 817.42` B/tile. The
+    slope is **3.68** standard errors from zero, so the leak clears its own
+    noise, and the run's total is `7 * 65 536 = 458 752 B`.
+
+    Bug this catches: a fit taken on the wrong axis, which returns the
+    reciprocal, or an `abs()` on the slope. The second is the dangerous one --
+    it makes a leak and a shrinking resident set the same observation, and a
+    resident set that shrinks under reclaim is precisely the reading
+    `rss_validity` exists to refuse.
+    """
+    report = accumulation_report(_peaks(65_536.0, tiles=8, scatter=1e5))
+
+    assert report.growth_bytes_per_tile == pytest.approx(65_536.0, rel=1e-9)
+    assert report.standard_error == pytest.approx(17_817.416, rel=1e-6)
+    assert report.consistent_with_zero is False
+    assert report.tiles == 8
+    # Seven steps between eight tiles, so the run's total growth is 7 * 65 536.
+    assert report.total_growth_bytes == pytest.approx(458_752.0, rel=1e-9)
+
+
+def test_a_shrinking_run_is_reported_as_shrinking_and_not_as_no_accumulation():
+    """A falling resident set is a finding, not a pass.
+
+    Expected values derived by hand: the same eight-tile fixture as above with
+    the growth negated, so the slope is exactly -50 000 B/tile against the same
+    17 817.42 standard error -- 2.81 errors from zero, outside the two-sigma
+    band, so it is not consistent with zero either.
+
+    Bug this catches: reporting `abs(growth)` or clamping at zero. Under
+    reclaim the resident set falls while the process holds the same pages, so a
+    report that cannot express a negative slope turns the one in-band symptom
+    of an invalid measurement into a clean bill of health -- which is criterion
+    7 passing for the wrong reason, moved to the accumulation half.
+    """
+    report = accumulation_report(_peaks(-50_000.0, tiles=8, scatter=1e5))
+
+    assert report.growth_bytes_per_tile == pytest.approx(-50_000.0, rel=1e-9)
+    assert report.consistent_with_zero is False
+    assert "-50000" in report.verdict.replace(" ", "")
+
+
+def test_readings_that_sit_exactly_on_a_line_are_refused_not_reported():
+    """A watermark that has stopped moving is no evidence, and says so.
+
+    Expected behaviour determined independently: `machine.peak_rss_bytes` is a
+    high-water mark, so once the largest tile has been held every later reading
+    is the SAME INTEGER. A least-squares line through identical numbers has
+    zero residual, hence zero standard error, hence a two-sigma band of zero
+    width -- the report would state that it excluded every per-tile leak of
+    every size, from a run in which the instrument simply stopped responding.
+
+    Bug this catches: the accumulation measurement being fed the watermark
+    instead of the current resident set. It is the easy mistake -- the
+    watermark is the number criterion 7 wants two lines earlier in the same
+    callback -- and it fails **silently and in the reassuring direction**,
+    which is the combination this project refuses everywhere else.
+    """
+    with pytest.raises(ValueError) as caught:
+        accumulation_report((2.31e8,) * 8)
+
+    assert "exactly on a line" in str(caught.value)
+    assert "high-water mark" in str(caught.value)
+    assert "one-byte resolution" in str(caught.value)
+    # And a genuinely sloped-but-noiseless column is refused for the same
+    # reason, so the guard is about the residual and not about flatness.
+    with pytest.raises(ValueError, match="standard error"):
+        accumulation_report(_peaks(1000.0, tiles=8))
+
+
+def test_a_run_of_seven_tiles_or_fewer_is_refused_rather_than_reported():
+    """Below eight tiles the tail's exclusion would rest on one residual or none.
+
+    Expected behaviour determined independently: the second half is fitted
+    separately as the steady state, so eight tiles is four in each half. A
+    straight line through two points is exact, so its residual sum is zero
+    whatever the truth is and its standard error is undefined -- the report
+    would exclude every leak there is. Three points leave one residual degree
+    of freedom, so the whole exclusion is set by a single reading. Four is the
+    first count with two, and it is the threshold `linearity_report` refuses
+    below for the same reason one order up.
+
+    Bug this catches: a report that accepts four tiles and hands back a tail
+    fitted through two of them. That is not a weak answer, it is a confident
+    wrong one -- "this run excludes every per-tile leak" from a steady state
+    that was never measured.
+    """
+    for tiles in (4, 7):
+        with pytest.raises(ValueError) as caught:
+            accumulation_report(_peaks(0.0, tiles=tiles, scatter=1e5))
+        assert str(tiles) in str(caught.value)
+        assert "residual" in str(caught.value)
+        assert "eight" in str(caught.value)
+
+
+def test_the_verdict_states_the_exclusion_rather_than_asserting_a_result():
+    """What a reader quotes has to carry the bound, not the point estimate.
+
+    Expected content determined independently from the hand-computed figures in
+    `test_a_flat_run_reports_no_growth_and_the_leak_it_could_have_excluded`:
+    the two-sigma band is +/-126 491 B/tile.
+
+    Bug this catches: a verdict that says "no accumulation" from a slope
+    consistent with zero. Task 7's ladder was published as a bound for exactly
+    this reason, and an accumulation instrument is more prone to the error, not
+    less -- a flat line looks like proof.
+    """
+    report = accumulation_report(_peaks(0.0, tiles=8, scatter=1e5))
+
+    assert "EXCLUDES" in report.verdict
+    assert "-35635" in report.verdict.replace(" ", "")
+    assert "+35635" in report.verdict.replace(" ", "")
+    assert "8 tiles" in report.verdict
+
+
+def test_a_warm_up_is_not_published_as_a_leak():
+    """A one-time cost charged to every tile is the error this field exists for.
+
+    Expected values derived by hand. The readings rise by 1e6 across the first
+    four tiles and then hold, plus the same `(+1, -1, -1, +1)` residual at 1e4.
+    Over the whole run, `Sxx = 42` and `Sxy = 17.0e6`, so the fitted slope is
+    `17.0e6 / 42 = 404 761.9` B/tile -- large, and an artefact. The second half
+    is flat: the residual pattern is orthogonal to its index, so its slope is
+    exactly 0, and with `SSR = 4e8`, `s^2 = 2e8` and `Sxx = 5` its standard
+    error is `sqrt(4e7) = 6324.56` B/tile.
+
+    Bug this catches: reporting the whole-run slope alone. **Measured on this
+    project's own 36-tile run**, which rose 3.81 MB across its first eighteen
+    tiles and 0.16 MB across its last eighteen; one line through all of it gave
+    `+69 083 +- 9 523 B/tile at 7.3 sigma`, which is a confident, significant
+    and entirely fictional leak. numba's compiled entry points, zarr's metadata
+    and the allocator's arenas are paid once, and a per-tile figure that
+    includes them extrapolates a fixed cost as if it recurred.
+    """
+    signs = [1.0, -1.0, -1.0, 1.0]
+    rise = [0.0, 1e6, 2e6, 3e6, 3e6, 3e6, 3e6, 3e6]
+    readings = [
+        2.31e8 + step + 1e4 * signs[index % 4] for index, step in enumerate(rise)
+    ]
+
+    report = accumulation_report(readings)
+
+    assert report.growth_bytes_per_tile == pytest.approx(404_761.905, rel=1e-6)
+    assert report.consistent_with_zero is False
+    assert report.tail_tiles == 4
+    assert report.tail_growth_bytes_per_tile == pytest.approx(0.0, abs=1e-6)
+    assert report.tail_standard_error == pytest.approx(6324.555, rel=1e-6)
+    assert report.tail_consistent_with_zero is True
+    # The two bands do not overlap, so the steady state does not support the
+    # whole-run slope -- which is what makes the whole-run slope a transient.
+    assert report.saturating is True
+    assert "SATURATING" in report.verdict
+    assert "NOT a leak" in report.verdict
+
+
+def test_a_constant_leak_is_not_reported_as_saturating():
+    """The negative control for `saturating`, without which it means nothing.
+
+    Expected values determined independently: a genuine per-tile leak has the
+    same slope in both halves, so the whole-run and tail fits agree and the
+    difference between them is nowhere near their bands. The fixture is the
+    eight-tile 65 536 B/tile leak from above, whose whole-run slope is exactly
+    the constructed one.
+
+    Bug this catches: `saturating` computed from the whole-run slope alone --
+    for instance "any slope above some threshold is warm-up". It would then
+    label every leak a transient, which is the same reassuring-direction
+    failure as the watermark, one level up.
+    """
+    report = accumulation_report(_peaks(65_536.0, tiles=8, scatter=1e5))
+
+    assert report.growth_bytes_per_tile == pytest.approx(65_536.0, rel=1e-9)
+    assert report.tail_growth_bytes_per_tile == pytest.approx(65_536.0, rel=1e-9)
+    assert report.saturating is False
+    assert "SATURATING" not in report.verdict
+
+
+def test_a_run_that_both_warms_up_and_leaks_still_reports_saturating():
+    """`saturating` says a transient is present, never that there is no leak.
+
+    Expected behaviour determined independently: adding a constant per-tile
+    cost raises the whole-run slope and the tail slope by the SAME amount and
+    changes neither residual, so their difference -- which is all `saturating`
+    compares -- is untouched. The fixture is the warm-up readings from
+    `test_a_warm_up_is_not_published_as_a_leak` with 1e6 per tile added, so its
+    whole-run slope is `404 761.9 + 1e6` and its tail slope is `0 + 1e6`, both
+    shifted by exactly 1e6 from the values hand-derived there.
+
+    Bug this catches: a caller -- or a future edit to this module's own
+    docstring -- reading `saturating is True` as "no per-tile leak". This
+    exact mistake was made while writing Task 8's suite test, and the positive
+    control in `test_reuse.py` is what caught it: a 1 MB/tile leak injected
+    into a real 16-tile run left the flag True. The leak test is the tail's
+    magnitude and this pins that it has to be.
+    """
+    signs = [1.0, -1.0, -1.0, 1.0]
+    rise = [0.0, 1e6, 2e6, 3e6, 3e6, 3e6, 3e6, 3e6]
+    readings = [
+        2.31e8 + step + 1e4 * signs[index % 4] + 1e6 * index
+        for index, step in enumerate(rise)
+    ]
+
+    report = accumulation_report(readings)
+
+    assert report.growth_bytes_per_tile == pytest.approx(1_404_761.905, rel=1e-6)
+    assert report.tail_growth_bytes_per_tile == pytest.approx(1e6, rel=1e-9)
+    assert report.saturating is True
+    # And the tail -- the figure that IS the leak test -- has moved by the
+    # whole leak, which is the difference between the two readings.
+    assert report.tail_consistent_with_zero is False
+
+
+def test_the_accumulation_report_keeps_no_copy_of_the_readings_it_was_given():
+    """One home per measurement, at the second report as at the first.
+
+    `linearity_report`'s equivalent partitions its fields against
+    `CalibrationResult`. This one has no result type to partition against, so
+    the rule takes its other form: **the readings belong to the run that took
+    them, and the report carries only what it derived.**
+
+    Expected behaviour determined independently from the rule itself, which
+    this project has paid for four times -- the published tile side, F3's
+    magnitude, the sweep timing, and a docstring publishing a floor at
+    `k_beta = 4` for an instrument running six.
+
+    Bug this catches: a later reader adding `readings` or `peaks` to the report
+    "so the caller can see what it fitted". After that a run's readings exist
+    in two places, a re-measurement updates one, and the growth figure can be
+    quoted beside numbers it was never computed from with nothing comparing
+    them.
+    """
+    fields = {field.name for field in dataclasses.fields(AccumulationReport)}
+
+    for copied in ("peaks", "readings", "values", "residuals", "indices"):
+        assert copied not in fields
+    # What it does carry is derived, and `tiles` is a count rather than a copy
+    # -- the one number a caller cannot recover from the report without it.
+    assert "tiles" in fields
+    assert "tail_growth_bytes_per_tile" in fields
+
+
+def test_the_transient_factor_is_read_from_the_constant_rather_than_inlined(
+    monkeypatch,
+):
+    """The documented policy has to be the thing the code consults.
+
+    Expected behaviour determined independently: `saturating` is
+    `gap > FACTOR * (SE + tail SE)`, so raising the factor far enough makes any
+    finite gap fail the comparison. The fixture is the warm-up readings from
+    `test_a_warm_up_is_not_published_as_a_leak`, which saturate at 2.0; at 1e6
+    nothing can.
+
+    **The exact value is NOT derived and is pinned here on purpose**, the way
+    this module pins `SLOPE_RESOLUTION_LIMIT` and `SLOPE_BAND_FACTOR`: it is a
+    policy number with a stated asymmetry, so changing it must be a deliberate
+    edit that updates a test rather than a silent one.
+
+    Bug this catches: the factor written as a literal `2.0` in the comparison
+    while the constant sits above it carrying a docstring. The policy would
+    then be decoration -- editing it would change the documentation and not the
+    behaviour -- which is the same defect as a docstring that outlives the code
+    it describes, in the direction where the reader trusts it.
+    """
+    assert ACCUMULATION_TRANSIENT_FACTOR == 2.0
+
+    signs = [1.0, -1.0, -1.0, 1.0]
+    rise = [0.0, 1e6, 2e6, 3e6, 3e6, 3e6, 3e6, 3e6]
+    readings = [
+        2.31e8 + step + 1e4 * signs[index % 4] for index, step in enumerate(rise)
+    ]
+    # FIXTURE GUARD: it saturates at the shipped factor, so the flip below is
+    # the constant doing it and not the data.
+    assert accumulation_report(readings).saturating is True
+
+    monkeypatch.setattr(memory_module, "ACCUMULATION_TRANSIENT_FACTOR", 1e6)
+    assert accumulation_report(readings).saturating is False

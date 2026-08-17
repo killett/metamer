@@ -66,7 +66,7 @@ import json
 import math
 import subprocess
 import sys
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
@@ -236,6 +236,276 @@ noise-dominated ladder is published as a value, which is the failure above;
 too tight and a perfectly good measurement is reported as a bound, which
 costs a sentence and no correctness. **Set from the expensive side.**
 """
+
+
+ACCUMULATION_TRANSIENT_FACTOR = 2.0
+"""POLICY. How far the tail's growth must sit below the whole run's to be called a transient.
+
+A tile loop pays numba's compiled entry points, zarr's metadata and the
+allocator's arenas **once**, at the front. `AccumulationReport.saturating`
+compares the whole-run slope against the steady state's and calls the difference
+a transient when it exceeds this many times the two standard errors together.
+
+**IT GATES A DESCRIPTION AND NEVER A LEAK TEST**, which is the whole reason it
+can be a policy number at all: `saturating` says whether the whole-run slope is
+safe to read, and the leak test is `tail_growth_bytes_per_tile` regardless of
+what this is set to. A run can saturate and leak at once.
+
+**THE ASYMMETRY, since this is policy rather than derived.** Too low and
+ordinary scatter between two fits reads as a warm-up, so a real constant leak
+gets described as a transient -- the reassuring direction, and the one that
+matters. Too high and a genuine warm-up goes undescribed, which costs a sentence
+and no correctness, because the tail is published either way. **Set from the
+expensive side**, and 2.0 is the same two-sigma convention every other bound in
+this module uses.
+"""
+
+
+@dataclass(frozen=True)
+class AccumulationReport:
+    """What a tile loop's per-tile peaks exclude about accumulation.
+
+    **THE SUBJECT IS PEAK AGAINST TILE INDEX, WHICH IS NOT `LinearityReport`'s
+    SUBJECT.** That one fits peak against **B** across a ladder of separate
+    runs and asks how much one more series costs. This one fits peak against
+    **tile index** inside a single run and asks how much one more *iteration*
+    costs, which the formula says is **zero**: a tile is released before the
+    next is assembled. The two share arithmetic and share no question.
+
+    **AND THE ANSWER IS AN EXCLUSION, NOT A VERDICT.** A flat line looks like
+    proof, and it is the shape a measurement takes when it cannot see anything
+    at all. So the number that matters is `detectable_growth` -- what this run
+    would have had to leak before this run could have noticed.
+
+    **THE WHOLE-RUN SLOPE IS NOT THE LEAK, AND MEASURING ONE TAUGHT US THAT.**
+    Phase 2b Task 8's 36-tile run rose **3.81 MB across its first eighteen
+    tiles and 0.16 MB across its last eighteen**: numba's compiled entry points,
+    zarr's metadata and the allocator's arenas are all one-time costs paid at
+    the front of a loop. A straight line through the whole run charged them to
+    every tile and reported **+69 083 +- 9 523 B/tile at 7.3 sigma** -- a
+    confident, significant, and entirely wrong leak. **So both halves are fitted
+    and both are published**, and the split is a fixed rule rather than a
+    judgement, because a warm-up boundary chosen by looking at the data is the
+    analysis fitted to the answer.
+
+    Attributes:
+        tiles: How many tiles the run wrote.
+        growth_bytes_per_tile: The whole-run slope, **with its sign**. Negative
+            is a resident set that fell, which is a finding about the
+            measurement rather than about the loop. **Read it beside
+            `saturating`, never alone.**
+        standard_error: The slope's standard error, from the fit's own
+            residuals.
+        detectable_growth: `2 * standard_error` -- the smallest per-tile leak
+            the whole-run fit could have excluded.
+        lower_bound_bytes_per_tile: `growth - detectable_growth`.
+        upper_bound_bytes_per_tile: `growth + detectable_growth`.
+        consistent_with_zero: True when the whole-run growth is inside its own
+            two-sigma band, which is *"no leak was seen"* and never *"there is
+            no leak"*.
+        total_growth_bytes: The fitted growth across the run, `growth` times
+            the index span. **What a reader actually pays**, since a per-tile
+            figure at 400 tiles and one at 4 are different amounts of memory.
+        excluded_total_bytes: `detectable_growth` times the span -- the total
+            the whole-run fit could have excluded.
+        tail_tiles: Tiles in the second half, which is the fitted steady state.
+        tail_growth_bytes_per_tile: The second half's slope. **This is the
+            figure that extrapolates**, because a leak is a property of the
+            steady state and a warm-up is paid once.
+        tail_standard_error: Its standard error.
+        tail_consistent_with_zero: Whether the tail's growth is inside its own
+            two-sigma band.
+        saturating: True when the tail's growth is smaller than the whole
+            run's by more than the two bands together -- the signature that a
+            **transient is present**. **IT IS NOT A LEAK TEST AND MUST NEVER BE
+            USED AS ONE.** A run can saturate and leak at once: adding a
+            constant per-tile cost raises both slopes equally and leaves their
+            difference, and therefore this flag, untouched. Found by the
+            positive control in
+            `test_reuse.py::test_the_recompute_loop_retains_nothing_that_survives_its_warm_up`,
+            which injected a 1 MB/tile leak into a real run's readings and
+            watched `saturating` stay True. **The leak test is
+            `tail_growth_bytes_per_tile`**; this flag only says whether the
+            whole-run slope is safe to read, and it never is when it is True.
+        verdict: One sentence a reader can quote, built from the fields above.
+    """
+
+    tiles: int
+    growth_bytes_per_tile: float
+    standard_error: float
+    detectable_growth: float
+    lower_bound_bytes_per_tile: float
+    upper_bound_bytes_per_tile: float
+    consistent_with_zero: bool
+    total_growth_bytes: float
+    excluded_total_bytes: float
+    tail_tiles: int
+    tail_growth_bytes_per_tile: float
+    tail_standard_error: float
+    tail_consistent_with_zero: bool
+    saturating: bool
+    verdict: str
+
+
+def accumulation_report(peaks: Sequence[float]) -> AccumulationReport:
+    """Say what a run's per-tile peaks exclude about a per-tile leak.
+
+    **THE STRAIGHT-LINE ARITHMETIC IS `linearity_report`'s, DELIBERATELY THE
+    SAME**: `s**2 = SSR/(n-2)`, `SE = sqrt(s**2/Sxx)`. It is written out rather
+    than shared through a helper because the two functions differ in what they
+    fit it to and agree in nothing else, and a helper taking `(x, y)` would
+    invite a caller to fit one subject's data with the other's interpretation.
+
+    **THE INDEX IS THE ABSCISSA AND NOT THE TILE'S SERIES COUNT.** A ragged
+    grid's edge tiles hold fewer series, so a fit against series count would
+    charge the edge tiles' smaller blocks to a leak, or hide one behind them.
+    The question is *"does iterating cost anything"*, and iterations are
+    counted.
+
+    **DO NOT FEED THIS A HIGH-WATER MARK.** `machine.peak_rss_bytes` is monotone
+    and stops moving once the largest tile has been held, so a run with no leak
+    produces a column of **identical** numbers -- zero residual, zero standard
+    error, and a report that says it excluded every per-tile leak there is.
+    That is the confident-from-nothing answer this module refuses elsewhere, so
+    it is refused here too: **pass `current_rss_bytes` per tile**, which is the
+    working set, which jitters, and in which a leak appears one tile earlier
+    than in a watermark. The watermark belongs in the criterion-7 comparison
+    against the budget, where monotonicity is the property that makes it right.
+
+    Args:
+        peaks: One peak per tile, in the order the tiles were written.
+
+    Returns:
+        The report.
+
+    Raises:
+        ValueError: If there are fewer than eight tiles, or if either half's
+            readings sit exactly on a line. **Both are the same defect and it
+            is not a small one**: with no residual the standard error is zero,
+            every bound collapses to the point estimate, and the report claims
+            to have excluded every leak of every size. **Eight is four in each
+            half**, and four is the count below which a straight line has at
+            most one residual to be wrong about -- the threshold
+            `linearity_report` refuses below for the same reason one order up.
+            Identical readings reach the same place by instrument, which is
+            what a high-water mark produces.
+    """
+    import numpy as np
+
+    count = len(peaks)
+    if count < 8:
+        raise ValueError(
+            f"an accumulation report needs at least eight tiles and got "
+            f"{count}: the second half is fitted separately as the steady "
+            "state, so eight is four in each half -- and below four a straight "
+            "line has one residual or none, which would let this report claim "
+            "to have excluded every per-tile leak there is"
+        )
+
+    def fit(values: np.ndarray, what: str) -> tuple[float, float]:
+        """Return `(slope, standard error)` for one span of readings.
+
+        Args:
+            values: The readings, in order.
+            what: Which span, for the failure message.
+
+        Returns:
+            Slope in bytes per tile and its standard error.
+
+        Raises:
+            ValueError: If the readings sit exactly on a line, so the fit has
+                no residual to take a standard error from.
+        """
+        indices = np.arange(len(values), dtype=np.float64)
+        slope, intercept = np.polyfit(indices, values, 1)
+        residuals = values - (slope * indices + intercept)
+        centred = indices - indices.mean()
+        variance = float((residuals**2).sum()) / (len(values) - 2)
+        error = float(np.sqrt(variance / float((centred**2).sum())))
+        # **THE THRESHOLD IS ONE BYTE AND IT IS DERIVED, NOT CHOSEN.** Resident
+        # set size is counted in whole pages and reported in bytes, so a
+        # standard error below a single byte means the readings are collinear
+        # at the finest resolution the instrument has -- there is no residual
+        # to take an uncertainty from. Testing `== 0.0` instead would miss it:
+        # least squares on identical integers returns residuals of order 1e-8,
+        # not zero, so an exact comparison lets exactly the reassuring case
+        # through.
+        if error < 1.0:
+            raise ValueError(
+                f"the {what} readings sit exactly on a line -- the fitted "
+                f"standard error is {error:.3g} B/tile, below the one-byte "
+                "resolution of the instrument -- so this report would exclude "
+                "every per-tile leak of every size. A column of identical "
+                "numbers is what a high-water mark produces once it has stopped "
+                "moving: pass the per-tile CURRENT resident set instead"
+            )
+        # **CAST AT THE BOUNDARY**: numpy's scalars render differently in a
+        # message and its boolean fails `is True`, so a caller asserting
+        # identity against this dataclass would get a wrong answer from a right
+        # computation.
+        return float(slope), error
+
+    values = np.asarray(peaks, dtype=np.float64)
+    growth, error = fit(values, f"{count}")
+    # **THE SPLIT IS A FIXED RULE AND NOT A JUDGEMENT.** A warm-up boundary
+    # chosen by looking at the readings is the analysis fitted to the answer;
+    # the second half is whatever the second half is.
+    tail_values = values[count // 2 :]
+    tail_growth, tail_error = fit(tail_values, "second half's")
+
+    detectable = 2.0 * error
+    span = float(count - 1)
+    consistent = bool(abs(growth) <= detectable)
+    tail_consistent = bool(abs(tail_growth) <= 2.0 * tail_error)
+    # A transient is a whole-run slope the steady state does not support, and
+    # "does not support" is the two bands failing to overlap.
+    saturating = bool(
+        growth - tail_growth > ACCUMULATION_TRANSIENT_FACTOR * (error + tail_error)
+    )
+
+    if consistent:
+        head = (
+            f"NO PER-TILE GROWTH SEEN over {count} tiles: {growth:+.0f} +- "
+            f"{error:.0f} B/tile EXCLUDES per-tile growth outside "
+            f"{growth - detectable:+.0f} to {growth + detectable:+.0f} B/tile, "
+            f"which is {detectable * span:.0f} B across the run"
+        )
+    else:
+        head = (
+            f"PER-TILE GROWTH of {growth:+.0f} +- {error:.0f} B/tile over "
+            f"{count} tiles, {abs(growth) / error:.1f} standard errors from "
+            f"zero and {growth * span:+.0f} B across the run"
+        )
+    tail_head = (
+        f"the last {len(tail_values)} tiles give {tail_growth:+.0f} +- "
+        f"{tail_error:.0f} B/tile"
+    )
+    if saturating:
+        tail_head += (
+            ", SATURATING -- the whole-run slope is a one-time warm-up charged "
+            "to every tile and is NOT a leak"
+        )
+    return AccumulationReport(
+        tiles=count,
+        growth_bytes_per_tile=growth,
+        standard_error=error,
+        detectable_growth=detectable,
+        lower_bound_bytes_per_tile=growth - detectable,
+        upper_bound_bytes_per_tile=growth + detectable,
+        consistent_with_zero=consistent,
+        total_growth_bytes=growth * span,
+        excluded_total_bytes=detectable * span,
+        tail_tiles=len(tail_values),
+        tail_growth_bytes_per_tile=tail_growth,
+        tail_standard_error=tail_error,
+        tail_consistent_with_zero=tail_consistent,
+        saturating=saturating,
+        verdict=(
+            f"{head}; {tail_head}. A flat line is what this measurement looks "
+            f"like when it can see nothing, so the bound is the result and the "
+            f"slope is not"
+        ),
+    )
 
 
 @dataclass(frozen=True)

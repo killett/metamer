@@ -17,6 +17,7 @@ never entered the tiling loop would satisfy every assertion here.
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
@@ -34,7 +35,8 @@ from metamer.batch.input import InputContractError
 from metamer.batch.run import run
 from metamer.batch.validation import ExitCode, ValidationError
 from metamer.batch.write import InvariantError
-from tests.conftest import RaisingStubEngine
+from metamer.core.memory import accumulation_report
+from tests.conftest import STUB_FLOOR_PEAK, RaisingStubEngine, rss_validity
 
 pytestmark = pytest.mark.filterwarnings("ignore::UserWarning")
 
@@ -769,3 +771,118 @@ def test_a_source_violating_the_status_invariant_is_refused(
             reuse_fits_from=src,
             engine=raising_engine,
         )
+
+
+# --------------------------------------------------------------------------
+# What the loop retains per tile -- Phase 2b Task 8
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.slow
+@pytest.mark.machine
+def test_the_recompute_loop_retains_nothing_that_survives_its_warm_up(
+    tmp_path: Path,
+) -> None:
+    """Sixteen tiles of recompute in a FRESH PROCESS, and the total is bounded.
+
+    **THIS IS THE ONLY ARM THAT ISOLATES THE LOOP.** The recompute is the tile
+    loop with the fit removed -- same loop, same write path, same completion
+    bitmap, same zarr buffers -- so growth here is the loop's and nothing
+    `optimize_series` or the engines retain can reach it. That is why the fit
+    path cannot answer this question and this can.
+
+    **AND IT RUNS IN A SUBPROCESS BECAUSE AN IN-PROCESS VERSION DOES NOT
+    MEASURE THE LOOP.** The first version read `current_rss_bytes` inside
+    pytest, on the argument that a DIFFERENCE across tiles cancels whatever the
+    process already holds (pre-flight (a)). **The constant cancels and the
+    growth does not**: measured 2026-08-16, the same sixteen tiles grew
+    **63 kB/tile run alone**, **96 kB/tile run after this module**, and past the
+    bound entirely inside `pixi run test` -- allocator arenas, zarr caches and
+    collection timing all carry the history of a thousand earlier tests into
+    the window. It passed alone and failed in the sweep twice. **A fresh
+    interpreter reads 143 kB/tile and reads it whatever ran before**, which is
+    the number this bound is set against, and it is what every other machine
+    assertion here uses.
+
+    Expected behaviour determined independently, by measurement rather than
+    from the code. Phase 2b Task 8 ran this loop at **400 tiles** and got a
+    steady-state growth of **+45 +- 9 B/tile** -- 18 kB across the whole run --
+    against **+380 +- 9 B/tile** for the same loop with the fit restored.
+    **Sixteen tiles cannot separate a transient from a leak**, so neither
+    `saturating` nor the tail slope is asserted; what is asserted is the total,
+    which is the one quantity that does not move with what ran first.
+
+    Bug this catches: a per-tile retention in the loop, the write path or
+    zarr's buffers -- the store group reopened and kept, a tile's copied block
+    held in a list, a bitmap read that accumulates. Any of those is a constant
+    per tile, so the total climbs past a bound the observed growth clears
+    comfortably. The positive control below proves this fixture can express
+    exactly that; what it cannot do is see the 45 B/tile the 400-tile run
+    measured, and no suite-scale run can.
+    """
+    uri = _input(tmp_path, n_y=4, n_x=4)
+    source_store = tmp_path / "source.zarr"
+    built = run(_config(tmp_path, uri, criteria='["aic"]'), source_store)
+    # FIXTURE GUARD: fewer than eight tiles and the report refuses, so a
+    # regression in the tiling would look like a failure of this measurement.
+    assert built.tiles_written == 16
+    assert built.tiles_total == 16
+
+    program = textwrap.dedent(
+        """
+        import json, sys
+        from metamer.batch.run import run
+        from metamer.core.machine import current_rss_bytes
+
+        readings = []
+        report = run(
+            sys.argv[1],
+            sys.argv[2],
+            reuse_fits_from=sys.argv[3],
+            on_tile_written=lambda _tile: readings.append(current_rss_bytes()),
+        )
+        print(json.dumps({"tiles": report.tiles_written, "readings": readings}))
+        """
+    )
+    second = _config(tmp_path, uri, name="two.toml", criteria='["aic", "hqic"]')
+    with rss_validity("the recompute loop's per-tile resident set"):
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                program,
+                str(second),
+                str(tmp_path / "new.zarr"),
+                str(source_store),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            # THE SUBPROCESS NEEDS THE SAME PINNED FLOOR, or it measures its own
+            # and derives a different tile side from the one the source has.
+            env={**os.environ, "METAMER_FLOOR_BYTES": str(STUB_FLOOR_PEAK)},
+        )
+        assert result.returncode == 0, result.stderr
+        payload = json.loads(result.stdout.splitlines()[-1])
+        assert payload["tiles"] == 16
+
+        report = accumulation_report(payload["readings"])
+        assert report.tiles == 16
+        assert report.tail_tiles == 8
+        # **THE BOUND IS PLACED BETWEEN TWO MEASUREMENTS RATHER THAN CHOSEN**:
+        # in a fresh process on 2026-08-16 this loop grew **2.142 MB** across
+        # the run (+142 818 +- 11 590 B/tile), and the control below is 15 MB.
+        # Six megabytes is 2.8x the first and 0.4x the second, so it catches a
+        # leak of 400 kB/tile and says nothing finer.
+        assert report.total_growth_bytes < 6e6
+
+        # **THE POSITIVE CONTROL, ON THIS RUN'S OWN READINGS** (i2). A pure
+        # negative needs one: without it, a loop that allocated nothing and a
+        # bound nothing could ever breach are the same observation. Adding a
+        # constant 1 MB per tile to what was actually measured is what a leak
+        # would have looked like in this exact data.
+        leaking = [
+            value + 1e6 * index for index, value in enumerate(payload["readings"])
+        ]
+        control = accumulation_report(leaking)
+        assert control.total_growth_bytes > 14e6
