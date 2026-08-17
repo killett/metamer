@@ -46,6 +46,7 @@ from pathlib import Path
 import pydantic
 
 from metamer.batch.input import InputContractError
+from metamer.batch.tiling import PUBLISHED_TILE_SIDE
 from metamer.config.model import PER_POINT_TERM_PREFIX, Config, StampedKeyError, load
 from metamer.core.criteria import Criterion
 from metamer.core.lint import Finding, lint
@@ -54,8 +55,14 @@ from metamer.core.memory import resident_bytes_per_series, tile_side
 # Design doc section 9.4's worked example. The per-point refusal quotes tile
 # sizes, and they are COMPUTED from these rather than written down, so a change
 # to the memory formula moves the message instead of dating it.
-_WORKED_EXAMPLE = {"k_beta": 4, "p_max": 4, "n_time": 630, "n_models": 12}
-_WORKED_EXAMPLE_BUDGET = 10**9
+#
+# **READ OUT OF `PUBLISHED_TILE_SIDE` SINCE PHASE 2b TASK 9, NOT DEFINED HERE.**
+# This was one of three copies of section 9.4's model -- with the record and
+# `tests/test_tiling.py` -- and the record's own binding test would not have
+# seen this one drift. What is NOT shared is the answer; see the budget's
+# docstring below, which is the reason the sharing stops at the inputs.
+_WORKED_EXAMPLE = dict(PUBLISHED_TILE_SIDE.per_series_model)
+_WORKED_EXAMPLE_BUDGET = PUBLISHED_TILE_SIDE.budget_bytes
 """Bytes, DECIMAL, and the unit is not decoration.
 
 **THE UNIT IS SETTLED AND `run()` NOW AGREES WITH IT.** It converted
@@ -69,10 +76,16 @@ measured, so the sides below divide the WHOLE budget -- an upper bound, and the
 pre-Task-2 arithmetic. **What the refusal is for is the RATIO**, which is what
 the per-point declaration costs and which the floor does not move; quoting the
 pair without that qualification would publish a fourth tile side into a project
-that has already had three.
+that has already had four.
+
+**SO THIS MODULE SHARES THE MODEL WITH `PUBLISHED_TILE_SIDE` AND NOT THE
+ANSWER**, and the split is deliberate rather than incomplete. A "one source"
+repair that gave the refusal the published side would be publishing a side
+derived from a floor this layer has not measured -- (a5): the brief's
+requirement against the module's own constraint.
 """
 
-_WORKED_EXAMPLE_STATE_DIM = 3
+_WORKED_EXAMPLE_STATE_DIM = PUBLISHED_TILE_SIDE.d
 """§9.4's `d`, kept for the message and NOT used in the arithmetic.
 
 **THE PUBLISHED PAIR NO LONGER CARRIES A BACKEND, AND THAT IS THE CORRECTION.**

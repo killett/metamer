@@ -7,9 +7,10 @@ unwritten seam; an overlap writes some points twice. Neither raises, both produc
 a complete-looking store, and the completion bitmap is per tile so it cannot see
 either.
 
-**Assembly never holds both representations of the whole tile.** Measured at
-design doc section 9.4's worked example the difference is 863 MB against 575 MB
--- a 50% overshoot of the data term against a budget the design doc calls hard.
+**Assembly never holds both representations of the whole tile.** Recomputed at
+design doc section 9.4's worked example and `PUBLISHED_TILE_SIDE.shared` the
+difference is 559 MB against 373 MB -- a 50% overshoot of the data term against
+a budget the design doc calls hard. ~~863 against 575~~, at the superseded 338.
 
 **Read amplification is measured in one set of units.** The store's bytes are
 compressed and the tile's are not, so a ratio taken across that boundary measures
@@ -18,6 +19,7 @@ compression as well as amplification and can report less than 1.
 
 from __future__ import annotations
 
+import inspect
 import warnings
 from collections import Counter
 from typing import Any
@@ -30,6 +32,7 @@ from zarr.storage import LocalStore
 from metamer.batch.input import InputContractError, open_input
 from metamer.batch.store import CHUNK_TARGET_BYTES, TILE_SIDE_BASE
 from metamer.batch.tiling import (
+    PUBLISHED_TILE_SIDE,
     BudgetTooSmallError,
     Tile,
     assemble_tile,
@@ -43,7 +46,6 @@ from metamer.batch.tiling import (
 )
 from metamer.core.memory import (
     HEADROOM_FRACTION,
-    FloorReport,
     SolverPlacement,
     resident_bytes_per_series,
     solver_state_bytes,
@@ -53,26 +55,23 @@ from metamer.core.memory import (
 pytestmark = pytest.mark.filterwarnings("ignore::UserWarning")
 
 #: Design doc section 9.4's worked example, as `tile_side_for` takes it.
+#:
+#: **ALIASES INTO `PUBLISHED_TILE_SIDE`, NOT A SECOND DEFINITION.** These were
+#: literals here until Phase 2b Task 9, which is one of the three copies of
+#: section 9.4's model the tree carried -- with `validation.py`'s
+#: `_WORKED_EXAMPLE` and the record itself -- and two copies of one derivation
+#: drift silently, because a wrong tile side still runs. A pointer is not a
+#: copy: change the record and every call site below follows.
 WORKED_EXAMPLE: dict[str, Any] = {
-    "d": 3,
-    "k_beta": 4,
-    "p_max": 4,
-    "n_time": 630,
-    "n_models": 12,
+    "d": PUBLISHED_TILE_SIDE.d,
+    **PUBLISHED_TILE_SIDE.per_series_model,
 }
 
-#: **THE PUBLISHED SIDE NOW NEEDS A PINNED FLOOR AMONG ITS PRECONDITIONS**, which
-#: it never did before Phase 2b Task 2: the floor is measured with the input
-#: open, so the derived side depends on the store being read. These are this
-#: machine's readings of 2026-08-15, frozen here so the documented number is
-#: reproducible rather than machine-dependent.
-WORKED_FLOOR = FloorReport(
-    pre_warm_bytes=171_200_000,
-    post_warm_bytes=216_900_000,
-    with_input_bytes=228_200_000,
-    peak_bytes=228_200_000,
-    components={"input_open": 228_200_000},
-)
+#: **THE PUBLISHED SIDE NEEDS A PINNED FLOOR AMONG ITS PRECONDITIONS**, which it
+#: never did before Phase 2b Task 2: the floor is measured with the input open,
+#: so the derived side depends on the store being read -- and on **which** store,
+#: measured at 1.28 MB across two inputs on 2026-08-17.
+WORKED_FLOOR = PUBLISHED_TILE_SIDE.floor
 
 
 def _store(tmp_path, *, n_time=12, n_y=16, n_x=16, chunks=(12, 4, 4), name="a.zarr"):
@@ -271,10 +270,14 @@ def test_assembly_splits_the_tile_at_chunk_boundaries(tmp_path):
 
     **The brief's two bullets conflict and the numbers decide.** One `.load()`
     over the whole tile materializes the entire float32 block, and casting it
-    afterwards has both alive at once. At section 9.4's worked example --
-    `tile_side` 338, N = 630 -- that is 288 MB of float32 beside 575 MB of
-    float64, **863 MB against 575 MB, a 50% overshoot of the data term** against
-    a budget the design doc calls hard.
+    afterwards has both alive at once. Recomputed 2026-08-17 at section 9.4's
+    worked example and `PUBLISHED_TILE_SIDE.shared` = 272, N = 630: 272**2 * 630
+    = 46 609 920 points, so 186 MB of float32 beside 373 MB of float64,
+    **559 MB against 373 MB, a 50% overshoot of the data term** against a budget
+    the design doc calls hard. ~~At the superseded 338 the figures were 288 MB,
+    575 MB and 863 MB.~~ The ratio is 3:2 by construction and does not move with
+    the side; the absolute figures do, which is why they carry the side that
+    produced them and are recomputed when the record moves.
 
     Bug this catches: `handle.dataset[var].isel(...).load().astype(float64)`,
     which is what the brief says literally. Under it the span list is one span
@@ -851,3 +854,184 @@ def test_a_side_no_budget_can_derive_is_refused_with_its_neighbours():
     )
     assert "16" in message
     assert "32" in message
+
+
+# --------------------------------------------------------------------------
+# The published tile side, its preconditions and its dispute (Phase 2b Task 9)
+# --------------------------------------------------------------------------
+
+
+def test_the_published_side_equals_tile_side_for_its_own_arguments():
+    """Exit criterion 16: the documented number is the derived number.
+
+    **THIS IS A CONSISTENCY TEST AND NOT A CORRECTNESS TEST, AND THE
+    DISTINCTION IS THE REASON THE HAND-DERIVATION ABOVE STAYS.** Its oracle is
+    the implementation, so both sides move together and a wrong formula passes
+    it. What it catches is the whole subject of this task: the next formula
+    correction leaving four documents and five docstrings quoting a number
+    nothing derives any more. `tile_side` has been wrong four times -- 171, 338,
+    347, and whatever 8b makes of 272 -- and every one of those was found by a
+    reader, never by a test.
+
+    Expected values derived independently, at the published preconditions:
+
+        available = 10**9 - 228 200 000                    771 800 000 B
+        block     = int(available * (1 - 0.15))            656 030 000 B
+        block - solver_state(11 984)                       656 018 016 B
+        / 8274 B per series                                    79 285.5
+        sqrt -> floor                                               281
+        round down to a multiple of 16                          **272**
+
+    and the per-point branch, whose per-series cost gains `n_time * k_beta * 8`
+    = 20 160 B: 656 018 016 / 28 434 = 23 070.2, sqrt 151.9, floor 151, rounded
+    **144**.
+
+    Bug this catches: the record and the function disagreeing at all -- which is
+    what every previous cascade was, discovered by hand months later.
+    """
+    record = PUBLISHED_TILE_SIDE
+    # The two preconditions that are module constants rather than arguments.
+    # Pinned as literals in the record, so this compares two derivations rather
+    # than a value with itself.
+    assert record.headroom_fraction == HEADROOM_FRACTION
+    assert record.smooth_base == TILE_SIDE_BASE
+    assert tile_side_for(**record.arguments) == record.shared == 272
+    assert (
+        tile_side_for(**record.arguments, per_point_design=True)
+        == record.per_point
+        == 144
+    )
+
+
+def test_the_published_arguments_are_exactly_what_tile_side_for_takes():
+    """The precondition list binds against the signature, not against prose.
+
+    **(g2), AND THE OMISSION IT CATCHES IS ALREADY IN THE TREE.** The handoff's
+    precondition table names budget, floor, headroom, base and the model, and
+    says nothing about `placement` or `threads` -- both parameters of
+    `tile_side_for`, both defaulted, either of which moves the published number
+    if its default moves. "338" came to be quoted with no backend attached by
+    exactly this route: a precondition dropped from a list is invisible, because
+    a list does not know what is missing from it.
+
+    Expected values determined independently by reading the signature:
+    `tile_side_for` takes eleven keyword parameters. The record supplies nine of
+    them and deliberately varies two -- `per_point_design`, because it publishes
+    both branches, and `per_series_bytes`, whose being `None` is the "analytic,
+    not calibrated" precondition the dispute is about.
+
+    Bug this catches: a parameter added with a default. The published number
+    then depends on something no document names, and nothing fails.
+    """
+    parameters = inspect.signature(tile_side_for).parameters
+    assert all(p.kind is p.KEYWORD_ONLY for p in parameters.values())
+    assert set(PUBLISHED_TILE_SIDE.arguments) | {
+        "per_point_design",
+        "per_series_bytes",
+    } == set(parameters)
+
+
+def test_the_published_model_is_exactly_what_the_per_series_formula_takes():
+    """The same binding one level down, where the model actually lands.
+
+    `resident_bytes_per_series` is what `validation.py` calls with this model to
+    build its per-point refusal, so the model has two consumers with different
+    arithmetic and one description. A parameter added there moves the refusal's
+    ratio as well as the published side.
+
+    Expected values determined independently: the formula takes `k_beta`,
+    `p_max`, `n_time`, `n_models` and `per_point_design`; the record supplies
+    the first four and varies the fifth. It does **not** take `d` -- that is
+    Task 0's correction, and `d` reaches the arithmetic only through the solver
+    constant.
+
+    Bug this catches: `d` creeping back into the per-series term, which is the
+    F2/F4 defect and the one that made the published side carry a backend.
+    """
+    parameters = inspect.signature(resident_bytes_per_series).parameters
+    assert set(PUBLISHED_TILE_SIDE.per_series_model) | {"per_point_design"} == set(
+        parameters
+    )
+    assert "d" not in PUBLISHED_TILE_SIDE.per_series_model
+    assert PUBLISHED_TILE_SIDE.per_series_model["n_time"] == 630
+
+
+def test_the_disputes_hypothesis_sides_are_recomputed_and_not_transcribed():
+    """The caveat is arithmetic, so it cannot outlive its subject silently.
+
+    **(a6) IN A NEW REGISTER: A DESCRIPTION WHOSE SUBJECT HAS BEEN RESOLVED.**
+    A number published with its dispute is honest; a dispute still attached
+    after 8b settles it is a description of nothing, and unfalsifiable in
+    exactly the way `Backend` was. Recomputing each hypothesis here means the
+    field cannot be left behind: 8b deletes it in the edit that moves the value,
+    or this test fails.
+
+    Expected values derived independently, all at the published preconditions
+    and the same 656 018 016 B block unless stated:
+
+        published, 8274 B/series                    79 285.5 -> 281 -> **272**
+        additive, 8274 + 974.9 = 9248.9             70 928.9 -> 266 -> **256**
+        multiplicative, 8274 x 1900.9/926 = 16 984.9  38 623 -> 196 -> **192**
+        headroom 51.29%, block 376 020 960 - 11 984   45 444 -> 213 -> **208**
+
+    Bug this catches: a hypothesis side transcribed from a report rather than
+    derived -- (a4)'s review-side register, which has fired three times here --
+    and the whole record going stale after 8b.
+    """
+    dispute = PUBLISHED_TILE_SIDE.dispute
+    assert dispute is not None, (
+        "the per-series dispute is resolved, so this test and "
+        "`test_the_dispute_states_its_direction_its_owner_and_its_spread` go "
+        "with the field, in the same commit that moves the published value. "
+        "Failing here rather than passing vacuously is the point: a test that "
+        "skipped when the dispute went away would let the caveat outlive it"
+    )
+    for name, hypothesis in dispute.hypotheses.items():
+        derived = tile_side_for(
+            **PUBLISHED_TILE_SIDE.arguments,
+            per_series_bytes=hypothesis.per_series_bytes,
+        )
+        assert derived == hypothesis.side, name
+
+    # The headroom explanation moves a multiplier rather than a per-series term,
+    # so it is not one of the hypotheses above. The field is DERIVED from the
+    # two slopes on purpose -- it cannot drift from them -- so re-deriving it
+    # here would be an oracle sharing its subject's derivation path (j). The
+    # check that bites is the hand-computed value: criterion 7 asymptotically
+    # needs the budget's slope to reach the peak's, `926 / (1 - h) >= 1900.9`,
+    # so `h >= 1 - 926/1900.9 = 0.51286`. **The blocker recorded "~33%" and no
+    # derivation reproduces it**; at 33% the side would be 240 rather than 208,
+    # and neither changes the 192-272 spread, which is why it survived review.
+    assert dispute.headroom_fraction_required == pytest.approx(0.51286, abs=5e-6)
+
+
+def test_the_dispute_states_its_direction_its_owner_and_its_spread():
+    """What the sentence beside the number has to contain to be worth printing.
+
+    A bare "disputed" is worse than nothing: it warns without letting a reader
+    act. Three things make it actionable -- who owns the resolution, how far
+    apart the readings are, and **which way the one-sided evidence points**.
+
+    Expected values determined independently: the transient bound is
+    `<= 152 B/series`, from Task 8's side-96 watermark sitting 1.4 MB above the
+    end-of-tile current reading at B = 9216 -- an **upper** bound, so it
+    excludes the headroom explanation as *sufficient* without establishing it as
+    zero. The spread is 192 to 272, the extremes of the hypothesis sides. The
+    ratio is 1900.9 / 926 = 2.053.
+
+    Bug this catches: the bound quoted without its direction, which turns "at
+    most a sixth of the excess is transient" into "the transient is 152", and a
+    one-sided exclusion into a measurement.
+    """
+    dispute = PUBLISHED_TILE_SIDE.dispute
+    assert dispute is not None, "resolved -- see the sibling test's message"
+    assert "8a" in dispute.owner
+    sides = [h.side for h in dispute.hypotheses.values()]
+    assert min(sides) == 192
+    assert max(sides) == PUBLISHED_TILE_SIDE.shared == 272
+    assert dispute.transient_bound_is_an_upper_bound is True
+    assert dispute.transient_bound_bytes_per_series == 152
+    assert (
+        round(dispute.measured_bytes_per_series / dispute.analytic_bytes_per_series, 3)
+        == 2.053
+    )

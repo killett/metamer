@@ -27,17 +27,19 @@ reads. `.load()`'s peak is analytic where a graph's is emergent, which is what
 lets 2b's calibration tile turn the memory formula from a model into a
 measurement.
 
-**A TILE SIDE IS NOT A NUMBER WITHOUT ITS PRECONDITIONS, AND THIS DOCSTRING NO
-LONGER STATES ONE.** The current pair and its full precondition list — budget,
-measured floor, headroom, base, and §9.4's model — live in
-`docs/superpowers/notes/phase1-to-phase2-handoff.md` §3, **once**. Every
-superseded pair is struck there rather than deleted, so a reader meeting one in
-an old note can date it. This file carried ~~347 shared / 187 per-point~~ until
-2026-08-15, which was Task 0's corrected per-series cost divided into the
-**whole** budget — the defect F1 names, and Task 2 fixed. **A second copy here
-is how the two came to disagree**, and the source docstring is the half a
-documentation sweep misses: this is the position §11.1 held while it carried the
-superseded 445.
+**A TILE SIDE IS NOT A NUMBER WITHOUT ITS PRECONDITIONS, AND THIS DOCSTRING
+STATES NEITHER.** Both live in `PUBLISHED_TILE_SIDE` below — the value, the
+budget, the pinned floor and what was open when it was measured, the headroom,
+the base, §9.4's model, and the dispute the per-series cost is currently under.
+**It is a value rather than a paragraph so that a test can recompute it**, which
+is exit criterion 16 and the only durable end to this cascade: `tile_side` has
+been wrong four times and every correction was found by a reader.
+
+This file carried ~~347 shared / 187 per-point~~ until 2026-08-15, which was
+Task 0's corrected per-series cost divided into the **whole** budget — the
+defect F1 names, and Task 2 fixed. **A second copy here is how the two came to
+disagree**, and the source docstring is the half a documentation sweep misses:
+this is the position §11.1 held while it carried the superseded 445.
 
 **AND THE SIDE NO LONGER CARRIES A BACKEND**, which is the visible half of the
 correction: the two engines' published pairs differed only because the formula
@@ -69,8 +71,9 @@ change to the stride or its membership has one place to look:
 from __future__ import annotations
 
 import math
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 from numpy.typing import NDArray
@@ -85,6 +88,251 @@ from metamer.core.memory import (
     solver_state_bytes,
     tile_side,
 )
+
+
+@dataclass(frozen=True)
+class DisputedHypothesis:
+    """One reading of the per-series cost, and the side it derives.
+
+    Attributes:
+        per_series_bytes: The per-series cost this reading implies at the
+            published model.
+        side: The shared-design tile side it derives, recomputed by
+            `tests/test_tiling.py` rather than transcribed.
+        basis: Where the number comes from, in one line.
+    """
+
+    per_series_bytes: float
+    side: int
+    basis: str
+
+
+@dataclass(frozen=True)
+class PerSeriesDispute:
+    """Two instruments disagreeing about the per-series cost, as a value.
+
+    **THIS IS A FIELD RATHER THAN A PARAGRAPH BECAUSE A CAVEAT MUST NOT OUTLIVE
+    ITS SUBJECT.** A number published with its dispute is honest; a dispute
+    still attached after the dispute is settled is (a6) -- a description of
+    something that no longer exists, unfalsifiable because nothing exercises it,
+    which is what `Backend` was. Every number here is recomputed by a test, so
+    the task that resolves this deletes the field in the same edit that moves
+    the value, or the suite fails.
+
+    Attributes:
+        owner: The task that resolves it.
+        analytic_bytes_per_series: What the formula predicts at the ladder
+            fixture -- **not** at the published model.
+        measured_bytes_per_series: The five-point production ladder's slope at
+            that fixture.
+        measured_standard_error: Its standard error. 4.4% relative, so it
+            resolves, against the earlier ladder's 13.2% which did not.
+        ladder_fixture: The configuration both figures belong to. A slope
+            without one is not a number.
+        transient_bound_bytes_per_series: How much of the excess can be a
+            transient rather than resident cost.
+        transient_bound_is_an_upper_bound: **True, and the direction is the
+            whole value of the number.** It excludes the headroom explanation as
+            *sufficient*; it does not establish the transient as zero.
+        headroom_fraction_required: What `HEADROOM_FRACTION` would have to
+            become for the measured peak to sit inside the budget as B grows,
+            if the formula is right and the excess is transient.
+        hypotheses: The readings that remain live, by name.
+    """
+
+    owner: str
+    analytic_bytes_per_series: float
+    measured_bytes_per_series: float
+    measured_standard_error: float
+    ladder_fixture: str
+    transient_bound_bytes_per_series: float
+    transient_bound_is_an_upper_bound: bool
+    headroom_fraction_required: float
+    hypotheses: Mapping[str, DisputedHypothesis]
+
+
+@dataclass(frozen=True)
+class PublishedTileSide:
+    """The published tile side, its preconditions, and its dispute, once.
+
+    **THE NUMBER LIVES HERE AND NOWHERE ELSE, AND THAT IS THE POINT OF THE
+    TYPE.** `tile_side` has been wrong four times -- 171 through Phase 1, 338
+    from 2026-08-10, 347 after Task 0 corrected the per-series formula, and 272
+    since Task 2 stopped treating the budget as the block -- and every
+    correction had to chase four documents, five source docstrings and a dozen
+    test assertions, because each of them held its own copy. **A set of
+    consistent copies is the wrong repair.** Documents point at this record;
+    `tests/test_tiling.py` recomputes it from `tile_side_for`, so the next
+    correction fails a test instead of orphaning a paragraph.
+
+    **AND A SIDE IS NOT A NUMBER WITHOUT ITS PRECONDITIONS**, which is why they
+    are fields and not prose. `arguments` is bound against `tile_side_for`'s
+    signature by a test: a parameter added with a default would otherwise move
+    the published number with nothing to see it, which is how 338 came to be
+    quoted with no backend attached.
+
+    **THE FLOOR IS THE ONLY PRECONDITION THAT IS A MEASUREMENT, AND IT IS
+    INPUT-DEPENDENT.** `measure_floor` takes a `data_uri`, so the floor a run
+    derives depends on the store it opens: measured 2026-08-17 on the
+    development machine at 0.0000 ms/s of full stall, opening a 60x160x160
+    input gave 228.61 MB and a 630x64x64 input gave 229.89 MB -- 1.28 MB apart,
+    eleven times the 0.11 MB within-fixture span. **So a pinned floor needs its
+    input beside it or it is not reproducible**, and `floor_basis` carries it.
+
+    Attributes:
+        budget_bytes: The resolved budget. **SI, 10**9 B**, not `1024**3`.
+        floor: The pinned process floor, measured with the input open.
+        floor_basis: What was open when the floor was measured, and when.
+        d: Composite state dimension. Reaches the arithmetic only through the
+            solver constant, which is why it is not in `per_series_model`.
+        k_beta: Design columns.
+        p_max: Widest candidate's free noise parameter count.
+        n_time: Series length.
+        n_models: Candidates held until the tile is written.
+        placement: The one reachable placement.
+        threads: Ignored under that placement, and named anyway because it is a
+            parameter of the function that derives the number.
+        headroom_fraction: **A LITERAL, NOT A READ OF
+            `memory.HEADROOM_FRACTION`**, checked against it by a test. Reading
+            the constant here would make that test compare a value with itself
+            -- the shape of an oracle sharing its subject's derivation path (j)
+            -- and a change to the headroom would move the published side with
+            nothing to say so.
+        smooth_base: A literal pin of `store.TILE_SIDE_BASE`, same reason.
+        shared: The published side with a shared design.
+        per_point: The published side with a per-point design.
+        dispute: The live disagreement about the per-series cost, or None once
+            it is settled.
+    """
+
+    budget_bytes: int
+    floor: FloorReport
+    floor_basis: str
+    d: int
+    k_beta: int
+    p_max: int
+    n_time: int
+    n_models: int
+    placement: SolverPlacement
+    threads: int
+    headroom_fraction: float
+    smooth_base: int
+    shared: int
+    per_point: int
+    dispute: PerSeriesDispute | None
+
+    @property
+    def per_series_model(self) -> Mapping[str, int]:
+        """What `memory.resident_bytes_per_series` takes, and only that.
+
+        Returns:
+            The model keywords, without `d`.
+        """
+        return {
+            "k_beta": self.k_beta,
+            "p_max": self.p_max,
+            "n_time": self.n_time,
+            "n_models": self.n_models,
+        }
+
+    @property
+    def arguments(self) -> Mapping[str, Any]:
+        """Every argument `tile_side_for` needs to reproduce `shared`.
+
+        **A VIEW RATHER THAN A SECOND COPY.** The two branches the record
+        publishes both ways -- `per_point_design` -- and the calibration seam
+        `per_series_bytes` are the only parameters left out, and a test binds
+        that split against the signature.
+
+        Returns:
+            The call keywords.
+        """
+        return {
+            "budget_bytes": self.budget_bytes,
+            "floor": self.floor,
+            "placement": self.placement,
+            "threads": self.threads,
+            "d": self.d,
+            **self.per_series_model,
+        }
+
+
+PUBLISHED_TILE_SIDE = PublishedTileSide(
+    budget_bytes=10**9,
+    floor=FloorReport(
+        pre_warm_bytes=171_200_000,
+        post_warm_bytes=216_900_000,
+        with_input_bytes=228_200_000,
+        peak_bytes=228_200_000,
+        components={"input_open": 228_200_000},
+    ),
+    floor_basis=(
+        "measured 2026-08-15 on the development machine with the input open; "
+        "re-measured 2026-08-17 at 228.4-229.9 MB across three inputs at "
+        "0.0000 ms/s of full stall"
+    ),
+    d=3,
+    k_beta=4,
+    p_max=4,
+    n_time=630,
+    n_models=12,
+    placement=SolverPlacement.PER_SERIES_LIVE,
+    threads=1,
+    headroom_fraction=0.15,
+    smooth_base=16,
+    shared=272,
+    per_point=144,
+    dispute=PerSeriesDispute(
+        owner="Phase 2b Task 8a (the second-fixture discriminator)",
+        analytic_bytes_per_series=926.0,
+        measured_bytes_per_series=1900.9,
+        measured_standard_error=84.1,
+        ladder_fixture="N = 60, M = 2, k_beta = 4, p_max = 3, grid = side",
+        transient_bound_bytes_per_series=152.0,
+        transient_bound_is_an_upper_bound=True,
+        headroom_fraction_required=1.0 - 926.0 / 1900.9,
+        hypotheses={
+            "published": DisputedHypothesis(
+                per_series_bytes=8274.0,
+                side=272,
+                basis="the corrected analytic formula, Task 0",
+            ),
+            "additive": DisputedHypothesis(
+                per_series_bytes=8274.0 + (1900.9 - 926.0),
+                side=256,
+                basis=(
+                    "the 974.9 B/series excess is a per-series term independent "
+                    "of the configuration; open question 16's instrument shows "
+                    "an N-independent excess at a different magnitude"
+                ),
+            ),
+            "multiplicative": DisputedHypothesis(
+                per_series_bytes=8274.0 * 1900.9 / 926.0,
+                side=192,
+                basis="the formula understates every per-series term by 2.053x",
+            ),
+        },
+    ),
+)
+"""**`tile_side` IS 272 SHARED / 144 PER-POINT, AND THE PER-SERIES COST IT RESTS
+ON IS UNDER DISPUTE BY 1.86x** -- Task 7's ladder gave 1021.6 +/- 134.7 B/series
+and did not resolve, Task 8's five-point production ladder gave 1900.9 +/- 84.1
+and does, Task 7's rung 48 does not reproduce, and **Phase 2b Task 8a owns the
+measurement that separates them; until it lands the published side is 272 and
+the live readings span 192 to 272.**
+
+That sentence is the number's, not a footnote's, and `dispute` is what makes it
+one: every figure in it is recomputed by `tests/test_tiling.py`, so the task
+that settles the dispute deletes the field in the edit that moves the value.
+
+**WHAT IS NOT IN DISPUTE:** that the floor, the headroom, the base and the model
+are preconditions of the answer; that the placement moves a constant and not the
+slope, so the side carries no backend; and that a side quoted without this list
+is not a number. Superseded pairs are struck in the handoff's section 3 with
+their dates -- ~~171~~, ~~338~~/~~186~~, ~~339~~, ~~347~~/~~187~~, ~~361~~/~~189~~
+-- so a reader meeting one in an old note can date it.
+"""
+
 
 _INVERSE_WALK_LIMIT = 64
 """How far `budget_bytes_for_side` may walk from its closed form, in bytes.
@@ -242,10 +490,12 @@ def tile_side_for(
     then rounded **down** to a multiple of `store.TILE_SIDE_BASE`.
 
     **NOT `sqrt(block_bytes / (n_time * itemsize))`**, which is the prompt's
-    formula: it counts only the float64 data and overestimates, giving 445 where
-    the full accounting gives 272. Design doc §11.1 carried it until 2026-08-12
-    while §9.4 rejected it, and §11.1 is the section a tiling implementer opens
-    first.
+    formula: it counts only the float64 data and overestimates, giving ~~445~~
+    where the full accounting gives `PUBLISHED_TILE_SIDE.shared`. Design doc
+    §11.1 carried it until 2026-08-12 while §9.4 rejected it, and §11.1 is the
+    section a tiling implementer opens first. **The answer is not repeated here**
+    — this is the function the record recomputes its value through, so a copy in
+    its own docstring is the one place the cascade could restart.
 
     **THE ROUNDING HAPPENS HERE, BEFORE THE SIDE IS STORED**, and that placement
     is the point rather than a detail. A calibration that rounded at its own call
@@ -582,13 +832,16 @@ def assemble_tile(handle: InputHandle, tile: Tile) -> NDArray[np.float64]:
     whole tile materializes the entire float32 block, and casting that has both
     full representations alive at once -- which "float32 to float64 conversion
     per chunk, so both full representations never coexist" exists to forbid.
-    Recomputed at design doc section 9.4's worked example on 2026-08-14, at the
-    corrected `tile_side` of **347** (was 338) and N = 630: 347**2 * 630 =
-    75 857 670 points, so the float32 tile is **303 MB** and the float64 tile
-    **607 MB**, and the one-call form peaks at **910 MB against 607 MB -- a 50%
-    overshoot of the data term** against a budget the design doc calls hard.
+    Recomputed at design doc section 9.4's worked example on 2026-08-17 at
+    `PUBLISHED_TILE_SIDE.shared` = 272 and N = 630: 272**2 * 630 = 46 609 920
+    points, so the float32 tile is **186 MB** and the float64 tile **373 MB**,
+    and the one-call form peaks at **559 MB against 373 MB -- a 50% overshoot of
+    the data term** against a budget the design doc calls hard. ~~At 347 the
+    same figures were 303 MB, 607 MB and 910 MB~~, struck 2026-08-17.
     The ratio is 3:2 by construction and does not move with the side; the
-    absolute figures do, which is why they carry the side that produced them.
+    absolute figures do, which is why they carry the side that produced them --
+    **and why they are recomputed whenever the record moves**, including
+    whichever way Task 8a resolves.
 
     So the float64 destination is allocated once and each span from
     `assembly_spans` is loaded, cast into its slice, and dropped.
