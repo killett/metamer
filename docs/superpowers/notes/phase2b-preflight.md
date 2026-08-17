@@ -1820,3 +1820,78 @@ which is exactly the `current_end` bias the brief already names.
   paragraph a reader compares by eye. A prediction that has to be matched up by hand is one the
   analysis can drift toward, and this project has recorded a conclusion surviving its own
   contradicted derivation once already.
+
+### WHAT TASK 8a ACTUALLY MEASURED, AND WHY BOTH ARMS RETURN "NEITHER EXCLUDED"
+
+Run 2026-08-17 on a box measured quiet — 20 s idle at **0.0000 ms/s** of cgroup full stall, load
+0.93. Every point in
+[`task-8a-measured.jsonl`](task-8a-measured.jsonl), the harness in
+[`task-8a-harness.py`](task-8a-harness.py), the predictions in
+[`task-8a-predictions.json`](task-8a-predictions.json) — **committed before any arm ran.**
+
+**THE INSTRUMENT MEASURES ELAPSED TIME, NOT THE TRANSIENT, AND A CONTROL PROVES IT.** Two masked
+runs at side 48, identical fixture, identical code path, differing **only** in 600 s of idle
+inside the callback before the reading:
+
+| run | wall | `peak − current` |
+|---|---|---|
+| masked side 48 | 55.2 s | **0.000 MB** |
+| masked side 48, +600 s idle | 668.8 s | **92.115 MB** |
+
+**Time alone produces the entire effect the arm exists to detect.** The full-fit run at side 48
+took 4072.9 s and read a working set **85 MB below its own measured floor** — 144.7 MB against
+229.7 MB — which is reclaim of the floor's own pages, not a tile transient. **(i2) discipline in
+both directions: the positive control passed (64 MB injected, 66.59 MB seen) and the negative
+control — vary time, hold everything else — reproduced the "signal" from nothing.**
+
+### AND THE STALL GATE CANNOT SEE THIS, WHICH IS THE FINDING THAT OUTLIVES THE TASK
+
+`RSS_STALL_LIMIT_US_PER_S`'s docstring says it has never been checked against a known-bad
+reading and that the next failure should record its rate. **Here are two.** The run that lost
+85 MB read **0.0876 ms/s** — *below* the 0.9 ms/s known-good idle rate — and the 600 s control
+that lost 92 MB read **1.2489 ms/s**, forty times inside the 50 ms/s limit. **Both would pass the
+gate.** PSI `full` counts time the workload was *stalled waiting* on memory; reclaiming clean
+file-backed pages the workload has stopped touching costs **no stall at all**. So the gate
+catches thrashing and is **blind to quiet reclaim over a long window**, which is the failure mode
+that matters for a tile loop.
+
+### SO ARM A IS "NEITHER EXCLUDED", AND THE EXISTING BOUND SURVIVES UNCHANGED
+
+The decision rule would have read side 48's 84.005 MB gap as TRANSIENT. **It is not a verdict, it
+is the clock.** What does survive: the contamination **inflates** `peak − current`, so Task 8's
+1.4 MB at side 96 remains an **upper** bound and **transient ≤ 152 B/series** still holds — the
+headroom explanation stays excluded as *sufficient*, exactly as before, and is now excluded with
+its mechanism understood rather than on one reading.
+
+### ARM C's LADDER IS CLEAN AND ITS COMPARISON IS NOT
+
+The masked ladder is short-running and uncontaminated: side 48 and side 96 give **2750.8
+B/series** at this fixture. **Two points, so no residual and no standard error** — stated rather
+than papered over. But the differential Arm C exists to take is masked **against full**, and
+every full-fit run at these B is long enough to be contaminated: the side-48 full run's peak sits
+**0.97 MB below its own floor**. **The subtraction cannot be done, so Arm C is "neither excluded"
+too.**
+
+### ARM B DOES NOT RUN, BY THE RULE COMMITTED BEFORE THE RUN
+
+It was gated on Arm A returning RESIDENT. Arm A returned neither. **8b stays blocked.**
+
+### AND TASK 8's LADDER HAS AN UNCONTROLLED VARIABLE CONFOUNDED WITH B
+
+Its five points ran **45.6 s to 1780.1 s** — a **39× spread in run length, monotonically
+increasing with B**, which is precisely the variable just shown to move an RSS reading by tens of
+megabytes. **The direction matters and is stated:** contamination *lowers* the peak of the longer
+runs, which *lowers* the fitted slope, so **1900.9 ± 84.1 is if anything an UNDERestimate.** This
+does not rescue the formula — it widens the disagreement — but the ladder is no longer a clean
+measurement of anything, and neither is criterion 7's crossover, whose failing point is its
+longest run.
+
+### AND TASK 8's FIXTURE CANNOT BE REBUILT FROM WHAT WAS RECORDED — THE COMPARABILITY RULE, DAY ONE
+
+Rebuilt from the recorded description (N = 60, M = 2, k_β = 4, p_max = 3, `grid = side`), this
+fixture is **7–9× more expensive per series** — side 48 took **4072.9 s against Task 8's
+438.8 s** — and its **masked** peak at side 96, 255.09 MB, **exceeds Task 8's full-fit peak of
+245.36 MB** at the same side. **A masked run cannot hold more than the live run it is a subset
+of**, so these are not the same fixture. What the record omits: the data distribution, the input
+**chunking**, the criteria list, and whether an iteration cap was applied. **The rule promoted
+yesterday fired within a day, on the measurement the whole dispute rests on.**
