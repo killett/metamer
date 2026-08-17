@@ -1597,3 +1597,140 @@ puts the two peaks `(9216 − 256) · 926` apart. **A prediction that large from
 that costs nothing extra is worth more than either run alone**, and it is what turned into the
 five-point ladder once the pair proved confounded — Run A's 36 tiles accumulate a warm-up that
 Run B's single tile does not, so `grid = side` replaced it.
+
+---
+
+## Task 9 (narrowed) — the cascade mechanism, ahead of the disputed value
+
+Run 2026-08-17, against the **narrowed** brief agreed after Task 8 blocked the task as written:
+land the single-source mechanism and the sites that are wrong under every hypothesis, leave the
+**value** frozen until 8a/8b resolve the 1.86x disagreement. The plan's Task 9 section is
+otherwise unchanged and is still the brief.
+
+### (a4) THE FLOOR CORRECTION THIS TASK WAS ASKED TO LAND DOES NOT SURVIVE ITS OWN MEASUREMENT
+
+The narrowed brief included one correction that looked free: `WORKED_FLOOR` pins **228 200 000**
+while Task 8 measured **232.00 MB, sigma 0.468, over ten runs**, and the published side is
+**272 either way** because the base-16 round-down absorbs the difference. A stale constant that
+currently changes nothing is the cheapest possible correction -- so it was checked before it was
+made, and **the premise is not established.**
+
+**`measure_floor` TAKES A `data_uri`, SO THE FLOOR IS INPUT-DEPENDENT BY CONSTRUCTION**, and
+**neither number was recorded with its input.** Measured today on a quiet box -- 20 s idle at
+**0.0397 ms/s**, every probe window at **0.0000**, swap 100% full (2047/2047 MB) and 5094 MB
+available, three fixtures, three `measure_floor` runs each:
+
+| fixture opened | `peak_bytes`, MB | span |
+|---|---|---|
+| 12 x 16 x 16 | 228.37, 228.68, 228.93 | 0.56 |
+| 60 x 160 x 160 (Task 7's ladder fixture) | 228.66, 228.54, 228.63 | 0.11 |
+| 630 x 64 x 64 (section 9.4's N) | 229.95, 229.83, 229.89 | 0.11 |
+
+**The input does move the floor -- +1.28 MB from the ladder fixture to section 9.4's N, eleven
+times the within-fixture span -- so a floor quoted without its input is not reproducible.** That
+is the same rule as handoff section 3's *"a published side needs a pinned floor beside it"*, one
+level down, and it is why the published record pins the whole `FloorReport` rather than a number.
+
+**But 1.28 MB is not 3.8, so the input does not explain the gap.** Nine readings today bracket
+**228.37-229.95**; Task 8's own five-point ladder intercept is **228.042 MB**, measured on the day
+it recorded 232.00. **Three lines land at 228-230 and one at 232.** So `WORKED_FLOOR` is **not
+established stale, and it does not move in this task.** Recorded as a disagreement to report,
+per the precedence rule, and it is (a8) inverted: two independent lines converging is evidence,
+and here it is the **third** line that fails to converge.
+
+**AND THE 232.00 READING IS NOT WITHDRAWN EITHER** -- it is ten runs at sigma 0.468, which is not
+scatter around 228.6. What is withdrawn is the *inference*: "the floor has moved" was drawn from
+two numbers whose common precondition was never recorded, which is (a) at a parameter value.
+
+### (j4) AND THE SAME CHECK PAID OFF ON THE BLOCKER ITSELF, ONE SESSION EARLIER
+
+Two of the three surviving explanations were narrowed **before** any new measurement, out of
+numbers already in `PROGRESS.md`: Task 8's side-96 watermark sitting **1.4 MB above the
+end-of-tile current reading** bounds the transient at **<= 152 B/series** of the 975 B/series
+excess -- **an upper bound, so it excludes the headroom explanation as SUFFICIENT without
+establishing it as zero**, and the direction must be stated wherever it is quoted. Open question
+16's table is the second: an N-independent excess (+2736 at N = 630, +2616 at N = 60) at a
+different instrument and a different magnitude, so it is a **prior for additive rather than
+evidence for it**, and it stays open rather than being folded in (a5).
+
+### AND THE BLOCKER'S OWN FRAMING WAS WRONG, WHICH IS (a4) ON THE REVIEW SIDE
+
+`PROGRESS.md`'s Task 9 inherit section said the two explanations *"both predict exactly what was
+observed, because the observation is a single line through peak against B and either term moves
+it."* **`HEADROOM_FRACTION` does not move peak.** Task 8's ladder forced `grid = side`, so the
+tile geometry is fixed by the fixture and not by the budget; the 1900.9 +/- 84.1 B/series is a fit
+through **peak RSS**, and the headroom enters only the budget column. The headroom explanation
+survives only if the excess is a **transient**, which is a different claim with a different and
+much cheaper discriminator. **The blocker was written from the task's conclusion rather than from
+its method, and the method fixes the geometry the alternative hypothesis would have needed to
+move.**
+
+### (a6) A SECOND DESCRIPTION OF SECTION 9.4's MODEL EXISTS ALREADY, AND THIS TASK WOULD HAVE MADE A THIRD
+
+Two copies of the worked example are in the tree today: `validation.py:57`'s `_WORKED_EXAMPLE`
+(plus `_WORKED_EXAMPLE_BUDGET` and `_WORKED_EXAMPLE_STATE_DIM`) and
+`tests/test_tiling.py:56`'s `WORKED_EXAMPLE` / `WORKED_FLOOR`. **A published record added beside
+them is the third**, and it is the one every document would then point at -- so the model
+parameters and the pinned floor move **into** the record and both existing copies read it.
+(a6)'s own corollary: a second description is cheapest to prevent in the commit that would have
+created it.
+
+### (a5) BUT VALIDATION'S SIDES ARE NOT THE PUBLISHED SIDE, AND UNIFYING THEM WOULD PUBLISH A FOURTH
+
+`_WORKED_EXAMPLE_BUDGET`'s docstring already refuses this: layer 3 runs **before the input is
+open and therefore before the floor is measured**, so its sides divide the **whole** budget --
+an upper bound and the pre-Task-2 arithmetic -- and what the refusal is for is the **ratio**,
+which the floor does not move. **Share the model parameters; never share the answer.** A "one
+source" repair that gave validation the published side would publish a fourth tile side into a
+project that has had four, which is the failure this task exists to end.
+
+### (j) CRITERION 16's TEST CHECKS CONSISTENCY, NOT CORRECTNESS, AND MUST SAY SO
+
+*The documented number equals `tile_side_for(documented inputs)`* has the implementation as its
+own oracle. **It catches the next formula correction orphaning the documents -- which is the
+whole cascade -- and it cannot catch a wrong formula**, because both sides move together.
+`test_the_worked_example_derives_272_from_the_whole_chain`'s hand-derivation is the independent
+oracle and **stays**, re-pointed at the record rather than replaced by it. Two tests, two
+subjects.
+
+### (g2) THE PRECONDITION LIST BINDS AGAINST THE WHOLE SIGNATURE, NOT THE REQUIRED PARAMETERS
+
+`tile_side_for` takes eleven keyword parameters; handoff section 3's precondition table names
+seven things and omits `placement` and `threads` entirely. **A parameter added with a default
+would move the published number with nothing to see it**, so the binding is
+`set(record arguments) | {the two the record varies deliberately} == set(signature parameters)`.
+The two are `per_point_design` (the record publishes both branches) and `per_series_bytes` (the
+calibration seam -- and its being `None` is exactly the "analytic, not calibrated" precondition
+the dispute is about).
+
+### (i5) THE TEMPTING REPAIR IS HERE, AND THE DISPUTE MAKES IT CHEAPER RATHER THAN DEARER
+
+The plan already calls this the one place where the easy fix is undetectable: when an assertion
+will not go green, the thing that would have to change is the published constant. **The open
+dispute adds an excuse the plan did not anticipate -- "the number is under revision anyway".**
+Every expected value in this task is derived by hand from the corrected formula with the
+derivation recorded beside it, and the four hypothesis sides are computed the same way.
+
+### AND THE CAVEAT MUST NOT OUTLIVE THE DISPUTE — (a6) IN A NEW REGISTER
+
+A number published with its dispute is honest; a **caveat whose subject has been resolved** is
+(a6) exactly -- a description surviving its subject, and unfalsifiable because nothing exercises
+it. So the dispute is a **field of the record, not prose**: structured, with its owner, its two
+measured slopes and its hypothesis sides **recomputed by the same test that recomputes the
+value**. 8b deletes the field in the edit that moves the number, and a stale caveat fails a test
+rather than reading as current.
+
+### (d), (e), (f) briefly
+
+- **(d)** `rg`: nothing in the tree publishes a tile side as a value-plus-preconditions record
+  today. The vocabulary this task needs -- a published number, its derivation, its preconditions
+  -- exists only as prose in handoff section 3 and `PROGRESS.md`, neither of which any test reads.
+- **(e)** the mutations that must bite: change the record's value away from `tile_side_for`'s
+  answer; drop a key from the arguments; add a defaulted parameter to `tile_side_for`; leave the
+  dispute field present with a hypothesis side that no longer reproduces.
+- **(f)** the brief says "five source docstrings"; the count today is **four files** --
+  `tiling.py` (module docstring and `tile_side_for`), `store.py` (two module comments and one
+  docstring), `validation.py`, `memory.py` -- and the stale-number occurrences in `src/` are
+  already struck-through annotations rather than live claims. **The live stale statements are in
+  the design doc**, which has never been updated past 338/445/186: sections 2.5, 9.4's table,
+  11.1 and 13.4.
