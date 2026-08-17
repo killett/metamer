@@ -1004,6 +1004,16 @@ subject.
 
 ## Task 8a — the discriminator: resident or transient, additive or multiplicative
 
+> **RAN 2026-08-17. VERDICT: NEITHER EXCLUDED — and the instrument is what failed, not the
+> hypothesis.** `peak − current_end` measures how long the process lived: a control varying only
+> elapsed time took the gap from **0.000 MB at 55 s to 92.115 MB at 669 s** on the same fixture.
+> The stall gate cannot see it (0.0876 and 1.2489 ms/s against a 50 000 limit). **Arm B did not
+> run**, per the gate committed in advance. **Two further findings bear on the dispute itself:**
+> Task 8's ladder has **run length confounded with B** (45.6 s to 1780.1 s, monotonic), in the
+> direction that makes 1900.9 an **under**estimate; and its **fixture cannot be rebuilt** from
+> what was recorded. The measurements are in `PROGRESS.md`'s *What Task 8a established*. **The
+> brief below is what was run and is kept unchanged.**
+
 **Added 2026-08-17, after Task 8 blocked Task 9.** Two instruments disagree about the per-series
 cost by 1.86× and **no task in this plan owned the resolution**. This one does, and it **changes
 no constant**: its deliverable is a verdict with its predictions **committed before the run**.
@@ -1047,6 +1057,13 @@ verdict rather than leaving it for Task 10 to discover.
 ---
 
 ## Task 8b — the correction, gated on 8a
+
+> **STILL BLOCKED AFTER 8a, AND NOW BLOCKED ON A MEASUREMENT NOBODY HAS DESIGNED.** 8a did not
+> return RESIDENT, so nothing here is licensed. **Whoever designs the replacement owes three
+> controls 8a did not have:** run length held constant across the points being compared, a
+> fixture recorded completely enough to rebuild (data distribution, **chunking**, criteria,
+> iteration cap), and a validity check that is not the stall rate — which is blind to quiet
+> reclaim. **Do not re-run 8a harder.**
 
 **One term moves, alone, in its own commit** — the standing rule that two changes which could each
 explain a wrong number land separately. Re-checks criterion 6's band against the corrected

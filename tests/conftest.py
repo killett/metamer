@@ -241,10 +241,25 @@ def _stub_the_floor_probe(request, monkeypatch):
 #: `measure_floor` whose answer was CORRECT gave **5.3 ms/s** -- five times
 #: idle, from our own allocations. So a nonzero stall is normal and the gate
 #: must be a rate. **50 ms/s is 5% of wall clock and roughly ten times the
-#: known-good rate.** What is NOT known is the rate during the failing sweep,
-#: because it was not recorded -- so this separates "known good" from "far
-#: worse" and has **not** been validated against a known-bad reading. The next
-#: failure should record its rate, which is what the terminal summary is for.
+#: known-good rate.**
+#:
+#: **AND THE KNOWN-BAD READINGS ARRIVED AT PHASE 2b TASK 8a, 2026-08-17: THE
+#: GATE DOES NOT SEE THIS FAILURE MODE AT ALL.** Two one-tile runs lost most of
+#: their resident set to reclaim and both read far INSIDE the limit -- a 4073 s
+#: fit whose working set ended **85 MB below its own measured floor** read
+#: **0.0876 ms/s**, which is below the 0.9 ms/s idle rate, and a control that
+#: added 600 s of idle and lost **92 MB** read **1.2489 ms/s**. **Both would
+#: pass.** The mechanism is in the counter's definition: PSI `full` counts time
+#: the workload was **stalled waiting** on memory, and reclaiming clean
+#: file-backed pages the workload has stopped touching costs **no stall at
+#: all**. So this gate catches **thrashing** and is **blind to quiet reclaim
+#: over a long window**.
+#:
+#: **THE NUMBER IS THEREFORE NOT WIDENED AND NOT NARROWED -- ITS SUBJECT IS.**
+#: It is a valid gate on the failure it was built from and it is not a
+#: certificate that an RSS difference is sound. **A long-running RSS difference
+#: needs its own control**: hold the fixture and vary only elapsed time, which
+#: is what exposed this. See `PROGRESS.md`'s *What Task 8a established*.
 #:
 #: **THE ASYMMETRY IS UNUSUAL BECAUSE BOTH DIRECTIONS COST SOMETHING.** Too
 #: loose and a corrupted measurement is asserted as a fact. Too tight and these

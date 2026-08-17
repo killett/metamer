@@ -3,9 +3,9 @@
 ## Start here (cold-start summary)
 
 1. **Branch `main`, everything on it, every commit pushed by a hook** — https://github.com/killett/metamer.
-2. **DONE:** Phase 1 (0–18), Phase 2 preliminaries P0–P4, **Phase 2a (0–13)**, **Phase 2b Tasks 0–8 and Task 9 NARROWED**, open questions 1, 4, 9, 11, 12, 15.
-3. **NEXT ACTION: 2b TASK 8a — the three-arm discriminator** (added 2026-08-17; the plan's own Task 8a section is the brief). Task 8 left a per-series figure two instruments disagree about by 1.86×; **Task 9's mechanism landed ahead of it and the published value is frozen at 272 carrying its dispute.** Execution order is **9 (narrowed) → 8a → 8b → 9's value freeze → 10.**
-4. **Tests: 1052 passed, 0 failed, 0 indeterminate — 2026-08-17, 1041 s, at a full-stall rate of 2.04 ms/s over the sweep's own window** (host load 12 falling to 2 on a 4-core box; the rate is the sweep's, not an idle reading, and is 4% of `RSS_STALL_LIMIT_US_PER_S`). The only statement of the current count; earlier counts and sweep durations are in [Task 8's section](#what-task-8-established-done-2026-08-16--read-before-quoting-the-per-series-cost-criterion-6-or-criterion-7).
+2. **DONE:** Phase 1 (0–18), Phase 2 preliminaries P0–P4, **Phase 2a (0–13)**, **Phase 2b Tasks 0–8, Task 9 NARROWED, Task 8a (verdict: neither excluded)**, open questions 1, 4, 9, 11, 12, 15.
+3. **NEXT ACTION: A DECISION. Task 8a ran on 2026-08-17 and returned "neither excluded" — because the instrument, not the hypothesis, failed.** `peak − current_end` measures how long the process lived; the stall gate cannot see the contamination; and **Task 8's ladder has run length confounded with B and a fixture nobody can rebuild from the record.** **8b is blocked on a measurement that does not yet exist.** Read [What Task 8a established](#what-task-8a-established-done-2026-08-17--read-before-quoting-any-long-running-rss-reading) FIRST. The published side stays **272 carrying its dispute**.
+4. **Tests: 1049 passed, 3 FAILED, 0 indeterminate — 2026-08-17 afternoon, 2093 s. THE SUITE IS RED AND THE THREE FAILURES ARE THE SUBJECT OF [What Task 8a established](#what-task-8a-established-done-2026-08-17--read-before-quoting-any-long-running-rss-reading), NOT A REGRESSION.** All three are `machine` RSS-difference tests, one of them already gated, and the gate printed `0 indeterminate` because it cannot see quiet reclaim. The same suite was **1052 passed, 0 failed** at 1041 s the same morning on the same code. **Nothing was widened and nothing was gated.** The only statement of the current count; earlier counts and sweep durations are in [Task 8's section](#what-task-8-established-done-2026-08-16--read-before-quoting-the-per-series-cost-criterion-6-or-criterion-7).
 5. **`pixi run test` is the full sweep and every end-of-task verification must run it; `test-fast` and `test-ci` are not evidence.** It has caught **seven** things a fast run could not, two of them in Task 8. **Every run prints `RSS measurement validity`, including at zero** — a nonzero count is INDETERMINATE, neither pass nor fail.
 6. **Verify a fresh checkout with `pixi run test && pixi run typecheck && pixi run lint`**, plus `pixi run pre-commit run --all-files` before every commit.
 7. **THE METHOD IS THE PRE-FLIGHT AND IT LIVES IN EXACTLY ONE PLACE:** [`phase1-to-phase2-handoff.md`](docs/superpowers/notes/phase1-to-phase2-handoff.md) §1 — (a0)–(a8), (a)–(k), **(j4) new at Task 8**, the five causes of a surviving mutation, the standing rules, the fixture facts. **Run it against the task brief before code**, append to [`phase2b-preflight.md`](docs/superpowers/notes/phase2b-preflight.md). **Do not restate it here** — the two copies drifted once already.
@@ -1429,6 +1429,127 @@ instrument, different magnitude — and stays open rather than being folded in (
 
 ---
 
+### What Task 8a established (done 2026-08-17 — read before quoting ANY long-running RSS reading)
+
+**BOTH ARMS RETURN "NEITHER EXCLUDED", AND THAT WAS A PERMITTED OUTCOME COMMITTED BEFORE THE
+RUN.** But not for want of signal: the arms found a defect in the instrument that **the dispute
+itself rests on**. Every point, the harness and the predictions are in
+[`task-8a-measured.jsonl`](docs/superpowers/notes/task-8a-measured.jsonl),
+[`task-8a-harness.py`](docs/superpowers/notes/task-8a-harness.py) and
+[`task-8a-predictions.json`](docs/superpowers/notes/task-8a-predictions.json) — **the last
+committed before any arm ran.** Box quiet at the start: 20 s idle at **0.0000 ms/s**, load 0.93.
+
+#### `peak − current_end` MEASURES HOW LONG THE PROCESS LIVED
+
+| run | wall | peak | current | gap |
+|---|---|---|---|---|
+| masked, side 48 | 55.2 s | 235.921 MB | 235.921 MB | **0.000 MB** |
+| masked, side 48, **+600 s idle** | 668.8 s | 232.116 MB | 140.001 MB | **92.115 MB** |
+| **full fit, side 48** | 4072.9 s | 228.729 MB | 144.724 MB | **84.005 MB** |
+| masked, side 96 | 223.6 s | 255.087 MB | 255.087 MB | **0.000 MB** |
+| positive control, 64 MB injected | 10.4 s | 296.210 MB | 229.622 MB | **66.589 MB** |
+
+**The first two differ only in 600 s of sleep inside the callback, and that alone produces the
+whole effect.** The full-fit run's working set ended **85 MB below its own measured floor** —
+144.7 against 229.7 — and its peak sits **0.97 MB below** that floor, so **reclaim depresses the
+watermark too, not just the working set.** (i2) ran in both directions: the injected 64 MB was
+seen at 66.59 MB, and the negative control manufactured the signal out of nothing but time.
+
+#### THE STALL GATE IS BLIND TO THIS, AND ITS DOCSTRING NOW SAYS SO
+
+`RSS_STALL_LIMIT_US_PER_S`'s docstring asked for the rate of the next failure. **Two, and both
+pass the gate:** the run that lost 85 MB read **0.0876 ms/s** — *below* the 0.9 ms/s known-good
+idle rate — and the 600 s control that lost 92 MB read **1.2489 ms/s**, forty times inside the
+50 000 limit. **The mechanism is in the counter's definition:** PSI `full` counts time the
+workload was *stalled waiting* on memory, and reclaiming clean file-backed pages the workload has
+stopped touching costs **no stall at all**. So the gate catches **thrashing** and is blind to
+**quiet reclaim over a long window**. **The number is not widened and not narrowed — its subject
+is.** A long-running RSS difference needs its own control: hold the fixture, vary only time.
+
+#### WHAT SURVIVES: THE BOUND, UNCHANGED AND BETTER FOUNDED
+
+The contamination **inflates** `peak − current`, so Task 8's 1.4 MB at side 96 is still an
+**upper** bound: **transient ≤ 152 B/series**, and the headroom explanation stays excluded as
+**sufficient** — now with a mechanism rather than on one reading. **Arm B did not run**, being
+gated on Arm A returning RESIDENT. **8b stays blocked.**
+
+#### AND TASK 8's LADDER HAS AN UNCONTROLLED VARIABLE CONFOUNDED WITH B
+
+Its five points ran **45.6 s to 1780.1 s** — a **39× spread, monotonic in B**, which is exactly
+the variable just shown to move an RSS reading by tens of megabytes. **The direction is stated:**
+contamination lowers the longer runs' peaks, therefore lowers the fitted slope, so **1900.9 ±
+84.1 is if anything an UNDERestimate.** That widens the disagreement with the formula rather than
+resolving it — and criterion 7's crossover, whose failing point is its **longest** run, is not a
+clean measurement either.
+
+#### TASK 8's FIXTURE CANNOT BE REBUILT FROM WHAT WAS RECORDED
+
+Rebuilt from its recorded description (N = 60, M = 2, k_β = 4, p_max = 3, `grid = side`), the
+fixture is **7–9× more expensive per series** — side 48 took **4072.9 s against 438.8 s** — and
+its **masked** peak at side 96, **255.09 MB, exceeds Task 8's FULL peak of 245.36 MB**. A masked
+run cannot hold more than the live run it is a subset of, so **these are not the same fixture.**
+Unrecorded: the data distribution, the input **chunking**, the criteria list, and any iteration
+cap. **The comparability rule promoted the day before fired within a day, on the measurement the
+whole dispute rests on.**
+
+#### THE MASKED LADDER, WHICH IS CLEAN AND WHICH ANSWERS NOTHING ON ITS OWN
+
+Sides 48 and 96, short runs, uncontaminated: **2750.8 B/series** at this fixture. **Two points,
+so no residual and no standard error** — stated rather than papered over. Arm C's subtraction is
+masked **against full**, and every full-fit run at these B is long enough to be contaminated, so
+**the subtraction cannot be done.**
+
+#### AND THEN THE SUITE REPRODUCED THE FINDING BY ITSELF, WHICH IS WHY THIS SWEEP IS RED
+
+**THE END-OF-TASK SWEEP FAILED THREE `machine` RSS TESTS AND THE VALIDITY GATE PRINTED
+`0 indeterminate`.** 1049 passed, 3 failed, 2093 s. Not one of them is caused by this task's
+changes — which are documentation plus one docstring — and all three fail in the direction
+reclaim produces:
+
+| test | assertion | got |
+|---|---|---|
+| `test_a_child_inherits_the_parents_own_high_water_mark_and_not_its_current_rss` | 73.9 MB ± 11 MB | **50.4 MB** |
+| `test_peak_residency_does_not_move_with_the_iteration_cap` | two peaks within 16 MB | **24.77 MB apart** |
+| `test_the_recompute_loop_retains_nothing_that_survives_its_warm_up` | injected control > 14 MB | **6.76 MB** |
+
+**Re-run in isolation, the first passes and the other two still fail** — so this is not only
+(i9)'s sweep-pressure signature; the box's ambient state has itself moved. **Available RAM fell
+from 5094 MB at the start of this task to 1906 MB after it**, consumed by its own runs, and the
+sweep that was green at 1052/1052 this morning is red this afternoon on unchanged code.
+
+> **THE SECOND TEST IS ALREADY `rss_validity`-GATED AND THE GATE DID NOT FIRE.** That is the
+> whole finding, arriving unprompted: **the gate cannot see the condition that breaks the test it
+> guards.** The third is a **positive control** that under-registered — the injected leak was
+> partly reclaimed before it could be measured, so the instrument reported less than was put in.
+> The first is one of the four the survey left **ungated for a stated reason** — *"a watermark
+> cannot be reduced by reclaim"* — **and this task measured that premise false**: the full-fit
+> run's watermark sat 0.97 MB **below its own floor**. The stated reason is withdrawn.
+
+**NOTHING WAS WIDENED AND NOTHING WAS GATED.** Widening is forbidden, and gating with an
+instrument just shown to be blind would be worse than leaving them red: it would convert a
+visible failure into a silent skip. **The suite is red, it is recorded as red, and the repair is
+a new task.**
+
+#### THE REPLACEMENT INSTRUMENT EXISTS AND IS NAMED, SO THE NEXT TASK DOES NOT START FROM NOTHING
+
+`/sys/fs/cgroup/memory.stat` exposes **`pgscan` and `pgsteal`** (plus `pgscan_kswapd` and
+`pgscan_direct`), which count **pages actually reclaimed** rather than time anyone spent waiting
+for them. A nonzero `pgsteal` delta over a measurement window is the condition PSI `full` cannot
+express, and it is readable in exactly the place `machine.memory_stall_us` already reads. **It is
+a candidate, not a validated gate** — it needs both sides measured, known-good and known-bad,
+which is the discipline `RSS_STALL_LIMIT_US_PER_S` itself is annotated with.
+
+#### AND ONE PROCESS DEFECT, RECORDED BECAUSE IT IS MECHANICAL
+
+`machine.peak_rss_bytes` is **`ru_maxrss`**, which the kernel maintains lazily in
+`mm->hiwater_rss`; `/proc/self/status`'s **`VmHWM`** prints `max(hiwater_rss, current)` and
+therefore can never sit below `VmRSS` while `ru_maxrss` can — **measured, by 664 kB at side 16.**
+`PROGRESS.md` has been calling `peak_rss_bytes` "`VmHWM`" since Task 8; they are not the same
+field, and a `peak − current` built on the first can go **negative**. Every reading above records
+both.
+
+---
+
 ## Things a cold session cannot re-derive
 
 **PRECEDENCE, AMENDED 2026-08-12.** The rule carried since Phase 1 was *"if PROGRESS.md and the
@@ -1845,10 +1966,13 @@ effect an instrument says is absent. **Read them there, not here.**
 
 ---
 
-**Next action:** **Task 8a — the three-arm discriminator.** Arms A and C run regardless (~17 min
-together); Arm B runs only if A says resident (~1 h). **Its predictions are committed before the
-run, and "neither excluded — report and stop" is a permitted outcome.** The arms, their costs and
-what each separates are in the plan, once. Then 8b, then Task 9's value freeze, then Task 10.
+**Next action: A DECISION, NOT A TASK — Task 8a returned "neither excluded" and found the
+instrument at fault.** `peak − current_end` measures elapsed time; the stall gate cannot see the
+contamination; and Task 8's ladder, which the whole dispute rests on, has run length confounded
+with B and a fixture that cannot be rebuilt from what was recorded. **8b stays blocked, and it is
+now blocked on a measurement nobody has designed.** What that measurement has to control for is
+in [What Task 8a established](#what-task-8a-established-done-2026-08-17--read-before-quoting-any-long-running-rss-reading).
+**Do not read Task 8a as "no result" and re-run it harder.**
 
 **THIS TABLE SAID "AWAITING REVIEW; NO CODE YET" WHILE THE COLD-START HEAD TWELVE HUNDRED LINES
 ABOVE SAID "APPROVED 2026-08-14".** Found at Task 0's start, 2026-08-15. Same shape as the
