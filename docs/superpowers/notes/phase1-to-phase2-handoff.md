@@ -197,6 +197,32 @@ the repair is not "verify each term once": it is **verify each term of whatever 
 write down, including the terms of a correction**, and write the derivation beside the number so
 the next reader can do the comparison the author did not.
 
+#### AND THE LIMIT CLAUSE: A DIFFERENTIAL CANCELS A CONSTANT, NOT A TERM THAT GROWS
+
+> **A differential cancels a CONSTANT offset. It does not cancel a term that grows during the
+> measurement window.** Allocator arenas, caches and warm-up are growth, so an **in-process**
+> differential measures the process's history plus the subject.
+
+Worked instance, Phase 2b Task 8. A per-tile resident-set measurement was taken inside pytest,
+justified by this very rule: whatever the process already holds cancels across the tiles. **The
+constant cancels and the growth does not.** The same sixteen tiles, four ways:
+
+| condition | growth |
+|---|---|
+| in-process, run alone | 63 kB/tile |
+| in-process, after its own module | 96 kB/tile |
+| in-process, inside the full sweep | past any bound |
+| **fresh subprocess** | **143 kB/tile, and it reads that whatever ran before** |
+
+**Only the last is a property of the loop.** The test passed alone and failed the sweep twice
+before the instrument was changed rather than the bound.
+
+**AND THE PART THAT GENERALIZES FURTHEST IS NOT THE MEMORY.** Every other machine assertion in
+this repo already used a subprocess, and `memory.py` carries a bare launcher for exactly this.
+The author reasoned past an established convention with a local argument. **A local
+justification that contradicts an established pattern is evidence against the justification** —
+find out why the pattern exists before deciding you are the exception.
+
 ### (a2) A NAME IS NOT A GATE
 
 Three instances, each of which reads as a gate and is not one: `metamer_version` in
@@ -1157,6 +1183,25 @@ Three further shapes this covers, so it is not read as being about stubs:
 | a value edit does not move `geometry_hash` | a geometry edit through the same fingerprint call does move it |
 | a resume refits nothing | the same resume with one outstanding tile refits exactly that tile |
 
+#### WHEN AN INSTRUMENT REPORTS "NO EFFECT FOUND", CONSTRUCT THE EFFECT AND CONFIRM IT SEES IT
+
+> **A null result is a claim about the instrument before it is a claim about the subject.**
+> Build the effect the instrument says is absent, feed it through the same wiring, and check
+> that it shows up.
+
+**Three defects in ONE instrument, found in one task, and the direction is the pattern: every
+one of them produced a confident null.** Phase 2b Task 8's accumulation report:
+
+| defect | the confident null it produced |
+|---|---|
+| fed a **monotone high-water mark**, which stops moving | identical readings, zero residual, zero standard error — *"this run excluded every per-tile leak of every size"* |
+| the guard written as `variance == 0.0` | least squares on identical integers returns residuals of order **1e-8**, so the exact comparison lets precisely that case through |
+| `saturating` read as *"no leak"* | a run can saturate **and** leak: a constant per-tile cost raises both slopes equally and leaves their difference, and the flag, untouched |
+
+**The second was caught by a positive control inside the task**, not a task later: a 1 MB/tile
+leak injected into a real run's own readings, which is (i2) paying for itself in the sitting
+that wrote the bug. **A null result nobody tried to break is an untested branch.**
+
 #### AN INTERFACE BLOCK THAT PRODUCES A VALUE NO CONSUMER TAKES IS A MECHANISM WITH NO EFFECT
 
 > **Before implementing a brief, trace its output to the consumer that reads it. If no
@@ -1274,6 +1319,36 @@ rather than a copy of it. It was cheap all along and was built for something els
 a recompute holds less than a fit does, so it witnesses no accumulation *in the loop* and says
 nothing about what the engines or the optimizer retain.
 
+#### (j4) AN EXISTING MEASUREMENT IS EVIDENCE, NOT HISTORY
+
+> **Before measuring, check whether a table you already have answers the question.** A prior
+> task's published numbers are **inputs**, not a record of what happened, and **the cheapest
+> possible instrument is arithmetic on data already in hand.**
+
+(j3) finds an existing **feature** that can serve as an instrument; this is one step earlier and
+finds an existing **measurement** that is already the answer. Worked instance, Phase 2b Task 8:
+exit criterion 7 asserts *"peak RSS at or below the budget"*, and `budget_bytes_for_side` had
+chosen every budget in Task 7's published ladder. **The criterion was four subtractions from a
+table that had been in `PROGRESS.md` for a day, and nobody performed them — through a task and
+a review.** The peaks were read as a record of a completed measurement rather than as data.
+
+**The tell is a criterion phrased as a comparison between two quantities you can both already
+name.** Write the subtraction before you plan the run.
+
+#### AND ITS COROLLARY: A CHEAP INSTRUMENT CAN NEED AN EXPENSIVE INPUT, SO PRICE BOTH
+
+(j3) prices the instrument. **Price what the instrument has to be fed.** `--reuse-fits-from`
+reads its tile side from the **source** store and refuses one whose completion bitmap is not
+full, so the cheap recompute needs a complete **fitted** store at the same scale — hours of the
+work the instrument exists to avoid. The brief priced the first and not the second.
+
+**The repair generalizes and is worth reaching for: make the expensive input degenerate rather
+than small.** A wholly-masked series short-circuits before any design or optimizer is built, so
+a mostly-masked input produces a **complete store of the right geometry for almost nothing**,
+and the loop under test moves identical bytes because the copy is shaped by the arrays and never
+by the outcomes. **Keep a live fraction** so the successful path stays reachable, and **state
+what the degeneracy skips.**
+
 ### (k) Does anything that must be stable across runs depend on process-local state?
 
 Set iteration order, `id()`, the `repr` of an unordered container, time, environment.
@@ -1334,6 +1409,24 @@ checked for whether its **baseline is set by history outside the test**:
 And the harder lesson: **both modules already documented, in capitals, the property that
 broke the test.** The violating tests were written anyway, by the same author, in the same
 sitting. **Documentation does not constrain the next author — tests do.**
+
+#### AND A LINEAR FIT TO A SATURATING PROCESS REPORTS THE TRANSIENT AS A RATE
+
+> **A one-time cost charged across N observations comes back as a per-observation rate, and its
+> significance grows with the size of the transient.** High sigma is not protection — it is the
+> symptom.
+
+Worked instance, Phase 2b Task 8. A tile loop pays numba's entry points, zarr's metadata and the
+allocator's arenas **once, at the front**. A straight line through all 36 tiles returned
+**+69 083 ± 9 523 B/tile at 7.3σ** — confident, significant, and entirely fabricated;
+extrapolated to a production grid it invents 690 MB of leak that does not exist.
+
+**AND THE TAIL IS AN UPPER BOUND, NEVER A VALUE, BECAUSE THE BOUND FALLS WITH RUN LENGTH.**
+Measured on one loop, the excluded bound fell **26×** between a 36-tile run and a 400-tile one —
+the figures are in `PROGRESS.md`'s Task 8 section and are not repeated here. At 36 tiles **even
+the second half was still transient.** So a saturation claim carries **the run length it was
+measured at**, and a longer run is entitled to a smaller bound. Fit both halves, publish the tail, and split them on a **fixed rule** — a
+warm-up boundary chosen by looking at the readings is the analysis fitted to the answer.
 
 ### (k2) THE RUNTIME'S OWN CODES ARE PART OF YOUR VOCABULARY WHETHER YOU CHOSE THEM OR NOT
 

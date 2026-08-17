@@ -2,78 +2,17 @@
 
 ## Start here (cold-start summary)
 
-1. **Branch `main`, and everything is on it.** Last commit: `git log --oneline -1`. `phase-1` is
-   a stale name that never diverged and needs nothing done to it. Remote:
-   https://github.com/killett/metamer — public, and every commit is pushed by a hook.
-2. **DONE:** Phase 1 Tasks 0–18 (Task 19 deleted), Phase 2 preliminaries P0–P4, **Phase 2a
-   Tasks 0–13 — the whole sub-phase**, **Phase 2b Tasks 0–8**, and open questions 1,
-   4, 9, 11, 12 and **15**.
-3. **NEXT ACTION: 2b TASK 9 — the tile-side cascade amendment — AND ITS FIRST STEP IS THE
-   PRE-FLIGHT AGAINST ITS OWN BRIEF**, appended to
-   [`docs/superpowers/notes/phase2b-preflight.md`](docs/superpowers/notes/phase2b-preflight.md)
-   **before** the code. **What remains is 9–10**: the five-site cascade amendment and the
-   exit-criteria suite. **Both long measurements are now done and neither is needed again.**
+1. **Branch `main`, everything on it, every commit pushed by a hook** — https://github.com/killett/metamer.
+2. **DONE:** Phase 1 (0–18), Phase 2 preliminaries P0–P4, **Phase 2a (0–13)**, **Phase 2b Tasks 0–8**, open questions 1, 4, 9, 11, 12, 15.
+3. **NEXT ACTION: 2b TASK 9 IS BLOCKED — read [What Task 9 inherits](#what-task-9-inherits-2026-08-16) FIRST and decide before writing anything.** Task 8 left a per-series figure two instruments disagree about by 1.86×, and Task 9 publishes tile sides derived from it.
+4. **Tests: 1047 passed, 0 failed, 0 indeterminate — 2026-08-16, 773 s, on a box measured quiet (0.000 ms/s cgroup full stall over 20 s idle).** The only statement of the current count; earlier counts and sweep durations are in [Task 8's section](#what-task-8-established-done-2026-08-16--read-before-quoting-the-per-series-cost-criterion-6-or-criterion-7).
+5. **`pixi run test` is the full sweep and every end-of-task verification must run it; `test-fast` and `test-ci` are not evidence.** It has caught **seven** things a fast run could not, two of them in Task 8. **Every run prints `RSS measurement validity`, including at zero** — a nonzero count is INDETERMINATE, neither pass nor fail.
+6. **Verify a fresh checkout with `pixi run test && pixi run typecheck && pixi run lint`**, plus `pixi run pre-commit run --all-files` before every commit.
+7. **THE METHOD IS THE PRE-FLIGHT AND IT LIVES IN EXACTLY ONE PLACE:** [`phase1-to-phase2-handoff.md`](docs/superpowers/notes/phase1-to-phase2-handoff.md) §1 — (a0)–(a8), (a)–(k), **(j4) new at Task 8**, the five causes of a surviving mutation, the standing rules, the fixture facts. **Run it against the task brief before code**, append to [`phase2b-preflight.md`](docs/superpowers/notes/phase2b-preflight.md). **Do not restate it here** — the two copies drifted once already.
+8. **The plan is [`2026-08-14-metamer-phase2b.md`](docs/superpowers/plans/2026-08-14-metamer-phase2b.md)** — 11 tasks, 16 exit criteria, approved 2026-08-14, **amended in place by every one of Tasks 0–8, because every one contradicted its brief.**
+9. **Read, in order:** [What Task 9 inherits](#what-task-9-inherits-2026-08-16), [What Task 8 established](#what-task-8-established-done-2026-08-16--read-before-quoting-the-per-series-cost-criterion-6-or-criterion-7), [the RSS validity gate](#what-the-rss-validity-gate-established-done-2026-08-16--read-before-writing-any-rss-assertion), [What Task 7 established](#what-task-7-established-done-2026-08-16--read-before-quoting-the-slope-or-the-linearity-claim), then [What 2b's first tasks inherit](#what-2bs-first-tasks-inherit-2026-08-14).
+10. **Precedence: the design doc is authoritative on INTENT; a measured, dated number supersedes an unmeasured one wherever it lives, including in the design doc. Any measurement stated twice has one copy DELETED, never reconciled.**
 
-   **BUT READ [What Task 8 established](#what-task-8-established-done-2026-08-16--read-before-quoting-the-per-series-cost-criterion-6-or-criterion-7)
-   FIRST, BECAUSE IT LEFT TWO THINGS OPEN THAT NO LATER TASK OWNS.** Exit criterion 7 has a
-   **crossover** rather than an answer — met below a tile of ~4900 series, failed above it — and
-   the measured per-series cost is **2.05× the formula and outside `slope_band`**, which puts exit
-   criterion 6's *"met as written"* in question by contradicting Task 7 on a rung that **does not
-   reproduce**. Two explanations remain (the formula is short, or `HEADROOM_FRACTION` is too
-   small) and **Task 8 deliberately chose neither and changed neither**. Whoever picks this up
-   decides whether it is a Task 9/10 concern, a new task, or a Phase 2c one — **it is not closed
-   and nothing in the plan currently owns it.**
-4. **READ [What Task 8 inherits](#what-task-8-inherits-2026-08-16) and
-   [What the RSS validity gate established](#what-the-rss-validity-gate-established-done-2026-08-16--read-before-writing-any-rss-assertion)
-   FIRST — the second is what stops a 1.7 h measurement being wasted — then
-   [What Task 7 established](#what-task-7-established-done-2026-08-16--read-before-quoting-the-slope-or-the-linearity-claim)**, then
-   [What 2b's first tasks inherit](#what-2bs-first-tasks-inherit-2026-08-14) — the findings
-   F1–F5 and every measured number 2b rests on. Then the plan. **Tasks 0–4 each have their own
-   *established* section, and each was written because its task contradicted the brief.**
-5. **Tests: 1047 passed, 0 failed, 0 indeterminate — measured 2026-08-16 after Task 8, on a
-   QUIET box: a 20 s idle window gave 0.000 ms/s of cgroup full stall, against the ~0.9 ms/s
-   that was idle during Task 7.** Earlier counts: 1035 after the RSS validity gate, 1024 after
-   Task 6, 1018 after Task 5, 997 after Task 4, 989 after Task 3, 977 after Task 2, 967 after
-   Task 1, 947 after Task 0. The only statement of the **current** count.
-
-   **EVERY RUN PRINTS AN `RSS measurement validity` SECTION, INCLUDING WHEN IT IS ZERO.** If it
-   ever reports a nonzero count, those measurements **neither passed nor failed** — read the
-   reasons, and record the stall rate, because the limit has never been checked against a
-   known-bad reading.
-
-   **Sweep durations: 1199 s (Task 5), 942 s (Task 6), 3502 s (Task 7), 2687 s (the validity
-   gate), 773 s (Task 8) — and they are measurements of the HOST, not of the suite.** Between
-   Task 6 and Task 7 the suite grew by eight tests and the wall clock nearly quadrupled, at host
-   load average 12–16 against a 4-core box; **Task 8 added twelve more tests and came in at 22%
-   of Task 7's time on a quiet one.** The Task 5→6 pair already showed the suite getting **21%
-   faster while growing**, which is why the attribution trigger was dropped. **Do not read any of
-   them as a per-task cost.** What each task adds is measured standalone instead: Task 5's
-   `tests/test_calibration.py` ~123 s, Task 6 ~63 s, Task 7 ~9 s, Task 8 ~30 s (one subprocess
-   recompute; its 2.4 h of runs are deliberately NOT in the suite).
-6. **`pixi run test` is the full sweep and is what every end-of-task verification must run**;
-   **`pixi run test-fast` deselects `slow` and is for iteration only — a green fast run is NOT
-   evidence a task is done.** The sweep has now caught **seven** things a fast run could not.
-   `pixi run test-ci` reproduces CI (`-m 'not machine'`) and is not evidence either, because
-   `machine` covers exactly the tests that pin the RSS shim's units and the per-core bandwidth
-   claim. **Task 8 is the sixth and seventh catches**: its accumulation test asserted `saturating`,
-   then asserted a total taken in-process, and **both passed in isolation and failed inside the
-   sweep** — an in-process RSS differential carries the history of every test that ran before it.
-7. **Verify a fresh checkout with `pixi run test && pixi run typecheck && pixi run lint`**, plus
-   `pixi run pre-commit run --all-files` before every commit.
-8. **The plan is
-   [`docs/superpowers/plans/2026-08-14-metamer-phase2b.md`](docs/superpowers/plans/2026-08-14-metamer-phase2b.md)**
-   — 11 tasks, dependencies, 16 exit criteria, **approved 2026-08-14**, amended in place by each
-   task that deviated from it — **which is every one of Tasks 0–7**. Its predecessor,
-   [the 2a plan](docs/superpowers/plans/2026-08-11-metamer-phase2a.md), is complete and is read
-   only for its closing exit-criteria table.
-9. **THE METHOD IS THE PRE-FLIGHT AND IT LIVES IN EXACTLY ONE PLACE:**
-   [`docs/superpowers/notes/phase1-to-phase2-handoff.md`](docs/superpowers/notes/phase1-to-phase2-handoff.md)
-   §1 — **(a0), (a1), (a6)–(a8), (a)–(k) with (a2)–(a5), (c2), (c3), (g2), (i2)–(i9), (j2),
-   (j3) and (k2)**, the **five** causes of a surviving mutation, the standing rules and the
-   fixture facts. **Do not restate it here** — the two copies drifted once already.
-10. **Precedence: the design doc is authoritative on INTENT; a measured, dated number supersedes
-    an unmeasured one wherever it lives, including in the design doc.** Full statement below.
-    **And any measurement stated twice has one copy deleted, never reconciled.**
 ---
 
 ## What 2b's first tasks inherit (2026-08-14)
@@ -1293,9 +1232,9 @@ the arithmetic puts it**.
 > overruns. The peak that breaches is a **transient**: at side 96 the watermark sits **1.4 MB above
 > the end-of-tile current reading**, so it is exactly what the headroom exists to absorb.
 
-**TWO EXPLANATIONS REMAIN AND THIS TASK DOES NOT CHOOSE BETWEEN THEM**: the per-series formula is
-short by ~975 B/series, or `HEADROOM_FRACTION` is too small (the asymptotic requirement implied
-here is **~33%**, against 15%). **Nothing was changed on this evidence.**
+**TWO EXPLANATIONS REMAIN AND THIS TASK DOES NOT CHOOSE BETWEEN THEM**, and they are named with
+their magnitudes in [What Task 9 inherits](#what-task-9-inherits-2026-08-16), which is where the
+decision sits. **Nothing was changed on this evidence.**
 
 #### AND IT CONTRADICTS TASK 7, WHOSE RUNG 48 DOES NOT REPRODUCE
 
@@ -1309,7 +1248,8 @@ Two of Task 7's rungs were re-run on **Task 7's own instrument and fixture** —
 
 **Task 7's bottom pair implies −98 B/series** — its rungs 16 and 48 are within 0.2 MB of each
 other — and that is what dragged its fit down to 1021.6. **Today's same-instrument pair implies
-1787.9 B/series**, consistent with the independent five-point ladder's 1900.9 and not with 1021.6.
+1787.9 B/series**, consistent with the independent five-point ladder above and not with Task 7's
+value.
 **Two independent lines land at 1790–1900; Task 7's value rests on a rung that does not
 reproduce.**
 
@@ -1319,29 +1259,43 @@ reproduce.**
 > the finding, and choosing a winner from one reproduction of each is the error this project keeps
 > catching.
 
-#### ACCUMULATION: THE TAIL IS AN UPPER BOUND THAT FALLS WITH RUN LENGTH
+#### ACCUMULATION DECOMPOSES, AND THE CHEAP INSTRUMENT'S INPUT WAS MADE CHEAP TOO
 
-**`--reuse-fits-from` IS THE TILE LOOP WITH THE FIT REMOVED, AND ITS EXPENSIVE INPUT WAS MADE
-CHEAP.** A wholly-masked series short-circuits in `optimize.py:517` before any design or optimizer
-exists, so a **mostly-masked input builds a complete source store for almost nothing**: 102 400
-points with 1 600 live (one in 64) completed in **338.1 s**. The recompute over its **400 tiles**
-then took **35.6 s** — the plan's *"minutes rather than hours"*, now with an affordable source.
+**`--reuse-fits-from` IS THE TILE LOOP WITH THE FIT REMOVED.** A wholly-masked series
+short-circuits in `optimize.py:517` before any design or optimizer exists, so a **mostly-masked
+input builds a complete source store for almost nothing**: 102 400 points with 1 600 live (one in
+64) completed in **338.1 s**, and the recompute over its **400 tiles** took **35.6 s** — the
+plan's *"minutes rather than hours"*, now with an affordable source. The technique is promoted as
+(j3)'s corollary in the handoff.
 
-| run | tiles | whole-run growth | tail | stall |
-|---|---|---|---|---|
-| fit path, grid 96, side 16 | 36 | +69 083 ± 9 523 | +9 705 ± 796 (18) | 0.0000 |
-| fit path, masked, side 16 | 400 | +7 861 ± 265 | **+380 ± 9** (200) | 0.0030 |
-| **recompute**, side 16 | 400 | +8 626 ± 249 | **+45 ± 9** (200) | 0.0000 |
+| run, side 16 | steady-state growth | stall |
+|---|---|---|
+| fit path, 36 tiles | +9 705 ± 796 B/tile | 0.0000 |
+| fit path, 400 tiles, mostly masked | **+380 ± 9 B/tile** | 0.0030 |
+| **recompute, 400 tiles** | **+45 ± 9 B/tile** | 0.0000 |
 
 **THE LOOP, THE WRITE PATH, THE COMPLETION BITMAP AND ZARR'S BUFFERS RETAIN ~45 B/TILE** — 18 kB
-across 400 tiles. **The fit path retains ~335 B/tile more**, which is the decomposition the brief
-said only these two instruments together could give.
+across 400 tiles — **and the fit path retains ~335 B/tile more.** That is the decomposition the
+brief said only these two instruments together could give, and it is the deliverable.
 
-> **AND THE 36-TILE RUN'S TAIL WAS ITSELF WARM-UP.** It rose **3.81 MB across its first eighteen
-> tiles and 0.16 MB across its last eighteen**; its "steady state" of +9 705 B/tile is 26× the
-> 400-tile figure. **Any finite run's tail is an UPPER BOUND on retention, not a value**, and the
-> bound falls with run length: 9 705 → 380 → 45 B/tile. That is the honest form of the accumulation
-> claim and it is the only form these measurements support.
+**AND THE FIRST ROW IS NOT A THIRD RESULT — IT IS THE SAME LOOP MEASURED TOO SHORT.** At 36 tiles
+even the second half is still transient, so its tail is 26× the 400-tile figure. **A finite run's
+tail is an upper bound that falls with run length**, and a straight line through a saturating loop
+reports its warm-up as a rate at high significance; both are promoted to the handoff's (k)
+register, which is where the reasoning lives.
+
+#### THE SUITE'S COUNTS AND THE SWEEP'S DURATIONS, WHICH THE HEAD POINTS HERE FOR
+
+**Counts:** 1047 after Task 8, 1035 after the RSS validity gate, 1024 after Task 6, 1018 after
+Task 5, 997 after Task 4, 989 after Task 3, 977 after Task 2, 967 after Task 1, 947 after Task 0.
+
+**Sweep durations: 1199 s (Task 5), 942 s (Task 6), 3502 s (Task 7), 2687 s (the validity gate),
+773 s (Task 8) — and they measure the HOST, not the suite.** Between Tasks 6 and 7 the suite grew
+by eight tests and the wall clock nearly quadrupled at host load 12–16 on a 4-core box; Task 8
+added twelve tests and came in at **22% of Task 7's time on a quiet one**. The Task 5→6 pair
+already showed the suite getting **21% faster while growing**, which is why the attribution
+trigger was dropped. **Do not read any of them as a per-task cost.** What each task adds is
+measured standalone: Task 5 ~123 s, Task 6 ~63 s, Task 7 ~9 s, Task 8 ~30 s.
 
 #### THE COST MODEL HAS NOW FAILED TO TRANSFER THREE TIMES
 
@@ -1351,42 +1305,24 @@ rule holds against Task 7's own number: **a predicted cost is a claim with the s
 as the measurement it came from.** Plan from the fixture you are about to run, never from the last
 one.
 
-#### WHAT SHIPPED IN CODE, AND THE TWO DEFECTS THE INSTRUMENT HAD BEFORE IT WAS USED
+#### WHAT SHIPPED IN CODE, AND THREE INSTRUMENT DEFECTS THAT ARE NOW RULES
 
-`memory.AccumulationReport` and `memory.accumulation_report` — peak against **tile index** inside
-one run, which is not `linearity_report`'s subject (peak against **B** across runs). Both halves
-are fitted on a **fixed** split, because a warm-up boundary chosen by looking at the readings is
-the analysis fitted to the answer.
+`memory.AccumulationReport`, `memory.accumulation_report` and
+`memory.ACCUMULATION_TRANSIENT_FACTOR` — peak against **tile index** inside one run, which is not
+`linearity_report`'s subject. Both halves are fitted on a **fixed** split.
 
-- **A HIGH-WATER MARK PRODUCES IDENTICAL READINGS, HENCE NO RESIDUAL, HENCE A REPORT THAT EXCLUDES
-  EVERY LEAK.** Refused. And `variance == 0.0` does **not** catch it: least squares on identical
-  integers returns residuals of order 1e-8. The guard is **`SE < 1 B`**, derived from resident set
-  size being counted in whole pages.
-- **`saturating` IS NOT A LEAK TEST AND WAS BRIEFLY USED AS ONE.** A run can saturate and leak at
-  once: a constant per-tile cost raises both slopes equally and leaves their difference untouched.
-  **Found by the positive control** in `test_reuse.py`, which injected 1 MB/tile into a real
-  16-tile run's readings and watched the flag stay True. **The leak test is
-  `tail_growth_bytes_per_tile`.**
-- **AND AN IN-PROCESS RSS DIFFERENTIAL DOES NOT MEASURE THE LOOP — (i9)/(a), CAUGHT BY THE SWEEP
-  TWICE AND NOT BY THE TEST'S OWN RUN.** The suite test read `current_rss_bytes` inside pytest, on
-  the argument that a **difference** across tiles cancels whatever the process already holds.
-  **The constant cancels and the growth does not.** The same sixteen tiles grew **63 kB/tile run
-  alone**, **96 kB/tile run after the rest of their module**, and past any bound inside
-  `pixi run test`: allocator arenas, zarr caches and collection timing carry a thousand earlier
-  tests into the window. **A fresh interpreter reads 143 kB/tile and reads it whatever ran
-  before** — 2.142 MB across the run — so the test now drives a subprocess, which is what every
-  other machine assertion here does and for this reason.
-- **AND SIXTEEN TILES CANNOT SEPARATE A TRANSIENT FROM A LEAK**, so neither `saturating` nor the
-  tail is asserted at suite scale. **The total growth is**, bounded at **6 MB — 2.8× the observed
-  2.142 MB and 0.4× a 15 MB positive control** — which catches a leak of 400 kB/tile and nothing
-  finer. **The 45 B/tile figure is reachable only by the 400-tile hand run.** The first version
-  asserted `saturating`, the second asserted a total taken in-process; **both passed alone and
-  failed in the sweep**, which is the sixth and seventh things the full sweep has caught that a
-  fast run could not.
+**Three defects were found in it before it was trusted, all failing in the reassuring direction,
+and all three are promoted in the handoff rather than described here** — a monotone watermark
+giving a confident total exclusion, an exact-zero variance guard that misses it, and `saturating`
+mistaken for a leak test. **A fourth is (a)'s limit clause**: the suite test read the resident set
+**in-process**, which measures the process's history plus the subject, and it passed alone and
+failed the sweep twice before the instrument changed rather than the bound. **The suite test now
+drives a subprocess**, bounds the **total** growth at 6 MB — 2.8× the 2.142 MB a fresh process
+measures — and carries its own injected positive control. It catches a leak of 400 kB/tile and
+nothing finer; **the 45 B/tile figure is reachable only by the 400-tile hand run.**
 
 **The measurements are NOT in the suite** — Task 4's and Task 7's precedent — and the suite tests
-the **analysis** against constructed ladders plus one 16-tile recompute that asserts the shape and
-carries its own positive control.
+the **analysis** against constructed ladders plus that one 16-tile recompute.
 
 ---
 
@@ -1742,66 +1678,59 @@ was the actual defect the leak exposed.
 | **Phase 2b implementation plan** | [`docs/superpowers/plans/2026-08-14-metamer-phase2b.md`](docs/superpowers/plans/2026-08-14-metamer-phase2b.md) — 11 tasks, 16 exit criteria, **approved 2026-08-14. Tasks 0–6 landed 2026-08-15, Task 7 on 2026-08-16.** Its head carries findings F1–F4, which are why 2b begins with a correction task rather than with the calibration tile |
 | **Phase 2b pre-flight, per task** | [`docs/superpowers/notes/phase2b-preflight.md`](docs/superpowers/notes/phase2b-preflight.md) — carries the pre-plan audit and Task 0's; per-task entries are appended **before** each task |
 
-### What Task 8 inherits (2026-08-16)
+### What Task 9 inherits (2026-08-16)
 
-**Task 8 — criterion 7's run, and accumulation across tiles. Its first step is the pre-flight
-against its own brief.** What it needs that no earlier task states:
+**TASK 9 IS BLOCKED AND THE FIRST THING IT OWES IS A DECISION, NOT A PRE-FLIGHT.**
 
-- **THE BOX MUST BE QUIET, AND "QUIET" IS MEASURED RATHER THAN DESCRIBED.** Read
-  `machine.memory_stall_us()` twice around a 20 s idle window before starting. **Idle on this box
-  is ~0.9 ms/s of cgroup full stall; a correct `measure_floor` ran at 5.3 ms/s; the gate refuses
-  above 50 ms/s.** If an idle window already exceeds ~5 ms/s, the host is loaded and a 1.7 h
-  measurement will be wasted — **check before spending the time, not after.** Swap was 100% full
-  and host load 12–16 during Task 7's sweep, and that is what corrupted two readings.
-- **RECORD THE STALL RATE BESIDE EVERY PEAK.** Task 7's ladder did not, which is why its
-  threshold is only half-validated. A peak with no stall rate beside it cannot be defended later.
-- **`rss_validity` is already on criterion 7's exit-criteria test**, and the accumulation half
-  needs it too. **Under reclaim criterion 7 passes for the WRONG REASON** — an understated peak
-  is a peak under budget.
-- **The cheap instrument is `--reuse-fits-from`** (j3): the tile loop with the fit removed —
-  same loop, same write path, same bitmap, no optimizer — so 10⁵–10⁶ points run in **minutes
-  rather than hours**. **STATE WHAT IT COVERS AND WHAT IT DOES NOT, OR IT READS AS A STRONGER
-  CLAIM THAN IT IS.** It covers the **tile loop, the write path, the completion bitmap and
-  zarr's buffers**. It covers **nothing `optimize_series` or the engines retain**, because a
-  recompute holds less than a fit does. **If a fit-path version is wanted, the capped run at
-  side 192 iterates several tiles — assert peak against tile index in that same run**, which
-  costs no extra measurement.
-- **Expect a bound rather than a value.** Task 7's ladder did not resolve — its figures are in
-  *What Task 7 established*, once — and criterion 6 is **met with its scope stated** rather than
-  closed.
-  Criterion 7 is a **different quantity** — an inequality, *"peak at or below the budget"* —
-  so it may well resolve; **the honest output is whatever the uncertainty supports**, and the
-  arithmetic for saying so is `memory.linearity_report`.
-- **Two long measurements remain and this is the second**, ~1.7 h. Task 7's cost model held to
-  2% (290.3 ms/series measured against 283.8 predicted), so a per-point probe is worth running
-  before committing to a ladder.
-- **Two open items Task 8 is positioned to close, and neither is required of it.**
-  **Open question 16** — the batched-evaluation instrument's unmodelled ~2.7 kB/series,
-  invisible at N = 630 and dominant at N = 60 — and **the half-validated stall threshold**,
-  which needs one known-bad reading. **Task 8 measures under exactly the conditions that would
-  supply the second**, so recording the rate costs nothing and closing it is a bonus rather
-  than a task.
-- **AND READ THE CORRECTION RECORD BEFORE TRUSTING ANY FLOOR FIGURE IN `core/memory.py`.** The
-  struck-through version is left visible in `phase2b-preflight.md` on purpose: an oracle at
-  `k_β = 4` was compared against an instrument running **six** design columns, and the first
-  correction changed the **correct** number to match the **wrong** oracle. **A difference that
-  equals a named term is a coincidence until the other terms are computed too.**
+**THE BLOCK.** Task 9 is the tile-side cascade amendment: it publishes a tile side derived from a
+per-series cost. **Two instruments now disagree about that cost by 1.86×** — Task 7's ladder did
+not resolve and sits inside `slope_band`; Task 8's five-point production ladder resolves and sits
+outside it, and Task 7's rung 48 does not reproduce. **Both sets of figures are in their own
+sections and are not repeated here.** **Amending
+twenty-plus sites to a number under active dispute is the cascade repeating at higher speed**,
+which is the exact failure Q6 sequenced Task 9 last to avoid.
+
+**SO TASK 9 CANNOT PROCEED AS WRITTEN.** Either the disagreement is resolved first, or **Task 9's
+scope narrows to the sites that do not depend on the disputed figure** — and which sites those are
+is itself the first thing to establish. **Decide before writing anything**; do not let the
+convenient reading win because it is the one that unblocks the task.
+
+**THE TWO SURVIVING EXPLANATIONS, AND THEY ARE NOT SEPARABLE FROM THE CURRENT EVIDENCE:**
+
+- **the per-series formula understates by ~49%** — the measured slope against an analytic 926; or
+- **`HEADROOM_FRACTION` is too small**, the asymptotic requirement implied by criterion 7's
+  crossover being **~33%** against the shipped 15%.
+
+**Both predict exactly what was observed**, because the observation is a single line through peak
+against B and either term moves it. **Task 8 changed neither, on purpose**, and one reproduction
+of each instrument is not grounds to choose. **Do not touch `HEADROOM_FRACTION` or
+`resident_bytes_per_series` on this evidence.** What would separate them is a measurement that
+varies one without the other — the headroom is a pure multiplier on the budget and the formula is
+a term in the peak, so a ladder at a **second fixture** (different N, different M) discriminates:
+the formula's error scales with the configuration and the headroom's does not.
+
+**AND EXIT CRITERION 6 IS IN QUESTION BECAUSE OF IT.** Its published ratio of 1.103 inside the
+band becomes 2.05 outside it on the better instrument. **This is an open defect that NO TASK IN
+THE PLAN OWNS.** It is not Task 9's subject and it is not Task 10's; whoever picks it up decides
+whether it is a new task or a Phase 2c one. **It must not be inherited silently.**
+
+**WHAT TASK 9 GETS FOR FREE, AND SHOULD NOT RE-MEASURE.** Everything in *What Task 8 established*
+— the ladder, criterion 7's crossover at B ≈ 4893 predicted then observed, the accumulation
+decomposition, the fifth closure boundary (the tile outweighs the interpreter only at side ≥ 512,
+21 h for one tile), the masked-source technique for a cheap instrument's expensive input, and the
+floor's contemporaneous value with its scatter. **Both long measurements are done and neither is
+needed again.**
+
+**AND FOUR RULES WERE PROMOTED OUT OF TASK 8 INTO THE HANDOFF'S §1** — (j4) an existing
+measurement is evidence rather than history, (a)'s limit clause on what a differential cancels,
+(k)'s register on a linear fit to a saturating process, and (i2)'s register on constructing the
+effect an instrument says is absent. **Read them there, not here.**
 
 ---
 
-**Next action:** Task 9 — the tile-side cascade amendment. Its first step is the pre-flight
-against its own brief, appended to `phase2b-preflight.md`. **No long measurement remains**: both
-are done, and what Task 8 spent 2.4 h establishing is in *What Task 8 established*, once.
-
-**WHAT TASK 9 INHERITS THAT IS NOT ITS OWN SUBJECT, AND IS NOT OWNED BY ANY TASK IN THE PLAN.**
-Task 8 measured the production per-series cost at **2.05× the analytic 926 and outside
-`slope_band`**, contradicting Task 7 — whose rung 48 **does not reproduce** — and left exit
-criterion 7 with a **crossover** rather than a verdict. Two explanations survive, the formula
-being short and `HEADROOM_FRACTION` being too small, and **Task 8 changed neither on purpose**:
-either change moves a constant every tile side in the tree depends on, which is precisely the
-cascade Task 9 exists to amend. **So Task 9 should decide, before it starts, whether its cascade
-is the place to act on this or whether it needs a task of its own** — but it must not inherit it
-silently, and it must not adopt one explanation because it is the convenient one.
+**Next action:** Task 9 — the tile-side cascade amendment — **and it is BLOCKED.** What blocks
+it, the two surviving explanations, and what would separate them are in
+[What Task 9 inherits](#what-task-9-inherits-2026-08-16), once. **No long measurement remains.**
 
 **THIS TABLE SAID "AWAITING REVIEW; NO CODE YET" WHILE THE COLD-START HEAD TWELVE HUNDRED LINES
 ABOVE SAID "APPROVED 2026-08-14".** Found at Task 0's start, 2026-08-15. Same shape as the
