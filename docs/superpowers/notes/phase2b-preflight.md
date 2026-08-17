@@ -1367,3 +1367,233 @@ and does not establish a value"*.
   per-thread placement (no batched driver exists — F4), and a 10⁷-point run (1.7 years here). **A
   linearity result at N = 60 and M = 2 on one four-core box is this machine's**, and extrapolating
   it to §9.4's configuration is exactly the step the report must decline to take.
+
+---
+
+## Task 8 — criterion 7's run, and accumulation across tiles
+
+Run 2026-08-16 against the task brief in
+[`../plans/2026-08-14-metamer-phase2b.md`](../plans/2026-08-14-metamer-phase2b.md), the live
+`batch/tiling.py`, `batch/reuse.py` and `batch/run.py`, and **against two measurements taken
+before any code was written** — the process floor, and a two-rung reproduction of Task 7's
+ladder. **Seven findings. The first needs no new measurement at all: criterion 7 is already
+contradicted by Task 7's own published table, and the comparison that shows it is four
+subtractions nobody performed.**
+
+### (a4) TASK 7's FOUR PUBLISHED PEAKS ALL EXCEED THE BUDGET THAT SIZED THEM
+
+`budget_bytes_for_side` returns *"the smallest budget whose derived tile side is exactly
+`side`"*, and it is the function that chose every budget in Task 7's ladder. So each rung has a
+budget, and criterion 7 — *"peak RSS at or below the budget"* — is a subtraction away. **It was
+never done.** At the pinned floor of 228.2 MB:
+
+| side | budget for that side | Task 7's peak | peak − budget |
+|---|---|---|---|
+| 16 | 228 492 066 | 231.31 MB | **+2.82 MB** (+1.23%) |
+| 48 | 230 723 182 | 231.11 MB | **+0.39 MB** (+0.17%) |
+| 80 | 235 185 412 | 235.81 MB | **+0.62 MB** (+0.27%) |
+| 112 | 241 878 758 | 243.14 MB | **+1.26 MB** (+0.52%) |
+
+**Every rung is over.** The brief opens *"peak RSS is a property of ONE TILE"* and proposes a new
+run to establish it; four measurements of exactly that quantity already exist, and they say the
+criterion fails at its most adversarial budget. **(a4): recompute every worked example before
+trusting the requirement it illustrates** — here the example is a whole published ladder.
+
+**THE EXCESS IS NOT THE OVERAGE, AND THE DIFFERENCE MATTERS.** With `peak = floor + tile + ε` and
+`budget = floor + tile/0.85`, the overage is `ε − 0.17647·tile`, so:
+
+| side | tile bytes | 0.17647·tile (the headroom) | implied ε |
+|---|---|---|---|
+| 16 | 248 256 | 0.04 MB | **2.86 MB** |
+| 48 | 2 144 704 | 0.38 MB | **0.77 MB** |
+| 80 | 5 937 600 | 1.05 MB | **1.67 MB** |
+| 112 | 11 626 944 | 2.05 MB | **3.31 MB** |
+
+ε averages **2.15 MB** with no trend in side, which is what Task 7's own figures predict: an
+intercept of 229.85 MB against a 228.2 MB pinned floor is **1.65 MB** of unmodelled residency,
+and the RMS residual is **0.88 MB**. **The unmodelled term is the finding; the sign of the
+subtraction is a consequence of it.**
+
+**AND THE MEASURING CHILD IS A CANDIDATE EXPLANATION THAT MUST NOT BE ASSUMED.**
+`CalibrationResult`'s own docstring says the intercept is the pinned floor **plus what the
+measuring child holds and a production run does not** — a sampling thread, a temporary store, a
+JSON payload. So ε may be the instrument rather than production. **That is (j2), and it is
+exactly why Task 8's run must be a plain `run()` and not a calibration point.**
+
+### (a4)/(a5) THE BRIEF'S BUDGET AND THE BRIEF'S GRID DESCRIBE DIFFERENT RUNS
+
+The brief: *"One capped run at side ≥ 192 under a 0.5 GiB budget"*, and separately *"The capped
+run at side 192 iterates several tiles, so assert peak against tile index there too — same run,
+second assertion."*
+
+**At a 0.5 GiB budget the derived tile side is 528.** Computed through the production path
+(`tiling.tile_side_for`, floor 228.2 MB, d = 1, k_β = 4, p_max = 3, N = 60, M = 2):
+
+    block  = (536 870 912 − 228 200 000) × 0.85 = 262 370 275 B
+    raw    = floor(sqrt((262 370 275 − 11 200) / 926)) = 532
+    side   = 528 after rounding down to a multiple of TILE_SIDE_BASE
+
+**528 > 192, so a 192×192 grid is ONE tile** and the second assertion has no subject. The two
+sentences are not both satisfiable by one run.
+
+**AND THE BUDGET IS THE NUMBER THAT IS RIGHT.** A 528-point tile holds 258.1 MB, which finally
+**exceeds the 228.2 MB floor** — the goal's *"a scale where the tile, not the interpreter, is the
+subject"*, reached exactly. It is the grid that is wrong, and it is wrong by 2.75×: the run the
+budget describes has a grid of **528**, not 192.
+
+### (a4) "~1.7 h" IS THE COST OF A SIDE-144 RUN, AND THE BUDGET'S OWN RUN IS 22.5 h
+
+Task 7 measured **290.3 ms/series** over 21 504 series. Against it:
+
+| run | series | predicted wall clock |
+|---|---|---|
+| the brief's stated cost | — | **~1.7 h** |
+| grid 144 (what 1.7 h buys) | 20 736 | 1.67 h |
+| grid 192 (what the brief says) | 36 864 | **2.97 h** |
+| grid 528 (what the brief's budget means) | 278 784 | **22.5 h** |
+
+**The estimate is Task 7's ladder total carried across as if it were one run's cost.** It is
+1.75× short of the brief's own grid and 13× short of the brief's own budget.
+
+### THE FIFTH CLOSURE BOUNDARY: THE TILE OUTWEIGHS THE INTERPRETER ONLY AT 22 h A TILE
+
+Four boundaries are recorded; this is a fifth, and it is the goal sentence of this very task.
+`tile > floor` needs `side² · 926 > 228.2e6`, so `side ≥ 512` — **262 144 series in ONE tile,
+21.1 h at the measured rate**, and the brief's own 528 is 22.5 h. Criterion 6's ladder wants four
+such rungs. **On this machine the interpreter outweighs the tile at every affordable scale**, and
+that is a property of a 228 MB floor sitting under a 926 B/series tile, not of the code.
+
+### (i10) CRITERION 7's MARGIN IS THE HEADROOM CONSTANT, AND IT IS 17.6% OF THE TILE
+
+`budget = floor + tile/0.85` makes the slack `budget − (floor + tile)` equal to
+`0.17647 · tile` **exactly** — the headroom, and nothing else. So criterion 7 at the minimal
+budget is a test of one question: **is unmodelled residency smaller than 17.6% of the tile?**
+
+With ε ≈ 2.15 ± 0.88 MB from the table above, the criterion turns over at a tile of
+**12.2 MB — side 115** — and needs side ≥ 160 to clear it by 2σ. This is (i10) at a second
+criterion, found the same way: by comparing the criterion's window against the measurement's own
+uncertainty.
+
+> **THIS PREDICTION WAS SUPERSEDED BY THE MEASUREMENT AND IS LEFT VISIBLE.** The ε it rests on
+> comes from two rungs against a stale floor pin. The five-point ladder put the crossover at
+> **side ≈ 70**, not 115, and resolved the slope rather than bounding it — see `PROGRESS.md`'s
+> *What Task 8 established*, which is the only home for the figures. **The reasoning was right and
+> its input was two points**, which is the whole reason the task ran five.
+
+**At a generous budget the criterion is vacuous instead.** At 0.5 GiB with a 192 grid the peak is
+~262 MB against a 536.9 MB budget: it clears by 274 MB, of which 228 MB is block the grid never
+fills. **A criterion that fails at the tight end and is vacuous at the loose end is a criterion
+about the headroom constant**, and reporting it without saying so would be closing it rather than
+meeting it.
+
+### (f) THE RECOMPUTE READS ITS TILE SIDE FROM THE SOURCE, SO THE CHEAP INSTRUMENT NEEDS AN EXPENSIVE INPUT
+
+The brief calls `--reuse-fits-from` *"the tile loop with the fit removed … so a recompute over
+10⁵–10⁶ points runs in minutes"*, and (j3) credits it as an instrument found rather than built.
+**Both are true of the recompute and neither is true of getting one to run.** `reuse.py`, in the
+tree since 2a Task 12: *"THE NEW STORE'S GEOMETRY IS READ BACK FROM THE SOURCE, NOT RE-DERIVED
+FROM THE BUDGET"*, and `run.py:822` is `side = reuse.source_tile_side(reuse_fits_from)`. So:
+
+- the recompute's **tile count is a property of the source store**, not of this run's budget;
+- `resume.check_source` **refuses a source whose completion bitmap is not fully set**;
+- therefore a 10⁵-point recompute needs a **complete 10⁵-point fitted store**, which at
+  290.3 ms/series is **8.1 h**, and 10⁶ points is **80.6 h**.
+
+**The instrument is cheap and its input is not.** The brief prices the first and not the second.
+
+**THE REPAIR, AND IT IS A FIXTURE RATHER THAN A COMPROMISE.** A wholly-masked series
+short-circuits in `optimize.py:517` at the data-level check — before any design is built and
+before an optimizer exists — and is written as `INSUFFICIENT_DATA`. So a mostly-masked input
+produces a **complete store of the right geometry for almost nothing**, and the recompute over it
+copies, re-ranks and writes exactly the same bytes: `copy_tile` and `read_scores` are shaped by
+the arrays, never by the outcomes. **A fraction of live series keeps the OK path reachable in the
+source**, so the store being read is not uniformly degenerate.
+
+**WHAT IT DOES NOT COVER IS THE SAME LIST THE BRIEF ALREADY WROTE**, plus one entry: a masked
+source's `/selection/` write ranks nothing, so any allocation conditional on a scored series is
+not reached. The live fraction is what keeps that from being the whole store.
+
+### (j3) THE PER-TILE SEAM EXISTS ALREADY, AND THE WATERMARK REMOVES THE SAMPLER
+
+`run(on_tile_written=...)` fires **inside the loop, between a tile's data write and its
+completion bit** (`run.py:959`), and it fires on **both** arms — the fit at 934 and
+`_recompute_tile` at 958 share it. So *"assert peak against tile index"* needs no new seam, on
+either path. This is the same (j3) the calibration used to stop after one tile.
+
+**AND THE PEAK PER TILE IS `VmHWM`, NOT A SAMPLED MAXIMUM.** `_CALIBRATION_CHILD` runs a 2 ms
+sampler because a batched evaluation frees its working set before `score` returns; a tile loop
+has no such window, and the kernel already keeps the process high-water exactly.
+`machine.peak_rss_bytes()` read in the callback is monotone by construction, so *"peak stops
+growing"* is read directly off it — **and a sampler thread inside the process whose residency is
+the subject is the contamination this task exists to avoid**. `current_rss_bytes()` is recorded
+beside it, because a watermark cannot fall and a leak is visible in the working set first.
+
+### (c), (d), (h), (k) and the boundaries, briefly
+
+- **(c) the refusal has TWO arms, and "below the floor" is only the first.**
+  `tiling.py:212` fires when the budget does not clear floor + headroom; `tiling.py:329` fires
+  when it does but the remaining block will not hold one series at the base. **Both name the
+  floor**, and a test that asserts only the first leaves the second unreached — *enumerate every
+  raise, never assert a count*.
+- **(d)** `rg`: nothing in the tree computes growth-per-tile, a per-tile residual or an
+  accumulation bound today. `linearity_report` fits peak against **B** and takes a
+  `CalibrationResult`; peak against **tile index** is a different subject and cannot be reached
+  through it without inventing a ladder that does not exist.
+- **(h)** the fixture must state its own geometry rather than take the module defaults, which is
+  what put `memory._CHILD` at six design columns while its oracle used four.
+- **(k)** every peak is read in a fresh process behind a bare launcher, for the reason `memory`
+  has one: `peak_rss_bytes` is inherited across fork/exec, so a child spawned from a large
+  process reports the parent's watermark.
+- **THE STALL RATE IS RECORDED BESIDE EVERY PEAK**, which Task 7's ladder did not do and which is
+  why `RSS_STALL_LIMIT_US_PER_S` has never been checked against a known-bad reading.
+
+### THE THREE MEASUREMENTS THIS PRE-FLIGHT RAN, AND THE FIRST TWO CONTRADICT WHAT IT PLANNED WITH
+
+**Two of Task 7's rungs, reproduced on Task 7's own instrument and fixture, and the floor measured
+ten times.** Every figure is in [`PROGRESS.md`](../../../PROGRESS.md)'s *What Task 8 established*
+and **is not repeated here** — this section records what the audit concluded from them, which is
+the part that belongs to the audit.
+
+- **THE COST MODEL DOES NOT TRANSFER**, and two points separate the reason from the rate: solving
+  `t = a + b·B` on the pair splits a marginal per-series cost from a fixed per-child cost, and
+  Task 7's published figure is a ladder total over a ladder's series with its own four fixed costs
+  inside it. **Task 7's rule applies to Task 7's own number** — *a predicted cost is a claim with
+  the same preconditions as the measurement it came from.* The run planned here was resized
+  accordingly, and then the rate failed to transfer a third time.
+- **THE FLOOR HAS MOVED SINCE TASK 7 PINNED IT**, and the movement is a level shift rather than
+  scatter. **`FLOOR_OVERRIDE_ENV`'s docstring says the measured floor "varies by megabytes between
+  runs"; the measurement says half a megabyte** — the sentence overstates the jitter and says
+  nothing about the drift, which is the larger effect and the one that invalidates a stale pin.
+
+### AND THAT CORRECTS THIS PRE-FLIGHT'S OWN ε TABLE, WHICH IS (a4)'s THIRD REGISTER ON ME
+
+The ε table above computes `peak − (floor + tile)` against Task 7's **228.2 MB** pin and concludes
+criterion 7 fails at every rung. **The arithmetic is right for Task 7's ladder, which pinned that
+floor. The conclusion does not carry to production, which measures its floor in the run that uses
+it.** Against a contemporaneous floor the same two rungs give one sign each way, both inside the
+floor's own scatter — so the honest statement was never *"criterion 7 fails"* but *"ε is not
+separable from the floor's measurement noise at these tile sizes"*. **A correction arrives with
+the authority of the error it has just exposed**, so this one was written with the measurement
+that forced it and not on its own.
+
+**AND THE TASK THEN MEASURED PAST IT.** With five one-tile runs rather than two rungs, ε is not
+noise at all: it grows with B at roughly twice the rate the formula charges, and criterion 7
+acquires a crossover. **The pre-flight's job was to stop the wrong measurement being run, and its
+own first conclusion would have been the wrong measurement.**
+
+### SO CRITERION 7 IS DECIDABLE ONLY ABOVE A TILE SIZE, AND THE THRESHOLD IS COMPUTABLE
+
+The margin at the minimal budget is `0.17647 · tile` **exactly** — the headroom and nothing else —
+while the noise is a floor reading against a peak reading. Setting the first above twice the
+second is what picks the smallest tile whose answer means anything, and it landed on **side 96**:
+affordable at under an hour, where the brief's side 192 is 3.6 h and the side its own budget
+implies is 27 h — **both at the re-measured marginal rate**, which is why they exceed the figures
+computed from Task 7's rate two sections above.
+
+**So the plan for this task became two runs over ONE 96×96 grid** — same series, same fitting
+work, differing only in tile side — **side 16 for accumulation in the fit path and side 96 for
+criterion 7**, plus a third prediction the pairing gives free: *"peak is a property of one tile"*
+puts the two peaks `(9216 − 256) · 926` apart. **A prediction that large from a fixture pairing
+that costs nothing extra is worth more than either run alone**, and it is what turned into the
+five-point ladder once the pair proved confounded — Run A's 36 tiles accumulate a warm-up that
+Run B's single tile does not, so `grid = side` replaced it.
