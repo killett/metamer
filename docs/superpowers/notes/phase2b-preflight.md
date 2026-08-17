@@ -1734,3 +1734,89 @@ rather than reading as current.
   already struck-through annotations rather than live claims. **The live stale statements are in
   the design doc**, which has never been updated past 338/445/186: sections 2.5, 9.4's table,
   11.1 and 13.4.
+
+---
+
+## Task 8a — the discriminator, audited against a brief I wrote myself
+
+Run 2026-08-17. **The brief is mine, written at the end of Task 9, so this audit is (a4)'s third
+register applied to my own work: a correction arrives with the authority of the error it just
+exposed.** Four findings, and the first changes the measurement.
+
+### (i7) ARM A's FIXTURE WAS PLACED WHERE THE TWO HYPOTHESES AGREE
+
+The brief chose sides **16/32/48** for Arm A because they are cheap. **The discriminating
+quantity is `peak - current` — the transient — and it scales with B**, so cheapness is bought
+directly out of the signal:
+
+| B (side) | H_resident predicts | H_transient predicts | separation |
+|---|---|---|---|
+| 256 (16) | 0.04 MB | 0.25 MB | **0.21 MB** |
+| 2 304 (48) | 0.35 MB | 2.25 MB | 1.90 MB |
+| 4 096 (64) | 0.62 MB | 4.00 MB | 3.38 MB |
+| 9 216 (96) | 1.40 MB | 8.99 MB | **7.60 MB** |
+
+taking H_resident at the 152 B/series the existing bound allows and H_transient at the full
+974.9. **At side 16 the separation is 0.21 MB against a floor whose own sigma is 0.468 MB** —
+the fixture cannot express the effect, which is (i8)'s first shape, and the run would have come
+back "neither excluded" **by construction rather than by evidence.** Corrected: Arm A runs at
+**side 96, where the existing bound came from, and side 48 as the low anchor.**
+
+### AND THE COST FOLLOWS THE FIXTURE, SO THE BRIEF'S "~11 min" IS VOID
+
+Re-derived from Task 8's own wall clocks at this exact fixture — side 96 took **1780.1 s**
+(193 ms/series) and side 48 **438.8 s** — Arm A is **~37 minutes, not 11.** The estimate was
+built on the design (i7) has just rejected, which is the honest reason it was wrong rather than
+a fourth failure of the cost model. **The cost model has failed to transfer three times, so
+these are Task 8's measured numbers at Task 8's fixture and not an extrapolation.**
+
+### (j3) THE SEAM EXISTS AND YIELDS BOTH READINGS AT ONCE, SO NO INSTRUMENT IS BUILT
+
+`run(on_tile_written=...)` fires between a tile's data write and its completion bit, on both
+arms, and **with `grid = side` there is exactly one tile**, so it fires once — at end of tile.
+`machine.peak_rss_bytes()` (`VmHWM`, monotone, what criterion 7 compares to the budget) and
+`machine.current_rss_bytes()` read there give the pair. **The store's root attrs carry the
+run's own `floor`**, measured with that input open, which is what the Task 9 comparability rule
+now requires of every floor. Nothing new is written.
+
+### ARM C MOVES AHEAD OF ARM A, AND IT MAKES ARM A's NUMBER INTERPRETABLE
+
+A mostly-masked run at the **same side** gives the same `(peak, current)` pair with the fit
+removed, for about 1% of the cost. Run first, it turns Arm A's single reading into a
+**differential**: full minus masked at one B is the fit path's contribution, and that is the
+decomposition that stops 8b fitting a coefficient to a fixture — **Task 0's F5, where `22p*8`
+was wrong in its dependence and not its magnitude, and tuning the coefficient would have made
+it worse.**
+
+> **(a)'s LIMIT CLAUSE ON THIS DIFFERENTIAL, STATED BEFORE IT IS TAKEN.** Masking changes
+> values, not shape: a wholly-masked series still occupies its row in the data tile and still
+> gets its output slots, so the floor, the data tile and the slots cancel. **What does not
+> cancel is anything sized by the count of LIVE series** — the selection write ranks nothing
+> for a masked point, so an allocation conditional on a scored series is absent rather than
+> cancelled. A live fraction keeps that path reachable, and the differential is read as *"the
+> fit path's per-series retention"* only to the extent that it is.
+
+### (i2) THE NEGATIVE RESULT IS THE EXPECTED ONE, SO IT NEEDS A POSITIVE CONTROL
+
+Arm A's likely finding is *"`peak - current` is small at both B"* — a **pure negative** about
+the transient, and the shape of answer an instrument gives when it sees nothing at all. **So
+the effect is constructed and the instrument confirmed to see it**: a run whose callback
+allocates and frees a known block inside the tile must show it in `peak - current`. Without
+that, "the transient is small" and "the reading is at the wrong moment" are one observation —
+which is exactly the `current_end` bias the brief already names.
+
+### (d), (a5) AND THE PREDICTIONS
+
+- **(d)** `rg`: nothing computes `peak - current` per tile today. `accumulation_report` fits
+  **current against tile index**, `linearity_report` fits **peak against B**; the transient is
+  neither, and reaching it through either would need a ladder that does not exist (j2).
+- **(a5) Arm B's `n_models` lever moves the cost model as well as the signal.** M = 12 is six
+  times the candidates and therefore about six times the per-series time, which is why it stays
+  at small sides — where, unlike Arm A's question, the signal is the **per-series slope** and
+  grows with the fixture rather than with B. **`per_point_design`'s reachability through
+  `run()` is checked before it is relied on**: Q7 deferred the feature and declared the regime,
+  so the formula branch exists and the path may not.
+- **THE PREDICTIONS ARE COMMITTED BEFORE THE RUN, AS DATA THE ANALYSIS READS** — not as a
+  paragraph a reader compares by eye. A prediction that has to be matched up by hand is one the
+  analysis can drift toward, and this project has recorded a conclusion surviving its own
+  contradicted derivation once already.
