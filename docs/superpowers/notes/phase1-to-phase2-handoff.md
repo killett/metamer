@@ -398,6 +398,28 @@ this project's idiom, because the idiom already requires the derivation to be st
 number. **State both, then compare them** — a correction that gives only a magnitude has
 discarded the one thing that could have caught it.
 
+> **A DIFFERENCE THAT EQUALS A NAMED TERM IS A COINCIDENCE UNTIL THE OTHER TERMS ARE COMPUTED
+> TOO. Matching a residual to the most recently-touched term is pattern recognition, and a
+> correction arrives with enough authority that nobody divides.**
+>
+> **AND THE UNDERLYING FAULT WAS NEVER THE NUMBER — SEE (h).** Phase 2b Task 7, in two steps,
+> and the shape shows only across both:
+>
+> 1. `memory._CHILD` runs `SignalSpec([Constant, Trend, Annual, SemiAnnual])` — **six** design
+>    columns — while `data_and_workspace_bytes_per_series`'s docstring **and**
+>    `test_measured_peak_rss_is_at_least_the_arrays_that_provably_exist` computed its floor at
+>    **four**. **An oracle at a different configuration from its instrument**, which is (h): the
+>    test exercised a default rather than the thing it names, and it survived because 6382 and
+>    6550 are both plausible sizes for that axis.
+> 2. The discrepancy was read as **stale prose**, on the strength of a 168 B gap that equals
+>    `augmented_state` at k_β = 6 — the term Task 0 had most recently added. It is actually the
+>    k_β 4→6 delta spread across **three** terms (48 + 104 + 16). **So the correction changed the
+>    correct number to match the wrong oracle**, and shipped in two commits.
+>
+> **The check that would have caught it is the other two subtractions**, and the reason they were
+> not done is that the first one already agreed. **An agreeing first check is where to be most
+> suspicious, not least** — it is the moment the search stops.
+
 **AND IT APPLIES TO YOUR OWN HAND-COUNTS, WHICH IS WHERE IT KEEPS BITING.** Phase 2b Task 2:
 re-deriving four modules' fixture budgets needed `p_max`, and I counted `white + matern12` as
 two free parameters by reading the candidate list. It is **three** — both sigmas and the
@@ -427,10 +449,20 @@ IMPLICATION:**
 | `_augment` is worth keeping | it helps path A | **path B gained, not path A** — a different consumer, so a different reason to keep it |
 | the probe needs a bare launcher | `peak_rss` is inherited | the operative quantity is the **peak**, not the inheritance — so the fix is where the reading is taken, not how deep the child is |
 | *"you calibrate and your store stops resuming"* (Phase 2b Task 6) | *"the refusal fires when the calibrated side is larger"* | **the arm is the opposite one**, and the corrected direction makes the refusal the **expected experience rather than a corner case** — a slope above the formula is what Task 4 measured, and it buys a smaller tile |
+| *"these two RSS tests failed because the box was under memory pressure"* (Phase 2b, the validity gate) | *"pages were reclaimed to swap"* | **swap was 100% full and could absorb nothing more**, and the pages that actually left were **file-backed** — mapped shared libraries, which is most of what importing numba costs, and which leave RSS with no swap at all |
 
 The third is the clearest: a reader told only that *"the conclusion survived"* would have carried
 away **the opposite impression of how often this happens.** The sentence was right and everything
 about how much it mattered was wrong.
+
+**AND THE FOURTH IS THE ONE WHERE RE-DERIVING PAID IN CODE RATHER THAN IN PROSE.** *"Is there
+swap"* is what the wrong mechanism suggests instrumenting, and it **could not have worked** — the
+swap device was already full and static while pages were still leaving. Re-deriving the mechanism
+produced a **better instrument**: pressure stall information answers *"was the kernel reclaiming
+from us"* directly, per cgroup, as a cumulative counter that can be differenced across exactly the
+window that produced the number. **The other three corrections improved an explanation; this one
+improved what gets measured**, which is the outcome worth expecting from the re-derivation rather
+than treating it as bookkeeping.
 
 #### A POINT BETWEEN TWO MEASURED POINTS IS NOT MEASURED
 
@@ -1398,6 +1430,25 @@ finite-difference gradient could resolve (measured instrument floor ~3e-10 relat
 two populations — converged fits at `3.46e-07 .. 2.30e-05` and fits stopped at one to three
 iterations at `1.45e-04 .. 1.84e-02` — and both bounds are pinned by a test. Its previous
 `1e-5` sat *below* the converged population's maximum.
+
+#### AND THE EXTENSION TO A CONSTANT THAT CANNOT BE DERIVED: STATE WHAT IT HAS NOT BEEN VALIDATED AGAINST, IN THE CONSTANT
+
+> **Where a threshold can be neither eps-derived nor separated between two measured
+> populations, record which side of it was measured and which side was not.** A constant
+> anchored on one side is not a bad constant; a constant that does not say so is.
+
+**This is the same discipline one register out.** `GRAD_TOL` is defensible because **both**
+populations were measured and it sits between them. `RSS_STALL_LIMIT_US_PER_S` has only the
+good side: 0.9 ms/s idle and **5.3 ms/s during a measurement whose answer was correct**, so
+50 ms/s is roughly ten times known-good — **and the rate during the failing sweep was never
+recorded, so it has never been checked against a known-bad reading.** That sentence is in the
+constant's own docstring, next to the number, with the instruction that the next failure
+should record its rate.
+
+**The alternative is what makes it worth the paragraph:** a threshold with one measured side
+and a confident docstring is indistinguishable from `GRAD_TOL` to a later reader, who will
+treat it as settled and tune around it. **Naming the missing half is what keeps it a
+provisional number rather than a fact.**
 
 ### The development environment cannot test the shipped artifact
 

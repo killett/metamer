@@ -244,10 +244,9 @@ What 2b will **not** establish, stated as a specification rather than as a hedge
 | **linearity of the per-series cost in B** (added 2026-08-16, Task 7) | the ladder excludes a curvature of **0.0687 B/series²**, i.e. **82.6%** variation across B ∈ [256, 12544]; **7 repeats is 12.1 h and still leaves 31% invisible** | repeats of the four-point ladder, `k` of them shrinking both errors as `1/√k` — the arithmetic is in `memory.linearity_report` | **not this one at any affordable cost.** A box with ~10× less RSS scatter, or one fast enough to afford ~50 repeats |
 
 **THE FOURTH IS THE ONE MOST EASILY MISREAD AS CLOSED**, because exit criterion 6 passes and the
-slope sits inside the band. **What passed is a bound**: 1021.6 ± 134.7 B/series, a 13.2% relative
-error, excluding 752–1291 B/series and establishing no value. The shipped calibration extrapolates
-a small-B slope to production B, and **that extrapolation rests on an assumption this ladder does
-not test.**
+slope sits inside the band. **What passed is a bound** — the figures are in
+*What Task 7 established*, once. The shipped calibration extrapolates a small-B slope to
+production B, and **that extrapolation rests on an assumption this ladder does not test.**
 
 **THE §9.3 GAP, NOW STATED RATHER THAN IMPLICIT.** 15 000 h here against §9.3's **10 h on 64
 cores** is a required wall-clock speedup of **≈ 1 500×**. Accounted for: **64 cores (64×) × path
@@ -1596,15 +1595,34 @@ against its own brief.** What it needs that no earlier task states:
 - **`rss_validity` is already on criterion 7's exit-criteria test**, and the accumulation half
   needs it too. **Under reclaim criterion 7 passes for the WRONG REASON** — an understated peak
   is a peak under budget.
-- **The cheap instrument is `--reuse-fits-from`** (j3): the tile loop with the fit removed, so
-  10⁵–10⁶ points run in minutes. **State what it does not cover** — it holds less than a fit
-  does, so it witnesses no accumulation in the optimizer or the engines.
-- **Expect a bound rather than a value.** Task 7's ladder returned 1021.6 ± 134.7 B/series, a
-  13.2% relative error; criterion 7's claim is an **inequality**, so it needs less precision —
-  but the accumulation claim is a difference and needs more.
+- **The cheap instrument is `--reuse-fits-from`** (j3): the tile loop with the fit removed —
+  same loop, same write path, same bitmap, no optimizer — so 10⁵–10⁶ points run in **minutes
+  rather than hours**. **STATE WHAT IT COVERS AND WHAT IT DOES NOT, OR IT READS AS A STRONGER
+  CLAIM THAN IT IS.** It covers the **tile loop, the write path, the completion bitmap and
+  zarr's buffers**. It covers **nothing `optimize_series` or the engines retain**, because a
+  recompute holds less than a fit does. **If a fit-path version is wanted, the capped run at
+  side 192 iterates several tiles — assert peak against tile index in that same run**, which
+  costs no extra measurement.
+- **Expect a bound rather than a value.** Task 7's ladder did not resolve — its figures are in
+  *What Task 7 established*, once — and criterion 6 is **met with its scope stated** rather than
+  closed.
+  Criterion 7 is a **different quantity** — an inequality, *"peak at or below the budget"* —
+  so it may well resolve; **the honest output is whatever the uncertainty supports**, and the
+  arithmetic for saying so is `memory.linearity_report`.
 - **Two long measurements remain and this is the second**, ~1.7 h. Task 7's cost model held to
   2% (290.3 ms/series measured against 283.8 predicted), so a per-point probe is worth running
   before committing to a ladder.
+- **Two open items Task 8 is positioned to close, and neither is required of it.**
+  **Open question 16** — the batched-evaluation instrument's unmodelled ~2.7 kB/series,
+  invisible at N = 630 and dominant at N = 60 — and **the half-validated stall threshold**,
+  which needs one known-bad reading. **Task 8 measures under exactly the conditions that would
+  supply the second**, so recording the rate costs nothing and closing it is a bonus rather
+  than a task.
+- **AND READ THE CORRECTION RECORD BEFORE TRUSTING ANY FLOOR FIGURE IN `core/memory.py`.** The
+  struck-through version is left visible in `phase2b-preflight.md` on purpose: an oracle at
+  `k_β = 4` was compared against an instrument running **six** design columns, and the first
+  correction changed the **correct** number to match the **wrong** oracle. **A difference that
+  equals a named term is a coincidence until the other terms are computed too.**
 
 ---
 

@@ -905,16 +905,14 @@ one line each:
   283.8 ms/series, which is not Task 4's 197 ms because that timed `fit` and this times a whole
   ladder point.
 
-**AND THE MEASUREMENT DID NOT RESOLVE, WHICH IS THE RESULT.** Run 2026-08-16 in 1.73 h:
-**slope 1021.6 ± 134.7 B/series, ratio 1.103 to the analytic 926, inside the band** — and a
-**13.2%** relative error, so it is published as a bound: *excludes 752–1291 B/series, establishes
-no value*. **Criterion 6 is met as written and reads stronger than it is**: its band is a 2.25×
-window and the measurement's own 2σ interval is nearly as wide, so it discriminates a gross
-formula error and not a marginal one. **Linearity is not established**: curvature
-**+0.045 ± 0.034** is 1.3σ, and the ladder could only have excluded a per-series cost varying by
-**82.6%** across B. **A fourth closure boundary joins Q7's three — linearity cannot be established
-on this machine at any affordable cost**: seven repeats is 12.1 h and still leaves 31% invisible.
-The figures live in `PROGRESS.md`'s *What Task 7 established*, once.
+**AND THE MEASUREMENT DID NOT RESOLVE, WHICH IS THE RESULT.** Run 2026-08-16 in 1.73 h; the slope
+is inside the band and its relative error is above the resolution limit, so it is published as a
+**bound** rather than a value. **Criterion 6 is met as written and reads stronger than it is** —
+its band is wider than the measurement's own 2σ interval, so it discriminates a gross formula
+error and not a marginal one, and that scope is recorded beside the criterion below.
+**Linearity is not established**, and **a fourth closure boundary joins Q7's three: linearity
+cannot be established on this machine at any affordable cost.** Every figure lives in
+`PROGRESS.md`'s *What Task 7 established*, once.
 
 ---
 
