@@ -1,0 +1,109 @@
+{
+  "task": "Phase 2b Task 8a - the discriminator",
+  "committed": "2026-08-17, BEFORE any arm was run",
+  "why_a_file": [
+    "A prediction the analysis has to be matched up against by eye is one the analysis can",
+    "drift toward. These are read by the analysis script, which prints the verdict against",
+    "them rather than inviting one. The commit that adds this file contains no results."
+  ],
+  "fixture": {
+    "note": "Task 7's and Task 8's ladder fixture, unchanged, so the figures are comparable.",
+    "d": 1,
+    "k_beta": 4,
+    "p_max": 3,
+    "n_time": 60,
+    "n_models": 2,
+    "grid_equals_side": true,
+    "analytic_bytes_per_series": 926.0,
+    "measured_peak_slope_bytes_per_series": 1900.9,
+    "measured_peak_slope_standard_error": 84.1,
+    "excess_bytes_per_series": 974.9
+  },
+  "arm_a": {
+    "question": "Is the 974.9 B/series excess RESIDENT or TRANSIENT?",
+    "framing": [
+      "This CONFIRMS a bound that already exists rather than choosing between two live",
+      "options. Task 8's side-96 watermark sat 1.4 MB above its end-of-tile current reading;",
+      "since peak - current_end >= transient, that bounds the transient at <= 152 B/series,",
+      "at most 15.6% of the excess. The bound is ONE-SIDED and UPWARD: it excludes the",
+      "headroom explanation as SUFFICIENT without establishing the transient as zero."
+    ],
+    "instrument": "run(on_tile_written=...) reading peak_rss_bytes and current_rss_bytes, one tile",
+    "bias_and_its_direction": [
+      "current_end understates resident-during-tile if the tile's arrays are released before",
+      "the read, which INFLATES peak - current and therefore biases toward 'transient'. So a",
+      "SMALL reading is the strong result and a large one is the ambiguous one."
+    ],
+    "points": [
+      {
+        "side": 96,
+        "batch": 9216,
+        "resident_predicts_mb": 1.4,
+        "transient_predicts_mb": 8.99,
+        "separation_mb": 7.6
+      },
+      {
+        "side": 48,
+        "batch": 2304,
+        "resident_predicts_mb": 0.35,
+        "transient_predicts_mb": 2.25,
+        "separation_mb": 1.9
+      }
+    ],
+    "decision_rule": {
+      "resident_confirmed_if_side_96_gap_mb_below": 3.0,
+      "transient_if_side_96_gap_mb_above": 7.0,
+      "otherwise": "NEITHER EXCLUDED - report and stop; 8b stays blocked"
+    },
+    "positive_control": {
+      "why": "The expected finding is a pure negative about the transient, and that is the",
+      "why_2": "shape an instrument produces when it sees nothing at all (i2).",
+      "what": "A callback that allocates and frees a known block inside the tile must appear",
+      "what_2": "in peak - current at approximately the block's size.",
+      "block_mb": 64,
+      "passes_if_observed_gap_mb_above": 48.0
+    }
+  },
+  "arm_c": {
+    "question": "WHERE does the excess live - the fit path, or the tile/store path?",
+    "why_regardless": [
+      "Naming the location is what stops 8b fitting a coefficient to a fixture. Task 0's F5",
+      "is the precedent: 22p*8 was wrong in its DEPENDENCE, not its magnitude, and tuning the",
+      "coefficient would have anchored it at the one point where the wrong shape was right."
+    ],
+    "instrument": "the same run, mostly masked - a wholly-masked series short-circuits in optimize.py before any design or optimizer exists",
+    "live_fraction": 0.015625,
+    "cancels": "the floor, the data tile and the output slots - masking changes values, not shape",
+    "does_not_cancel": "anything sized by the count of LIVE series; the selection write ranks nothing for a masked point",
+    "points": [
+      {"side": 96, "batch": 9216},
+      {"side": 48, "batch": 2304}
+    ],
+    "hypotheses": {
+      "excess_in_tile_or_store_path": {
+        "masked_slope_bytes_per_series_near": 1900.9,
+        "reading": "the masked run holds the excess too, so it is not the fit's"
+      },
+      "excess_in_fit_path": {
+        "masked_slope_bytes_per_series_near": 926.0,
+        "reading": "the masked run holds only what the formula models; the fit retains the rest"
+      }
+    },
+    "decision_rule": {
+      "fit_path_if_masked_slope_below": 1300.0,
+      "tile_or_store_path_if_masked_slope_above": 1500.0,
+      "otherwise": "NEITHER EXCLUDED - the two-point slope did not separate them"
+    }
+  },
+  "arm_b": {
+    "gated_on": "Arm A returning RESIDENT",
+    "question": "Is the excess ADDITIVE (a per-series constant) or MULTIPLICATIVE (a factor on every term)?",
+    "lever": "n_models, because it raises signal per unit B and lets the ladder stay at small sides",
+    "second_fixture": {"n_time": 60, "n_models": 12, "k_beta": 4, "p_max": 3},
+    "analytic_bytes_per_series": 2856.0,
+    "additive_predicts_bytes_per_series": 3830.9,
+    "multiplicative_predicts_bytes_per_series": 5862.6,
+    "check_first": "per_point_design's reachability through run(); Q7 deferred the feature and declared the regime, so the formula branch exists and the path may not"
+  },
+  "permitted_outcome": "NEITHER EXCLUDED - report and stop. 8b stays blocked rather than proceeding on a preference."
+}
