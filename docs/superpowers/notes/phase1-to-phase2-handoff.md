@@ -389,6 +389,25 @@ in `PROGRESS.md`, which is now a stated, unverified claim instead of an unasked 
 **The tell is a figure that supports a conclusion nobody disputes.** Nothing was riding on
 whether the number was 1.7 or 1712, so neither reader had a reason to divide.
 
+**FOURTH INSTANCE, PHASE 2b TASK 9, AND IT SURVIVED BECAUSE IT CHANGED NOTHING DOWNSTREAM.**
+The Task 9 blocker put criterion 7's implied headroom at *"~33% against the shipped 15%"*.
+Asymptotically the budget's slope has to reach the peak's — `926 / (1 − h) ≥ 1900.9` — so
+`h ≥ 1 − 926/1900.9 =` **0.51286**, and no derivation reproduces the 33%. At §9.4's
+preconditions the two give sides of **208** and **240**.
+
+> **AND THE REASON IT PASSED REVIEW IS THE GENERALIZABLE PART: IT LEFT THE PUBLISHED SPREAD
+> UNCHANGED — BY COINCIDENCE.** The spread stayed 192–272 only because a *different* reading,
+> the multiplicative one, was already the extreme. **A wrong number that does not move the
+> answer is not harmless; it is unfalsified.** And knowing that it did not move the answer
+> required doing the recomputation anyway — so "it probably doesn't matter" is never a reason
+> to skip the arithmetic, because that judgement is the arithmetic's output, not its input.
+
+**THE REPAIR IS A CONSTRUCTION, NOT A CORRECTION.** The figure now lives as
+`PerSeriesDispute.headroom_fraction_required`, **derived from the two slopes** so it cannot
+drift from them, and the test checks it against a **hand-computed literal** rather than
+re-deriving it — re-deriving would be an oracle sharing its subject's derivation path (j).
+Derive the field, hand-compute the check.
+
 **AND THE FIRST RECOMPUTATION THAT CONFIRMED RATHER THAN CORRECTED IS ITSELF INFORMATION.**
 Phase 2b Task 5 re-fitted Task 4's published ladder from Task 4's own table and got slope
 **1050.75** against the recorded 1049, SE **223.6** against 222, excess **0.558 SE** against
@@ -1681,6 +1700,31 @@ tests could not see.** `pixi run test-fast` would have shipped both.
   number, never the note** — date it, and state what it is a measurement *of*. **A
   `tile_side` without its backend is not a number**, and an A:B ratio without its harness, B
   and thread count is the same defect one subsystem over (P4).
+
+  > **AND THE SHARPEST FORM, PROMOTED AT PHASE 2b TASK 9: TWO MEASUREMENTS OF THE SAME NAMED
+  > QUANTITY ARE NOT COMPARABLE UNLESS THEY SHARE A RECORDED PRECONDITION SET.** A difference
+  > between them is **not a change in the quantity** — it is **undecomposed** until the
+  > preconditions match. **Withdraw the inference, not the reading.**
+  >
+  > Worked instance, and it is the whole reason the clause is worded that way. `measure_floor`
+  > takes a `data_uri`, so the process floor is **input-dependent by construction**; Task 7
+  > pinned **228.2 MB** and Task 8 measured **232.00 ± 0.468 over ten runs**, and neither
+  > recorded which input was open. The difference was written down as *"a 4.4 MB level shift,
+  > not scatter"* — a claim about the quantity, drawn from two numbers with no common
+  > precondition. Measured 2026-08-17 across three fixtures, the input's own contribution is
+  > **1.28 MB**, eleven times the within-fixture span: real, and not the effect being explained.
+  >
+  > **THE READING SURVIVES, THE INFERENCE DOES NOT, AND THAT ORDER IS THE DISCIPLINE.** Ten runs
+  > at σ = 0.468 is not scatter around 228.6, so **232.00 stands and something unrecorded
+  > explains it**. Refusing to withdraw a measurement you *cannot* explain is harder than
+  > refusing to withdraw one you can — the tempting move is to call the unexplained reading an
+  > outlier, which converts a missing precondition into a discarded fact.
+  >
+  > **AND THE CONSTANT ATTRACTING THE CORRECTION IS ITSELF A SIGNAL.** This is the **second**
+  > `WORKED_FLOOR` correction refused on measurement: the first was the k_β = 4 oracle at
+  > Task 7, where the "fix" changed the number that was already right. A constant that keeps
+  > attracting corrections which do not survive checking is one whose **preconditions are
+  > under-recorded**, not one that keeps being wrong. Fix the recording.
 - **ONE LIBRARY REFUSES LOUDLY, THE OTHER LIES QUIETLY — AND ONLY THE SECOND IS DANGEROUS.**
   The whole argument for **observing** rather than asserting, delivered by measurement rather
   than by reasoning. Requesting 1000 threads on a 4-core box (Phase 2a Task 5, 2026-08-12):
