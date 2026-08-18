@@ -47,8 +47,20 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Install the package and its test extra
-        run: pip install ".[test]"
+      # Both extras, and [batch] is not optional here despite its name. The smoke
+      # test below runs `python -m metamer`, and `__main__.py` imports
+      # `metamer.batch.run` unconditionally, which imports zarr; most of the test
+      # suite imports xarray, zarr or pydantic for the same reason. Installing
+      # only [test] left every matrix job dying at the smoke step with
+      # `ModuleNotFoundError: No module named 'zarr'` -- before pytest ever ran.
+      #
+      # This does NOT weaken the core-without-batch contract. That contract is
+      # held by tests/test_core_isolation.py, which probes a SUBPROCESS's
+      # sys.modules after importing metamer.core, so it measures the import graph
+      # rather than what happens to be installed; and by tests/test_packaging.py,
+      # which builds its own venv and installs the wheel with --no-deps.
+      - name: Install the package with its test and batch extras
+        run: pip install ".[test,batch]"
       # pytest is configured with pythonpath = ["src"], so the suite below runs
       # against the working tree rather than the installed distribution. This step
       # is what actually exercises the installed package: it runs from outside the
@@ -57,7 +69,14 @@ jobs:
         working-directory: ${{ runner.temp }}
         run: |
           python -c "import metamer; print(metamer.__version__)"
-          python -m metamer
+          # `--version`, NOT a bare `python -m metamer`. A bare invocation is a
+          # usage error -- `config` and `store` are required positionals -- and
+          # `_Parser.error` maps that to exit 3 (CONFIG_INVALID), which under
+          # `bash -e` fails the step. It still exercises the same import graph:
+          # `__main__`'s imports of `metamer.batch.*` run before argparse sees
+          # any flag, so this is what catches a batch-layer import that the
+          # published wheel cannot satisfy.
+          python -m metamer --version
       # `slow` stays IN: those tests drive the real Kalman filter at production
       # sizes and are the only thing that exercises the batched driver on anything
       # but healthy series, so deselecting them would make a green run meaningless.

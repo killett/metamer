@@ -2035,6 +2035,20 @@ was the actual defect the leak exposed.
   via Trusted Publishing. See [`RELEASING.md`](RELEASING.md). Pushes that touch
   `.github/workflows/` need `env -u GH_TOKEN` so the stored `gh` login (which has the
   `workflow` scope) is used instead of the injected `GH_TOKEN` (which does not).
+- **CI WAS RED FOR ~40 CONSECUTIVE PUSHES AND NOBODY WAS LOOKING — 2026-08-13 TO 2026-08-18.**
+  Both breaks were in the *workflow*, not the library, and both were in the smoke-test step,
+  which runs **before** `pytest`: so from the first red run to the fix, **the suite did not
+  execute in CI even once**. (1) The install line was `pip install ".[test]"`, but
+  `__main__.py` imports `metamer.batch.run`, which imports zarr — a `[batch]` package. Every
+  matrix job died on `ModuleNotFoundError: No module named 'zarr'`. (2) With that fixed the
+  step *still* failed: `python -m metamer` with no arguments is a usage error, `_Parser.error`
+  maps it to exit **3** (`CONFIG_INVALID`) by design, and `run:` executes under `bash -e`. The
+  step now runs `python -m metamer --version`, which crosses the same import graph — the
+  module-level imports run before argparse reads a flag — and exits 0.
+  **The lesson is the gap, not the two typos: a green local `pixi run test` says nothing about
+  CI, because the failure was in what CI does differently — install a *published* dependency
+  set and run from outside the repository.** Check `gh run list` after pushing work that
+  touches packaging, entry points or the workflows; nothing else will tell you.
 - **Task 18 is closed.** It was a user gate; the user closed it on 2026-08-07 by
   directing that the 64-core box and MacBook be skipped, with the reasoning
   recorded in the verdict note.
