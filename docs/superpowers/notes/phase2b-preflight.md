@@ -1895,3 +1895,97 @@ fixture is **7–9× more expensive per series** — side 48 took **4072.9 s aga
 of**, so these are not the same fixture. What the record omits: the data distribution, the input
 **chunking**, the criteria list, and whether an iteration cap was applied. **The rule promoted
 yesterday fired within a day, on the measurement the whole dispute rests on.**
+
+---
+
+## Task 8i — the instrument, audited before it is built
+
+Run 2026-08-17, against the brief I wrote at the end of 8a. **Four findings, and two of them
+correct claims in that brief — one of which I had already half-written into a promotion.**
+
+### THE BOX REBOOTED, AND THE THREE RED TESTS ARE GREEN AGAIN
+
+Uptime is **1:56** against Task 8a's ten days, and available RAM is **9046 MB** against the
+**1906 MB** that task ended on. Re-run on the rebooted box, **all three failures pass** —
+`test_a_child_inherits_the_parents_own_high_water_mark_and_not_its_current_rss`,
+`test_peak_residency_does_not_move_with_the_iteration_cap` and
+`test_the_recompute_loop_retains_nothing_that_survives_its_warm_up`, 119.5 s, three passed.
+
+**So they are not "known-red": they are AMBIENT-CONDITIONAL, and that is a different deliverable.**
+Calling them known-red would be a claim with an unrecorded precondition, which is the
+comparability rule the project promoted two days ago. **The same code and the same tests give
+green or red depending on a variable the validity gate cannot see, and the gate reported
+`0 indeterminate` in BOTH directions** — which is exactly the observation INDETERMINATE exists to
+make and exactly the one it failed to make.
+
+### I NEARLY RECORDED A FALSE STRUCTURAL CLAIM ABOUT THE CANDIDATE, AND (i2) IS WHAT STOPPED IT
+
+`/sys/fs/cgroup/memory.stat` read **`pgscan 0`, `pgsteal 0`** while `/proc/vmstat` showed
+**7 897 171** pages stolen system-wide. The tempting conclusion — and I had begun writing it — was
+**structural**: this container is `0::/` with `memory.max = max`, so it never triggers
+cgroup-internal reclaim, so the counter is not maintained and the named candidate is dead on this
+box. The file is demonstrably live (`anon` 673 MB, `file` 165 MB, `pgfault` 2 236 643), which
+made the story tidier still.
+
+**Measured instead of concluded: the counter moves.** Across the reproduction run below it went
+**45 120 → 81 317**, a delta of **36 197 pages ≈ 141 MB**. The zero meant *"no reclaim attributed
+here yet this boot"*, not *"not counted here"*. **(a0) on my own reading — a counter at zero and a
+counter that is not maintained are the same observation — and the resolution is (i2): construct
+the effect and confirm the instrument sees it.** A structural claim from a single zero would have
+sent 8i to a worse instrument for a better-sounding reason.
+
+### THE KNOWN-BAD REPRODUCES WITHOUT MEMORY PRESSURE, WHICH I SET OUT TO FALSIFY
+
+The brief calls the 600 s idle run *"a known-bad on demand — the first this project has had"*.
+**I expected that to be false**, because Task 8a produced it on a box with 1906 MB available and
+reclaim needs pressure. Re-run on the rebooted box with **9307 MB available**:
+
+| | Task 8a (1906 MB free) | Task 8i (9307 MB free) |
+|---|---|---|
+| `peak − current` | 92.115 MB | **86.344 MB** |
+| wall | 668.8 s | 671.1 s |
+| stall rate | 1.2489 ms/s | **0.0067 ms/s** |
+
+**The claim stands and is now measured on both sides of the ambient variable it was suspected of
+depending on.** Reclaim here is not driven by shortage — `pswpout` is 467 718 with 9 GB free, so
+anonymous pages are being paged out regardless. **Recorded because the audit set out to break the
+claim and failed**; a confirmation is only evidence if the attempt to refute it is published too.
+
+> **AND THE STALL RATE FELL BY 186× WHILE THE DAMAGE STAYED THE SAME.** 1.2489 ms/s against
+> 0.0067 ms/s for 92 MB against 86 MB lost. **The gate's quantity is not merely insensitive to
+> this failure; it is uncorrelated with it.** That is stronger than what (a2)'s new
+> instrument-level register claims, and it is the sharpest evidence in the project that a
+> threshold on the wrong quantity cannot be rescued by any value.
+
+### SO THERE ARE THREE CANDIDATES, NOT ONE, AND THE THIRD IS THIS PROJECT'S OWN IDIOM
+
+- **(A) cgroup `memory.stat` `pgsteal`.** Live and moving, per-cgroup. **Not per-process:** it
+  says reclaim happened somewhere in this cgroup during the window. Conservative for a gate —
+  false INDETERMINATE, never false clean — which the asymmetry rule already prefers.
+- **(B) `/proc/vmstat` `pgsteal_*`.** Always maintained, **system-wide**, moved by 1 342 132
+  pages during the same window. Broadest coverage, weakest attribution. **Risks a gate that
+  always fires**, which the standing rule says is equivalent to no gate.
+- **(C) THE PROCESS'S OWN WORKING SET AGAINST ITS OWN MEASURED FLOOR.** `current_end` **below**
+  the floor is impossible while a tile is allocated unless pages were taken: 148.8 MB against a
+  229.9 MB floor here, and 235.9 MB against 229.8 MB on the clean 55 s run. **Per-process, needs
+  no kernel interface, discriminates on both points already measured, and is one-sided by
+  construction** — it detects large reclaim and is silent on small. It is the shape
+  `FloorReport` already has a consumer for.
+
+**Whatever is chosen returns `None` where its counter is absent, never `0`** — the rule
+`machine.memory_stall_us` already follows, and the one my own near-miss above would have
+violated.
+
+### (a5), (d), AND WHAT THE BRIEF ASKS FOR THAT CANNOT BE DELIVERED YET
+
+- **(d)** `rg`: nothing in the tree reads `memory.stat`, `/proc/vmstat`, or compares a run's
+  end-of-window RSS against its floor. `machine.memory_stall_us` reads `memory.pressure` only.
+- **(a5) the brief's fourth deliverable and its first are in tension.** *"The suite goes green,
+  or the failures are recorded as known-red with owners"* assumed the failures were stable. They
+  are not: they are green today. **A gate cannot be validated against a failure that will not
+  hold still**, so the known-bad the gate is tuned against must be the **constructed** one — the
+  600 s idle run — and not the three tests. The tests are then a **separate** question: whether
+  their assertions can survive an ambient variable at all, which is deliverable two.
+- **The box's own state is a variable and the reboot proved it**, so every number 8i records
+  carries `MemAvailable` and the reclaim counters beside it, exactly as Task 8's peaks were
+  supposed to carry their stall rate.
