@@ -276,7 +276,7 @@ INDETERMINATE_RSS: list[str] = []
 
 
 @contextlib.contextmanager
-def rss_validity(what: str) -> Iterator[None]:
+def rss_validity(what: str, *, reference_bytes: float | None = None) -> Iterator[None]:
     """Bracket an RSS-difference measurement and refuse to judge an invalid one.
 
     **INDETERMINATE IS NOT PASS AND NOT FAIL**, which is the same shape as
@@ -285,6 +285,24 @@ def rss_validity(what: str) -> Iterator[None]:
     condition fails, so a reading taken under reclaim can neither confirm nor
     refute what it was measuring.
 
+    **TWO CONDITIONS, BECAUSE ONE OF THEM IS BLIND TO THE FAILURE THAT MATTERS.**
+    The stall rate below is a gate on **thrashing** and Phase 2b Task 8a measured
+    that it cannot see **quiet reclaim**: a run that lost 85 MB read 0.0876 ms/s,
+    below the idle baseline. `reference_bytes` adds the condition that can --
+    `machine.reclaim_shortfall_bytes`, validated in Task 8i against a 2x2 over
+    memory pressure and elapsed time, where clean runs sat 5.69-6.32 MB **above**
+    their reference and the damaged one 129.50 MB **below** it.
+
+    **IT IS OPTIONAL BECAUSE MOST CALLERS CANNOT SUPPLY IT HONESTLY.** The
+    witness must be read **in the process that took the measurement**, and this
+    repo's RSS measurements are taken in children; a reference here describes the
+    *test* process. So it is supplied only where the assertion is about this
+    process, and the survey in `PROGRESS.md`'s *What Task 8i established* records
+    which of the nine RSS tests can have one and which need their subject moved
+    into the child first. **Passing this from the wrong process would be worse
+    than omitting it** -- a gate reporting on something other than its subject is
+    the defect this whole line of work found.
+
     **THE CONDITION IS CHECKED ACROSS THE MEASUREMENT AND NOT BEFORE IT.** A box
     that is quiet when a test starts and stalls during it produces exactly the
     corrupted reading this exists to catch, so the counter is read on both sides
@@ -292,6 +310,10 @@ def rss_validity(what: str) -> Iterator[None]:
 
     Args:
         what: What was being measured, for the summary line.
+        reference_bytes: A resident-set figure THIS process cannot honestly be
+            below during the window -- its own pre-workload baseline. Omitted
+            where the measurement happens in a child, because a reference read
+            here would witness the wrong process.
 
     Yields:
         Nothing; the caller's assertions run inside.
@@ -303,6 +325,23 @@ def rss_validity(what: str) -> Iterator[None]:
     yield
     elapsed = max(time.perf_counter() - started, 1e-9)
     end = machine.memory_stall_us()
+
+    # **CHECKED FIRST, BECAUSE IT IS THE CONDITION THAT CAN SEE THE FAILURE.**
+    # The stall gate below missed a run that lost 85 MB; this one is what Task 8i
+    # validated against both sides. Ordering matters only for which reason gets
+    # reported, and the more specific one is worth more to the reader.
+    if reference_bytes is not None:
+        shortfall = machine.reclaim_shortfall_bytes(reference_bytes)
+        if shortfall > 0:
+            reason = (
+                f"{what}: this process's working set ended "
+                f"{shortfall / 1e6:.1f} MB BELOW a reference it cannot honestly "
+                f"be under, so pages were reclaimed from it during the window "
+                f"and every RSS difference taken across that window understates "
+                f"by an unknown amount"
+            )
+            INDETERMINATE_RSS.append(reason)
+            pytest.skip(reason)
 
     if start is None or end is None:
         # **THE KERNEL DOES NOT EXPOSE PSI, SO THE CONDITION CANNOT BE CHECKED.**
@@ -335,7 +374,8 @@ def pytest_terminal_summary(terminalreporter: Any) -> None:
     if not INDETERMINATE_RSS:
         terminalreporter.write_line(
             "0 indeterminate: every RSS-difference measurement ran under a "
-            f"full-stall rate below {RSS_STALL_LIMIT_US_PER_S / 1000:.0f} ms/s"
+            f"full-stall rate below {RSS_STALL_LIMIT_US_PER_S / 1000:.0f} ms/s, "
+            "and every one that supplied a reference ended at or above it"
         )
         return
     terminalreporter.write_line(

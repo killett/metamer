@@ -2376,3 +2376,156 @@ def test_the_transient_factor_is_read_from_the_constant_rather_than_inlined(
 
     monkeypatch.setattr(memory_module, "ACCUMULATION_TRANSIENT_FACTOR", 1e6)
     assert accumulation_report(readings).saturating is False
+
+
+def test_a_reference_at_or_below_the_working_set_reports_no_shortfall():
+    """A healthy process reads zero, and zero means "none seen", not "none".
+
+    Expected value derived independently: `reclaim_shortfall_bytes` is
+    `max(0, reference - VmRSS)`, so any reference at or below the current
+    working set gives exactly 0.0. Half of the live figure is comfortably below
+    it on any process that has imported this module.
+
+    Bug this catches: the subtraction inverted, or the `max` dropped -- either
+    turns a healthy process into a permanent shortfall, which would make the
+    gate fire on every measurement and therefore gate nothing. **A warning that
+    always fires is equivalent to no warning.**
+    """
+    live = machine_module.current_rss_bytes()
+    assert live > 0
+    assert machine_module.reclaim_shortfall_bytes(live / 2) == 0.0
+    assert machine_module.reclaim_shortfall_bytes(live) == 0.0
+
+
+def test_a_reference_above_the_working_set_reports_the_difference():
+    """The shortfall is the gap, in bytes, not a flag.
+
+    Expected values derived independently: with a reference of `VmRSS + 32 MB`
+    the shortfall is 32 MB, up to whatever the process allocates between the two
+    reads. The tolerance is 8 MB, which is far below the 129.50 MB shortfall the
+    known-bad produced and far above the few hundred kB a reader moves.
+
+    Bug this catches: returning a bool, or saturating at some cap. **The
+    magnitude is the point**: Task 8i's damaged run undershot its floor by
+    129.50 MB while its clean siblings sat 5.69-6.32 MB ABOVE it, and a gate
+    that reported only "reclaimed" could not tell those apart from a marginal
+    one.
+    """
+    live = machine_module.current_rss_bytes()
+    shortfall = machine_module.reclaim_shortfall_bytes(live + 32 * 1024 * 1024)
+    assert 24 * 1024 * 1024 <= shortfall <= 40 * 1024 * 1024
+
+
+def test_a_non_positive_reference_is_refused_rather_than_certifying_the_reading():
+    """Zero is refused, because zero can never be undershot.
+
+    Expected values determined independently: `max(0, 0 - rss)` is 0 for every
+    possible working set, so a zero reference reports "clean" without measuring
+    anything -- the fill-value defect (a0) at a validity gate, where it is worst,
+    because a missing instrument must never issue a clean bill of health.
+
+    Bug this catches: a caller that has no reference passing 0 rather than
+    saying so, and the gate then certifying every reading it sees.
+    """
+    for bad in (0, 0.0, -1, -1e9):
+        with pytest.raises(ValueError, match="reference must be positive"):
+            machine_module.reclaim_shortfall_bytes(bad)
+
+
+@pytest.mark.machine
+def test_the_shortfall_instrument_sees_a_constructed_loss():
+    """The positive control: construct the effect and confirm it is seen.
+
+    **(i2). The expected finding of this instrument is a NEGATIVE** -- no
+    shortfall -- and that is the shape a reading takes when nothing is measured
+    at all. So the effect is built: a block is allocated and touched, the
+    reference is taken while it is resident, and the block is released. The
+    working set then sits below that reference by about the block, which is
+    exactly the shape reclaim produces and the only shape available without
+    waiting on the kernel.
+
+    Expected values derived independently: a 64 MiB block touched on every page
+    is 64 MiB resident, so after release the shortfall against a reference taken
+    while it was live is ~64 MiB. The bound is 32 MiB, half of it, which no
+    amount of allocator retention plausibly closes.
+
+    Bug this catches: the reference and the reading taken from different places
+    -- a parent's working set standing in for a child's, which is the exact
+    error that makes a per-process instrument report on the wrong process.
+    """
+    block = np.zeros(64 * 1024 * 1024 // 8)
+    block[:] = 1.0
+    reference = machine_module.current_rss_bytes()
+    del block
+    assert machine_module.reclaim_shortfall_bytes(reference) > 32 * 1024 * 1024
+
+
+@pytest.mark.machine
+def test_the_validity_gate_declares_indeterminate_on_a_constructed_reclaim():
+    """The second condition fires, and the outcome is INDETERMINATE not failure.
+
+    **THE GATE THAT EXISTED COULD NOT DO THIS**, which is the whole of Task 8i:
+    `RSS_STALL_LIMIT_US_PER_S` reads pressure-stall time, and a run that lost
+    85 MB to quiet reclaim read 0.0876 ms/s -- below the idle baseline -- so it
+    passed. The condition added here reads the process's own working set against
+    a reference it cannot honestly be below.
+
+    Expected values derived independently: a 64 MiB block touched on every page
+    makes the working set 64 MiB larger; taking the reference while it is live
+    and releasing it inside the window leaves the process ~64 MiB short, which
+    is the shape reclaim produces. The assertion inside the block is one that
+    would PASS, so a plain pass and a skip are distinguishable only by the
+    outcome -- which is what makes this a test of the gate rather than of the
+    assertion.
+
+    Bug this catches: the reference checked before the window instead of after,
+    or a shortfall reported as a failure. **INDETERMINATE is neither pass nor
+    fail**, and a gate that failed the test would make every ambient dip look
+    like a defect in the code under test -- which is exactly the misreading the
+    three red tests of 2026-08-17 invited.
+    """
+    from tests.conftest import INDETERMINATE_RSS, rss_validity
+
+    block = np.zeros(64 * 1024 * 1024 // 8)
+    block[:] = 1.0
+    reference = machine_module.current_rss_bytes()
+    before = len(INDETERMINATE_RSS)
+
+    with pytest.raises(Skipped) as caught:
+        with rss_validity("a constructed reclaim", reference_bytes=reference):
+            del block
+            assert True
+
+    assert "BELOW a reference" in str(caught.value)
+    # AND IT IS RECORDED, NOT ONLY RAISED: the summary is what makes an
+    # indeterminate outcome visible rather than a skip nobody reads.
+    assert len(INDETERMINATE_RSS) == before + 1
+    assert "a constructed reclaim" in INDETERMINATE_RSS[-1]
+    # POPPED, as the constructed-stall test above pops its own. A test that
+    # leaves its own construction in the summary teaches every reader that "1
+    # indeterminate" is the healthy count, which destroys the loudness the
+    # section exists for.
+    INDETERMINATE_RSS.pop()
+
+
+def test_the_validity_gate_stays_quiet_when_the_working_set_holds():
+    """The negative case, so the gate is not simply always-on.
+
+    Expected value derived independently: with a reference at half the current
+    working set there is no shortfall by construction, so the block runs to
+    completion and nothing is recorded.
+
+    Bug this catches: **a gate that always fires, which is equivalent to no
+    gate** -- the failure mode this repo already names for warnings, arriving
+    here through a reference that is checked with the wrong sign.
+    """
+    from tests.conftest import INDETERMINATE_RSS, rss_validity
+
+    before = len(INDETERMINATE_RSS)
+    ran = False
+    with rss_validity(
+        "a healthy window", reference_bytes=machine_module.current_rss_bytes() / 2
+    ):
+        ran = True
+    assert ran
+    assert len(INDETERMINATE_RSS) == before

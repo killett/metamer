@@ -439,3 +439,62 @@ def current_rss_bytes() -> float:
     import psutil  # pragma: no cover
 
     return float(psutil.Process().memory_info().rss)  # pragma: no cover
+
+
+def reclaim_shortfall_bytes(reference_bytes: float) -> float:
+    """How far this process's working set has fallen BELOW a reference.
+
+    **THE VALIDITY INSTRUMENT `memory_stall_us` COULD NOT BE, AND THE
+    REPLACEMENT IS NOT A KERNEL COUNTER.** Phase 2b Task 8i measured three
+    candidates around the same windows, in a 2x2 over memory pressure and
+    elapsed time, and only this one separates a damaged reading from a clean
+    one:
+
+    | candidate | clean runs | damaged run |
+    |---|---|---|
+    | cgroup `memory.stat` pgsteal, pages/s | 0.0, 0.0, 0.0, 0.0, **402.0** | **198.7** |
+    | `/proc/vmstat` pgsteal, pages/s | 0.0 - **2790.6** | **5270.0** |
+    | **working set minus reference, MB** | **+5.69 to +6.32** | **-129.50** |
+
+    **The cgroup counter reads HIGHER on a clean run than on the damaged one**,
+    so no threshold on it is a gate; the system-wide counter's populations
+    overlap within a factor of two. The working set against a reference
+    separates by more than two hundred times, and its sign carries the meaning:
+    **a process cannot hold less than its own floor while a tile is still
+    allocated unless pages were taken from it.**
+
+    **WHAT THIS IS NOT.** It is one-sided by construction -- it detects reclaim
+    large enough to push the working set under the reference and is silent on
+    reclaim smaller than that -- and it needs a reference the caller already
+    has. `FloorReport.peak_bytes` is the reference the tile loop has;
+    `CalibrationPoint.baseline_bytes` is the one a ladder point has. **Where a
+    caller has no such reference this returns nothing useful and the caller must
+    say what it can claim instead**, which is the survey in `PROGRESS.md`'s
+    *What Task 8i established*.
+
+    **AND IT MUST BE READ IN THE PROCESS THAT TOOK THE MEASUREMENT.** Reclaim is
+    per-process; a parent's working set says nothing about what was taken from
+    the child that did the work.
+
+    Args:
+        reference_bytes: A resident-set figure this process cannot honestly be
+            below -- its own measured floor, or its own pre-workload baseline.
+            Must be positive: a reference of zero makes every reading clean,
+            which is the one answer a validity instrument must never give for
+            free.
+
+    Returns:
+        Bytes by which the working set is below the reference, or **0.0 when it
+        is at or above it**. Zero means "no shortfall seen", never "no reclaim
+        happened" -- the difference is the one-sidedness above.
+
+    Raises:
+        ValueError: If `reference_bytes` is not positive.
+    """
+    if reference_bytes <= 0:
+        raise ValueError(
+            f"a reclaim reference must be positive, got {reference_bytes!r}: a "
+            "reference of zero or less can never be undershot, so it would "
+            "certify every reading as clean without measuring anything"
+        )
+    return max(0.0, float(reference_bytes) - current_rss_bytes())

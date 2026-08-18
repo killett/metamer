@@ -1061,6 +1061,18 @@ verdict rather than leaving it for Task 10 to discover.
 
 ## Task 8i — the instrument, and it comes before 8b and before the suite is green
 
+> **RAN 2026-08-17. The instrument is `machine.reclaim_shortfall_bytes`, and it is NOT a kernel
+> counter.** Both named candidates were rejected **on data**: cgroup `pgsteal` reads **402.0
+> pages/s on a clean run against 198.7 on the damaged one**, and `/proc/vmstat`'s populations
+> overlap within 2×. The process's own working set against a reference it cannot honestly be
+> below separates by **more than 200×** (+5.69 to +6.32 MB clean, **−129.50 MB** damaged) and is
+> per-process. **And the known-bad needs two ingredients, not one:** a 2×2 over memory pressure
+> and elapsed time shows neither alone does anything and both together lose 135 MB — which
+> **corrects the rule promoted out of 8a the same day.** Pressure is now **constructed** by a
+> bounded self-limiting generator rather than waited for. Measurements, harness and generator are
+> archived beside the plan; the survey and the numbers are in `PROGRESS.md`'s *What Task 8i
+> established*. **The brief below is what was run and is kept unchanged.**
+
 **Added 2026-08-17, after Task 8a.** Nothing downstream can proceed: 8b is blocked on a
 measurement nobody has designed, the suite is red on three RSS assertions, and **every
 RSS-difference test in the repo now rests on a premise measured false.** Designing 8b's

@@ -3,9 +3,9 @@
 ## Start here (cold-start summary)
 
 1. **Branch `main`, everything on it, every commit pushed by a hook** — https://github.com/killett/metamer.
-2. **DONE:** Phase 1 (0–18), Phase 2 preliminaries P0–P4, **Phase 2a (0–13)**, **Phase 2b Tasks 0–8, Task 9 NARROWED, Task 8a (verdict: neither excluded)**, open questions 1, 4, 9, 11, 12, 15.
-3. **NEXT ACTION: A DECISION. Task 8a ran on 2026-08-17 and returned "neither excluded" — because the instrument, not the hypothesis, failed.** `peak − current_end` measures how long the process lived; the stall gate cannot see the contamination; and **Task 8's ladder has run length confounded with B and a fixture nobody can rebuild from the record.** **8b is blocked on a measurement that does not yet exist.** Read [What Task 8a established](#what-task-8a-established-done-2026-08-17--read-before-quoting-any-long-running-rss-reading) FIRST. The published side stays **272 carrying its dispute**.
-4. **Tests: 1049 passed, 3 FAILED, 0 indeterminate — 2026-08-17 afternoon, 2093 s. THE SUITE IS RED AND THE THREE FAILURES ARE THE SUBJECT OF [What Task 8a established](#what-task-8a-established-done-2026-08-17--read-before-quoting-any-long-running-rss-reading), NOT A REGRESSION.** All three are `machine` RSS-difference tests, one of them already gated, and the gate printed `0 indeterminate` because it cannot see quiet reclaim. The same suite was **1052 passed, 0 failed** at 1041 s the same morning on the same code. **Nothing was widened and nothing was gated.** The only statement of the current count; earlier counts and sweep durations are in [Task 8's section](#what-task-8-established-done-2026-08-16--read-before-quoting-the-per-series-cost-criterion-6-or-criterion-7).
+2. **DONE:** Phase 1 (0–18), Phase 2 preliminaries P0–P4, **Phase 2a (0–13)**, **Phase 2b Tasks 0–8, Task 9 NARROWED, Task 8a (verdict: neither excluded), Task 8i (the instrument)**, open questions 1, 4, 9, 11, 12, 15.
+3. **NEXT ACTION: 2b TASK 8b — unblocked on the instrument, still blocked on the FIXTURE.** Task 8i shipped `machine.reclaim_shortfall_bytes`, validated against both sides, so a replacement measurement can be designed with something that can see. But Task 8's ladder still cannot be rebuilt from what was recorded, so 8b re-measures it on a fixture recorded completely enough to reproduce, with run length held constant across its points. **Background:** `peak − current_end` measures how long the process lived; the stall gate cannot see the contamination; and **Task 8's ladder has run length confounded with B and a fixture nobody can rebuild from the record.** **8b is blocked on a measurement that does not yet exist.** Read [What Task 8a established](#what-task-8a-established-done-2026-08-17--read-before-quoting-any-long-running-rss-reading) FIRST. The published side stays **272 carrying its dispute**.
+4. **Tests: 1058 passed, 0 failed, 0 indeterminate — 2026-08-17, 794 s, with 8821 MB available and the box quiet.** **GREEN, and the conditions are part of the claim**: the same suite was 1049/3-failed at 1906 MB available earlier the same day, on the same code. The three failures were **ambient-conditional, not code** — see [What Task 8i established](#what-task-8i-established-done-2026-08-17--read-before-writing-any-rss-assertion-or-trusting-the-validity-gate), which is also where the survey of every RSS assertion lives. **Every sweep prints `RSS measurement validity` and it now has TWO conditions**, the second being the one that can see quiet reclaim.
 5. **`pixi run test` is the full sweep and every end-of-task verification must run it; `test-fast` and `test-ci` are not evidence.** It has caught **seven** things a fast run could not, two of them in Task 8. **Every run prints `RSS measurement validity`, including at zero** — a nonzero count is INDETERMINATE, neither pass nor fail.
 6. **Verify a fresh checkout with `pixi run test && pixi run typecheck && pixi run lint`**, plus `pixi run pre-commit run --all-files` before every commit.
 7. **THE METHOD IS THE PRE-FLIGHT AND IT LIVES IN EXACTLY ONE PLACE:** [`phase1-to-phase2-handoff.md`](docs/superpowers/notes/phase1-to-phase2-handoff.md) §1 — (a0)–(a8), (a)–(k), **(j4) new at Task 8**, the five causes of a surviving mutation, the standing rules, the fixture facts. **Run it against the task brief before code**, append to [`phase2b-preflight.md`](docs/superpowers/notes/phase2b-preflight.md). **Do not restate it here** — the two copies drifted once already.
@@ -1316,11 +1316,11 @@ register, which is where the reasoning lives.
 
 #### THE SUITE'S COUNTS AND THE SWEEP'S DURATIONS, WHICH THE HEAD POINTS HERE FOR
 
-**Counts:** 1052 after Task 9 (narrowed), 1047 after Task 8, 1035 after the RSS validity gate, 1024 after Task 6, 1018 after
+**Counts:** 1058 after Task 8i, 1052 after Task 9 (narrowed), 1047 after Task 8, 1035 after the RSS validity gate, 1024 after Task 6, 1018 after
 Task 5, 997 after Task 4, 989 after Task 3, 977 after Task 2, 967 after Task 1, 947 after Task 0.
 
 **Sweep durations: 1199 s (Task 5), 942 s (Task 6), 3502 s (Task 7), 2687 s (the validity gate),
-773 s (Task 8), 1041 s (Task 9 narrowed) — and they measure the HOST, not the suite.** Task 9's
+773 s (Task 8), 1041 s (Task 9 narrowed), 2093 s and then 794 s (Task 8i, the same suite twice in one day at 1906 MB and 8821 MB available) — and they measure the HOST, not the suite.** Task 9's
 run started at host load 12 and finished at 2, which is why it is 35% above Task 8's on a suite
 five tests larger; **a sweep duration is a measurement of the box that hour**. Between Tasks 6 and 7 the suite grew
 by eight tests and the wall clock nearly quadrupled at host load 12–16 on a 4-core box; Task 8
@@ -1574,6 +1574,97 @@ therefore can never sit below `VmRSS` while `ru_maxrss` can — **measured, by 6
 `PROGRESS.md` has been calling `peak_rss_bytes` "`VmHWM`" since Task 8; they are not the same
 field, and a `peak − current` built on the first can go **negative**. Every reading above records
 both.
+
+---
+
+### What Task 8i established (done 2026-08-17 — read before writing ANY RSS assertion or trusting the validity gate)
+
+**THE KNOWN-BAD NEEDS TWO INGREDIENTS AND TASK 8a RECORDED ONE.** Every point below is at the
+Task 8a fixture, side 48, masked, one tile, on the rebooted box.
+
+| condition | idle | wall | peak | working set | `peak − current` | **working set − floor** | cgroup pgsteal/s | vmstat pgsteal/s |
+|---|---|---|---|---|---|---|---|---|
+| no pressure | 0 | 54.1 s | 235.14 | 235.14 | 0.00 | **+5.85 MB** | 0.0 | 937.6 |
+| no pressure | 60 | 116.3 s | 235.12 | 235.12 | 0.00 | **+5.83 MB** | 0.0 | 0.0 |
+| no pressure | 180 | 233.7 s | 234.80 | 234.80 | 0.00 | **+5.69 MB** | 0.0 | 207.9 |
+| no pressure | 600 | 653.9 s | 234.87 | 234.87 | 0.00 | **+5.77 MB** | 0.0 | 143.2 |
+| **pressure** | 0 | 64.0 s | 235.40 | 235.40 | 0.00 | **+6.32 MB** | 402.0 | 2790.6 |
+| **pressure** | **600** | 665.9 s | 234.05 | **98.56** | **135.50** | **−129.50 MB** | 198.7 | 5270.0 |
+
+**Neither factor alone does anything. Both together lose 135 MB.** Pressure was **constructed**
+— a bounded, self-limiting allocator that stops when `MemAvailable` reaches a floor — because
+waiting for it is not a method.
+
+> **AND THAT CORRECTS THE RULE PROMOTED FROM TASK 8a THE SAME DAY.** *"A differential between two
+> readings taken at different times measures elapsed time"* was drawn from a control that varied
+> only sleep — on a box that **happened** to be at 1906 MB available. Re-run at 9307 MB, the same
+> 600 s gave **0.00 MB**. **Elapsed time is necessary and not sufficient: the interval only
+> matters under memory pressure, and the effect is an interaction rather than a main effect.**
+> The operational advice is unchanged and now better founded — hold run length constant, or
+> record it as a covariate — but the stated mechanism was incomplete, and I confirmed it on one
+> run before generalizing. **(a4)'s third register, on a rule I promoted two hours earlier.**
+
+#### THE INSTRUMENT IS NOT A KERNEL COUNTER, AND BOTH CANDIDATES FAILED ON DATA
+
+- **cgroup `memory.stat` `pgsteal`: REJECTED.** It reads **402.0 pages/s on a CLEAN run and
+  198.7 on the damaged one** — higher where there is no damage. **No threshold on it is a gate.**
+- **`/proc/vmstat` `pgsteal_*`: REJECTED.** Populations overlap within a factor of two — clean up
+  to **2790.6**, damaged **5270.0** — and it is system-wide, so it reports the box rather than
+  the process.
+- **The process's own working set against a reference it cannot honestly be below: ACCEPTED.**
+  Clean runs sit **+5.69 to +6.32 MB** above; the damaged one **−129.50 MB**. **Separation of
+  more than two hundred times, the sign carries the meaning, and it is per-process.** Shipped as
+  `machine.reclaim_shortfall_bytes`, with `tests/conftest.py`'s `rss_validity` taking an optional
+  `reference_bytes`.
+
+**IT IS ONE-SIDED AND SAYS SO.** It detects reclaim large enough to push the working set under
+the reference and is silent on anything smaller, and **zero means "no shortfall seen", never "no
+reclaim happened"**. It also **must be read in the process that took the measurement** — a
+parent's working set says nothing about what was taken from its child.
+
+#### WHAT AN RSS ASSERTION CAN CLAIM, WHICH IS THE PART THAT CHANGES THE SUITE
+
+**The watermark is far more robust than the working set, and the numbers say by how much.** Under
+the same reclaim that took **135 MB** off the working set, `VmHWM` moved from ~235.1 to **234.05
+MB — about 1 MB.** So:
+
+- **Peak-based criteria survive.** Criterion 7 compares a watermark to a budget, and a watermark
+  degrades by ~1 MB where a working set degrades by ~135. **Task 8a's "even a high-water mark
+  decays" is right in kind and wrong in scale**, and the scale is what decides whether an
+  assertion is writable.
+- **Differences of *current* RSS across a long window are not assertable on this box** without a
+  reference, because the ambient variable moves them by two orders of magnitude more than the
+  effects being asserted.
+- **A reference makes the difference assertable again**, which is what the new gate is for.
+
+#### TASK 7's SURVEY, RESTATED AGAINST THE WITHDRAWN PREMISE
+
+The four ungated tests were ungated because *"a watermark cannot be reduced by reclaim"*. **That
+premise is withdrawn** — but the measurement above **bounds** the damage at ~1 MB rather than
+removing it, so the conclusion mostly survives with a stated margin rather than a proof.
+
+| test | window | verdict |
+|---|---|---|
+| `test_the_floor_ladder_reproduces_the_recorded_rungs` | rungs ±25%, two `> 30 MB` steps | gated; **salvageable** — margins far exceed 1 MB |
+| `test_peak_residency_does_not_move_with_the_iteration_cap` | three peaks within 16 MB | gated; **the one that failed on 2026-08-17.** 16 MB against a ~1 MB watermark drift is sound; it failed on a **current-RSS-shaped** path and needs its witness moved **into the child** |
+| `test_the_floor_with_the_input_open_exceeds_the_floor_without_it` | `> 1 MB` | gated; **AT RISK** — the tightest window in the suite and the same order as the watermark drift |
+| `test_criteria_6_and_7_peak_rss_is_bounded_and_does_not_track_the_grid` | two peaks within 64 MB | gated; **salvageable**, 64 ≫ 1 |
+| `test_peak_rss_tracks_a_known_allocation` | `live − before ≥ 200 MB` | ungated; **stays** — 200 MB margin survives a 1 MB drift |
+| `test_current_rss_falls_after_a_release_and_the_watermark_does_not` | `≥ 200 MB` | ungated; **stays**, same margin |
+| `test_a_child_inherits_the_parents_own_high_water_mark_and_not_its_current_rss` | 400 MiB watermarks | ungated on the withdrawn premise; **failed 2026-08-17, passes now.** Margin is 400 MiB against ~1 MB drift, so it **stays ungated** — but the stated reason changes from *"reclaim cannot"* to *"reclaim can, bounded at ~1 MB, and the margin is 400×"* |
+| `test_the_inheritance_does_not_compound_across_a_generation` | 400 MiB watermarks | same |
+| `test_measured_peak_rss_is_at_least_the_arrays_that_provably_exist` | fitted slope, floor ≤ x ≤ 2× floor | ungated; **stays** — a 2× band over a three-point fit |
+
+**So the survey's answer is: nothing needs widening, one test needs its witness moved into the
+child, and one is at risk on margin.** The premise changed and almost every conclusion held —
+**for a different reason than the one originally written down**, which is why restating it was
+worth the measurement.
+
+#### AND THE SUITE'S THREE RED TESTS WERE AMBIENT, NOT CODE
+
+All three pass on the rebooted box (9046 MB available against 1906 MB), 119.5 s. **They are not
+known-red; they are ambient-conditional**, and the gate reported `0 indeterminate` in **both**
+directions. That is the observation INDETERMINATE exists to make and the one it could not make.
 
 ---
 
@@ -1993,8 +2084,12 @@ effect an instrument says is absent. **Read them there, not here.**
 
 ---
 
-**Next action: TASK 8i — THE INSTRUMENT, AND IT COMES BEFORE 8b AND BEFORE THE SUITE IS GREEN.**
-Added 2026-08-17 after Task 8a returned "neither excluded" and found the instrument at fault. `peak − current_end` measures elapsed time; the stall gate cannot see the
+**Next action: TASK 8b — and it is unblocked on the instrument but NOT on the fixture.**
+Task 8i shipped `machine.reclaim_shortfall_bytes` and validated it against both sides, so a
+replacement measurement can now be designed with something that can see. **What is still
+missing is Task 8's fixture**, which cannot be rebuilt from the record, so 8b's first act is
+to re-measure the ladder on a fixture recorded completely enough to reproduce — with run
+length held constant across its points, which the old ladder did not do. `peak − current_end` measures elapsed time; the stall gate cannot see the
 contamination; and Task 8's ladder, which the whole dispute rests on, has run length confounded
 with B and a fixture that cannot be rebuilt from what was recorded. **8b stays blocked, and it is
 now blocked on a measurement nobody has designed.** What that measurement has to control for is
