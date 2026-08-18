@@ -223,6 +223,42 @@ The author reasoned past an established convention with a local argument. **A lo
 justification that contradicts an established pattern is evidence against the justification** —
 find out why the pattern exists before deciding you are the exception.
 
+#### AND THE SECOND LIMIT CLAUSE: A DIFFERENTIAL BETWEEN READINGS TAKEN AT DIFFERENT TIMES MEASURES ELAPSED TIME
+
+> **A differential cancels a constant offset. It does not cancel a term that GROWS during the
+> window, and it does not cancel a term that DECAYS with elapsed time.** Any two readings
+> separated in time carry **the interval** as a hidden variable, and a run whose duration
+> correlates with its independent variable has that interval **confounded with the effect**.
+
+**Promoted at Phase 2b Task 8a, 2026-08-17, and the negative control is what earns it.** Two
+masked runs at tile side 48 — identical fixture, identical code path, identical B — differing
+**only** in 600 s of sleep inserted before the reading:
+
+| run | wall | `peak − current_end` |
+|---|---|---|
+| masked, side 48 | 55.2 s | **0.000 MB** |
+| masked, side 48, **+600 s idle** | 668.8 s | **92.115 MB** |
+| full fit, side 48 | 4072.9 s | **84.005 MB** |
+
+**Time alone manufactured the entire effect the measurement existed to detect.** The mechanism
+is reclaim: the kernel takes clean file-backed pages away from a process that has stopped
+touching them, so a reading taken *later* is smaller for reasons that have nothing to do with the
+subject. The full-fit run ended with a working set **85 MB below its own measured floor**, and
+its **watermark sat 0.97 MB below that floor too** — so *even a high-water mark decays*, because
+`VmHWM` is the maximum **simultaneous** residency and a process under continuous reclaim never
+simultaneously holds what a short one does.
+
+> **THE CONFOUNDING CASE IS THE DANGEROUS ONE AND IT IS THE COMMON ONE.** A ladder in batch size
+> is a ladder in run length: Phase 2b Task 8's five points ran **45.6 s to 1780.1 s**,
+> monotonically with B. Contamination therefore lowers the *longer* runs' peaks, which **lowers
+> the fitted slope** — so its **1900.9 ± 84.1 B/series is if anything an UNDERestimate**, and the
+> disagreement with the analytic 926 is **wider** than recorded rather than explained away.
+> Criterion 7's crossover is not clean either: its failing point is its longest run.
+>
+> **The design rule that follows: hold run length constant across the points being compared, or
+> measure the interval and report it as a covariate.** A ladder that varies duration with its
+> abscissa is not a ladder in one variable.
+
 ### (a2) A NAME IS NOT A GATE
 
 Three instances, each of which reads as a gate and is not one: `metamer_version` in
@@ -279,6 +315,38 @@ calibration cache key, a warm-start cache key. **`machine_fingerprint` is the li
 of a field whose classification changes with its consumer**: self-reported at its own
 boundary, harmless while it reaches `run_hash` alone (provenance, never a gate), and an
 identity the moment the calibration cache key reads it.
+
+#### AND (a2) AT THE INSTRUMENT: A GATE CAN BE BLIND BY CONSTRUCTION AND PASS EVERY TEST
+
+> **A gate must be validated against a KNOWN-BAD reading, not merely against a known-good one
+> and a threshold.** A threshold set from one measured side answers *"how far from good"* and
+> never *"can this counter move at all when the thing goes wrong"*. If the quantity the gate
+> reads is not caused by the failure it guards, **no value of the threshold makes it a gate** —
+> and it will pass, quietly, forever.
+
+**This is (a2) one level past Task 5's version.** There, an instrument's *coverage* was assumed
+rather than enumerated. Here the coverage is total and the **causal link is absent**:
+`RSS_STALL_LIMIT_US_PER_S` gates every RSS-difference test on **pressure stall information**,
+and PSI `full` counts time the workload was **stalled waiting** on memory. Reclaiming clean
+file-backed pages that the workload has **stopped touching** costs no stall at all, because
+nobody waits for a page nobody wants. **So the gate could never have seen the failure mode it
+was built for.**
+
+Measured, Phase 2b Task 8a: the run that lost **85 MB** of resident set read **0.0876 ms/s** —
+*below* the 0.9 ms/s **idle** baseline — and the 600 s control that lost **92 MB** read
+**1.2489 ms/s**, forty times inside a 50 000 limit. **Both pass.** The docstring had asked, in
+writing, for the rate of the next failure; two failures now answer it, and the answer is that
+the rate is not the right quantity.
+
+> **THE CONSTANT IS NOT WRONG — ITS SUBJECT IS.** It is a valid gate on **thrashing**, which is
+> what it was built from, and it is not a certificate that an RSS difference is sound. So it was
+> **neither widened nor narrowed**; what changed is the claim written next to it.
+
+**AND REFUSING TO GATE WITH A BLIND INSTRUMENT IS THE RIGHT CALL, FOR A REASON WORTH RECORDING.**
+Three `machine` tests then failed on this box. The standing rule says *"if a gated test fails,
+gate it; never widen it"* — but gating them with **this** gate would convert a **visible failure
+into a silent skip**, which is strictly worse than red: a red suite is read, and a skip is not.
+**A known-red failure with an owner beats a green suite that stopped asking the question.**
 
 #### A DISCOVERED CARDINALITY MUST BE FOLLOWED TO ITS CONSEQUENCES, NOT JUST RECORDED
 

@@ -180,15 +180,18 @@ read:
 | 8 | Criterion 7's run, and accumulation via `--reuse-fits-from` | 2, 7 |
 | **9 (narrowed)** | The cascade **mechanism**: one source, N pointers, and the tests that recompute it. **Landed 2026-08-17 ahead of 8a**, value not frozen | 7, 8 |
 | **8a** | The discriminator — resident vs transient, additive vs multiplicative. **Added 2026-08-17.** Owns criterion 6's restated verdict. Changes no constant | 8, 9 |
-| **8b** | The correction, one term per commit, and the value freeze. **Added 2026-08-17.** Owns criterion 7 | 8a |
+| **8i** | **The instrument.** Validate a reclaim-detecting gate against both sides; decide what an RSS assertion can claim; restate Task 7's survey; suite green or known-red with owners. **Added 2026-08-17 after 8a** | 8a |
+| **8b** | The correction, one term per commit, and the value freeze. **Added 2026-08-17.** Owns criterion 7 | 8a, **8i** |
 | 10 | The 2b exit-criteria suite | 0–9, 8a, 8b |
 
 **THE NUMBERING IS OUT OF ORDER ON PURPOSE AND IS NOT TIDIED.** 8a and 8b are Task 8's
 unfinished business — they resolve a disagreement Task 8 produced and deliberately did not
 choose between — and renumbering 9 and 10 would break every reference in `PROGRESS.md`, the
-pre-flight and eight commit messages. **The execution order is 9 (narrowed) → 8a → 8b →
+pre-flight and eight commit messages. **The execution order is 9 (narrowed) → 8a → 8i → 8b →
 9's value freeze → 10**, and it is written here because the table's own order no longer implies
-it.
+it. **8i was inserted after 8a returned "neither excluded" and found the instrument at fault**;
+it is not optional and it is not a subtask of 8b, because 8b's measurement cannot be designed
+with an instrument that cannot see.
 
 **Three dependency decisions worth their reasons.**
 
@@ -1053,6 +1056,47 @@ convenient reading does not win because it is the one that unblocks the sequence
 **It also owns exit criterion 6's restated verdict.** Criterion 6's *"MET as written"* rests on
 Task 7's rung 48, which does not reproduce. 8a is the instrument that decides, so it restates the
 verdict rather than leaving it for Task 10 to discover.
+
+---
+
+## Task 8i — the instrument, and it comes before 8b and before the suite is green
+
+**Added 2026-08-17, after Task 8a.** Nothing downstream can proceed: 8b is blocked on a
+measurement nobody has designed, the suite is red on three RSS assertions, and **every
+RSS-difference test in the repo now rests on a premise measured false.** Designing 8b's
+measurement with an instrument known to be blind produces another 8a.
+
+**Behaviour, as four deliverables.**
+
+- **VALIDATE A RECLAIM-DETECTING INSTRUMENT AGAINST BOTH SIDES.** `pgscan` / `pgsteal` from the
+  cgroup's `memory.stat` is the **named candidate and it is a candidate, not a gate** — it
+  counts pages actually reclaimed rather than time anyone waited for them, which is the quantity
+  PSI `full` cannot express. **It must be measured on a known-bad case and on a known-good one.**
+  The 600 s idle run reproduces a known-bad **on demand**, which is the **first reproducible
+  known-bad this project has had** — `RSS_STALL_LIMIT_US_PER_S` was set from a known-good side
+  and a failing sweep whose rate was never recorded, and that is exactly the gap that made it
+  blind.
+- **DECIDE WHAT AN RSS ASSERTION CAN CLAIM AT ALL.** If a watermark can be reduced by reclaim —
+  and Task 8a measured a run whose watermark sat **0.97 MB below its own floor** — then `VmHWM`
+  is **not a high-water mark over the run; it is a high-water mark over what survived.** That may
+  mean peak-based criteria need a **different quantity**, or need the process to be **short
+  enough that reclaim cannot act**. **Both are design answers, not threshold answers**, and the
+  deliverable is the decision with its reasoning, not a tuned number.
+- **RESTATE TASK 7's SURVEY.** Its nine RSS tests were classified against the premise *"a
+  watermark cannot be reduced by reclaim"*, which is **withdrawn**. Re-run the survey and record,
+  per test, which can be **salvaged**, which need a **different quantity**, and which **cannot be
+  asserted on this box at all** — the fourth closure boundary's shape, one subsystem over.
+- **THE SUITE GOES GREEN, OR THE FAILURES ARE RECORDED AS KNOWN-RED WITH OWNERS.** A red suite is
+  acceptable **while its cause is understood and owned**; a red suite of unclear provenance is
+  not, because it trains the reader to ignore failures — and the full sweep has caught **seven**
+  things a fast run could not. **Never gate with the blind instrument**: that converts a visible
+  failure into a silent skip, which is strictly worse than red.
+
+**Carried into its pre-flight from Task 8a.** Available RAM fell from **5094 MB to 1906 MB across
+that task's own runs**, so **the box's state is itself a variable in every long measurement.** 8i
+must establish whether a measurement can be made **robust** to it, or only made **under
+conditions that are checked and recorded** — and those are different answers with different
+consequences for what the suite may assert.
 
 ---
 

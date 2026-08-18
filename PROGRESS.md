@@ -1179,6 +1179,33 @@ rate beside its peaks, exactly as Task 7's ladder should have.
 
 ### What Task 8 established (done 2026-08-16 — read before quoting the per-series cost, criterion 6 or criterion 7)
 
+> ## THIS LADDER CANNOT CURRENTLY BE REPRODUCED. STATED FIRST BECAUSE EVERY FIGURE BELOW INHERITS IT.
+>
+> **Task 8a tried, on 2026-08-17, and failed at the fixture.** Rebuilt from the description this
+> section records — N = 60, M = 2, k_β = 4, p_max = 3, `grid = side` — the rebuild is **7–9×
+> more expensive per series** (side 48: **4072.9 s** against the **438.8 s** recorded here), and
+> its **wholly-masked** run at side 96 peaked at **255.09 MB, above the 245.36 MB this section
+> records for the FULL run** at the same side. **A masked run is a subset of the live run and
+> cannot hold more than it**, so the two are **not the same fixture**.
+>
+> **What was never recorded, and is what the rebuild needs:** the input's **data distribution**,
+> its **chunking**, the **criteria list**, and whether an **iteration cap** was applied. This
+> section states the model and the geometry and none of those.
+>
+> **AND THE LADDER'S OWN INDEPENDENT VARIABLE IS CONFOUNDED.** Its five points ran **45.6 s to
+> 1780.1 s**, monotonically with B, and Task 8a measured that elapsed time alone moves an RSS
+> reading by tens of megabytes. Contamination lowers the *longer* runs' peaks, therefore lowers
+> the fitted slope — so **1900.9 ± 84.1 is if anything an UNDERestimate** and the disagreement
+> with the analytic 926 is **wider** than recorded, not explained away. **Criterion 7's crossover
+> is not clean either: its failing point is its longest run.**
+>
+> **SO THIS IS THE STATUS OF THE NUMBER TASK 9 PUBLISHED UNDER DISPUTE.** The published side
+> stays **272** and its `dispute` field stays attached; what has changed is that the *better*
+> instrument in that dispute is now **unreproducible and confounded**, so the 1.86× is not a
+> disagreement between two measurements — **it is a disagreement between a measurement and one
+> that cannot presently be re-taken.** Task 8i owns the instrument; whoever re-takes this ladder
+> owns recording its fixture completely enough to rebuild.
+
 **CRITERION 7 HAS A CROSSOVER RATHER THAN AN ANSWER, AND THE PER-SERIES COST IS TWICE THE
 FORMULA.** Every reading below was taken on 2026-08-16 with the box quiet — a 20 s idle window
 gave **0.000 ms/s** of cgroup full stall — and **every peak carries the stall rate over its own
@@ -1966,13 +1993,21 @@ effect an instrument says is absent. **Read them there, not here.**
 
 ---
 
-**Next action: A DECISION, NOT A TASK — Task 8a returned "neither excluded" and found the
-instrument at fault.** `peak − current_end` measures elapsed time; the stall gate cannot see the
+**Next action: TASK 8i — THE INSTRUMENT, AND IT COMES BEFORE 8b AND BEFORE THE SUITE IS GREEN.**
+Added 2026-08-17 after Task 8a returned "neither excluded" and found the instrument at fault. `peak − current_end` measures elapsed time; the stall gate cannot see the
 contamination; and Task 8's ladder, which the whole dispute rests on, has run length confounded
 with B and a fixture that cannot be rebuilt from what was recorded. **8b stays blocked, and it is
 now blocked on a measurement nobody has designed.** What that measurement has to control for is
 in [What Task 8a established](#what-task-8a-established-done-2026-08-17--read-before-quoting-any-long-running-rss-reading).
 **Do not read Task 8a as "no result" and re-run it harder.**
+
+**8i's four deliverables are in the plan, once.** In one line each: validate a reclaim-detecting
+instrument against **both** sides, with the 600 s idle run as the first reproducible known-bad
+this project has ever had; decide **what an RSS assertion can claim at all**, given that a
+watermark is a high-water over *what survived* rather than over the run; **re-run Task 7's
+survey** of the nine RSS tests against the withdrawn premise; and leave the suite **green, or
+known-red with owners** — a red suite of unclear provenance trains the reader to ignore
+failures, and the full sweep has caught seven things a fast run could not.
 
 **THIS TABLE SAID "AWAITING REVIEW; NO CODE YET" WHILE THE COLD-START HEAD TWELVE HUNDRED LINES
 ABOVE SAID "APPROVED 2026-08-14".** Found at Task 0's start, 2026-08-15. Same shape as the
@@ -4764,6 +4799,28 @@ loop already built in Task 13.
 - Hooks are not tracked by git, so **a fresh clone will not have it.** Recreate it or push
   manually.
 - Never push tags without deciding to: a `v*` tag is the release trigger.
+
+### THE HOOK MAKES EVERY COMMIT A PUBLISHED COMMIT, SO EVERY AMEND IS A REWIND (2026-08-17)
+
+**Instance, at Task 8a, and it is recorded because the mechanism is the transferable part.** A
+commit message was mangled by the shell — an unescaped backtick inside a heredoc ate the words
+`peak - current_end` — and I amended the commit to repair it. **The post-commit hook had already
+pushed it, seconds earlier.** Amending a published commit is the rewind this project forbids, and
+*wanting a tidy message is not a reason*; it is the same motive that reset `phase-1` in August.
+
+**Repaired with `git merge -s ours`, never a force-push.** The two trees were byte-identical —
+only the message differed — so the merge changed nothing about the content and made the pushed
+commit an **ancestor** again instead of a dangling object. `dcd2ef8` is in the history beside its
+replacement `2af3229`, with the merge `2740d23` explaining why both are there.
+
+> **THE RULE, AND IT IS MECHANICAL RATHER THAN A MATTER OF JUDGEMENT: with a push-on-commit hook
+> there is no window in which a commit is private.** By the time a commit message can be read
+> back and found wanting, it is published. **So the only safe repair to a mangled message is a
+> follow-up commit** — never `--amend`, however local it feels.
+>
+> **And the second-order fix is to stop mangling them: a commit message goes in through a FILE**
+> (`git commit -F path`), never through a heredoc the shell will expand. Backticks, `$`, and `!`
+> all survive a file and none of them survive an unquoted heredoc.
 
 ### Open the draft PR right after Task 0's first commit
 
