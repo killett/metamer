@@ -108,6 +108,32 @@ precedent. **And no schema bump is owed**, which is the other half worth recordi
 for a question an older store *cannot answer*, and every earlier store's silence here is
 unambiguous because nothing before that task could consult a calibration at all.
 
+#### AND THE FIFTH REGISTER: A ZERO READING IS NOT EVIDENCE OF ABSENCE
+
+> **A counter at zero and a counter that is not maintained are the same observation. So are
+> "the effect did not happen" and "the effect has not happened YET".** Never infer that an
+> instrument is dead, or that a quantity is absent, from a zero — **construct the effect and
+> confirm the reading moves** (i2). A structural explanation for a zero is the most dangerous
+> possible reading, because it is tidy, it sounds mechanical, and it retires the question.
+
+**Phase 2b Task 8i, 2026-08-17, caught inside the task that would have written the bug.**
+`/sys/fs/cgroup/memory.stat` read **`pgscan 0`, `pgsteal 0`** while `/proc/vmstat` showed
+**7 897 171** pages stolen system-wide, and the file was demonstrably live (`anon` 673 MB,
+`pgfault` 2 236 643) — which made a **structural** story fit perfectly: this container is `0::/`
+with `memory.max = max`, so it never triggers cgroup-internal reclaim, so the counter is not
+maintained here. **That paragraph was already half-written when the counter was tested instead:
+it moved, 45 120 → 81 317, a delta of 36 197 pages.** The zero meant *"no reclaim attributed here
+yet this boot"*.
+
+**THE SAME FAMILY, THREE TIMES NOW, AND THE TELL IS ALWAYS THAT TWO STATES SHARE ONE READING:**
+a zero-filled fixture that zarr never writes a chunk for, so a read served entirely from the fill
+value returns correct-looking values and touches nothing; an empty store whose fill value a
+successful run can also produce, so incomplete reads as complete; and now a reclaim counter whose
+"nothing happened" and "nothing counted here" are the same integer. **Only constructing the
+effect separates them**, and the cost of constructing it is always far below the cost of the
+structural claim being wrong — here it would have sent the task to a worse instrument for a
+better-sounding reason.
+
 ### (a1) RE-DERIVATION AT RESUME IS THE HAZARD, NOT AN UNHASHED ANCESTOR
 
 > **A stored geometry READ BACK from the store is safe, however it was originally
@@ -223,30 +249,40 @@ The author reasoned past an established convention with a local argument. **A lo
 justification that contradicts an established pattern is evidence against the justification** —
 find out why the pattern exists before deciding you are the exception.
 
-#### AND THE SECOND LIMIT CLAUSE: A DIFFERENTIAL BETWEEN READINGS TAKEN AT DIFFERENT TIMES MEASURES ELAPSED TIME
+#### AND THE SECOND LIMIT CLAUSE: A DIFFERENTIAL DOES NOT CANCEL A TERM THAT DECAYS — AND DECAY IS AN INTERACTION
 
 > **A differential cancels a constant offset. It does not cancel a term that GROWS during the
-> window, and it does not cancel a term that DECAYS with elapsed time.** Any two readings
-> separated in time carry **the interval** as a hidden variable, and a run whose duration
-> correlates with its independent variable has that interval **confounded with the effect**.
+> window, and it does not cancel a term that DECAYS across it.** Any two readings separated in
+> time carry **the interval** as a hidden variable, and a run whose duration correlates with its
+> independent variable has that interval **confounded with the effect**.
+>
+> **BUT THE DECAY HERE NEEDS TWO THINGS AT ONCE: memory pressure AND elapsed time.** Neither
+> alone produced any loss; both together lost **135 MB**. **The operational rule — hold run
+> length constant across a ladder's points, or record it as a covariate — stands and is better
+> founded. The mechanism is an INTERACTION, not a property of time.**
 
-**Promoted at Phase 2b Task 8a, 2026-08-17, and the negative control is what earns it.** Two
-masked runs at tile side 48 — identical fixture, identical code path, identical B — differing
-**only** in 600 s of sleep inserted before the reading:
+**Promoted at Task 8a on 2026-08-17 and CORRECTED BY TASK 8i THE SAME DAY.** The original was
+generalized from a single control: two masked runs at side 48 differing only in 600 s of sleep,
+giving **0.000 MB** and **92.115 MB**, on a box that happened to sit at **1906 MB available**.
+**Re-run at 9307 MB available, the same 600 s gave 0.00 MB.** The 2×2 that settles it:
 
-| run | wall | `peak − current_end` |
+| | idle 0 | idle 600 |
 |---|---|---|
-| masked, side 48 | 55.2 s | **0.000 MB** |
-| masked, side 48, **+600 s idle** | 668.8 s | **92.115 MB** |
-| full fit, side 48 | 4072.9 s | **84.005 MB** |
+| **no pressure** | 0.00 MB | **0.00 MB** |
+| **pressure** (constructed) | 0.00 MB | **135.50 MB** |
 
-**Time alone manufactured the entire effect the measurement existed to detect.** The mechanism
-is reclaim: the kernel takes clean file-backed pages away from a process that has stopped
-touching them, so a reading taken *later* is smaller for reasons that have nothing to do with the
-subject. The full-fit run ended with a working set **85 MB below its own measured floor**, and
-its **watermark sat 0.97 MB below that floor too** — so *even a high-water mark decays*, because
-`VmHWM` is the maximum **simultaneous** residency and a process under continuous reclaim never
-simultaneously holds what a short one does.
+The mechanism is reclaim, and reclaim needs a reason: the kernel takes clean file-backed pages
+from a process that has stopped touching them **when something else wants the memory**. A reading
+taken later is then smaller for reasons that have nothing to do with the subject — but only when
+both conditions hold. The damaged run's working set ended **129.50 MB below its own floor**;
+clean runs sat **+5.69 to +6.32 MB above** it.
+
+> **AND THIS IS THE SECOND TIME IN TWO DAYS A PROMOTED RULE HAS BEEN CORRECTED BY THE NEXT TASK'S
+> MEASUREMENT** — the first being the "~33%" implied headroom, at 51.29%. **That is the process
+> working, not the process failing.** A rule promoted from one run is a hypothesis with a
+> citation; what makes the register worth keeping is that the next task measures against it
+> rather than around it. **The failure mode to fear is a rule nobody re-measures**, and it is
+> invisible precisely because nothing contradicts it.
 
 > **THE CONFOUNDING CASE IS THE DANGEROUS ONE AND IT IS THE COMMON ONE.** A ladder in batch size
 > is a ladder in run length: Phase 2b Task 8's five points ran **45.6 s to 1780.1 s**,
@@ -576,6 +612,35 @@ from us"* directly, per cgroup, as a cumulative counter that can be differenced 
 window that produced the number. **The other three corrections improved an explanation; this one
 improved what gets measured**, which is the outcome worth expecting from the re-derivation rather
 than treating it as bookkeeping.
+
+#### AND THE FIFTH: RIGHT IN KIND, WRONG IN SCALE — AND SCALE IS WHAT DECIDES WRITABILITY
+
+> **A qualitative finding that an effect EXISTS does not establish that it MATTERS. Measure its
+> magnitude against the assertion's own margin before withdrawing the assertion.** A premise
+> shown false does not automatically retire everything built on it: what retires the assertion
+> is the effect being large relative to the margin the assertion was written with.
+
+**Phase 2b Task 8a established that a high-water mark can be reduced by reclaim**, which
+withdrew the stated premise under four ungated tests — *"a watermark cannot be reduced by
+reclaim"* — and read as though the survey's conclusions had to go with it. **Task 8i measured
+the magnitude.** The same reclaim event that took **135 MB** off the working set moved `VmHWM`
+by about **1 MB**:
+
+under the same constructed known-bad tabulated above — **about a hundred and thirty times less
+damage to the watermark than to the working set.**
+
+**So peak-based criteria survive with a stated margin, and current-RSS differences across a long
+window do not.** The four ungated tests carry margins of 200 MB and 400 MiB against a ~1 MB
+drift, so they stay ungated — **for a different reason than the one originally written down**:
+not *"reclaim cannot"* but *"reclaim can, bounded at about a megabyte, and the margin is four
+hundred times that."* One test whose window is **1 MB** is at risk on exactly this arithmetic,
+and it is named in the survey rather than left to be discovered.
+
+> **THE FIRST INSTANCE IN THIS FAMILY WHERE THE CORRECTION RESTORED CAPABILITY RATHER THAN
+> REMOVING IT.** The other four narrowed what could be claimed. This one showed that most of
+> what had just been called into question was still assertable — and only a measurement could
+> establish that, because *"the premise is false"* and *"the assertion is unsafe"* are different
+> statements and the gap between them is a number.
 
 #### A POINT BETWEEN TWO MEASURED POINTS IS NOT MEASURED
 

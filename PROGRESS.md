@@ -4,13 +4,13 @@
 
 1. **Branch `main`, everything on it, every commit pushed by a hook** — https://github.com/killett/metamer.
 2. **DONE:** Phase 1 (0–18), Phase 2 preliminaries P0–P4, **Phase 2a (0–13)**, **Phase 2b Tasks 0–8, Task 9 NARROWED, Task 8a (verdict: neither excluded), Task 8i (the instrument)**, open questions 1, 4, 9, 11, 12, 15.
-3. **NEXT ACTION: 2b TASK 8b — unblocked on the instrument, still blocked on the FIXTURE.** Task 8i shipped `machine.reclaim_shortfall_bytes`, validated against both sides, so a replacement measurement can be designed with something that can see. But Task 8's ladder still cannot be rebuilt from what was recorded, so 8b re-measures it on a fixture recorded completely enough to reproduce, with run length held constant across its points. **Background:** `peak − current_end` measures how long the process lived; the stall gate cannot see the contamination; and **Task 8's ladder has run length confounded with B and a fixture nobody can rebuild from the record.** **8b is blocked on a measurement that does not yet exist.** Read [What Task 8a established](#what-task-8a-established-done-2026-08-17--read-before-quoting-any-long-running-rss-reading) FIRST. The published side stays **272 carrying its dispute**.
+3. **NEXT ACTION: 2b TASK 8b — UNBLOCKED ON THE INSTRUMENT, STILL BLOCKED ON THE FIXTURE.** Read [What Task 8b inherits](#what-task-8b-inherits-2026-08-17--the-cold-start-handoff-read-this-before-designing-anything) FIRST; it is the handoff and it says what 8b must build before it may measure. In one line: **Task 8's ladder cannot be rebuilt from what was recorded**, so the disputed **1.86×** stays disputed until a completely-recorded fixture with constant run length replaces it. The published side stays **272 carrying its dispute**.
 4. **Tests: 1058 passed, 0 failed, 0 indeterminate — 2026-08-17, 794 s, with 8821 MB available and the box quiet.** **GREEN, and the conditions are part of the claim**: the same suite was 1049/3-failed at 1906 MB available earlier the same day, on the same code. The three failures were **ambient-conditional, not code** — see [What Task 8i established](#what-task-8i-established-done-2026-08-17--read-before-writing-any-rss-assertion-or-trusting-the-validity-gate), which is also where the survey of every RSS assertion lives. **Every sweep prints `RSS measurement validity` and it now has TWO conditions**, the second being the one that can see quiet reclaim.
 5. **`pixi run test` is the full sweep and every end-of-task verification must run it; `test-fast` and `test-ci` are not evidence.** It has caught **seven** things a fast run could not, two of them in Task 8. **Every run prints `RSS measurement validity`, including at zero** — a nonzero count is INDETERMINATE, neither pass nor fail.
 6. **Verify a fresh checkout with `pixi run test && pixi run typecheck && pixi run lint`**, plus `pixi run pre-commit run --all-files` before every commit.
-7. **THE METHOD IS THE PRE-FLIGHT AND IT LIVES IN EXACTLY ONE PLACE:** [`phase1-to-phase2-handoff.md`](docs/superpowers/notes/phase1-to-phase2-handoff.md) §1 — (a0)–(a8), (a)–(k), **(j4) new at Task 8**, the five causes of a surviving mutation, the standing rules, the fixture facts. **Run it against the task brief before code**, append to [`phase2b-preflight.md`](docs/superpowers/notes/phase2b-preflight.md). **Do not restate it here** — the two copies drifted once already.
-8. **The plan is [`2026-08-14-metamer-phase2b.md`](docs/superpowers/plans/2026-08-14-metamer-phase2b.md)** — 11 tasks, 16 exit criteria, approved 2026-08-14, **amended in place by every one of Tasks 0–8, because every one contradicted its brief.**
-9. **Read, in order:** [What Task 9 (narrowed) established](#what-task-9-narrowed-established-done-2026-08-17--read-before-quoting-the-tile-side-the-floor-or-the-blocker) — **and the tile side is `batch.tiling.PUBLISHED_TILE_SIDE`, in code, not in any document** — [What Task 9 inherited](#what-task-9-inherited-and-what-was-decided-2026-08-16-resolved-2026-08-17), [What Task 8 established](#what-task-8-established-done-2026-08-16--read-before-quoting-the-per-series-cost-criterion-6-or-criterion-7), [the RSS validity gate](#what-the-rss-validity-gate-established-done-2026-08-16--read-before-writing-any-rss-assertion), [What Task 7 established](#what-task-7-established-done-2026-08-16--read-before-quoting-the-slope-or-the-linearity-claim), then [What 2b's first tasks inherit](#what-2bs-first-tasks-inherit-2026-08-14).
+7. **THE METHOD IS THE PRE-FLIGHT AND IT LIVES IN EXACTLY ONE PLACE:** [`phase1-to-phase2-handoff.md`](docs/superpowers/notes/phase1-to-phase2-handoff.md) §1 — (a0)–(a8), (a)–(k), **three new at Tasks 8a/8i: decay as an INTERACTION, right-in-kind-wrong-in-scale, and a zero reading is not evidence of absence**, the five causes of a surviving mutation, the standing rules, the fixture facts. **Run it against the task brief before code**, append to [`phase2b-preflight.md`](docs/superpowers/notes/phase2b-preflight.md). **Do not restate it here** — the two copies drifted once already.
+8. **The plan is [`2026-08-14-metamer-phase2b.md`](docs/superpowers/plans/2026-08-14-metamer-phase2b.md)** — 11 tasks, 16 exit criteria, approved 2026-08-14, **amended in place by every task so far, because every one contradicted its brief — including Tasks 8a and 8i, which corrected briefs I had written myself.** Tasks **8a**, **8i** and **8b** were added after approval; the execution order is at the task index.
+9. **Read, in order:** [What Task 8b inherits](#what-task-8b-inherits-2026-08-17--the-cold-start-handoff-read-this-before-designing-anything), [What Task 8i established](#what-task-8i-established-done-2026-08-17--read-before-writing-any-rss-assertion-or-trusting-the-validity-gate) — the instrument, the 2×2 and the survey of every RSS assertion — [What Task 8a established](#what-task-8a-established-done-2026-08-17--read-before-quoting-any-long-running-rss-reading), [What Task 9 (narrowed) established](#what-task-9-narrowed-established-done-2026-08-17--read-before-quoting-the-tile-side-the-floor-or-the-blocker) — **the tile side is `batch.tiling.PUBLISHED_TILE_SIDE`, in code, not in any document** — then [What Task 8 established](#what-task-8-established-done-2026-08-16--read-before-quoting-the-per-series-cost-criterion-6-or-criterion-7), which **opens by stating its ladder cannot be reproduced**.
 10. **Precedence: the design doc is authoritative on INTENT; a measured, dated number supersedes an unmeasured one wherever it lives, including in the design doc. Any measurement stated twice has one copy DELETED, never reconciled.**
 
 ---
@@ -1511,10 +1511,11 @@ clean measurement either.
 
 #### TASK 8's FIXTURE CANNOT BE REBUILT FROM WHAT WAS RECORDED
 
-Rebuilt from its recorded description (N = 60, M = 2, k_β = 4, p_max = 3, `grid = side`), the
-fixture is **7–9× more expensive per series** — side 48 took **4072.9 s against 438.8 s** — and
-its **masked** peak at side 96, **255.09 MB, exceeds Task 8's FULL peak of 245.36 MB**. A masked
-run cannot hold more than the live run it is a subset of, so **these are not the same fixture.**
+Rebuilt from its recorded description, the fixture is far more expensive per series and its
+**masked** peak exceeds Task 8's **full** peak at the same side, which a subset cannot do. **The
+figures are in the banner at the head of
+[What Task 8 established](#what-task-8-established-done-2026-08-16--read-before-quoting-the-per-series-cost-criterion-6-or-criterion-7)**,
+where they belong, and are not repeated here.
 Unrecorded: the data distribution, the input **chunking**, the criteria list, and any iteration
 cap. **The comparability rule promoted the day before fired within a day, on the measurement the
 whole dispute rests on.**
@@ -1582,16 +1583,16 @@ both.
 **THE KNOWN-BAD NEEDS TWO INGREDIENTS AND TASK 8a RECORDED ONE.** Every point below is at the
 Task 8a fixture, side 48, masked, one tile, on the rebooted box.
 
-| condition | idle | wall | peak | working set | `peak − current` | **working set − floor** | cgroup pgsteal/s | vmstat pgsteal/s |
-|---|---|---|---|---|---|---|---|---|
-| no pressure | 0 | 54.1 s | 235.14 | 235.14 | 0.00 | **+5.85 MB** | 0.0 | 937.6 |
-| no pressure | 60 | 116.3 s | 235.12 | 235.12 | 0.00 | **+5.83 MB** | 0.0 | 0.0 |
-| no pressure | 180 | 233.7 s | 234.80 | 234.80 | 0.00 | **+5.69 MB** | 0.0 | 207.9 |
-| no pressure | 600 | 653.9 s | 234.87 | 234.87 | 0.00 | **+5.77 MB** | 0.0 | 143.2 |
-| **pressure** | 0 | 64.0 s | 235.40 | 235.40 | 0.00 | **+6.32 MB** | 402.0 | 2790.6 |
-| **pressure** | **600** | 665.9 s | 234.05 | **98.56** | **135.50** | **−129.50 MB** | 198.7 | 5270.0 |
+| condition | idle | wall | peak | working set | **working set − floor** | cgroup pgsteal/s | vmstat pgsteal/s |
+|---|---|---|---|---|---|---|---|
+| no pressure | 0 | 54.1 s | 235.14 | 235.14 | **+5.85 MB** | 0.0 | 937.6 |
+| no pressure | 60 | 116.3 s | 235.12 | 235.12 | **+5.83 MB** | 0.0 | 0.0 |
+| no pressure | 180 | 233.7 s | 234.80 | 234.80 | **+5.69 MB** | 0.0 | 207.9 |
+| no pressure | 600 | 653.9 s | 234.87 | 234.87 | **+5.77 MB** | 0.0 | 143.2 |
+| **pressure** | 0 | 64.0 s | 235.40 | 235.40 | **+6.32 MB** | 402.0 | 2790.6 |
+| **pressure** | **600** | 665.9 s | 234.05 | **98.56** | **−129.50 MB** | 198.7 | 5270.0 |
 
-**Neither factor alone does anything. Both together lose 135 MB.** Pressure was **constructed**
+**Neither factor alone does anything; both together lose the working set.** The `peak − current` cells that state the interaction live once, in (a)'s second limit clause in the handoff. Pressure was **constructed**
 — a bounded, self-limiting allocator that stops when `MemAvailable` reaches a floor — because
 waiting for it is not a method.
 
@@ -1612,8 +1613,8 @@ waiting for it is not a method.
   to **2790.6**, damaged **5270.0** — and it is system-wide, so it reports the box rather than
   the process.
 - **The process's own working set against a reference it cannot honestly be below: ACCEPTED.**
-  Clean runs sit **+5.69 to +6.32 MB** above; the damaged one **−129.50 MB**. **Separation of
-  more than two hundred times, the sign carries the meaning, and it is per-process.** Shipped as
+  **Separation of more than two hundred times in the table above, the sign carries the meaning,
+  and it is per-process.** Shipped as
   `machine.reclaim_shortfall_bytes`, with `tests/conftest.py`'s `rss_validity` taking an optional
   `reference_bytes`.
 
@@ -1665,6 +1666,63 @@ worth the measurement.
 All three pass on the rebooted box (9046 MB available against 1906 MB), 119.5 s. **They are not
 known-red; they are ambient-conditional**, and the gate reported `0 indeterminate` in **both**
 directions. That is the observation INDETERMINATE exists to make and the one it could not make.
+
+---
+
+### What Task 8b inherits (2026-08-17 — the cold-start handoff; read this before designing anything)
+
+**8b IS UNBLOCKED ON THE INSTRUMENT AND STILL BLOCKED ON THE FIXTURE**, and those are different
+problems with different owners. **Do not re-run Task 8's ladder as recorded — it cannot be
+rebuilt.**
+
+#### THE INSTRUMENT IS SETTLED AND SHIPPED, SO USE IT
+
+`machine.reclaim_shortfall_bytes` — the process's own working set against a reference it cannot
+honestly be below. Both kernel counters were **rejected on data**, and the reasons are the
+durable part: cgroup `pgsteal` reads **higher where there is no damage**, so no threshold on it
+is a gate; `/proc/vmstat`'s populations **overlap within 2×** and it reports the box rather than
+the process. The figures, the 2×2 and the survey are in
+[What Task 8i established](#what-task-8i-established-done-2026-08-17--read-before-writing-any-rss-assertion-or-trusting-the-validity-gate)
+and **are not repeated here**.
+
+**`rss_validity(..., reference_bytes=...)` is optional on purpose**: the witness must be read in
+**the process that took the measurement**, and this repo measures in children, so a reference
+read in the test process witnesses the wrong process. **8b's probes should read it in the child
+and return it beside the peak**, which is the one wiring Task 8i deliberately did not do — it
+touches `CalibrationPoint`'s schema, which Tasks 4, 5 and 7 pin, and doing that at the end of a
+long session is how the cascade repeats.
+
+#### THE KNOWN-BAD IS REPRODUCIBLE NOW, AND EVERY FUTURE GATE SHOULD BE VALIDATED AGAINST IT
+
+**This project's first on-demand known-bad.** It needs **both** ingredients — memory pressure
+**and** elapsed time — and the pressure is **constructed** by
+[`task-8i-pressure.py`](docs/superpowers/notes/task-8i-pressure.py), a bounded, self-limiting
+allocator that stops when `MemAvailable` reaches a floor and releases at the end. Run it beside
+[`task-8i-harness.py`](docs/superpowers/notes/task-8i-harness.py) at `idle=600`; the 2×2 is in
+Task 8i's section. **Waiting for ambient pressure is not a method** — the same run reproduced and
+then did not, which is what sent Task 8a's promoted rule back for correction. **Validate every
+future gate against this**, which is what `RSS_STALL_LIMIT_US_PER_S` never had.
+
+#### WHAT 8b MUST DO FIRST, AND WHY IT IS NOT OPTIONAL
+
+**Task 8's ladder cannot be reproduced from what was recorded**, so the disputed **1.86×**
+remains disputed until a rebuilt ladder lands. **The evidence is in
+[What Task 8 established](#what-task-8-established-done-2026-08-16--read-before-quoting-the-per-series-cost-criterion-6-or-criterion-7)**,
+whose section now opens with it, and is not repeated here. **Never recorded, and this is the
+list 8b must supply:** the data distribution, the input **chunking**, the criteria list, and any
+iteration cap — beside the model and the geometry, which were.
+
+And the ladder's **run length must be held constant across its points**, which the old one did
+not do. **A ladder that varies duration with its abscissa is not a ladder in one variable** —
+(a)'s second limit clause, in the handoff.
+
+#### AND THE PUBLISHED NUMBER IS STILL UNDER DISPUTE, DELIBERATELY
+
+`batch.tiling.PUBLISHED_TILE_SIDE` still carries its `dispute` field and still publishes **272**
+with the 192–272 spread in the same sentence as the value. **A test recomputes every figure in
+that field**, so whoever settles the dispute deletes it in the edit that moves the number — or
+the suite fails. **Criterion 6 is 8a's restated verdict and criterion 7 is 8b's**, either fixed
+or recorded as a known limitation with the failing regime named.
 
 ---
 
