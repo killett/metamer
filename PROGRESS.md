@@ -2049,6 +2049,17 @@ was the actual defect the leak exposed.
   CI, because the failure was in what CI does differently — install a *published* dependency
   set and run from outside the repository.** Check `gh run list` after pushing work that
   touches packaging, entry points or the workflows; nothing else will tell you.
+- **THE CI FIX IS COMMITTED AND UNPUSHED — `3a6ca34`, blocked on a token scope, 2026-08-18.**
+  `main` is one commit ahead of `origin/main` and **CI stays red until it lands**, because the
+  last run GitHub has seen is `ab560cf`. The block is not resolvable from inside the container:
+  the injected `GH_TOKEN` carries `admin:public_key, gist, read:org, repo` and **not
+  `workflow`**, so the push is rejected with *"refusing to allow an OAuth App to create or
+  update workflow `.github/workflows/test.yml`"*; and the `env -u GH_TOKEN` fallback this file
+  recommends above **no longer works either — `~/.config/gh/` does not exist**, so unsetting the
+  token leaves no credential at all (`could not read Username`). Unblock with
+  `gh auth login --scopes workflow`, then `env -u GH_TOKEN git push origin main`. Note that
+  **no commit on `main` can be pushed until this one can**, workflow-touching or not, since
+  every push carries it.
 - **Task 18 is closed.** It was a user gate; the user closed it on 2026-08-07 by
   directing that the 64-core box and MacBook be skipped, with the reasoning
   recorded in the verdict note.
