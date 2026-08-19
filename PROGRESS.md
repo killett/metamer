@@ -2063,6 +2063,13 @@ was the actual defect the leak exposed.
   the key is on the account until deleted, and `origin` was deliberately left on HTTPS. **Note
   that once such a commit is in the history, NO push of `main` succeeds until it can**,
   workflow-touching or not, because every push carries it.
+- **CI IS GREEN AGAIN AS OF 2026-08-19**, run `32213835726` on `b1f8b3c`: lint plus
+  3.12/3.13/3.14, **1044 passed, 23 deselected** on each, 4–7 minutes per job. That is the
+  first green run since 2026-08-13 **and the first time the suite has ever executed in CI** —
+  every run before it died in the smoke step, which sits ahead of `pytest`. The local
+  stand-in that caught all ten failures first is a pip-installed venv on PyPI wheels; its
+  count (1044) matches CI's exactly, and rebuilding it is
+  `python -m venv <dir> && <dir>/bin/pip install "/workspace[test,batch]"`.
 - **THE FIRST CI RUN EVER TO REACH `pytest` FAILED SEVEN TESTS AND ERRORED THREE — 2026-08-19,
   and not one of them was a defect in the library.** Every one was a test that had encoded a
   property of the *development environment*. This is the shape to expect from any test that has
