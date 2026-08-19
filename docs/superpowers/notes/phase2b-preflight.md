@@ -1989,3 +1989,181 @@ violated.
 - **The box's own state is a variable and the reboot proved it**, so every number 8i records
   carries `MemAvailable` and the reclaim counters beside it, exactly as Task 8's peaks were
   supposed to carry their stall rate.
+
+---
+
+## Task 8b — the correction, audited before the fixture is built
+
+Run 2026-08-19, against the brief in the plan plus the cold-start handoff in `PROGRESS.md`'s
+*What Task 8b inherits*. State confirmed first: branch `main`, `HEAD` = `c407320` = `origin/main`,
+working tree clean, **1067 tests collected**, which is the count the cold-start head records.
+Latest CI run green.
+
+**THE BRIEF SAYS THE FIRST ACT IS A COMPLETELY RECORDED FIXTURE AND NOT A MEASUREMENT. THIS
+AUDIT SAYS THE FIRST ACT IS CHEAPER THAN THAT AND IT IS (j4).** Two of the four things the
+dispute needs were computable from the tree and from the two published ladders, with no run at
+all, and one of them **excludes the explanation this audit set out to confirm**.
+
+### (j4) THE TWO DISPUTED LADDERS USED TWO DIFFERENT INSTRUMENTS, AND NO RUN HAS EVER REPORTED BOTH
+
+The record states both choices and never compares them, so the comparison has never been made:
+
+| | Task 7's ladder | Task 8's ladder |
+|---|---|---|
+| what "peak" is | **the maximum of `current_rss_bytes()` sampled every 2 ms on a thread inside the measured process** (`memory._CALIBRATION_CHILD`, `_sample`) | **`machine.peak_rss_bytes()`, i.e. `ru_maxrss`** — a kernel watermark |
+| grid | 160 x 160, one tile taken by SIGTERM | `grid = side`, the whole grid is one tile |
+| iteration cap | `max_iter = 1` | **not recorded** |
+| slope | **1021.6 +/- 134.7** | **1900.9 +/- 84.1** |
+| ratio to the analytic 926 | **1.103** | **2.053** |
+
+**A SAMPLER CANNOT SEE A TRANSIENT SHORTER THAN ITS PERIOD AND A WATERMARK ALWAYS CAN**, so the
+two instruments measure different quantities whenever the peak is transient — and Task 8 already
+established that this peak *is* transient, at side 96, by 1.4 MB. **Task 7's 1021.6 sits within
+10% of the analytic 926, which is the resident term alone**, and Task 8's 1900.9 is 2.05x it.
+That is the signature of one instrument seeing a transient and the other not, and it is the
+hypothesis no measurement in this project has yet been pointed at.
+
+> **AND IT IS ALREADY VISIBLE IN THE ONE REPRODUCTION THE RECORD HAS.** Task 8 re-ran two of Task
+> 7's rungs on **Task 7's own instrument and fixture** and got +0.33 MB at rung 16 and **+4.19 MB
+> at rung 48** — the same instrument, the same fixture, twice, disagreeing by four megabytes at
+> one rung and not at the other. **That is what a stochastic instrument looks like**, and the
+> record reads it as *"Task 7's value rests on a rung that does not reproduce"* — true, and it
+> does not say why. `_CALIBRATION_CHILD`'s own comment says the sampler *"is not load-bearing
+> here today"* and that a sampler recording nothing leaves every assertion in `test_memory.py`
+> green, which is the same fact from the other side: **nothing in the suite can tell the two
+> instruments apart.**
+
+### (j4) AND THE DISCRIMINATING READING IS ALREADY COMPUTED IN THE TREE AND THROWN AWAY
+
+`memory._CALIBRATION_CHILD` prints `"watermark": peak_rss_bytes()` beside its sampled `"peak"`
+(`memory.py:1724`). **`_measure_point` parses five of the six fields and drops that one**, because
+`CalibrationPoint` has no place to put it. So the measurement that separates the two disputed
+instruments **costs one dataclass field, not a run** — every calibration this project has ever
+executed took both readings and recorded one.
+
+**That is the wiring the handoff already flagged as 8b's**, for the reclaim witness rather than
+for this: *"8b's probes should read it in the child and return it beside the peak — the one
+wiring Task 8i deliberately did not do, because it touches `CalibrationPoint`'s schema, which
+Tasks 4, 5 and 7 pin."* The same edit now carries two witnesses, and the reason to make it is
+stronger than the reason recorded for it.
+
+### (a7) THE OMITTED TERM IS `assemble_tile`'s SPAN TRANSIENT — AND FOUR MULTIPLICATIONS EXCLUDE IT AS THIS DISPUTE'S CAUSE
+
+`tiling.assemble_tile` loads each chunk-aligned span as `.values` (**float32**, measured) and
+`.astype(np.float64)`, so within one span the float32 and the float64 are alive **together**,
+alongside the float64 destination block. Its docstring's guarantee — *"both full representations
+never coexist"* — is a claim about **spans**, and it is exactly as strong as the chunking makes
+it. At N = 60 the coexistence is `4*60 + 8*60 =` **720 B per series of the span**, against a
+formula that charges `n_time * 9 =` **540 B per series of the tile** for the block and its mask
+and nothing at all for the load.
+
+**AND THE CHUNKING WAS NEVER RECORDED FOR EITHER LADDER, SO IT WAS MEASURED FROM THE FIXTURES'
+OWN CONSTRUCTION.** Default `to_zarr` chunking on `(n_time, grid, grid)` float32, read back
+through `tiling.chunk_shape`:
+
+| ladder | side | B | chunk shape | spans | largest span, series |
+|---|---|---|---|---|---|
+| Task 8, `grid = side` | 16 | 256 | (60, 16, 16) | 1 | 256 |
+| | 32 | 1 024 | (60, 32, 32) | 1 | 1 024 |
+| | 48 | 2 304 | (30, 48, 48) | 1 | 2 304 |
+| | 64 | 4 096 | (30, 32, 64) | **2** | **2 048** |
+| | 96 | 9 216 | (30, 48, 48) | **4** | **2 304** |
+| Task 7, grid 160 | 16 | 256 | (15, 80, 80) | 1 | 256 |
+| | 48 | 2 304 | (15, 80, 80) | 1 | 2 304 |
+| | 80 | 6 400 | (15, 80, 80) | 1 | 6 400 |
+| | 112 | 12 544 | (15, 80, 80) | **4** | **6 400** |
+
+**THE LARGEST SPAN IS NOT MONOTONIC IN B ON EITHER LADDER, AND ON TASK 8's IT FALLS BETWEEN ITS
+LAST TWO POINTS** while B more than doubles. So the chunking is a **second** variable that moved
+with the abscissa and was recorded by nobody — the same defect as the run length, in a quantity
+the fixture list does name.
+
+**AND THEN THE ARITHMETIC KILLS THE STORY.** Fitting `peak = 926*B + 720*largest_span + c` over
+each ladder's own points:
+
+| ladder | model slope, 720 B/span-series | model slope, with a contiguity copy at 1200 | **measured** |
+|---|---|---|---|
+| Task 7 | **1286.0** | 1526.0 | **1021.6** |
+| Task 8 | **1056.2** | 1142.9 | **1900.9** |
+
+**The model puts Task 7 ABOVE Task 8. The measurement puts it 1.86x BELOW.** The span transient
+is real, it is omitted from the formula, and **it is not what these two ladders disagree about** —
+its own sign is wrong. Four multiplications, before any fixture was built, retired an explanation
+that was mechanical, chunk-shaped, and exactly the kind of thing this audit was hoping to find.
+
+> **(a4)'s third register, pre-emptively, on this audit.** The story was half-written — a named
+> function, a stated docstring guarantee shown vacuous, a magnitude of 720 that brackets the
+> observed 975 B/series excess when the span is the whole tile (1646 and 2126 against 1900.9) —
+> and **the bracketing is what made it feel finished.** It survives only under the assumption
+> that every span is the whole tile, which the measured chunking above says is false at four of
+> the nine published points. **An agreeing first check is where the search stops**, and the check
+> that agreed here was the magnitude; the checks that disagreed were the two orderings.
+
+### SO THE EXCESS GROWS WITH B AND IS NOT IN THE LOAD, AND TASK 8a ALREADY SAID WHERE TO LOOK
+
+If the span transient cannot produce a slope of 1900.9 — its span saturates at 2304 series while
+Task 8's B reaches 9216 — then something else per-series and watermark-visible is unaccounted.
+**Task 8a's Arm C measured a wholly-masked ladder at 2750.8 B/series**, which short-circuits
+before any design or optimizer exists, so its per-series cost is **the tile plus the output slots
+plus the store path, with the fit removed** — and it is *higher* than 1900.9, not lower. Two
+points, no standard error, a different fixture: it settles nothing and it points somewhere. **The
+excess is in the tile/store path rather than in the fit path**, which is the location Arm C
+existed to name and could not, because its comparison arm was contaminated.
+
+### (a) RUN LENGTH, AND WHY THE FIX IS PADDING AND NOT A SHORTER LADDER
+
+The second limit clause requires run length held constant across the points being compared. A
+ladder in B is a ladder in run length by construction, so the constancy has to be **built**:
+
+- **Hold the LIVE-series count constant across the points**, not the total. A wholly-masked series
+  short-circuits in `optimize.py:517`, so the fit cost is `L * cost_per_fit` with `L` fixed while
+  `B = side^2` varies. The tile, the slots and the store path are shaped by the arrays and never
+  by the outcomes, so **the per-series terms under measurement are untouched by masking**.
+- **Then pad the remainder to a constant wall clock** inside the tile callback, because the masked
+  path still costs roughly 24 ms/series (8a: 55.2 s at B = 2304, 223.6 s at B = 9216) and that is
+  not flat. Padding at the short points, never truncation at the long ones.
+- **Task 8i's 2x2 licenses the padding**: idle alone lost 0.00 MB at every duration measured; idle
+  **under memory pressure** lost 135 MB. So padding is safe exactly while the box is quiet, and
+  quietness is now checkable per point rather than assumed — `reclaim_shortfall_bytes` read **in
+  the child**, which is where 8i said it must be read.
+
+**AND THE COST OF NOT PADDING IS KNOWN RATHER THAN FEARED**: it is what makes 1900.9 an
+underestimate of unknown size, which is the state the dispute is in today.
+
+### (i2) THE POSITIVE CONTROL IS THE CHUNKING, AND IT IS FREE
+
+The span transient is now a **term with a predicted magnitude and a stated dependence** — on the
+chunk, not on B — so it supplies the control the instrument comparison needs. Two ladders at
+identical sides, live counts, run lengths and models, differing **only** in the input's chunk
+shape:
+
+- **fine, `(n_time, 16, 16)`**: every span is 256 series whatever the tile, so the transient is a
+  **constant** and belongs in the intercept.
+- **whole-grid, `(n_time, side, side)`**: one span, so the transient is `720 B/series` and belongs
+  in the **slope**.
+
+The pair predicts a slope difference of **+720 B/series** and an intercept difference of about
+`-720 * 256 =` **-184 kB**. If the watermark sees that difference and the sampler does not, both
+questions are answered by one pair of ladders — **which instrument is right, and where the
+omitted term lives** — and if neither sees it, the transient hypothesis is dead on its own
+positive control rather than on an argument.
+
+### (d), (e), (g2), (i5) AND THE STANDING CHECKS
+
+- **(d)** `rg`: nothing in the tree records a watermark on a `CalibrationPoint`, records a
+  reclaim shortfall from inside a measured child, or sets an input's chunking anywhere outside a
+  test fixture. `assembly_spans` is public and asserted in `tests/test_tiling.py`; **no test binds
+  a span count to a memory figure.**
+- **(e)/(i5)** the tempting repair when a corrected slope will not match a published side is to
+  move `PUBLISHED_TILE_SIDE`, which is the cascade. **The value freeze happens in its own commit,
+  after the term moves, and the `dispute` field is deleted in the same edit that moves the
+  value** — a test recomputes every figure in it, so a caveat left behind fails.
+- **(g2)** `CalibrationPoint` is pinned by Tasks 4, 5 and 7 and by `CalibrationResult`'s
+  consumers; adding a field is additive, and every consumer's construction site must be bound
+  against the new field list rather than assumed keyword-complete.
+- **(a5)** the brief says *"one term moves, alone, in its own commit"*. **This audit has already
+  found two candidate terms** — the load transient and whatever the store path holds — so the
+  rule bites immediately: they cannot land together, and neither lands before the ladder says
+  which one the slope needs.
+- **A PERMITTED OUTCOME REMAINS "NEITHER RESOLVED — REPORT AND STOP"**, and after the span model
+  was excluded above it is a live possibility rather than a formality.
