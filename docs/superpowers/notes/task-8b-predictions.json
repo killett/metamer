@@ -1,0 +1,85 @@
+{
+  "task": "8b",
+  "written": "2026-08-19",
+  "committed_before": "any ladder point ran; only the two cost-probe points below had run",
+  "why_predictions_are_committed_first": "Task 8a's precedent. A permitted outcome is 'neither resolved -- report and stop', granted in advance so the convenient reading does not win because it is the one that unblocks the sequence.",
+
+  "what_had_already_run_when_this_was_written": {
+    "purpose": "COST PROBE, not a result. Two points, no repeat, no error bar. Every prediction below that quotes a number is derived from these two, and that dependence is stated rather than hidden -- a prediction fitted to two points is a claim about the next three, not a confirmation of itself.",
+    "fixture": "grid = side, n_time 60, standard normal float32 rng(0), first 16 series live and the rest wholly NaN, chunk (60,16,16), signal_terms constant+trend+annual, candidates white / white+matern12, criteria [aic], objective reml, threads 1, max_iter 1, floor measured on this input and pinned, no padding",
+    "points": [
+      {"side": 16, "batch": 256, "child_wall_s": 5.49, "sampled_peak": 229289984.0, "ru_maxrss_end": 229056512.0, "vmhwm_end": 229531648.0, "current_at_tile": 229183488.0, "current_end": 229531648.0, "shortfall_at_tile": 303104.0, "stall_ms_per_s": 5.5634},
+      {"side": 96, "batch": 9216, "child_wall_s": 6.74, "sampled_peak": 250220544.0, "ru_maxrss_end": 249430016.0, "vmhwm_end": 249430016.0, "current_at_tile": 242266112.0, "current_end": 238190592.0, "shortfall_at_tile": 0.0, "stall_ms_per_s": 0.0}
+    ],
+    "two_point_slopes_bytes_per_series": {
+      "sampled_peak": 2336.0,
+      "ru_maxrss_end": 2273.8,
+      "vmhwm_end": 2220.8,
+      "current_at_tile": 1460.1,
+      "current_end": 966.4
+    },
+    "the_cost_finding_that_changes_the_plan": "A masked point at side 96 costs 6.7 s in the child, not the 223.6 s Task 8a's masked side 96 took and not the 1780.1 s Task 8's full side 96 took. So repeats, a second chunking and a second factor are all affordable, and the fourth closure boundary's 'not on this machine at any affordable cost' applies to the FULL-LIVE ladder and not to this one."
+  },
+
+  "ladders": {
+    "A": "fine chunking (60,16,16), live = 16, sides 16/32/48/64/96, wall clock padded to 30 s, 3 repeats per side",
+    "B": "identical to A except chunking = whole grid (60,side,side), so one assembly span",
+    "D": "side 96 fixed, live in {16, 64, 256, 1024}, fine chunking, padded to 300 s -- a ladder in FITTED series at constant B"
+  },
+
+  "predictions": [
+    {
+      "id": "P1",
+      "claim": "Ladder A's four instruments separate into three levels, and the ordering is watermark > current-at-tile > current-at-end.",
+      "quantitative": "vmhwm slope 2221 +/- 300, current_at_tile slope 1460 +/- 250, current_end slope 966 +/- 200 B/series.",
+      "derived_from": "the two cost-probe points",
+      "what_would_falsify_it": "any two of the three coinciding within their standard errors, which would mean the decomposition below has no support"
+    },
+    {
+      "id": "P2",
+      "claim": "current_end's slope is the analytic 926, and current_at_tile exceeds it by the float64 block alone.",
+      "quantitative": "current_end slope inside slope_band(926) = 617.3-1389.0 and within 15% of 926; (current_at_tile - current_end) slope = 480 +/- 150 B/series, which is n_time*8 exactly.",
+      "derived_from": "arithmetic on resident_bytes_per_series plus the probe's 1460 - 966 = 494",
+      "why_it_matters": "resident_bytes_per_series charges n_time*9 = 540 for the block AND its mask, and the block is freed between the tile callback and the end of the run. If the difference is 480 the formula's data term is accounted for and the excess is elsewhere."
+    },
+    {
+      "id": "P3",
+      "claim": "THE SAMPLER AND THE WATERMARK DO NOT DIFFER BY ANYTHING LIKE 1.86x, SO THE INSTRUMENT DIFFERENCE IS NOT WHAT TASK 7 AND TASK 8 DISAGREE ABOUT.",
+      "quantitative": "|sampled_peak - vmhwm_end| < 1.5 MB at every point, and the two fitted slopes differ by less than 200 B/series.",
+      "derived_from": "the probe: 790 kB apart at side 96, 242 kB apart at side 16, slopes 2336 against 2221",
+      "status": "THIS PREDICTION KILLS THIS TASK'S OWN PRE-FLIGHT'S LEADING HYPOTHESIS, which was that Task 7's 2 ms sampler missed a transient the watermark caught. It is written down as a prediction rather than quietly dropped, because a hypothesis retired by its own author's next measurement is the only kind this project counts.",
+      "what_would_falsify_it": "a sampled slope near 926 with a watermark slope near 1900 on the same runs"
+    },
+    {
+      "id": "P4",
+      "claim": "The assembly transient is chunk-shaped, so ladder B's watermark slope exceeds ladder A's by the per-span float32+float64 coexistence becoming per-series.",
+      "quantitative": "B_slope - A_slope = +720 +/- 250 B/series, and B_intercept - A_intercept = -184 kB +/- 400 kB.",
+      "derived_from": "4*n_time + 8*n_time at n_time = 60, and 720 * 256 for the intercept",
+      "what_would_falsify_it": "no difference between the two chunkings, which would mean assemble_tile's span structure does not reach the watermark at all and the pre-flight's (a7) term is not merely mis-signed but absent"
+    },
+    {
+      "id": "P5",
+      "claim": "The fit path retains nothing per FITTED series, which is Task 0's structural claim measured rather than read.",
+      "quantitative": "Ladder D's slope in live count is 0 +/- 400 B/fitted-series; equivalently the side-96 watermark moves by less than 1 MB between live = 16 and live = 1024.",
+      "derived_from": "resident_bytes_per_series takes no live count, and everything optimize_series allocates has leading dimension 1",
+      "why_it_matters": "if it is nonzero, ladders A and B are not instruments for the production per-series cost and the full-live ladder has to be paid for; if it is zero, a masked ladder is a valid and cheap instrument for it and the fourth closure boundary loosens"
+    },
+    {
+      "id": "P6",
+      "claim": "The reclaim witness reads zero on every point, and any nonzero reading is below the floor measurement's own between-process scatter.",
+      "quantitative": "shortfall_at_tile < 600 kB at every point, against the 129.50 MB Task 8i measured on the constructed known-bad.",
+      "status": "the side-16 probe ALREADY read 303 kB, on a 5.5 s run with 4.8 GB available and no pressure. That is the witness's noise floor and it is the floor measurement's scatter -- Task 9 measured a within-fixture span of 0.11-0.56 MB across three fixtures. reclaim_shortfall_bytes's docstring states the instrument is one-sided and does not state that it has a noise floor at all.",
+      "what_would_falsify_it": "a shortfall of megabytes, which would make the affected point's readings uninterpretable rather than merely noisy"
+    },
+    {
+      "id": "P7",
+      "claim": "NONE OF THESE LADDERS REPRODUCES 1900.9, AND THAT IS NOT A FAILURE OF THEM.",
+      "detail": "Task 8's fixture was full-live at grid = side with default chunking and an unrecorded iteration cap. These ladders are masked, explicitly chunked and capped at 1. Two measurements of one named quantity are not comparable unless they share a recorded precondition set, so the comparison to 1900.9 runs through the DECOMPOSITION -- which instrument, which term, which factor -- and never through a matching number. A ladder here landing on 1900.9 would be a coincidence and would be reported as one."
+    }
+  ],
+
+  "permitted_outcomes": [
+    "the dispute is resolved and one term moves, alone, in its own commit, and PUBLISHED_TILE_SIDE's value is frozen with its dispute field deleted in the same edit",
+    "the dispute is NOT resolved: report, stop, leave the dispute field standing, and record criterion 7 as a known limitation with the failing regime named"
+  ]
+}
