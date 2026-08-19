@@ -15,6 +15,7 @@ is reused on the other, against a hard RAM constraint.
 from __future__ import annotations
 
 import platform
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -275,15 +276,15 @@ def test_the_fingerprint_is_wired_from_the_platform_and_not_from_a_caller():
 
 
 @pytest.mark.parametrize(
-    "changed",
+    "field, perturb",
     [
-        {"cpu_model": "AMD EPYC 7763 64-Core Processor"},
-        {"cores": 64},
-        {"total_ram_bytes": 256 * 1024**3},
+        ("cpu_model", lambda reading: reading + " (perturbed)"),
+        ("cores", lambda reading: reading + 1),
+        ("total_ram_bytes", lambda reading: reading + 1024**3),
     ],
     ids=["cpu", "cores", "ram"],
 )
-def test_each_of_the_three_readings_moves_the_fingerprint(changed):
+def test_each_of_the_three_readings_moves_the_fingerprint(field, perturb):
     """All three components reach the digest, asserted one at a time.
 
     Bug this catches: a component dropped from the payload -- a fingerprint
@@ -291,12 +292,23 @@ def test_each_of_the_three_readings_moves_the_fingerprint(changed):
     EPYC with the same RAM, and section 11.4's cache would hand one machine's
     bytes-per-series to the other. **One field is not evidence about a set**, so
     each is varied on its own rather than all together.
+
+    **THE PERTURBATION IS DERIVED FROM THE LIVE READING, NEVER A CONSTANT.**
+    It used to be a literal `"AMD EPYC 7763 64-Core Processor"`, `64` cores and
+    256 GiB -- and on 2026-08-19 CI ran on an EPYC 7763, where the "changed"
+    payload WAS the base payload, both digests were `a4efc574e619bf2c`, and the
+    test failed on a machine that had done nothing wrong. A constant asserts a
+    difference only on hosts that happen not to match it; `reading + 1` asserts
+    it everywhere. The assertion is unchanged in strength: the perturbed field
+    still differs in exactly one component.
     """
     base: dict[str, Any] = {
         "cpu_model": machine.cpu_model(),
         "cores": machine.physical_cores(),
         "total_ram_bytes": machine.total_ram_bytes(),
     }
+    changed = {field: perturb(base[field])}
+    assert changed[field] != base[field]
     assert machine_fingerprint(**base) != machine_fingerprint(**{**base, **changed})
 
 
@@ -314,10 +326,18 @@ def test_the_memory_stall_counter_is_cumulative_and_names_its_source() -> None:
     host counter moves for other tenants' reasons** and cannot gate our
     measurement.
 
-    Bug this catches: reading `avg10` instead of `total`. An average over a
-    fixed ten-second window cannot be differenced across a measurement that
-    took seventeen seconds or two hundred, and it would silently report the
-    wrong thing for every window that is not ten seconds long.
+    Bug this catches: a reading that goes BACKWARDS between two calls on one
+    boot -- a counter reset, a source that changes underfoot, a parse that
+    picks a different field on the second call. `conftest.rss_validity`
+    differences two of these, and a difference of a non-monotonic quantity is
+    not a rate.
+
+    **WHAT THIS TEST DELIBERATELY NO LONGER ASSERTS IS `value > 0`.** A quiet
+    host really has accrued zero full-stall microseconds; CI hit exactly that
+    on 2026-08-19 and failed against a correct reading. The `avg10`-versus-
+    `total` discrimination that `> 0` stood in for now lives in
+    `test_the_reading_is_the_total_field_of_the_full_line`, where the file
+    content is written by hand and the right answer is known.
     """
     first = machine.memory_stall_us()
     if first is None:  # pragma: no cover - kernels without PSI
@@ -328,7 +348,70 @@ def test_the_memory_stall_counter_is_cumulative_and_names_its_source() -> None:
     value, source = second
     assert source in {"cgroup", "host"}
     assert value >= first[0]
-    assert value > 0
+
+
+def test_the_reading_is_the_total_field_of_the_full_line(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """`total` off the `full` line, against a file whose every field differs.
+
+    **THIS IS WHERE THE avg10 BUG IS CAUGHT, AND IT USED TO BE NOWHERE.** The
+    live test above asserted `value > 0` as a proxy for "this is a cumulative
+    counter" -- but a quiet host has genuinely accrued zero full-stall
+    microseconds, which is exactly what a GitHub runner reported on 2026-08-19,
+    and the suite failed against a correct reading. The proxy is gone and the
+    property it stood for is asserted here instead, on synthetic content where
+    the answer is known rather than sampled.
+
+    Expected value determined independently: the fixture is written by hand so
+    that `total` on the `full` line is `123456789` and every other number in
+    the file -- both averages on that line, and every field of the `some` line,
+    including ITS total -- is different. Only one reading is correct.
+
+    Bug this catches: reading `avg10` (which would return 4, an unusable
+    percentage), reading the `some` line (987654321, which counts time ANY task
+    stalled and is nonzero on any busy box), or splitting the fields wrongly.
+    """
+    pressure = tmp_path / "memory.pressure"
+    pressure.write_text(
+        "some avg10=12.34 avg60=23.45 avg300=34.56 total=987654321\n"
+        "full avg10=4.00 avg60=5.00 avg300=6.00 total=123456789\n"
+    )
+    monkeypatch.setattr(machine, "MEMORY_PRESSURE_PATHS", (("cgroup", str(pressure)),))
+
+    assert machine.memory_stall_us() == (123456789, "cgroup")
+
+
+def test_the_cgroup_counter_is_preferred_over_the_host_counter(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """With both files readable, the cgroup one decides.
+
+    Expected value determined independently from the reason the preference
+    exists, stated in `memory_stall_us`'s own docstring: **on a shared host the
+    host counter moves for other tenants' reasons**, so gating our RSS
+    measurements on it would fail runs for pressure we did not cause. The two
+    fixtures carry different totals so the winner is identifiable.
+
+    Bug this catches: `MEMORY_PRESSURE_PATHS` reordered, or a loop that reads
+    every path and returns the last -- either of which silently swaps the
+    instrument for one that answers a different question.
+    """
+    cgroup = tmp_path / "cgroup.pressure"
+    host = tmp_path / "host.pressure"
+    cgroup.write_text("full avg10=0.00 avg60=0.00 avg300=0.00 total=111\n")
+    host.write_text("full avg10=0.00 avg60=0.00 avg300=0.00 total=222\n")
+    monkeypatch.setattr(
+        machine,
+        "MEMORY_PRESSURE_PATHS",
+        (("cgroup", str(cgroup)), ("host", str(host))),
+    )
+
+    assert machine.memory_stall_us() == (111, "cgroup")
+
+    cgroup.unlink()
+
+    assert machine.memory_stall_us() == (222, "host")
 
 
 def test_an_absent_pressure_file_reads_as_unknown_and_not_as_no_pressure(

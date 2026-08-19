@@ -34,6 +34,7 @@ from metamer.core.criteria import CandidateScores, Criterion, rank_candidates
 from metamer.core.memory import FloorReport
 from metamer.core.outcomes import Outcome
 from metamer.core.registry import REGISTRY_VERSION
+from tests.reader_probe import run_reader
 
 pytestmark = pytest.mark.filterwarnings("ignore::UserWarning")
 
@@ -582,30 +583,24 @@ def test_the_store_opens_in_a_process_that_cannot_import_metamer(tmp_path):
 
     Catches metadata only metamer can interpret -- an unstable dtype, a
     dimension name xarray cannot map, a group that needs a keyword to open. The
-    control is the half that can fail: the subprocess asserts metamer really is
-    absent, because a store opened by a process that quietly imported it proves
-    nothing at all.
+    control is the half that can fail, and it lives in `tests/reader_probe.py`:
+    the reader is run behind a meta-path finder that REFUSES metamer, and the
+    preamble proves the refusal bites before this program starts. It used to
+    assert that metamer was absent instead, which certified the environment
+    rather than the reader and broke the moment CI installed the package.
     """
     path, _ = _fixture(tmp_path)
-    program = textwrap.dedent(
+    result = run_reader(
         """
-        import sys, importlib.util
-        assert importlib.util.find_spec("metamer") is None, "control failed"
+        import sys
         import xarray as xr
         tree = xr.open_datatree(sys.argv[1], engine="zarr")
         print(sorted(tree.groups))
         noise = xr.open_zarr(sys.argv[1], group="noise")
         print(list(noise["noise_param_name"].values))
         print(int(xr.open_zarr(sys.argv[1]).attrs["schema_version"]))
-        """
-    )
-    environment = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
-    result = subprocess.run(
-        [sys.executable, "-c", program, str(path)],
-        capture_output=True,
-        text=True,
-        cwd="/",
-        env=environment,
+        """,
+        str(path),
     )
 
     assert result.returncode == 0, result.stderr

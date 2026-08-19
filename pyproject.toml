@@ -44,9 +44,19 @@ classifiers = [
 # celerite2 is an ORACLE, not a runtime dependency: tests/test_celerite2_agreement.py
 # is its only importer, and it is there to check our Matern nu=1/2 likelihood against
 # an independent implementation. Nothing under src/ imports it.
+#
+# build, hatchling and hatch-vcs are here because tests/test_packaging.py BUILDS
+# THE WHEEL, and it builds with `--no-isolation` (deliberately: see that module's
+# docstring) so the backend must already be importable. They were reachable only
+# through the pixi dev environment until 2026-08-19, when the first CI run to
+# reach the suite errored three packaging tests on `No module named build` --
+# the guard against an undeclared dependency, undeclared.
 test = [
     "pytest>=9",
     "celerite2>=0.3",
+    "build>=1.2",
+    "hatchling>=1.27",
+    "hatch-vcs>=0.4",
 ]
 # The batch layer -- metamer.batch and metamer.config -- and nothing else. These
 # are deliberately NOT in [project.dependencies]: metamer.core must stay usable

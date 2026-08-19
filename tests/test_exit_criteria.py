@@ -20,7 +20,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import shutil
 import signal
 import subprocess
@@ -48,6 +47,7 @@ from metamer.batch.write import check_status_invariant
 from metamer.config import load
 from metamer.core.outcomes import Outcome
 from tests.conftest import RaisingStubEngine, rss_validity
+from tests.reader_probe import run_reader
 
 pytestmark = pytest.mark.filterwarnings("ignore::UserWarning")
 
@@ -456,8 +456,11 @@ def test_criterion_3_the_store_opens_cleanly_without_metamer(
 
     **Two traps, both already paid for once in this project.** `PYTHONPATH=src`
     is inherited by subprocesses, so a "clean" child imports metamer out of the
-    development tree and passes for the wrong reason -- the control asserts the
-    module is genuinely absent. And an unconsolidated store *opens*: it warns,
+    development tree and passes for the wrong reason -- `tests/reader_probe.py`
+    strips it and blocks the import outright. (Asserting the module was *absent*
+    was the third trap, found on 2026-08-19: absence is a fact about the
+    environment, and CI installs the package.) And an unconsolidated store
+    *opens*: it warns,
     through the `warnings` module, and tells the reader to pass a keyword. "It
     opened" and "it opened cleanly" are different acceptance bars, so the child
     promotes warnings to errors around every open.
@@ -468,10 +471,9 @@ def test_criterion_3_the_store_opens_cleanly_without_metamer(
     """
     _base, _uri, _config_path, store = fitted
 
-    program = textwrap.dedent(
+    result = run_reader(
         """
-        import sys, importlib.util, warnings
-        assert importlib.util.find_spec("metamer") is None, "control failed"
+        import sys, warnings
         import numpy as np, xarray as xr
         with warnings.catch_warnings():
             warnings.simplefilter("error")
@@ -485,14 +487,8 @@ def test_criterion_3_the_store_opens_cleanly_without_metamer(
         print(sorted(groups))
         print(int(np.isfinite(groups["primitives"]["log_lik"].values).sum()))
         print(list(groups["selection"]["c"].values))
-        """
-    )
-    result = subprocess.run(
-        [sys.executable, "-c", program, str(store)],
-        capture_output=True,
-        text=True,
-        cwd="/",
-        env={k: v for k, v in os.environ.items() if k != "PYTHONPATH"},
+        """,
+        str(store),
     )
 
     assert result.returncode == 0, result.stderr
@@ -1054,10 +1050,9 @@ def test_criteria_15_and_16_the_recomputed_store_stands_alone(
     assert attrs["schema_version"] == SCHEMA_VERSION
 
     shutil.rmtree(store_copy)
-    program = textwrap.dedent(
+    result = run_reader(
         """
-        import sys, importlib.util, warnings
-        assert importlib.util.find_spec("metamer") is None, "control failed"
+        import sys, warnings
         import numpy as np, xarray as xr
         with warnings.catch_warnings():
             warnings.simplefilter("error")
@@ -1065,14 +1060,8 @@ def test_criteria_15_and_16_the_recomputed_store_stands_alone(
             selection = xr.open_zarr(sys.argv[1], group="selection")
         print(int(np.isfinite(primitives["log_lik"].values).sum()))
         print(list(selection["c"].values))
-        """
-    )
-    result = subprocess.run(
-        [sys.executable, "-c", program, str(new)],
-        capture_output=True,
-        text=True,
-        cwd="/",
-        env={k: v for k, v in os.environ.items() if k != "PYTHONPATH"},
+        """,
+        str(new),
     )
 
     assert result.returncode == 0, result.stderr

@@ -37,6 +37,7 @@ from metamer.batch.validation import ExitCode, ValidationError
 from metamer.batch.write import InvariantError
 from metamer.core.memory import accumulation_report
 from tests.conftest import STUB_FLOOR_PEAK, RaisingStubEngine, rss_validity
+from tests.reader_probe import run_reader
 
 pytestmark = pytest.mark.filterwarnings("ignore::UserWarning")
 
@@ -404,23 +405,16 @@ def test_the_new_store_opens_with_the_source_deleted(
 
     shutil.rmtree(src)
 
-    program = textwrap.dedent(
+    result = run_reader(
         """
-        import sys, importlib.util
-        assert importlib.util.find_spec("metamer") is None, "control failed"
+        import sys
         import numpy as np, xarray as xr
         primitives = xr.open_zarr(sys.argv[1], group="primitives")
         selection = xr.open_zarr(sys.argv[1], group="selection")
         print(int(np.isfinite(primitives["log_lik"].values).sum()))
         print(list(selection["c"].values))
-        """
-    )
-    result = subprocess.run(
-        [sys.executable, "-c", program, str(new)],
-        capture_output=True,
-        text=True,
-        cwd="/",
-        env={k: v for k, v in os.environ.items() if k != "PYTHONPATH"},
+        """,
+        str(new),
     )
 
     assert result.returncode == 0, result.stderr

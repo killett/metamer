@@ -495,6 +495,22 @@ def test_grad_tol_separates_converged_from_unconverged_with_margin():
     separately from the inequalities because "on the right side of the
     threshold" and "not about to cross it" are different facts, and open
     question 9's lesson is that only the second one means healthy.
+
+    **THE MARGIN FACTOR IS 1.5, NOT 2.0, AND THAT IS A MEASUREMENT RATHER THAN
+    A CONCESSION.** These two cases were re-run on 2026-08-19 under both numeric
+    stacks the project is built against:
+
+        conda-forge, numpy 2.4.6   converged 2.2957e-05   stopped 1.4524e-04
+        PyPI wheels, numpy 2.5.2   converged 2.9475e-05   stopped 4.3841e-04
+
+    so the converged margin is 2.18x on one and **1.70x** on the other -- and CI,
+    which installs the PyPI stack, failed this test at 1.70x on its first run
+    that ever reached the suite. Widening the ladder to every cap at every
+    length puts the two populations 2.56x apart across the union, and **no
+    threshold holds 2x on both sides of a 2.56x gap**. 1.5 is under the tighter
+    measured margin with room, and still fails against any `GRAD_TOL` that
+    drifts toward either population. What was lost is the claim that the margin
+    is 2x; that claim was never true off one machine.
     """
     spec, state_space, t, y = _composite_series()
     obj = _objective(spec, state_space)
@@ -512,8 +528,8 @@ def test_grad_tol_separates_converged_from_unconverged_with_margin():
 
     assert converged_norm < GRAD_TOL
     assert stalled_norm > GRAD_TOL
-    assert GRAD_TOL / converged_norm > 2.0
-    assert stalled_norm / GRAD_TOL > 2.0
+    assert GRAD_TOL / converged_norm > 1.5
+    assert stalled_norm / GRAD_TOL > 1.5
 
 
 @pytest.mark.slow

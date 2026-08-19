@@ -121,6 +121,31 @@ The two populations are separated by a factor of 6.3 and nothing lands
 between them. `5e-5` sits 2.2x above the converged maximum and 2.9x below the
 unconverged minimum, i.e. near the middle in log space.
 
+**RE-MEASURED 2026-08-19 ON A SECOND NUMERIC STACK, AND THE SEPARATION IS NOT
+6.3x.** The figures above were measured in one environment. Running the same
+compositions and record lengths under PyPI wheels (numpy 2.5.2) rather than
+conda-forge (numpy 2.4.6) moves the converged population's top, and widening
+the stopped ladder to every `max_iter` in 1..3 at every length -- which the
+line above says it covers -- finds stopped fits well below the `1.45e-04` it
+records:
+
+    conda-forge, numpy 2.4.6   converged max 2.2957e-05   stopped min 7.5363e-05
+    PyPI wheels, numpy 2.5.2   converged max 2.9475e-05   stopped min 2.8898e-04
+
+Union of the two: `2.9475e-05 .. 7.5363e-05`, a gap of **2.56x**, inside which
+`5e-5` sits 1.70x above and 1.51x below. **No threshold can hold a 2x margin on
+both sides of a 2.56x gap** -- the best any value achieves is 1.60x -- so the
+"2-3x margin" this docstring claims was a property of one stack and one ladder,
+not of the constant.
+
+`GRAD_TOL` IS LEFT AT `5e-5` DELIBERATELY. It still separates the populations
+in both environments, which is what it is for, and the log-midpoint of the
+union (4.71e-05) is not a better-evidenced value: the 2026-08-10 ladder cannot
+be reproduced from what is recorded here -- no seeds, no `sigma`/`rho`, and a
+stopped minimum that a straightforward reading of "max_iter = 1, 2, 3" does not
+reproduce -- so a retune would replace a measured constant with a differently
+measured one and lose the comparison. See PROGRESS.md's open question.
+
 CONSEQUENCE, AND WHY THE PREVIOUS `1e-5` WAS WRONG: it sat *below* the
 converged population's maximum, so two of the six converged fits above
 (2.30e-05 and 1.14e-05) would have been reported `ITER_CAP_LARGE_GRAD` had
@@ -131,7 +156,8 @@ the clamp rule: it does not fabricate a number, it makes
 
 The stakes are lower than for `HESSIAN_COND_LIMIT`: both outcomes are
 `is_failure`, so this splits one flagged category into two rather than calling
-a bad fit good. That is why a 2-3x margin is accepted here and would not be
+a bad fit good. That is why a margin of this size is accepted here -- 1.5x
+across two stacks, having been believed to be 2-3x -- and would not be
 accepted there. `test_the_iteration_cap_splits_on_the_gradient_norm_at_a
 _measured_separation` pins both bounds, so the margin cannot silently erode.
 """

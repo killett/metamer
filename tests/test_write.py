@@ -8,9 +8,6 @@ ones it emits only when it is broken.
 
 from __future__ import annotations
 
-import subprocess
-import sys
-import textwrap
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +21,7 @@ from metamer.batch.run import run
 from metamer.config import load
 from metamer.core.outcomes import Outcome
 from metamer.core.transforms import Log
+from tests.reader_probe import run_reader
 
 pytestmark = pytest.mark.filterwarnings("ignore::UserWarning")
 
@@ -432,30 +430,21 @@ def test_the_store_still_opens_without_metamer_after_a_run(tmp_path):
     sharded ones rather than pure metadata.
 
     Catches a write path that writes something xarray can only decode with
-    metamer's help -- and the control is that the subprocess asserts metamer is
-    genuinely absent.
+    metamer's help -- and the control is `tests/reader_probe.py`, which blocks
+    the import rather than asserting the package happens to be absent.
     """
     uri = _input(tmp_path)
     run(_config(tmp_path, uri), tmp_path / "out.zarr")
 
-    program = textwrap.dedent(
+    result = run_reader(
         """
-        import sys, importlib.util
-        assert importlib.util.find_spec("metamer") is None, "control failed"
+        import sys
         import numpy as np, xarray as xr
         noise = xr.open_zarr(sys.argv[1], group="noise")
         print(int(np.isfinite(noise["theta"].values).sum()))
         print(list(noise["noise_param_name"].values))
-        """
-    )
-    import os
-
-    result = subprocess.run(
-        [sys.executable, "-c", program, str(tmp_path / "out.zarr")],
-        capture_output=True,
-        text=True,
-        cwd="/",
-        env={k: v for k, v in os.environ.items() if k != "PYTHONPATH"},
+        """,
+        str(tmp_path / "out.zarr"),
     )
 
     assert result.returncode == 0, result.stderr
