@@ -3,9 +3,9 @@
 ## Start here (cold-start summary)
 
 1. **Branch `main`, everything on it, every commit pushed by a hook** — https://github.com/killett/metamer.
-2. **DONE:** Phase 1 (0–18), Phase 2 preliminaries P0–P4, **Phase 2a (0–13)**, **Phase 2b Tasks 0–8, Task 9 NARROWED, Task 8a (verdict: neither excluded), Task 8i (the instrument), Task 8b (verdict: the dispute is resolved, no term moved)**, open questions 1, 4, 9, 11, 12, 15.
-3. **NEXT ACTION: A SCOPE DECISION, NOT A TASK. IT IS OPEN QUESTION 17 AND NOTHING SHOULD BE IMPLEMENTED UNTIL IT IS MADE.** Read [What Task 8b established](#what-task-8b-established-done-2026-08-19--read-before-quoting-the-per-series-cost-criterion-6-or-criterion-7) FIRST. In one line: **the 1.86× was one confound acting on both ladders, the clean per-series peak is 2410.0 ± 46.0 against an analytic 926, and the correction's SHAPE is undetermined because the ratio is 1.888 / 2.603 / 3.850 at three fixtures** — so `PUBLISHED_TILE_SIDE` stays **272, with a rewritten caveat and a 160–272 spread**, criterion 6 is **not met and never named its reading**, and criterion 7 is **recorded as FAILED with its regime named: above roughly B = 1500, at all three fixtures.** **`memory.resident_bytes_per_series` describes residency and not peak, while Q1 settled that `--memory-budget` bounds process PEAK RSS** — so the sizing quantity and the bounded quantity are different quantities, which is an inconsistency between two settled decisions rather than an open modelling choice, and its first hypothesis is a **pipeline** change (free the block before the store write) rather than a formula one. **Task 10 is the only 2b work that can proceed as written.**
-4. **Tests: 1067 passed, 0 failed, 0 indeterminate — 2026-08-19 after Task 8b, 1273.9 s, 4214 MB available, 20 s idle at 0.0096 ms/s. The count did NOT move at Task 8b and that is correct**: its deliverable is a measurement, which by Tasks 4, 7 and 8's precedent does not enter the suite, and the two tests it touched already existed to fail when the published record changed. Earlier the same day, before 8b, 1067 passed in 1239 s, box quiet. And separately 1044 passed under `-m "not machine"` in a pip-installed venv (PyPI wheels, numpy 2.5.2), which is what CI runs and is NOT the same evidence** — see the 2026-08-19 entry under [Gotchas](#gotchas-discovered) for the seven failures and three errors that only that second environment could show. **GREEN, and the conditions are part of the claim**: the same suite was 1049/3-failed at 1906 MB available on 2026-08-17, on the same code. The three failures were **ambient-conditional, not code** — see [What Task 8i established](#what-task-8i-established-done-2026-08-17--read-before-writing-any-rss-assertion-or-trusting-the-validity-gate), which is also where the survey of every RSS assertion lives. **Every sweep prints `RSS measurement validity` and it now has TWO conditions**, the second being the one that can see quiet reclaim.
+2. **DONE:** Phase 1 (0–18), Phase 2 preliminaries P0–P4, **Phase 2a (0–13)**, and **PHASE 2b IS COMPLETE — Tasks 0–10, with 9 narrowed plus 8a, 8i and 8b, closing 10 met / 4 met with reduced scope / 2 FAILED**, open questions 1, 4, 9, 11, 12, 15.
+3. **NEXT ACTION: 2b IS CLOSED; WHAT IS OPEN IS A SCOPE DECISION, NOT A TASK. IT IS OPEN QUESTION 18 AND NOTHING SHOULD BE IMPLEMENTED UNTIL IT IS MADE.** Read [What Task 8b established](#what-task-8b-established-done-2026-08-19--read-before-quoting-the-per-series-cost-criterion-6-or-criterion-7) FIRST. In one line: **the 1.86× was one confound acting on both ladders, the clean per-series peak is 2410.0 ± 46.0 against an analytic 926, and the correction's SHAPE is undetermined because the ratio is 1.888 / 2.603 / 3.850 at three fixtures** — so `PUBLISHED_TILE_SIDE` stays **272, with a rewritten caveat and a 160–272 spread**, criterion 6 is **not met and never named its reading**, and criterion 7 is **recorded as FAILED with its regime named: above roughly B = 1500, at all three fixtures.** **`memory.resident_bytes_per_series` describes residency and not peak, while Q1 settled that `--memory-budget` bounds process PEAK RSS** — so the sizing quantity and the bounded quantity are different quantities, which is an inconsistency between two settled decisions rather than an open modelling choice, and its first hypothesis is a **pipeline** change (free the block before the store write) rather than a formula one. **Task 10 has landed and closed the sub-phase**; its closing table, the unclosed items with their closers and what 2c inherits are in the plan's *THE CLOSING TABLE*, once, and the verdicts are also data in `tests/exit_criteria_2b.py`.
+4. **Tests: 1074 passed, 0 failed, 1 INDETERMINATE — 2026-08-19 after Task 10, 1106.3 s, 3397 MB available at the end.** The indeterminate is `test_the_floor_ladder_reproduces_the_recorded_rungs` at **53 ms/s of cgroup full stall over 14.1 s**, and it is **the first time `RSS_STALL_LIMIT_US_PER_S` has ever fired** — the reading its own docstring had been asking for. Neither pass nor fail: the gate refused to judge, said so in the summary, and cost one reading rather than asserting a corrupted one. **It is a THRASHING reading and not the known-bad the constant still lacks**, and one of criterion 4's two witnesses therefore did not report on this run, which does not move its verdict. Before Task 10, and before the box's available RAM fell through the day: 1067 passed, 0 failed, 0 indeterminate, 1273.9 s at 4214 MB, 20 s idle at 0.0096 ms/s. The count did NOT move at Task 8b and that is correct**: its deliverable is a measurement, which by Tasks 4, 7 and 8's precedent does not enter the suite, and the two tests it touched already existed to fail when the published record changed. And separately 1044 passed under `-m "not machine"` in a pip-installed venv (PyPI wheels, numpy 2.5.2), which is what CI runs and is NOT the same evidence** — see the 2026-08-19 entry under [Gotchas](#gotchas-discovered) for the seven failures and three errors that only that second environment could show. **GREEN, and the conditions are part of the claim**: the same suite was 1049/3-failed at 1906 MB available on 2026-08-17, on the same code. The three failures were **ambient-conditional, not code** — see [What Task 8i established](#what-task-8i-established-done-2026-08-17--read-before-writing-any-rss-assertion-or-trusting-the-validity-gate), which is also where the survey of every RSS assertion lives. **Every sweep prints `RSS measurement validity` and it now has TWO conditions**, the second being the one that can see quiet reclaim.
 5. **`pixi run test` is the full sweep and every end-of-task verification must run it; `test-fast` and `test-ci` are not evidence.** It has caught **seven** things a fast run could not, two of them in Task 8. **Every run prints `RSS measurement validity`, including at zero** — a nonzero count is INDETERMINATE, neither pass nor fail.
 6. **Verify a fresh checkout with `pixi run test && pixi run typecheck && pixi run lint`**, plus `pixi run pre-commit run --all-files` before every commit.
 7. **THE METHOD IS THE PRE-FLIGHT AND IT LIVES IN EXACTLY ONE PLACE:** [`phase1-to-phase2-handoff.md`](docs/superpowers/notes/phase1-to-phase2-handoff.md) §1 — (a0)–(a8), (a)–(k), **three new at Tasks 8a/8i: decay as an INTERACTION, right-in-kind-wrong-in-scale, and a zero reading is not evidence of absence**, the five causes of a surviving mutation, the standing rules, the fixture facts. **Run it against the task brief before code**, append to [`phase2b-preflight.md`](docs/superpowers/notes/phase2b-preflight.md). **Do not restate it here** — the two copies drifted once already.
@@ -1920,6 +1920,84 @@ measured, not bounded) and `resident_at_tile_bytes_per_series`, `transient_bytes
 mutations bite: the owner reverted to 8a, the transient, the hypothesis sides, and the three
 fixtures' ratios pulled together — the last being the assertion that says *"the multiplier
 hypothesis is back"* if a later measurement ever brings them within 2×.
+
+---
+
+### What Task 10 established (done 2026-08-19 — the close of Phase 2b)
+
+> ## 2b CLOSES WITH 10 MET, 4 MET WITH REDUCED SCOPE, AND 2 FAILED. THE CLOSING TABLE IS IN THE PLAN, AND FOR THE FIRST TIME IT IS ALSO DATA.
+>
+> The verdicts, their **readings** and their scopes live in
+> [`tests/exit_criteria_2b.py`](tests/exit_criteria_2b.py) and are bound by
+> `tests/test_exit_criteria_2b.py`. **The table had only ever been prose, and that is exactly how
+> criterion 6 read *"MET as written"* through Tasks 8, 9 and 8a while the measurement under it
+> was being withdrawn** — a sentence in a document is attached to nothing.
+
+#### THE SUITE IS EIGHT TESTS AND 26 SECONDS, AND ITS SIZE IS THE FINDING
+
+**All sixteen criteria already had coverage in the module their own task landed**, so the default
+outcome of a closing suite is a **roll-up**: a criterion re-checked by calling the helper the
+implementing task's test called shares its whole derivation with the subject. 2b is more exposed
+to that than 2a was, because six of its criteria are about a **number**, and a number re-read from
+the constant that published it agrees with itself by construction. **So the audit partitioned them
+before anything was written:**
+
+| group | criteria | what was done |
+|---|---|---|
+| **no outside exists** | 1, 2, 3 | claims about code shape. **A subprocess around the same call is that call in a second interpreter** and would read as stronger evidence while being identical. Recorded as closed by their own falsifiable-by-reading tests, with the reason |
+| already driven from a genuine outside | 4, 8, 10, 11, 12, 13, 14, 15 | nothing added; the record names their tests |
+| met at Task 9 | 16 | five tests already recompute it. Re-asserting it here is the roll-up in its purest form |
+| **genuine gaps** | **5, 9** | three new tests |
+| **verdicts, not runs** | 6, 7 | the measurements are not in the suite by Tasks 4, 7, 8 and 8b's precedent. **What the suite holds is the verdict, bound to the record it rests on** |
+
+#### THE TWO GAPS, AND BOTH WERE REAL
+
+- **Criterion 5 never reached a user.** The in-module test asserts a `ValidationError` with
+  `layer is SEMANTIC`; a user sees neither, and a resuming script branches on an integer. Driven
+  through `python -m metamer` in a subprocess it exits **3** with the floor, its rungs and a
+  workable budget on stderr — **and the store is asserted absent**, because a half-created store
+  with the right attrs and no data is (a0)'s shape.
+- **AND THE REFUSAL'S PROMISE HAD NEVER BEEN TESTED.** The message says *"a budget above X GB
+  leaves a positive block"*. X is computed in the function that raises, from the same floor, and
+  **if it were off by the headroom the message would be confidently wrong while every assertion
+  about its text still passed.** The (i2) control parses X out of the message and runs it: the
+  same command stops being refused. **A refusal that names a remedy is making a claim.**
+- **Criterion 9 was arithmetic checking itself.** The in-module test computes achieved chunk bytes
+  from `_chunk_side` and the declared dtype widths; the new one reads chunk shapes back off a
+  store with `zarr.open_group`.
+
+#### AND CRITERION 9's FIRST FIXTURE COULD NOT EXPRESS ITS OWN PROPERTY
+
+The first version drove a real run on a 16 × 16 grid and asserted the band. **No array reached the
+chunk target at all** — `CHUNK_TARGET_BYTES` is 4 MB and a shard is one tile — so the assertion
+ran over an **empty set** and would have passed the moment the `assert in_band` guard came out.
+**(i) in its plainest form, caught by the guard that exists for it.** The repair is the fixture:
+`create_store` writes pure metadata, so a store at **side 336** with six candidates costs nothing
+and its widest array's shard is tens of megabytes. **A fitted fixture can never reach that scale
+in a suite**, which is (i8)'s third shape.
+
+#### WHAT THE RECORD BINDS, AND EVERY BINDING BITES
+
+Five tests over `PHASE_2B_EXIT_CRITERIA`: sixteen criteria numbered 1–16 compared **as a set**
+(a count cannot tell a duplicate from an omission); every `established_by` name is a
+`def test_...` found by **parsing** `tests/*.py` rather than by reading the session's item list, so
+`pytest -k` cannot make it fail for an unrelated reason; every criterion about an RSS measurement
+names a reading from a **closed vocabulary**; every non-MET verdict states its scope; and
+**criteria 6 and 7 move with `PUBLISHED_TILE_SIDE`'s caveat or the suite fails.**
+
+That last one is the binding that did not exist. **The caveat could have been deleted by a task
+that settled the number without anyone revisiting the criteria**, or a verdict flipped to met
+while the caveat stood. Mutations verified: the refusal dropping its workable-budget clause fails
+both criterion 5 tests; criterion 6 flipped to MET fails the binding; a renamed test fails the
+evidence check (eleven did, on the first run, and seven were names guessed wrong).
+
+#### THE FIVE CLOSURE BOUNDARIES, AND ONE OF THEM IS RE-PRICED
+
+The unclosed items and their closers are in the plan's closing table, once. **The change worth
+repeating here: closure boundary 4 — *"linearity of the per-series cost in B cannot be established
+on this machine at any affordable cost"* — was priced against a FULL-LIVE ladder.** A masked
+duration-controlled point is **~30 s** against ~30 min, so repeats are now affordable and the
+boundary needs re-reading rather than quoting.
 
 ---
 

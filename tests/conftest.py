@@ -267,6 +267,26 @@ def _stub_the_floor_probe(request, monkeypatch):
 #: notices. **The tie is broken by making INDETERMINATE loud**: a gate that is
 #: too tight announces itself in the summary and gets re-run, and a gate that is
 #: too loose is silent -- so the bias is toward tight.
+#:
+#: **AND IT FIRED FOR THE FIRST TIME ON 2026-08-19, WHICH IS THE READING THIS
+#: DOCSTRING HAS BEEN ASKING FOR SINCE IT WAS WRITTEN.**
+#: `test_the_floor_ladder_reproduces_the_recorded_rungs` went INDETERMINATE at
+#: **53 ms/s of cgroup full stall over 14.1 s**, on a box down to **3.4 GB
+#: available** after a day of measurement -- against 0.9 ms/s idle and 5.3 ms/s
+#: during a `measure_floor` whose answer was correct. **The gate behaved exactly
+#: as designed: it refused to judge, said so in the summary, and cost one
+#: reading rather than asserting a corrupted one.** The suite was otherwise
+#: green at 1074 passed, 0 failed.
+#:
+#: **DO NOT READ THIS AS THE KNOWN-BAD THE CONSTANT STILL LACKS.** It is a
+#: THRASHING reading, which is the failure mode the number was built from and
+#: is valid for; the failure mode it is blind to is the one above, and Task 8i
+#: shipped `machine.reclaim_shortfall_bytes` for that. What this datum settles
+#: is narrower and worth having: **at 53 ms/s the limit is close enough to a
+#: real sweep's worst window to fire about once a day on a loaded box**, so the
+#: 10x margin over known-good is roughly 1.06x over what actually occurs. **If
+#: it starts firing on most runs the repair is the box or the fixture, never the
+#: number** -- widening it is how the tests stop running.
 RSS_STALL_LIMIT_US_PER_S = 50_000
 
 #: Every indeterminate measurement this session, for the terminal summary.

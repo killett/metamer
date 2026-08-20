@@ -1251,6 +1251,59 @@ cache read by a process that did not write it.
 
 ---
 
+### THE CLOSING TABLE — 2026-08-19
+
+**MET 10 · MET WITH REDUCED SCOPE 4 · FAILED 2.** The verdicts, their readings and their scopes
+are **data**, in [`tests/exit_criteria_2b.py`](../../../tests/exit_criteria_2b.py), and
+`tests/test_exit_criteria_2b.py` binds them: every criterion names the tests that establish it and
+those tests must exist; every criterion about an RSS measurement names **which reading**; and the
+two failing verdicts move with `PUBLISHED_TILE_SIDE`'s caveat or the suite fails. **The table has
+always lived in prose, and that is how criterion 6 read *"MET as written"* through three tasks
+after the measurement under it was withdrawn.**
+
+| # | verdict | reading | the short reason |
+|---|---|---|---|
+| 1 | met | — | inventory, term by term; the total is not the check |
+| 2 | met | — | — |
+| 3 | met | — | unreachability is a property of today's driver, and its landing condition is recorded |
+| 4 | met | working set at end of run | the floor is input-dependent by construction |
+| 5 | met | — | and the workable budget the refusal names is now run |
+| **6** | **FAILED** | **peak** | 2410.0 ± 46.0 against a 617.3–1389.0 band, ratio 2.603, outside by 22σ. **Met on the end-of-run working set** at 970.6 ± 47.6, failed on the end-of-tile at 1504.1 ± 21.4 |
+| **7** | **FAILED** | **peak** | fails above roughly B = 1500 at all three fixtures; +11.0 MB, +11.2 MB and +61.1 MB at B = 9216 |
+| 8 | reduced scope | peak | catches 400 kB/tile and nothing finer; the tail is an upper bound that falls with run length |
+| 9 | reduced scope | — | the band holds for the arrays wide enough to reach the target; seven of eighteen are partitioned out |
+| 10 | met | — | — |
+| 11 | reduced scope | — | constructed; this box has no cgroup limit |
+| 12 | met | — | a second process, which the criterion names |
+| 13 | met | — | constructed; no version moves during a run |
+| 14 | reduced scope | — | true of a store, false of a resume whose stored side is larger — that arm is 15's |
+| 15 | met | — | fires in three of four basis cells and is silent in the fourth on purpose |
+| 16 | reduced scope | — | a consistency test whose oracle is the implementation; the hand-derivation is the independent one |
+
+**WHAT IS NOT CLOSED, AND WHAT WOULD CLOSE IT.**
+
+| open | closer | machine |
+|---|---|---|
+| **OQ18** — the budget bounds the peak (Q1) and the tile is sized from a model of residency (8b) | decide what the budget bounds or make the two agree; **first hypothesis is a pipeline change**, freeing the block before the store write; then instrument the peak's *location* per regime and measure on a **crossed 2 × 2**, never an L | this one; the masked duration-controlled ladder is ~30 s a point |
+| **OQ16** — the batched-evaluation instrument's ~2.7 kB/series its oracle does not charge | a second instrument on the same workload, or the term named by reading | this one |
+| the **slot term** at ≈ 240 B/candidate/series against a charged 193 | a fourth fixture; three points determine a two-parameter shape with ~2σ spare, which is **thin** | this one, ~10 min |
+| the **data term** at 7.89 B/time-step against a charged 9 | read `fit`'s mask lifetime; the overcharge is in the safe direction | none — reading |
+| **closure boundary 1** — a converged fit at a memory-relevant B | 85.5 h | none, not runnable anywhere |
+| **closure boundary 2** — the per-thread placement | a batched driver over series (F4) | any, once it exists |
+| **closure boundary 3** — a 10⁷-point run | 1.71 years single-threaded here | the 64-core box, whose RAM is **open question 5** |
+| **closure boundary 4** — linearity of the per-series cost in B | **re-priced 2026-08-19**: it was costed against a full-live ladder, and a masked duration-controlled point is ~30 s rather than ~30 min. **Repeats are now affordable and the boundary needs re-reading** | this one |
+| **closure boundary 5** — the tile outweighs the interpreter only at side ≥ 512 | 21 h for one tile | this one, at that price |
+
+**WHAT 2c INHERITS, STATED BECAUSE 2c SIZES TILES.** 2c is the two-pass warm start with its
+barrier, and it inherits: a memory model that **describes residency and not peak**; a criterion 7
+that **fails above B ≈ 1500**, which is every production tile; a published side of **272 / 144**
+whose caveat now says the model does not describe the peak, with a live spread of **160–272**; and
+§11.4's claim that pass 1 doubles as the calibration tile, which **2b already flagged as
+questionable and must not be taken as settled** — pass 1 fits a coarse subsample, so its batch is
+a fraction of a production tile even though it assembles a full one.
+
+---
+
 ## What 2b does not do
 
 - **The batched driver, and therefore path B in production.** F4. Its landing condition is
