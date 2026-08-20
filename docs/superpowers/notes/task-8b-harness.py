@@ -40,9 +40,15 @@ and therefore can never sit below `VmRSS` while `ru_maxrss` can, measured by
 
 Usage:
     task-8b-harness.py <workdir> <side> <live> <chunk> <target_s> [tag]
+                       [n_time] [candidate_set]
 
-`<chunk>` is `fine` (16 x 16 spatial) or `whole` (one spatial chunk per grid).
-`<target_s>` is the wall clock every point is padded up to; 0 disables padding.
+`<chunk>` is `fine` (16 x 16 spatial), `whole` (one spatial chunk per grid) or
+`default` (whatever `to_zarr` picks, which is what every fixture this project
+has measured used). `<live>` is the live-series count, or **-1 for every
+series**, which is Task 8's own setting. `<target_s>` is the wall clock every
+point is padded up to; 0 disables padding. `<n_time>` and `<candidate_set>` are
+the two levers that separate a data-shaped term from a slot-shaped one; see
+`CANDIDATE_SETS`.
 """
 
 from __future__ import annotations
@@ -66,22 +72,40 @@ from metamer.core.machine import available_ram_bytes, memory_stall_us
 #: are compared against.
 N_TIME = 60
 SIGNAL_TERMS = ("constant", "trend", "annual")
-CANDIDATES = ("white", "white + matern12")
 CRITERIA = ("aic",)
 OBJECTIVE = "reml"
 THREADS = 1
 MAX_ITER = 1
 K_BETA = 4
 P_MAX = 3
-N_MODELS = 2
 STATE_DIM = 1
 SEED = 0
+
+#: THE TWO LEVERS THAT SEPARATE A DATA-SHAPED TERM FROM A SLOT-SHAPED ONE.
+#: `resident_bytes_per_series` is `n_time * 9 + output_slot_bytes(n_models,
+#: p_max, k_beta)`, so `n_time` moves only the first and the candidate count
+#: moves only the second. **Both sets hold `p_max` at 3 and `k_beta` at 4**, so
+#: nothing else in the formula moves: `matern32` carries two free parameters, so
+#: `white + matern32` is 3 like `white + matern12`, and `white + white` is 2.
+#: A term measured at one fixture has an unknown DEPENDENCE, and correcting a
+#: magnitude without its variables is (a7) and F5 exactly.
+CANDIDATE_SETS = {
+    "m2": ("white", "white + matern12"),
+    "m6": (
+        "white",
+        "matern12",
+        "matern32",
+        "white + white",
+        "white + matern12",
+        "white + matern32",
+    ),
+}
 
 CONFIG = """
 data_uri = "{uri}"
 variable = "sla"
 signal_terms = ["constant", "trend", "annual"]
-candidates = ["white", "white + matern12"]
+candidates = {candidates}
 criteria = ["aic"]
 memory_budget_gb = {budget}
 objective = "reml"
@@ -199,7 +223,7 @@ sys.exit(out.returncode)
 
 
 def build_input(
-    path: Path, *, grid: int, live: int, chunk_side: int, n_time: int = N_TIME
+    path: Path, *, grid: int, live: int, chunk_side: int | None, n_time: int = N_TIME
 ) -> str:
     """Write the fixture: white noise, all but `live` series wholly masked.
 
@@ -214,9 +238,11 @@ def build_input(
         path: Destination store path.
         grid: Grid side. The tile side is chosen to match, so the run is one
             tile and no preemption path is involved.
-        live: How many series keep their data.
-        chunk_side: Spatial chunk side. The time axis is chunked whole, so the
-            assembly spans are a pure function of this and the tile.
+        live: How many series keep their data. Negative means every series.
+        chunk_side: Spatial chunk side, with the time axis chunked whole. **None
+            leaves `to_zarr`'s own chunking**, which is what every fixture this
+            project has measured used and what a rebuild of Task 8's ladder has
+            to reproduce.
         n_time: Series length.
 
     Returns:
@@ -224,11 +250,12 @@ def build_input(
     """
     rng = np.random.default_rng(SEED)
     values = rng.standard_normal((n_time, grid, grid)).astype("float32")
-    flat = values.reshape(n_time, -1)
-    keep = np.zeros(flat.shape[1], dtype=bool)
-    keep[: min(live, flat.shape[1])] = True
-    flat[:, ~keep] = np.nan
-    values = flat.reshape(n_time, grid, grid)
+    if live >= 0:
+        flat = values.reshape(n_time, -1)
+        keep = np.zeros(flat.shape[1], dtype=bool)
+        keep[: min(live, flat.shape[1])] = True
+        flat[:, ~keep] = np.nan
+        values = flat.reshape(n_time, grid, grid)
     origin = np.datetime64("2000-01-01")
     axis = np.array([origin + np.timedelta64(31 * i, "D") for i in range(n_time)])
     dataset = xr.Dataset(
@@ -239,11 +266,12 @@ def build_input(
             "x": np.arange(grid, dtype="float64"),
         },
     )
-    dataset["sla"].encoding["chunks"] = (
-        n_time,
-        min(chunk_side, grid),
-        min(chunk_side, grid),
-    )
+    if chunk_side is not None:
+        dataset["sla"].encoding["chunks"] = (
+            n_time,
+            min(chunk_side, grid),
+            min(chunk_side, grid),
+        )
     dataset.to_zarr(path, mode="w")
     return str(path)
 
@@ -284,18 +312,30 @@ def main() -> None:
     chunking = sys.argv[4]
     target = float(sys.argv[5])
     tag = sys.argv[6] if len(sys.argv) > 6 else "a"
-    if chunking not in {"fine", "whole"}:
-        raise SystemExit(f"chunk must be 'fine' or 'whole', got {chunking!r}")
-    chunk_side = 16 if chunking == "fine" else side
+    n_time = int(sys.argv[7]) if len(sys.argv) > 7 else N_TIME
+    which = sys.argv[8] if len(sys.argv) > 8 else "m2"
+    if chunking not in {"fine", "whole", "default"}:
+        raise SystemExit(
+            f"chunk must be 'fine', 'whole' or 'default', got {chunking!r}"
+        )
+    if which not in CANDIDATE_SETS:
+        raise SystemExit(f"candidate set must be one of {sorted(CANDIDATE_SETS)}")
+    chunk_side = {"fine": 16, "whole": side, "default": None}[chunking]
+    candidates = CANDIDATE_SETS[which]
+    n_models = len(candidates)
 
     work.mkdir(parents=True, exist_ok=True)
-    name = f"s{side}_l{live}_{chunking}_t{int(target)}_{tag}"
+    name = f"s{side}_l{live}_{chunking}_t{int(target)}_n{n_time}_{which}_{tag}"
     # A store left from a previous invocation would be RESUMED, and a resumed
     # run writes no tiles -- so the callback never fires and the readings come
     # back empty rather than wrong.
     shutil.rmtree(work / f"store_{name}.zarr", ignore_errors=True)
     uri = build_input(
-        work / f"in_{name}.zarr", grid=side, live=live, chunk_side=chunk_side
+        work / f"in_{name}.zarr",
+        grid=side,
+        live=live,
+        chunk_side=chunk_side,
+        n_time=n_time,
     )
 
     from metamer.batch.tiling import budget_bytes_for_side
@@ -314,20 +354,29 @@ def main() -> None:
         peak_bytes=floor.peak_bytes,
         components={},
     )
-    budget = (
-        budget_bytes_for_side(
-            side=side,
-            floor=pinned,
-            d=STATE_DIM,
-            k_beta=K_BETA,
-            p_max=P_MAX,
-            n_time=N_TIME,
-            n_models=N_MODELS,
-        )
-        / 1e9
-    )
+    # **THE MODEL COMES FROM THE PRODUCTION GEOMETRY, NOT FROM THIS FILE'S
+    # CONSTANTS.** Hand-passing `d`, `k_beta` and `p_max` measured them as
+    # whatever the harness's author believed: at the six-candidate set the
+    # composite state dimension is not 1, the budget came out too small by the
+    # solver-state difference, and side 32 derived **16** and ran four tiles.
+    # Every reading from such a point is at a different B than the one recorded.
+    # `run_geometry(...).tile_kwargs()` is what `calibrate` asks, and the budget
+    # does not enter it -- so a placeholder budget is written first, the geometry
+    # is read, and the config is rewritten. (j2), at the harness's own inputs.
     config = work / f"c_{name}.toml"
-    config.write_text(CONFIG.format(uri=uri, budget=f"{budget:.9f}"))
+    candidate_json = json.dumps(list(candidates))
+    config.write_text(CONFIG.format(uri=uri, budget="1.0", candidates=candidate_json))
+    from metamer.batch.input import check_contract, open_input
+    from metamer.batch.run import run_geometry
+    from metamer.batch.validation import load_config
+
+    loaded = load_config(str(config))
+    handle = open_input(loaded.data_uri, loaded.variable)
+    model = run_geometry(loaded, handle, check_contract(handle)).tile_kwargs()
+    budget = budget_bytes_for_side(side=side, floor=pinned, **model) / 1e9
+    config.write_text(
+        CONFIG.format(uri=uri, budget=f"{budget:.9f}", candidates=candidate_json)
+    )
     store = work / f"store_{name}.zarr"
     probe = PROBE.format(
         config=str(config),
@@ -363,6 +412,7 @@ def main() -> None:
             "side": side,
             "batch": side * side,
             "live": live,
+            "live_effective": side * side if live < 0 else min(live, side * side),
             "chunking": chunking,
             "target_s": target,
             "wall_s": round(window, 1),
@@ -378,19 +428,23 @@ def main() -> None:
             "fixture": {
                 "distribution": "standard normal float32, np.random.default_rng(0)",
                 "seed": SEED,
-                "n_time": N_TIME,
+                "n_time": n_time,
                 "grid": side,
                 "live_selection": "first `live` series in row-major grid order",
                 "signal_terms": list(SIGNAL_TERMS),
-                "candidates": list(CANDIDATES),
+                "candidates": list(candidates),
+                "candidate_set": which,
                 "criteria": list(CRITERIA),
                 "objective": OBJECTIVE,
                 "threads": THREADS,
                 "max_iter": MAX_ITER,
                 "k_beta": K_BETA,
                 "p_max": P_MAX,
-                "n_models": N_MODELS,
-                "state_dim": STATE_DIM,
+                "n_models": n_models,
+                "tile_kwargs_from_run_geometry": {
+                    k: (v if not hasattr(v, "value") else v.value)
+                    for k, v in model.items()
+                },
                 **fixture_facts(uri, side),
             },
         }
