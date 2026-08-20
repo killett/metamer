@@ -2213,7 +2213,7 @@ The audit found two readings already in hand. The run found a third, and it is t
   it. **What the audit checked was whether a published table answered the question as printed. It
   did not ask whether a SUBSET of it did.**
 
-### AND THE COST MODEL FAILED TO TRANSFER A FOURTH TIME, IN THE CHEAP DIRECTION
+### AND THE COST MODEL FAILED TO TRANSFER A FOURTH TIME, IN THE CHEAP DIRECTION (Task 8b)
 
 The plan and this audit both sized the replacement against Task 8a's masked runs — 55.2 s at
 side 48, 223.6 s at side 96, i.e. ~24 ms/series. **A masked point at side 96 with a constant live
@@ -2221,3 +2221,79 @@ count costs 6.7 s in the child**, ~0.7 ms/series, thirty times cheaper. That is 
 fixtures, two chunkings and three repeats affordable in one session, and it is why the fourth
 closure boundary — *"linearity cannot be established on this machine at any affordable cost"* —
 needs re-reading: it was priced against a **full-live** ladder.
+
+---
+
+## Task 10 — the 2b exit-criteria suite, audited before it is written
+
+Run 2026-08-19, against the brief in the plan plus the two deliverables added when 8b closed:
+a per-criterion verdict naming its **reading**, and a statement of what 2c inherits.
+
+### (j4) EVERY ONE OF THE SIXTEEN ALREADY HAS COVERAGE, SO THE DEFAULT OUTCOME OF THIS TASK IS A ROLL-UP
+
+`rg` over `tests/`, per criterion: **all sixteen are asserted somewhere already**, in the module
+its own task landed. 2a's Task 13 stated the failure mode in its own first paragraph — *"a
+criterion checked by calling the helper the implementing task's test called shares its whole
+derivation with the subject"* — and **this sub-phase is more exposed to it than 2a was**, because
+six of 2b's criteria are about a *number* rather than a behaviour, and a number re-read from the
+constant that published it agrees with itself by construction.
+
+**So the first act is the partition, and it is the deliverable that stops this being a formality:**
+
+| criterion | is there an OUTSIDE? | what the outside is |
+|---|---|---|
+| 1, 2, 3 | **no** | pure code shape, falsifiable by reading and by arithmetic. **Stating that there is no outside is the honest answer**, not a gap to paper over with a subprocess that proves nothing |
+| 4 | yes | the floor probe is a bare launcher by construction; the criterion is that **both** floors are recorded and **differ** |
+| 5 | yes | the CLI in a subprocess, and the refusal read out of **stderr and an exit code** rather than an exception type |
+| 6, 7 | **verdicts, not runs** | the measurements are not in the suite (Tasks 4, 7, 8, 8b precedent). What the suite can hold is the **verdict with its reading**, and a test that fails if the record and the constant disagree |
+| 8 | yes | a fresh subprocess over many tiles; Task 8's suite test already bounds total growth at 6 MB with an injected positive control |
+| 9 | yes | a store **read back from disk**, worst array chosen by measurement rather than named |
+| 10 | yes | **two stores on disk**, compared attr by attr |
+| 11 | constructed | no cgroup limit on this box, so the branch must be built |
+| 12 | yes, and the criterion says so | **a second process** reads a cache it did not write |
+| 13 | yes | the digest moves when a distribution's version moves — constructed, since no version moves during a run |
+| 14 | yes | delete the cache, then **resume in a subprocess** |
+| 15 | yes | two runs, the second reading the first's `tile_side_basis` off disk |
+| 16 | **met at Task 9** | five tests already recompute it; re-asserting here is the roll-up in its purest form |
+
+**Six have a genuine cross-boundary component that no single task's module can express** — 5, 9,
+10, 12, 14, 15 — which is the same count 2a's suite had, arrived at independently.
+
+### (a5) THE BRIEF'S "DRIVEN FROM OUTSIDE WHEREVER AN OUTSIDE EXISTS" HAS A CLAUSE PEOPLE DROP
+
+The clause is *"wherever an outside exists"*, and for criteria 1, 2 and 3 it does not. **A
+subprocess wrapped around a call to `resident_bytes_per_series` is not an outside**; it is the
+same derivation in a second interpreter, and it would read as stronger evidence than the in-module
+test while being identical to it. **Where there is no outside, the criterion is closed by the
+task's own falsifiable-by-reading test and this suite records that it is**, with the reason.
+
+### (a4) THE VERDICT TABLE IS ITSELF A WORKED EXAMPLE AND ITS ARITHMETIC MUST BE RECOMPUTED
+
+The closing table states, per criterion, met / met-with-reduced-scope / failed. **Every figure it
+quotes is a number this sub-phase measured, and (a4) says a number in a report is as unverified as
+one in a brief** — this has fired four times here. So the table quotes **no figure that is not
+either recomputed by a test or carried in a record a test recomputes**, and criteria 6 and 7 carry
+their **reading** in the same sentence as their verdict, which is the ambiguity that let them read
+as settled through four tasks.
+
+### (i2) THE SUITE'S OWN POSITIVE CONTROL, AND IT IS THE ONE A CLOSING SUITE MOST NEEDS
+
+A closing suite is almost all assertions of the form *"the property holds"*, and a suite whose
+fixtures cannot express the violation passes for free. **Each cross-boundary test here carries the
+construction that makes it fail** — a store written at a different basis, a cache deleted, a
+second process with no cache, a budget below the floor — rather than only the passing arm.
+
+### (d) AND THE VOCABULARY THE BRIEF NEEDS THAT THE TREE DOES NOT HAVE
+
+`rg`: nothing in the tree records an exit-criterion verdict as a value, and nothing binds a
+verdict to the test that establishes it. **The closing table has lived in `PROGRESS.md` and the
+plan only** — which is exactly how criterion 6 came to read *"MET as written"* for three tasks
+after the measurement under it had been withdrawn.
+
+### COST, BECAUSE THE SWEEP IS 1274 s AND THIS TASK ADDS SUBPROCESSES
+
+2a's Task 13 uses **one input and one config for the whole module** and the session-scoped floor
+stub (`METAMER_FLOOR_BYTES`, 1 MB) that makes a `run()` cheap. Task 10 follows both. **The budget
+constants must be re-derived at 2b's arithmetic rather than copied from 2a's module** — 2a's
+`ONE_POINT_PER_TILE` was already re-derived once at Task 2 when the budget stopped being the
+block, and its comment records that the old value silently fell below the floor.
