@@ -4,7 +4,7 @@
 
 1. **Branch `main`, everything on it, every commit pushed by a hook** — https://github.com/killett/metamer.
 2. **DONE:** Phase 1 (0–18), Phase 2 preliminaries P0–P4, **Phase 2a (0–13)**, **Phase 2b Tasks 0–8, Task 9 NARROWED, Task 8a (verdict: neither excluded), Task 8i (the instrument), Task 8b (verdict: the dispute is resolved, no term moved)**, open questions 1, 4, 9, 11, 12, 15.
-3. **NEXT ACTION: A SCOPE DECISION, NOT A TASK. IT IS OPEN QUESTION 17 AND NOTHING SHOULD BE IMPLEMENTED UNTIL IT IS MADE.** Read [What Task 8b established](#what-task-8b-established-done-2026-08-19--read-before-quoting-the-per-series-cost-criterion-6-or-criterion-7) FIRST. In one line: **the 1.86× was one confound acting on both ladders, the clean per-series peak is 2410.0 ± 46.0 against an analytic 926, and the correction's SHAPE is undetermined because the ratio is 1.888 / 2.603 / 3.850 at three fixtures** — so `PUBLISHED_TILE_SIDE` stays **272, with a rewritten caveat and a 160–272 spread**, criterion 6 is **not met and never named its reading**, and criterion 7 is **recorded as FAILED with its regime named: above roughly B = 1500, at all three fixtures.** **`memory.resident_bytes_per_series` describes residency and not peak, and the budget bounds the peak** — closing that gap is a modelling task nobody owns. **Task 10 is the only 2b work that can proceed as written.**
+3. **NEXT ACTION: A SCOPE DECISION, NOT A TASK. IT IS OPEN QUESTION 17 AND NOTHING SHOULD BE IMPLEMENTED UNTIL IT IS MADE.** Read [What Task 8b established](#what-task-8b-established-done-2026-08-19--read-before-quoting-the-per-series-cost-criterion-6-or-criterion-7) FIRST. In one line: **the 1.86× was one confound acting on both ladders, the clean per-series peak is 2410.0 ± 46.0 against an analytic 926, and the correction's SHAPE is undetermined because the ratio is 1.888 / 2.603 / 3.850 at three fixtures** — so `PUBLISHED_TILE_SIDE` stays **272, with a rewritten caveat and a 160–272 spread**, criterion 6 is **not met and never named its reading**, and criterion 7 is **recorded as FAILED with its regime named: above roughly B = 1500, at all three fixtures.** **`memory.resident_bytes_per_series` describes residency and not peak, while Q1 settled that `--memory-budget` bounds process PEAK RSS** — so the sizing quantity and the bounded quantity are different quantities, which is an inconsistency between two settled decisions rather than an open modelling choice, and its first hypothesis is a **pipeline** change (free the block before the store write) rather than a formula one. **Task 10 is the only 2b work that can proceed as written.**
 4. **Tests: 1067 passed, 0 failed, 0 indeterminate — 2026-08-19 after Task 8b, 1273.9 s, 4214 MB available, 20 s idle at 0.0096 ms/s. The count did NOT move at Task 8b and that is correct**: its deliverable is a measurement, which by Tasks 4, 7 and 8's precedent does not enter the suite, and the two tests it touched already existed to fail when the published record changed. Earlier the same day, before 8b, 1067 passed in 1239 s, box quiet. And separately 1044 passed under `-m "not machine"` in a pip-installed venv (PyPI wheels, numpy 2.5.2), which is what CI runs and is NOT the same evidence** — see the 2026-08-19 entry under [Gotchas](#gotchas-discovered) for the seven failures and three errors that only that second environment could show. **GREEN, and the conditions are part of the claim**: the same suite was 1049/3-failed at 1906 MB available on 2026-08-17, on the same code. The three failures were **ambient-conditional, not code** — see [What Task 8i established](#what-task-8i-established-done-2026-08-17--read-before-writing-any-rss-assertion-or-trusting-the-validity-gate), which is also where the survey of every RSS assertion lives. **Every sweep prints `RSS measurement validity` and it now has TWO conditions**, the second being the one that can see quiet reclaim.
 5. **`pixi run test` is the full sweep and every end-of-task verification must run it; `test-fast` and `test-ci` are not evidence.** It has caught **seven** things a fast run could not, two of them in Task 8. **Every run prints `RSS measurement validity`, including at zero** — a nonzero count is INDETERMINATE, neither pass nor fail.
 6. **Verify a fresh checkout with `pixi run test && pixi run typecheck && pixi run lint`**, plus `pixi run pre-commit run --all-files` before every commit.
@@ -6055,34 +6055,54 @@ Still open. **A new session must not assume these were settled.**
     derived from the union. **Do not close it by widening the margin further**: the margin
     is the constant's validation, and a stack-dependent converged tail is the finding.
 
-18. **`resident_bytes_per_series` DESCRIBES RESIDENCY AND THE BUDGET BOUNDS THE PEAK, AND
-    NOTHING IN 2b CLOSES THAT GAP.** Opened 2026-08-19 by Task 8b, and it is a **scope
-    decision before it is a measurement**. The model is exact on its own subject — the
-    at-tile-minus-at-end difference is **533.5 B/series** against a charged `n_time·9` = 540 —
-    and silent about everything else, so the peak sits at **2410.0 ± 46.0** against an
-    analytic **926** at one fixture and at a **different multiple** at every other:
-    **1.888 / 2.603 / 3.850** across M = 6, M = 2 and N = 240. **No coefficient fixes all
-    three**, which is why Task 8b changed nothing.
+18. **THE BUDGET BOUNDS THE PEAK AND THE TILE IS SIZED FROM A MODEL OF RESIDENCY. THAT IS AN
+    INCONSISTENCY BETWEEN TWO SETTLED DECISIONS, NOT AN OPEN MODELLING CHOICE.** Opened
+    2026-08-19 by Task 8b.
+
+    **Both halves are already decided and neither is in doubt:**
+
+    - **Q1, settled at the 2b brainstorm:** *"`--memory-budget` bounds process peak RSS, so
+      `block_bytes = budget − floor − headroom`."* The alternative was rejected as
+      unfalsifiable, and the hard 16 GB constraint is a statement about **process RSS**.
+    - **Task 8b, measured:** `memory.resident_bytes_per_series` describes **residency and not
+      peak**. It is exact on its own subject — the at-tile-minus-at-end difference is
+      **533.5 B/series** against a charged `n_time·9` = 540 — and silent about the rest, so the
+      peak sits at **2410.0 ± 46.0** against an analytic **926**.
+
+    **`tiling.tile_side_for` divides the block budget by the residency model.** So the sizing
+    quantity and the bounded quantity are different quantities, and **that is the defect** —
+    stated, not discovered, and it outranks *"an unaccounted term needs characterizing"*
+    because the term only matters through this. **§9.4 never said that the model it publishes
+    is not the quantity the budget bounds, and nothing in the tree says it either.**
+
+    **THE FIRST HYPOTHESIS TO TEST IS A PIPELINE CHANGE, NOT A FORMULA CHANGE.** The peak is
+    not one allocation: at M = 2 it lands at **tile assembly (1.6–2.3 s)** and at M = 6 at
+    **store finalisation (45.02 s at every side)**, by the sampler's own timestamps. **Freeing
+    the block before the store write moves the M = 6 peak**, and no coefficient in any formula
+    expresses that. **Test it before characterizing anything**: if the two allocations can be
+    made not to coexist, the gap between residency and peak shrinks to whichever one remains,
+    and the model may need no new term at all.
 
     **What Task 8b established about the two unaccounted terms:**
 
     | term | magnitude at N = 60, M = 2 | dependence |
     |---|---|---|
-    | resident, above the charged slots | **584.6 B/series** | **ESTABLISHED: slot-shaped, ≈ 240 B per candidate per series, `n_time`-independent**, against the 193 `output_slot_bytes` charges |
-    | transient, peak above at-tile residency | **905.9 B/series** | **REFUSED. Not one event**: at M = 2 the peak is at tile assembly (1.6–2.3 s), at M = 6 it is at store finalisation (45.02 s at every side). It is also **saturating in B**, not linear |
+    | resident, above the charged slots | **584.6 B/series** | **ESTABLISHED: slot-shaped, ≈ 240 B per candidate per series, `n_time`-independent**, against the 193 `output_slot_bytes` charges. **Thin** — three points determine a two-parameter shape with ~2σ of leftover |
+    | transient, peak above at-tile residency | **905.9 B/series** | **REFUSED, and the refusal is a finding rather than a gap**: the quantity is not one physical event across the fixtures, and it is **saturating in B**, not linear |
 
-    **Why the established one does not license a correction anyway:** it corrects **residency**,
-    and criterion 7 bounds the **peak**. Landing it would move `PUBLISHED_TILE_SIDE` — the
-    cascade, for the fifth time — for a term that leaves the failing criterion failing.
+    **Why the established one does not license a correction:** it corrects **residency**, and
+    the budget bounds the **peak**. Landing it would move `PUBLISHED_TILE_SIDE` — the cascade,
+    for the fifth time — for a term that leaves criterion 7 failing.
 
-    **What would close it**, and it is a modelling task rather than a measurement:
-    **(a)** identify the peak's *location* per regime, since a term fitted across two different
-    allocations is not a term; **(b)** measure on a **crossed** design — at least 2 × 2 in
-    `n_time` and `n_models`, not the L this task ran — so an interaction is visible; and
-    **(c)** decide whether the budget should bound the peak or the residency, because those are
-    different guarantees and §9.4 never said which it meant. **Sizing a tile against residency
-    while asserting a bound on the peak is the defect, and it is a design question, not an
-    arithmetic one.**
+    **What would close it, in order:**
+
+    **(a) Decide what the budget bounds, or make the two agree.** Either the sizing model
+    becomes a model of the peak, or the pipeline stops letting two allocations coexist so that
+    peak and residency converge. **This is the head of the list and the other two serve it.**
+    **(b) Instrument the peak's LOCATION before fitting its magnitude**, since a term fitted
+    across two different allocations is not a term. **(c) Measure on a CROSSED design** — at
+    least 2 × 2 in `n_time` and `n_models`, never the L Task 8b ran — because an interaction is
+    **aliased in an L**, and here the interaction is *which allocation dominates*.
 
     **Do not close it by fitting a coefficient.** One was available at the fixture criterion 7
     was measured at, it was one edit, and it would have turned a failing acceptance criterion

@@ -934,6 +934,41 @@ would have read *met*, at the only fixture anybody had measured.
 > hypothesis is back and the suite is what says so.** A refutation that lives only in a report is
 > a refutation nobody re-checks.
 
+#### AND THE REASON A TERM CAN REFUSE EVERY SHAPE: A MAXIMUM IS AN ARGMAX AS WELL AS A VALUE
+
+> **When a fitted term refuses to take a shape across fixtures, check whether the quantity being
+> fitted is the same physical event at each point.** A maximum over a run carries a *location* as
+> well as a magnitude, and **an unstable argmax means the samples are drawn from different
+> populations.** Instrument the location before fitting the magnitude.
+
+**THIS IS THE FINDING UNDER THE FINDING ABOVE, AND IT IS WHY NO COEFFICIENT COULD HAVE WORKED.**
+The section above says a moving ratio refutes every multiplier. This says what to do next, and it
+is not "find a better functional form": **there was no single quantity to fit.** A regression over
+a maximum silently assumes the maximum is produced by the same allocation at every point, and
+nothing in the fit can report that it is not — the residuals look like noise or like curvature.
+
+Worked instance, Phase 2b Task 8b. The transient — peak above end-of-tile residency — went
+**905.9 B/series** at N = 60, M = 2, **−39.9** at N = 60, M = 6 and **6985.8** at N = 240, M = 2.
+No constant, no `n_time` multiple, no candidate multiple fits three points. **The sampler's
+timestamp says why in one column:** at M = 2 the peak lands at **1.6–2.3 s**, which is tile
+assembly, and at M = 6 it lands at **45.02 s at every single side**, which is the store write.
+**Two allocations, one name.**
+
+> **AND THE SYMPTOM WAS ALREADY VISIBLE AS AN IMPOSSIBLE STATISTIC.** The same measurement, split
+> by chunking, returned curvature of **+0.054 ± 0.010 (5.3σ)** and **−0.037 ± 0.013 (2.8σ)** —
+> **opposite signs, both "significant", on two arms of one experiment.** That is not a result
+> about curvature; it is a fit reporting the transition between two regimes as a shape parameter,
+> which is (k)'s *"a linear fit to a saturating process reports the transient as a rate"* one
+> register out. **Two arms disagreeing about a coefficient's sign at high significance is a
+> diagnostic, not a puzzle: it says the model is wrong, not that the data are noisy.**
+
+**AND IT IS WHY AN L-SHAPED DESIGN COULD NOT HAVE WORKED.** Task 8b varied `n_time` at fixed
+`n_models` and `n_models` at fixed `n_time` — three fixtures on two arms of an **L**, which
+determines a two-parameter additive shape and **aliases every interaction into the corner point**.
+Here the interaction *is* which allocation dominates, so the design could not see the one thing
+that explains the data. **A crossed 2 × 2 costs one more fixture and is the minimum whenever the
+quantity might change regime**, which is exactly when a term refuses a shape.
+
 ### (a8) TWO INDEPENDENT LINES CONVERGING ON ONE PATHOLOGICAL CASE IS EVIDENCE, NOT COINCIDENCE
 
 > **When a guard's own documentation names a failure mode and an unrelated correction lands
