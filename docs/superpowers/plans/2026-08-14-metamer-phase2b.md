@@ -182,16 +182,24 @@ read:
 | **8a** | The discriminator — resident vs transient, additive vs multiplicative. **Added 2026-08-17.** Owns criterion 6's restated verdict. Changes no constant | 8, 9 |
 | **8i** | **The instrument.** Validate a reclaim-detecting gate against both sides; decide what an RSS assertion can claim; restate Task 7's survey; suite green or known-red with owners. **Added 2026-08-17 after 8a** | 8a |
 | **8b** | The correction, one term per commit, and the value freeze. **Added 2026-08-17.** Owns criterion 7 | 8a, **8i** |
-| 10 | The 2b exit-criteria suite | 0–9, 8a, 8b |
+| 10 | The 2b exit-criteria suite. **Landed 2026-08-19 and closed the sub-phase** | 0–9, 8a, 8b |
 
 **THE NUMBERING IS OUT OF ORDER ON PURPOSE AND IS NOT TIDIED.** 8a and 8b are Task 8's
 unfinished business — they resolve a disagreement Task 8 produced and deliberately did not
 choose between — and renumbering 9 and 10 would break every reference in `PROGRESS.md`, the
-pre-flight and eight commit messages. **The execution order is 9 (narrowed) → 8a → 8i → 8b →
-9's value freeze → 10**, and it is written here because the table's own order no longer implies
-it. **8i was inserted after 8a returned "neither excluded" and found the instrument at fault**;
-it is not optional and it is not a subtask of 8b, because 8b's measurement cannot be designed
-with an instrument that cannot see.
+pre-flight and eight commit messages. **The execution order was 9 (narrowed) → 8a → 8i → 8b →
+10**, and it is written here because the table's own order no longer implies it. **8i was
+inserted after 8a returned "neither excluded" and found the instrument at fault**; it is not
+optional and it is not a subtask of 8b, because 8b's measurement cannot be designed with an
+instrument that cannot see.
+
+> **AND TASK 9's VALUE FREEZE, WHICH THIS LINE USED TO PUT BETWEEN 8b AND 10, NEVER HAPPENED.**
+> 8b resolved the dispute the freeze was waiting on and then **declined to move the value**,
+> because the peak-to-analytic ratio is 1.888 / 2.603 / 3.850 across three fixtures and no
+> coefficient fits all three. **The sub-phase closes with `PUBLISHED_TILE_SIDE` at 272 / 144 and
+> a rewritten caveat**, and the correction is open question 18's. Struck rather than deleted,
+> because a planned step that was consciously not taken is a different fact from one nobody
+> reached.
 
 **Three dependency decisions worth their reasons.**
 
@@ -1160,7 +1168,7 @@ or **recorded as a known limitation with the failing regime named**. It must not
 
 **NARROWED 2026-08-17 AND ITS MECHANISM HAS LANDED.** The single-source record, its five tests and
 the re-pointing of every site went in ahead of 8a; **the value stays 272 / 144 carrying its
-dispute**, and 8b freezes it. Three reasons the mechanism goes first: criterion 16's test is what
+dispute**, and ~~8b freezes it~~ — struck 2026-08-19: 8b resolved the dispute and **declined to move the value**, so the caveat was rewritten and the correction is open question 18's. Three reasons the mechanism goes first: criterion 16's test is what
 turns 8b's change from twenty edits into one, so building it afterwards does the cascade twice;
 the sites quoting 338, 361 and the backend pairs are wrong **under every hypothesis**, and leaving
 known-wrong numbers in place while waiting for a different number is this cascade's own failure
