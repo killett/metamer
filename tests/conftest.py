@@ -223,8 +223,14 @@ def _stub_the_floor_probe(request, monkeypatch):
 # The validity gate for RSS-difference measurements
 # --------------------------------------------------------------------------
 
-#: POLICY. Microseconds of full memory stall per second of wall clock above
-#: which an RSS-difference reading is INDETERMINATE rather than pass or fail.
+#: POLICY. **A THRASHING GATE.** Microseconds of full memory stall per second
+#: of wall clock above which an RSS-difference reading is INDETERMINATE rather
+#: than pass or fail -- and **thrashing is the whole of what it can see.** The
+#: name says RSS and the subject is narrower: Task 8a measured that quiet
+#: reclaim over a long window costs no stall at all, so a reading this gate
+#: passes is a reading that was not thrashed, never a reading that is sound.
+#: `rss_validity`'s `reference_bytes` condition is the one that can see the
+#: other failure, and the two are not interchangeable.
 #:
 #: **AN RSS DIFFERENCE HAS A VALIDITY CONDITION AND THESE TESTS USED TO ASSUME
 #: IT.** Resident set size counts what a process currently holds; reclaim takes
@@ -241,7 +247,13 @@ def _stub_the_floor_probe(request, monkeypatch):
 #: `measure_floor` whose answer was CORRECT gave **5.3 ms/s** -- five times
 #: idle, from our own allocations. So a nonzero stall is normal and the gate
 #: must be a rate. **50 ms/s is 5% of wall clock and roughly ten times the
-#: known-good rate.**
+#: known-good rate** -- and **that margin is over KNOWN-GOOD, which is not the
+#: margin that matters.** Against the worst window a real sweep has produced,
+#: recorded below at the firing of 2026-08-19, the margin is **1.06x, not
+#: 10x.** The 10x figure describes
+#: the distance from idle; the 1.06x describes the distance from the readings
+#: the gate has to sit above, and only the second one predicts how often it
+#: fires.
 #:
 #: **AND THE KNOWN-BAD READINGS ARRIVED AT PHASE 2b TASK 8a, 2026-08-17: THE
 #: GATE DOES NOT SEE THIS FAILURE MODE AT ALL.** Two one-tile runs lost most of

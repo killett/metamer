@@ -1,0 +1,109 @@
+{
+  "task": "OQ18 Task A - does freeing the tile block before the store write move the peak?",
+  "written": "2026-08-19",
+  "committed_before_any_ladder_point_ran": true,
+  "why_this_file_exists": "Task 8b wrote seven predictions before its runs and four were wrong, which is what made its two exclusions refutations rather than absences. A prediction written after the numbers arrive is a description.",
+  "design": {
+    "arms": "off (Task 8b's pipeline, unchanged) and on (`block` rebound to None immediately before `write_tile`), run BACK TO BACK at each (fixture, side, repeat) so the arm cannot be confounded with the hour",
+    "fixtures": [
+      {"name": "m2-n60", "n_time": 60, "candidate_set": "m2", "target_s": 30, "block_bytes_per_series": 480},
+      {"name": "m6-n60", "n_time": 60, "candidate_set": "m6", "target_s": 45, "block_bytes_per_series": 480},
+      {"name": "m2-n240", "n_time": 240, "candidate_set": "m2", "target_s": 45, "block_bytes_per_series": 1920}
+    ],
+    "sides": [16, 32, 48, 64, 96],
+    "repeats": 3,
+    "live": 16,
+    "chunking": "fine",
+    "readings_named": {
+      "peak": "max of the 2 ms sampler, ru_maxrss and VmHWM over the whole child",
+      "at_tile": "working set inside on_tile_written, before the pad",
+      "at_end": "working set after run() returns"
+    }
+  },
+  "cost_and_instrument_probes_run_before_this_file_was_written": {
+    "side_16_m2_no_pad_off_arm": {"wall_s": 13.3, "child_wall_s": 8.45, "peak_phase": "mark_complete"},
+    "side_16_m2_no_pad_on_arm": {"freed_bytes": 122880, "rss_drop_across_free_bytes": 0, "digest_matches_off_arm": true},
+    "pep667_rebinding_control": {"array_mb": 80, "caller_sees": "None", "rss_drop_mb": 80.0},
+    "box_at_writing": {"available_ram_gb": 2.71, "stall_ms_per_s_during_a_point": 5.56, "note": "Task 8b ran at 4.5-5.0 GB available; this is a worse box and every point carries its own shortfall witness"}
+  },
+  "predictions": [
+    {
+      "id": "P1",
+      "statement": "The arm changes no result. The two arms at one point produce identical sha256 digests over /status/outcome, /noise/theta and /primitives/log_lik.",
+      "refuted_if": "any point's two arms differ, or the on arm raises",
+      "basis": "FitResult holds fourteen freshly allocated arrays and no view of y or mask; write_tile takes no block; mask is an inline temporary at run.py:940. Confirmed at one point before this file was written.",
+      "confidence": "high"
+    },
+    {
+      "id": "P2",
+      "statement": "The free fires at every on-arm point and releases exactly side^2 * n_time * 8 bytes.",
+      "refuted_if": "freed_bytes is absent, zero, or not equal to block_bytes at any on-arm point",
+      "basis": "the block is (n_series, n_time) float64 and nothing else is bound to that name",
+      "confidence": "high"
+    },
+    {
+      "id": "P3",
+      "statement": "The resident set falls across the free by at least 0.9x block_bytes at every point EXCEPT side 16 at n_time 60, where the block is 122 880 B, below glibc's 128 kB mmap threshold, and the drop is 0.",
+      "refuted_if": "a drop appears at side 16 n60, or no drop appears at any point with block_bytes >= 491 520",
+      "basis": "glibc returns mmap'd blocks at free and keeps arena blocks; the side-16 null was measured before this file was written and is the reason the exception is named rather than discovered",
+      "confidence": "high"
+    },
+    {
+      "id": "P4",
+      "statement": "The at_tile reading falls by exactly the block: the on arm's at_tile slope is lower than the off arm's by n_time * 8 B/series - 480 at n_time 60 and 1920 at n_time 240 - to within +/-100.",
+      "quantitative": "m2-n60 at_tile slope 1504.1 +/- 21.4 (8b) becomes approximately 1024",
+      "refuted_if": "the difference is under 300 or over 700 B/series at n_time 60",
+      "basis": "8b measured at_tile minus at_end as 533.5 B/series against a charged n_time*9 = 540, of which the block is n_time*8 = 480; the remaining ~53 is not the block",
+      "confidence": "high"
+    },
+    {
+      "id": "P5",
+      "statement": "The at_end reading is unchanged between arms, |delta slope| < 135 B/series at m2-n60.",
+      "refuted_if": "at_end moves by more than 2 sigma of the difference",
+      "basis": "run() has returned in both arms, so the frame and its block are gone either way. If this moves, the free is doing something other than what it claims.",
+      "confidence": "high"
+    },
+    {
+      "id": "P6",
+      "statement": "THE HYPOTHESIS ITSELF, AT THE ONLY FIXTURE THAT CAN CARRY IT. At m6-n60 the peak slope falls by approximately the full block, 480 B/series: 3205.2 +/- 51.3 becomes approximately 2725, and the fall is bounded above by 480 because a released allocation cannot lower a maximum by more than its own size.",
+      "refuted_if": "the fall is under 200 or over 560 B/series",
+      "basis": "8b's transient at m6 is -39.9 B/series, so that fixture's peak IS its at-tile residency, and the block is 480 of it",
+      "confidence": "medium - the peak may already have been attained during fit with the block alive, in which case the fall is 0 and the hypothesis fails at its own fixture"
+    },
+    {
+      "id": "P7",
+      "statement": "THE CONTROLS. At both m2 fixtures the peak slope is unchanged between arms: |delta| < 130 B/series at m2-n60 and < 120 at m2-n240.",
+      "refuted_if": "either m2 fixture's peak moves by more than 2 sigma of the difference",
+      "basis": "8b puts both m2 argmaxes at 1.6-2.3 s, which is tile assembly and is earlier than the earliest moment this free can occur. A maximum already attained cannot be lowered afterwards.",
+      "confidence": "high, and it is the prediction whose failure would say the 8b argmax reading is wrong"
+    },
+    {
+      "id": "P8",
+      "statement": "THE ARGMAX LABEL IN OQ18 IS WRONG AND THE OFF ARM WILL SAY SO. In the off arm the peak's phase is write, mark_complete or tail - the end of a monotonically non-decreasing trace - and NOT assemble, at every fixture including the two m2 ones.",
+      "refuted_if": "the off arm's per-phase maxima put the peak in assemble or fit at m2",
+      "basis": "8b's 45.02 s is target_s, the pad's own target; the pad runs inside on_tile_written, which run.py:959 calls AFTER write_tile returns at 945. The store write finished at the at_tile timestamp of 14.1-17.0 s, some 28 s earlier. 'Store finalisation' was read into a timestamp that only says 'the last moment the trace ticked up'.",
+      "confidence": "medium-high, and P7 and P8 cannot both be right in the way each is written - see the note"
+    },
+    {
+      "id": "P9",
+      "statement": "The pipeline change does not close criterion 7. In the on arm the peak still exceeds the minimal budget above roughly B = 1500 at all three fixtures, and the peak-to-analytic ratio stays above 1.5 everywhere.",
+      "refuted_if": "any fixture's on-arm peak sits at or below its budget at every side",
+      "basis": "the largest available fall is the block, 480 or 1920 B/series, against ratios of 1.888, 2.603 and 3.850",
+      "confidence": "high"
+    },
+    {
+      "id": "P10",
+      "statement": "No point goes indeterminate: reclaim shortfall read in the child is 0 at every point, and no point's stall rate exceeds 50 ms/s.",
+      "refuted_if": "any point reports a nonzero shortfall",
+      "basis": "every point is 30-45 s, and 8i's 2x2 needs pressure AND time; but the box is at 2.71 GB available against 8b's 4.5-5.0, so this is the prediction most exposed to the day",
+      "confidence": "medium"
+    }
+  ],
+  "the_note_P7_and_P8_cannot_both_be_right_as_written": "P7 rests on 8b's claim that the m2 peak is attained at tile assembly. P8 says that claim is an artefact of reading a pad's end as a store write, and that the trace is monotone, in which case the m2 peak is attained at the END and the free CAN lower it - which would refute P7. They are written as they stand because that is what each line of evidence says on its own, and the pair is the sharpest thing this measurement can settle: the off arm's per-phase maxima decide it in one column.",
+  "what_each_outcome_licenses": {
+    "peak_collapses_onto_residency": "OQ18 closes with a pipeline change rather than a formula one; criterion 7 is re-measured; PUBLISHED_TILE_SIDE's caveat is rewritten to say the model describes both readings - by re-measurement, never by inference",
+    "peak_moves_but_not_onto_residency": "a term remains and its location is now stable, which is the precondition B needs; proceed to a crossed 2 x 2",
+    "peak_does_not_move": "the store write is not the dominant allocation despite the timestamp; report and stop, do not proceed to B on an unexplained result"
+  },
+  "not_licensed_by_this_measurement": "moving any constant. If A collapses the peak, the correction is the pipeline change itself."
+}

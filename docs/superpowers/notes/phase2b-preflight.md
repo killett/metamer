@@ -2297,3 +2297,115 @@ stub (`METAMER_FLOOR_BYTES`, 1 MB) that makes a `run()` cheap. Task 10 follows b
 constants must be re-derived at 2b's arithmetic rather than copied from 2a's module** — 2a's
 `ONE_POINT_PER_TILE` was already re-derived once at Task 2 when the budget stopped being the
 block, and its comment records that the old value silently fell below the floor.
+
+---
+
+## OQ18 Task A — the pipeline hypothesis, audited before the harness exists
+
+**THE BRIEF.** Free the tile block before the store write and measure whether the peak moves.
+**It is a hypothesis test and not a repair**: it succeeds if the peak moves and it succeeds if it
+does not, because the second outcome says the peak is not where the sampler was read as saying it
+is dominated, and that redirects the crossed measurement rather than licensing one.
+
+### (j4) THE TABLE IN HAND ALREADY DECIDES TWO OF THE THREE FIXTURES, AND THEY BECOME CONTROLS
+
+Task 8b's own columns answer part of this before anything runs. **At N = 60, M = 2 and at
+N = 240, M = 2 the peak's argmax is 1.6-2.3 s, which is tile assembly** -- earlier than the
+earliest moment a free after `fit` could occur. **A maximum already attained cannot be lowered by
+an allocation released afterwards**, so at both M = 2 fixtures the predicted effect on the peak is
+exactly zero, by arithmetic rather than by expectation. They are therefore the **control arm** of
+this experiment and not two more chances for the hypothesis to succeed.
+
+**The whole hypothesis lives at N = 60, M = 6**, whose argmax is the only one that sits after the
+write path.
+
+### (a4)/(a6) AND THE LABEL ON THAT ARGMAX IS AN INFERENCE, NOT A READING
+
+OQ18 records the M = 6 peak as landing at *"store finalisation (45.02 s at every side)"*. Read
+against `task-8b-harness.py`: **45.0 s is `target_s`, the pad's own target**, the pad runs
+**inside `on_tile_written`**, and `run.py` calls that callback at line 959 -- **after `write_tile`
+has returned** at line 945. So 45.02 s is the end of the pad, and the store write finished some
+twenty-eight seconds earlier at the `at_tile` timestamp of 14.1-17.0 s. **The timestamp says
+"the last moment the trace ticked up", and "the store write" was read into it.**
+
+**This matters to the test's design rather than being a footnote.** With the transient at M = 6
+measured at **-39.9 B/series**, that fixture's peak is its at-tile residency to within noise, so
+what A does there is remove **480 B/series of block from a residency**, and whether that lowers
+the *peak* depends on whether the assemble/fit window ever sat higher -- which no reading in hand
+reports. **The pre-flight's own leading expectation is therefore recorded as undetermined**, and
+the per-phase maxima this harness adds are what settle it.
+
+### (a7) THE PREDICTIONS ARE STATED AS A DEPENDENCE, BECAUSE ONE FIXTURE CANNOT REFUTE A SHAPE
+
+The block is `n_series x n_time` float64, so it is **`n_time * 8` B/series exactly** -- 480 at
+N = 60 and 1920 at N = 240. Every predicted magnitude below is written in those terms rather than
+as a byte count, so a result that moves by the wrong *amount* at one fixture is distinguishable
+from one that moves with the wrong *variable* across three. **A prediction stated at one fixture
+is not falsifiable in the way that matters here**, which is the whole lesson of 8b's three ratios.
+
+### (j2) THE INSTRUMENT DOES NOT EDIT `run.py`, AND WHAT THAT COVERS IS STATED
+
+The free is applied by wrapping `batch.run.write_tile` and **rebinding the caller's frame local**
+through PEP 667's write-through proxy, which this interpreter supports -- verified before the
+harness was written: an 80 MB array, `x is None` in the caller afterwards, and **80.0 MB off the
+resident set**. Deletion is refused by the proxy (`cannot remove local variables`); rebinding to
+`None` is not, and it is the same effect as the `block = None` a production edit would insert.
+
+**The equivalence is a claim about two line ranges and was checked by reading them.** Between
+`fit` returning at run.py:944 and `write_tile` at 945 there is nothing at all; after `write_tile`
+the loop body reaches the callback and `mark_complete`, and **neither takes `block`**. What the
+simulation does **not** cover: the multi-tile path, where the change alters the block's lifetime
+in every iteration rather than once -- this harness is one tile by construction (`grid = side`),
+which is what makes its peak attributable.
+
+### (i2) THE FREE IS AN ABSENCE, SO IT NEEDS ITS OWN POSITIVE CONTROL -- AND ONE FIXTURE CANNOT HAVE IT
+
+"The RSS did not rise" and "the free never happened" are the same reading, which is the fifth
+register of (a0). Two fields separate them: **`freed_bytes`**, what the wrapper actually saw and
+released, and the **working set read immediately before and after the rebinding** in the same
+frame. A zero drop with a nonzero `freed_bytes` is the allocator, not a failed free.
+
+**And the exception is predicted rather than discovered.** At side 16, N = 60 the block is
+`256 * 60 * 8` = **122 880 B, below glibc's 128 kB mmap threshold**, so its free returns to the
+arena and need not leave the resident set at all. **That point is named in advance as the one
+where a null is uninformative**; at N = 240 the same side is 491 520 B and above the threshold.
+
+### (e) THE ARM MUST NOT CHANGE THE RESULT, AND THAT IS THE SAFETY CHECK CONSTRAINT 3 ASKS FOR
+
+Read for retained views before measuring anything: **`FitResult` holds fourteen freshly allocated
+arrays and no view of `y` or `mask`** -- `theta`, `beta`, the two error arrays, `loglik`,
+`outcome`, `init_rung`, `n_iter`, both `n_eff` arrays and `scores`'s five, each allocated inside
+`fit` at the batch's shape. `write_tile`'s signature takes `store_path`, `tile`, `result`,
+`criteria`, `index`, `has_trend` and **no block**. And `mask=np.isfinite(block)` at run.py:940 is
+an **inline temporary**, so it is already released when `fit` returns -- which is independently
+corroborated by 8b's data term fitting at **7.89 B/time-step against a charged 9**, the mask's
+byte being the one not resident.
+
+**So the static answer is that freeing is safe, and the run-time answer is asserted rather than
+assumed**: every point digests the store's `outcome` and `theta` arrays, and the two arms at one
+point must produce identical digests. A crash or a silently different result is what the reading
+would be worth nothing against.
+
+### (a5) WHAT A'S SUCCESS WOULD COST, STATED BEFORE IT IS MEASURED
+
+If the free collapses peak onto residency, **`resident_bytes_per_series` becomes wrong in the
+other direction**: its `n_time * 9` term charges a block that would no longer be resident at the
+tile boundary, and 8b measured that term as the one thing the model gets exactly right (533.5
+against 540). **A repair that fixes the criterion by invalidating the model's one exact term is
+not a free win**, and saying so now is what stops it being discovered as a surprise in the task
+that lands it.
+
+### (k) AND THE ARMS ARE INTERLEAVED, BECAUSE THIS BOX DRIFTS WITHIN A DAY
+
+8b's available RAM fell across its own measuring day, and 8i's 2x2 established that damage needs
+pressure **and** time. So the two arms are run **back to back at each (fixture, side, repeat)**
+rather than as two blocks, which is what stops the arm being confounded with the hour. Run length
+is held at 8b's own targets -- 30 s at N = 60, M = 2 and 45 s at the other two -- so the off arm
+is also a reproduction of 8b's ladder, and every point carries stall rate, reclaim shortfall read
+**in the child**, and available RAM on both sides.
+
+### COST
+
+Ninety points: three fixtures x five sides x three repeats x two arms, at 8b's own prices --
+about **63 minutes**, against the crossed 2 x 2 that B would need. That ratio is the second
+reason A goes first.
