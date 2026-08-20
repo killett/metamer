@@ -2167,3 +2167,57 @@ positive control rather than on an argument.
   which one the slope needs.
 - **A PERMITTED OUTCOME REMAINS "NEITHER RESOLVED — REPORT AND STOP"**, and after the span model
   was excluded above it is a live possibility rather than a formality.
+
+### WHAT THE RUNS FOUND, AND FOUR OF THIS AUDIT'S SEVEN PREDICTIONS WERE WRONG
+
+Every measurement is in [`task-8b-measured.jsonl`](task-8b-measured.jsonl) — 80 points, each
+carrying its whole fixture — and the numbers are in `PROGRESS.md`'s *What Task 8b established*
+rather than here. **What belongs to the audit is which of its own predictions survived**, and the
+score is the reason this section exists:
+
+| # | prediction | outcome |
+|---|---|---|
+| P1 | three instrument levels, watermark > at-tile > at-end | **held**, 2410 / 1504 / 971 |
+| P2 | `current_end` ≈ 926, and at-tile minus at-end ≈ `n_time·8` | **held**, 970.6 and 533.5 |
+| P3 | the sampler and the watermark do NOT differ by 1.86× | **held**, 93 ± 67 B/series apart |
+| P4 | whole-grid chunking adds +720 ± 250 B/series | **WRONG**, −35 ± 60 — no effect at all |
+| P5 | the fit path retains nothing per fitted series | **held at three sides and untestable at two**, because the full-live arm's own run length damaged its top two points |
+| P6 | the reclaim witness reads below 600 kB throughout | **wrong in detail**: 795 kB on a clean 30 s run, which is the floor measurement's own between-process scatter and is the witness's **noise floor** — a thing `reclaim_shortfall_bytes`'s docstring does not mention |
+| P7 | no ladder here reproduces 1900.9, and that is not a failure | **wrong, and wrong in the most useful direction**: Task 8's ladder reproduces *point by point* at every side its run length did not damage, to ±0.76 MB |
+
+**AND THE FOUR-MULTIPLICATION EXCLUSION ABOVE WAS RIGHT FOR THE WRONG REASON.** The span model was
+retired because it inverted the two ladders' ordering. Measured, the chunking moves the slope by
+**nothing** — so the model was not merely mis-signed, its effect is absent, and the arithmetic that
+retired it would have retired it even if the effect had been real and small. **A correct verdict
+from an argument that could not have distinguished the cases is a lucky verdict**, and the
+distinguishing evidence was one 9-minute ladder that this audit only planned as a positive control.
+
+### (j4), THREE TIMES IN ONE TASK, AND THE THIRD IS THE ONE THAT SETTLES THE DISPUTE
+
+The audit found two readings already in hand. The run found a third, and it is the largest:
+
+- **Task 8's iteration cap divides out of its own published wall-clock column.** 178.1, 190.0,
+  190.5, 189.1, 193.2 ms/series across a **36× range in B** — flat, therefore per-series, therefore
+  the `max_iter = 1` rate `CALIBRATION_LADDER`'s docstring measured at 197 ms/series. Task 8a's
+  rebuild ran at **1767.8 ms/series, 9.28×**, against the 11.8× that docstring records for the
+  converged cap. **The "7–9× too expensive, therefore not the same fixture" conclusion WAS the
+  cap**, and one division of a column already in `PROGRESS.md` recovers it.
+- **The chunking reads back out of the fixtures' own construction**, so *"never recorded"* was
+  true of the note and false of the artifact.
+- **THE LADDER ITSELF IS IN THE PUBLISHED TABLE.** Fitting Task 8's five points gives 1900.9;
+  fitting the three that ran under 440 s gives **2584.3 ± 127.0**, and the new duration-controlled
+  ladder gives **2574.9 ± 236.1** over those same three sides. **The measurement that resolves the
+  dispute was a three-point refit of a table that had been in `PROGRESS.md` since 2026-08-16.**
+  Everything else this task ran was needed to know *which* three points to keep — but the answer
+  was already there, and (j4) says to look before measuring, which this audit did and did not find
+  it. **What the audit checked was whether a published table answered the question as printed. It
+  did not ask whether a SUBSET of it did.**
+
+### AND THE COST MODEL FAILED TO TRANSFER A FOURTH TIME, IN THE CHEAP DIRECTION
+
+The plan and this audit both sized the replacement against Task 8a's masked runs — 55.2 s at
+side 48, 223.6 s at side 96, i.e. ~24 ms/series. **A masked point at side 96 with a constant live
+count costs 6.7 s in the child**, ~0.7 ms/series, thirty times cheaper. That is what made three
+fixtures, two chunkings and three repeats affordable in one session, and it is why the fourth
+closure boundary — *"linearity cannot be established on this machine at any affordable cost"* —
+needs re-reading: it was priced against a **full-live** ladder.

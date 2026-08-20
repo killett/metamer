@@ -967,16 +967,24 @@ def test_the_disputes_hypothesis_sides_are_recomputed_and_not_transcribed():
     or this test fails.
 
     Expected values derived independently, all at the published preconditions
-    and the same 656 018 016 B block unless stated:
+    and the same 656 018 016 B block unless stated. The block is
+    `(10**9 - 228 200 000) x 0.85 - 11 984`, and it does not depend on the
+    per-series cost, so only the divisor moves between rows:
 
-        published, 8274 B/series                    79 285.5 -> 281 -> **272**
-        additive, 8274 + 974.9 = 9248.9             70 928.9 -> 266 -> **256**
-        multiplicative, 8274 x 1900.9/926 = 16 984.9  38 623 -> 196 -> **192**
-        headroom 51.29%, block 376 020 960 - 11 984   45 444 -> 213 -> **208**
+        published, 8274 B/series                      79 285.5 -> 281 -> **272**
+        additive, 8274 + 1484.0 = 9758.0              67 228.7 -> 259 -> **256**
+        multiplicative, 8274 x 2410.0/926 = 21 533.8  30 464.5 -> 174 -> **160**
+        headroom 61.577%, block 771 800 000 x 0.38423
+                          - 11 984 = 296 538 555      35 839.8 -> 189 -> **176**
+
+    ~~Under the 1900.9 reading these were 272 / 256 / 192 / 208~~, struck
+    2026-08-19: Task 8b measured 2410.0 +/- 46.0 on a duration-controlled ladder
+    and both earlier slopes are underestimates. **The spread moves, 192 to 160**,
+    which the Task 9 note said had survived a correction only by coincidence.
 
     Bug this catches: a hypothesis side transcribed from a report rather than
     derived -- (a4)'s review-side register, which has fired three times here --
-    and the whole record going stale after 8b.
+    and the whole record going stale after the next measurement.
     """
     dispute = PUBLISHED_TILE_SIDE.dispute
     assert dispute is not None, (
@@ -998,40 +1006,64 @@ def test_the_disputes_hypothesis_sides_are_recomputed_and_not_transcribed():
     # two slopes on purpose -- it cannot drift from them -- so re-deriving it
     # here would be an oracle sharing its subject's derivation path (j). The
     # check that bites is the hand-computed value: criterion 7 asymptotically
-    # needs the budget's slope to reach the peak's, `926 / (1 - h) >= 1900.9`,
-    # so `h >= 1 - 926/1900.9 = 0.51286`. **The blocker recorded "~33%" and no
-    # derivation reproduces it**; at 33% the side would be 240 rather than 208,
-    # and neither changes the 192-272 spread, which is why it survived review.
-    assert dispute.headroom_fraction_required == pytest.approx(0.51286, abs=5e-6)
+    # needs the budget's slope to reach the peak's, `926 / (1 - h) >= 2410.0`,
+    # so `h >= 1 - 926/2410.0 = 0.61577`. ~~0.51286 against 1900.9~~, struck
+    # 2026-08-19. **AND THE HEADROOM IS NO LONGER EXCLUDED AS A PARTIAL
+    # EXPLANATION**: Task 8a inferred a transient of at most 152 B/series from
+    # one contaminated run, and measured at this fixture the transient is 905.9
+    # -- 37.6% of the 2410.0 peak, against a shipped headroom of 15%.
+    assert dispute.headroom_fraction_required == pytest.approx(0.61577, abs=5e-6)
 
 
 def test_the_dispute_states_its_direction_its_owner_and_its_spread():
     """What the sentence beside the number has to contain to be worth printing.
 
     A bare "disputed" is worse than nothing: it warns without letting a reader
-    act. Three things make it actionable -- who owns the resolution, how far
-    apart the readings are, and **which way the one-sided evidence points**.
+    act. Three things make it actionable -- who owns what is left, how far apart
+    the readings are, and **what the evidence actually says**.
 
-    Expected values determined independently: the transient bound is
-    `<= 152 B/series`, from Task 8's side-96 watermark sitting 1.4 MB above the
-    end-of-tile current reading at B = 9216 -- an **upper** bound, so it
-    excludes the headroom explanation as *sufficient* without establishing it as
-    zero. The spread is 192 to 272, the extremes of the hypothesis sides. The
-    ratio is 1900.9 / 926 = 2.053.
+    Expected values determined independently, from Task 8b's ladders:
 
-    Bug this catches: the bound quoted without its direction, which turns "at
-    most a sixth of the excess is transient" into "the transient is 152", and a
-    one-sided exclusion into a measurement.
+      - the peak is 2410.0 B/series and the process still holds 1504.1 at the
+        end of the tile, so the transient is `2410.0 - 1504.1 =` **905.9** by
+        subtraction. **Every figure comes from the one arm** -- fifteen
+        fine-chunked points, best-of-four peak instrument -- because a peak from
+        one arm minus a residency from another is a difference of two fixtures.
+      - the ratio is `2410.0 / 926 = 2.603`, and it is **not** the ratio at the
+        other two fixtures -- 1.888 at M = 6 and 3.850 at N = 240 -- which is
+        the whole reason no term has moved.
+      - the spread is 160 to 272, the extremes of the hypothesis sides.
+      - the owner is nobody. 8a and 8b answered the question they were given.
+
+    Bug this catches: the record still naming 8a as the owner and 1900.9 as the
+    measurement after 8b, and a ratio published as though it were a constant of
+    the code when three fixtures say it is not -- which is the multiplier
+    correction (a7) forbids, arriving as a field rather than as an edit.
     """
     dispute = PUBLISHED_TILE_SIDE.dispute
     assert dispute is not None, "resolved -- see the sibling test's message"
-    assert "8a" in dispute.owner
+    assert "8a" not in dispute.owner
+    assert "unowned" in dispute.owner
     sides = [h.side for h in dispute.hypotheses.values()]
-    assert min(sides) == 192
+    assert min(sides) == 160
     assert max(sides) == PUBLISHED_TILE_SIDE.shared == 272
-    assert dispute.transient_bound_is_an_upper_bound is True
-    assert dispute.transient_bound_bytes_per_series == 152
+    assert dispute.transient_bytes_per_series == pytest.approx(905.9)
+    assert dispute.resident_at_tile_bytes_per_series == pytest.approx(1504.1)
+    assert (
+        dispute.measured_bytes_per_series - dispute.resident_at_tile_bytes_per_series
+        == pytest.approx(dispute.transient_bytes_per_series, abs=0.05)
+    )
     assert (
         round(dispute.measured_bytes_per_series / dispute.analytic_bytes_per_series, 3)
-        == 2.053
+        == 2.603
+    )
+    ratios = dispute.peak_to_analytic_by_fixture
+    assert set(ratios) == {"N=60 M=2", "N=60 M=6", "N=240 M=2"}
+    assert min(ratios.values()) == 1.888
+    assert max(ratios.values()) == 3.850
+    assert max(ratios.values()) / min(ratios.values()) > 2.0, (
+        "the three fixtures' ratios must stay more than 2x apart, because that "
+        "spread is the evidence that a multiplicative correction is the wrong "
+        "shape. If a later measurement brings them together, the multiplier "
+        "hypothesis is back and this assertion is what says so"
     )

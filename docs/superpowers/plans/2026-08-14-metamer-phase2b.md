@@ -1114,6 +1114,30 @@ consequences for what the suite may assert.
 
 ## Task 8b — the correction, gated on 8a
 
+> **RAN 2026-08-19. THE DISPUTE IS RESOLVED AND NO TERM MOVED, AND BOTH HALVES ARE THE RESULT.**
+> The 1.86× is not a disagreement between two instruments: **both published slopes are
+> underestimates of one quantity, by one mechanism.** Each ladder's run length grew with its own
+> abscissa, and a long run under memory pressure loses working set and takes its watermark with
+> it — measured here at **−2.74 MB after 1048 s and −8.32 MB after 2060 s**, with Task 8i's
+> reclaim witness firing in the child at exactly those two points and nowhere else in 45 runs.
+> **Restricted to the points its own run length cannot have damaged, Task 8's ladder gives
+> 2584.3 ± 127.0 and a duration-controlled ladder gives 2574.9 ± 236.1 over the same three
+> sides** — two independent lines, 0.4% apart.
+>
+> **AND THREE THINGS THE RECORD CALLED LOST WERE RECOVERABLE WITHOUT A MEASUREMENT.** Task 8's
+> iteration cap divides straight out of its own published wall clocks (178–193 ms/series, flat
+> across a 36× range in B — the `max_iter=1` rate); its chunking reads back out of `to_zarr`'s
+> defaults; and the reading that separates the two instruments was already being computed and
+> discarded at `CalibrationPoint`'s boundary.
+>
+> **NO CORRECTION IS LICENSED**, because the gap is not a multiplier: measured at three
+> fixtures the peak-to-analytic ratio is **1.888, 2.603 and 3.850**. Fitting a coefficient to one
+> of them is (a7) and F5. **Criterion 7 is therefore recorded as a known limitation with its
+> failing regime named, and `PUBLISHED_TILE_SIDE` keeps its value and its caveat — with the
+> caveat rewritten, because its old subject no longer exists.** The measurements are in
+> `PROGRESS.md`'s *What Task 8b established*; the brief below is what was run and is kept
+> unchanged.
+
 > **STILL BLOCKED AFTER 8a, AND NOW BLOCKED ON A MEASUREMENT NOBODY HAS DESIGNED.** 8a did not
 > return RESIDENT, so nothing here is licensed. **Whoever designs the replacement owes three
 > controls 8a did not have:** run length held constant across the points being compared, a
@@ -1207,8 +1231,14 @@ cache read by a process that did not write it.
 | 3 | The batched placement is unreachable through `run()`, with its arithmetic asserted through a constructed call |
 | 4 | The floor is measured post-warm with the input open, behind a bare launcher; pre- and post-warm are both recorded and differ |
 | 5 | A budget at or below the floor is refused, naming the floor, its components, and a budget that would work |
-| 6 | Measured slope and intercept match the corrected formula within a two-sided band at four or five sides, residuals reported — **closes 2a criterion 6**. **MET 2026-08-16 WITH ITS SCOPE STATED: 1021.6 ± 134.7 B/series against the analytic 926, ratio 1.103, inside the 617.3–1389.0 band — and the band is a 2.25× window while the measurement's own 2σ interval is 752–1291, nearly as wide. This criterion discriminates a gross formula error and not a marginal one. A criterion whose band is wider than its instrument's uncertainty is a criterion about the instrument** (i10). **Linearity is NOT established**: curvature +0.045 ± 0.034 (1.3σ), and the ladder could only have excluded an 82.6% variation across B. **AND THAT VERDICT IS NOW IN QUESTION AND IS OWNED BY TASK 8a**: it rests on Task 7's rung 48, which does not reproduce — re-run on Task 7's own instrument it measured 4.19 MB higher, and the same-instrument pair then implies 1787.9 B/series rather than 1021.6. On the better instrument the ratio is **2.05, outside the band**. Reported, not reconciled |
-| 7 | A run at a formula-derived side under a budget well below available RAM has peak RSS at or below the budget — **closes 2a criterion 7**. **IN QUESTION, AND OWNED BY TASK 8b.** Task 8 measured a **crossover at B ≈ 4893, side ≈ 70**, predicted from the two slopes and then bracketed: it holds for small tiles and fails for large ones, which is the production regime. Either 8b's correction closes it or it is recorded as a known limitation **with the failing regime named** |
+| 6 | Measured slope and intercept match the corrected formula within a two-sided band at four or five sides, residuals reported — **closes 2a criterion 6**. **MET 2026-08-16 WITH ITS SCOPE STATED: 1021.6 ± 134.7 B/series against the analytic 926, ratio 1.103, inside the 617.3–1389.0 band — and the band is a 2.25× window while the measurement's own 2σ interval is 752–1291, nearly as wide. This criterion discriminates a gross formula error and not a marginal one. A criterion whose band is wider than its instrument's uncertainty is a criterion about the instrument** (i10). **Linearity is NOT established**: curvature +0.045 ± 0.034 (1.3σ), and the ladder could only have excluded an 82.6% variation across B. **AND THAT VERDICT IS WITHDRAWN, 2026-08-19, BY TASK 8b: CRITERION 6 IS NOT MET, AND IT NEVER NAMED WHICH QUANTITY IT WAS ABOUT.** Measured on a duration-controlled ladder, fifteen points, three repeats, reclaim witness clean: the **end-of-run working set** slope is 970.6 +/- 47.6, ratio **1.048**, comfortably inside the band; the **end-of-tile** working set is 1504.1 +/- 21.4, ratio **1.624, outside** it; and the **peak** is 2410.0 +/- 46.0, ratio **2.603**, outside it by 22 sigma. `resident_bytes_per_series` describes what a process still holds after the tile is written and nothing else. **Criterion 6 is met on one reading of three and the criterion does not say which reading it means** -- (a5) at an acceptance criterion. Task 7's 1021.6 and Task 8's 1900.9 are both withdrawn as underestimates: each ladder's run length grew with its abscissa |
+| 7 | A run at a formula-derived side under a budget well below available RAM has peak RSS at or below the budget — **closes 2a criterion 7**. **NOT MET. RECORDED AS A KNOWN LIMITATION WITH ITS FAILING REGIME NAMED, 2026-08-19, BY TASK 8b.** ~~Crossover at B ~ 4893, side ~ 70~~, struck: that was read off a ladder whose top points were depressed by their own run length. Measured cleanly -- fifteen points per fixture, wall clock padded to a constant, reclaim witness read in the child -- **peak RSS exceeds the budget at every tile above roughly B = 1500, at all three fixtures measured**, and the margin grows with both B and `n_time`:
+
+  - N = 60, M = 2: passes at B = 256 and 1024, fails from B = 2304 (+1.0 MB) to B = 9216 (+11.0 MB)
+  - N = 60, M = 6: passes at B = 256 only, fails from B = 1024 (+1.2 MB) to B = 9216 (+11.2 MB)
+  - N = 240, M = 2: passes at B = 256 only, fails from B = 1024 (+5.1 MB) to B = 9216 (+61.1 MB)
+
+**It is not closed by a correction because the correction's shape is not determined**: the peak-to-analytic ratio is 1.888, 2.603 and 3.850 at those three fixtures, so no multiplier and no single added term reproduces all three, and a coefficient fitted to one fixture is (a7). The budgets are the minimal budget for each side, which is the convention Task 8 used |
 | 8 | Peak RSS does not grow with tile count over 10⁵–10⁶ points, nor with tile index within a fitted run |
 | 9 | Every derived side is a multiple of the base, and the achieved chunk bytes for the **worst** array are inside the target band |
 | 10 | A config omitting `memory_budget_gb` and one naming the resolved value produce the same `run_hash`, and provenance distinguishes them |

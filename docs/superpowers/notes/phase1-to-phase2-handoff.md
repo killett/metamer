@@ -896,6 +896,44 @@ and been wrong at every other `p` — and *right* for the wrong reason at the on
 measures. **The question is never "is this number too small"; it is "what is this number a
 function of".**
 
+#### A RATIO THAT IS NOT CONSTANT ACROSS FIXTURES REFUTES EVERY MULTIPLIER, AND MEASURING IT IS CHEAPER THAN NAMING THE TERM
+
+> **Measure the model's error at a SECOND and THIRD fixture before correcting it. If the ratio of
+> measured to predicted moves, no coefficient exists** — one that fits any fixture is wrong at the
+> others — **and that is established without knowing what the missing term is.**
+
+**This is (a7) turned into a test you can run.** (a7) says verify a term's variables before its
+magnitude, which requires understanding the term. This gets the same verdict from outside: a
+multiplicative correction predicts a **constant** ratio, so three fixtures falsify it whether or
+not anyone can say what the omission is. **It is the cheapest possible check on the shape of a
+correction and it comes before any inventory.**
+
+Worked instance, Phase 2b Task 8b. Peak against `resident_bytes_per_series`, three fixtures on one
+harness, fifteen points each:
+
+| fixture | analytic | measured peak | ratio |
+|---|---|---|---|
+| N = 60, M = 6 | 1698 | 3205.2 ± 51.3 | **1.888** |
+| N = 60, M = 2 | 926 | 2410.0 ± 46.0 | **2.603** |
+| N = 240, M = 2 | 2546 | 9801.3 ± 40.9 | **3.850** |
+
+**Two-fold spread, and each ratio is pinned to under 2% by its own standard error.** So no
+multiplier and no single added constant reproduces all three, and the correction that would have
+made exit criterion 7 pass at the fixture it was measured at would have been wrong at both others.
+
+**THIRD INSTANCE OF SHAPE-BEFORE-MAGNITUDE, AND THE FIRST WHERE THE CORRECT ACTION WAS TO CHANGE
+NOTHING.** F5's `22p·8` was wrong in its dependence; F3's slot inventory was wrong in its terms;
+this one is wrong in a way **no available correction fixes**. Recorded because refusing was the
+harder call: **a coefficient was available, it was one edit, and it would have turned a failing
+acceptance criterion into a passing one.** Nothing external would have caught it — the criterion
+would have read *met*, at the only fixture anybody had measured.
+
+> **AND THE SPREAD IS EVIDENCE THAT HAS TO BE KEPT ALIVE, NOT JUST REPORTED.**
+> `PUBLISHED_TILE_SIDE`'s record carries the three ratios as a field with a test asserting they
+> stay more than 2× apart — so if a later measurement ever brings them together, **the multiplier
+> hypothesis is back and the suite is what says so.** A refutation that lives only in a report is
+> a refutation nobody re-checks.
+
 ### (a8) TWO INDEPENDENT LINES CONVERGING ON ONE PATHOLOGICAL CASE IS EVIDENCE, NOT COINCIDENCE
 
 > **When a guard's own documentation names a failure mode and an unrelated correction lands
@@ -915,6 +953,39 @@ Measured at the convergence: the worst array's chunk goes from 18.3 MB at 338 to
 makes the corrected arithmetic usable at all**, and dropping it costs a tenfold chunk on every
 tile. The caution and the correction are independent, which is exactly why their meeting is
 evidence.
+
+### (a9) A DISAGREEMENT BETWEEN TWO INSTRUMENTS CAN BE ONE MECHANISM ACTING ON BOTH
+
+> **Before treating two measurements as rival estimates, ask whether a shared confound explains
+> the gap.** Two instruments biased by the same mechanism to different degrees look exactly like
+> two instruments disagreeing — and the repair is **not to choose between them** but to control
+> the confound and re-measure both.
+
+**THIS IS TOP-LEVEL BECAUSE IT INVERTS THE NATURAL FRAMING.** A gap between two numbers presents
+itself as a question about *which one is right*, and that question absorbs a task: it recruits a
+better instrument, a tie-breaker, a third measurement. **The question that dissolves it is whether
+the two are the same measurement made twice under different amounts of one bias.** The tell is
+that the two disagree along an axis they also *differ* along — and any variable that both
+instruments' designs let vary with the abscissa is that axis.
+
+Worked instance, Phase 2b Task 8b, and the tell was available a day in advance. Task 7's ladder
+gave **1021.6 ± 134.7 B/series**, Task 8's gave **1900.9 ± 84.1**, and the project spent three
+tasks (8a, 8i, 8b) on the 1.86×. **Both ladders had run length monotonic with B** — Task 8's from
+45.6 s to 1780.1 s, Task 7's further — and Task 8a had already established that a long run under
+memory pressure loses working set and **predicted the direction**. Neither figure was wrong about
+its own points; both fits were dragged down by their longest ones.
+
+**THE ARITHMETIC THAT SETTLES IT USES NEITHER A NEW INSTRUMENT NOR A NEW RUN.** Refit Task 8's own
+published table over the three points that ran under 440 s: **2584.3 ± 127.0**. A
+duration-controlled ladder at the same fixture and the same three sides: **2574.9 ± 236.1**. The
+same number, 0.4% apart. **The ladders never disagreed; the confound did.**
+
+> **AND THE COROLLARY IS WHAT MAKES IT CHEAP: A CONFOUND THAT VARIES ACROSS A LADDER'S POINTS CAN
+> BE CONTROLLED BY DISCARDING POINTS, NOT ONLY BY RE-RUNNING.** If the confounded variable is
+> recorded per point — and a wall-clock column usually is — then the subset where it cannot have
+> acted is a clean measurement already in hand. **(j4) says to check whether a published table
+> answers the question. This says to check whether a SUBSET of it does**, which is the register
+> (j4) did not have and the one that resolved this dispute.
 
 ### (b) Batch vs series
 
@@ -1127,6 +1198,44 @@ beside the criterion rather than only in the task that ran it.
 > **AND THE SCOPE BELONGS NEXT TO THE CRITERION, NOT ONLY IN THE TASK SECTION.** A criterion
 > whose band is wider than its instrument's uncertainty is **a criterion about the
 > instrument**, and the next reader meets the criterion first.
+
+#### AND ITS COMPANION: A CRITERION OVER A MEASURED QUANTITY MUST NAME THE READING, NOT JUST THE QUANTITY
+
+> **One run yields several readings of "the same" quantity, and a criterion that names the
+> quantity without naming the reading is met on whichever reading the next measurer happens to
+> take.** Name the instrument, the moment, and what is alive when the number is taken.
+
+**(i10) asks whether a criterion's band is wide enough to be unfailable. This asks something
+prior: whether the criterion identifies WHAT is being compared to the band at all.** The tell is a
+criterion phrased in the units of a quantity — bytes per series, milliseconds, resident set — with
+no clause saying *when* it is read or *what is still allocated at that moment*. Such a criterion
+is not loose; it is **several criteria wearing one sentence**, and nothing makes the choice
+between them visible.
+
+Worked instance, Phase 2b Task 8b. Exit criterion 6 is *"measured slope and intercept match the
+corrected formula within a two-sided band"*. **One duration-controlled ladder yields three
+readings**, fifteen points and three repeats each:
+
+| reading | slope, B/series | ratio to the analytic 926 | inside `slope_band` (617.3–1389.0)? |
+|---|---|---|---|
+| working set at **end of run** | **970.6 ± 47.6** | 1.048 | **yes** |
+| working set at **end of tile**, block alive | **1504.1 ± 21.4** | 1.624 | no |
+| **peak** | **2410.0 ± 46.0** | 2.603 | no, by 22σ |
+
+**Met on one of three, and the criterion does not say which.** Worse, *"peak RSS"* and
+*"resident bytes per series"* were treated as the same thing through Tasks 4, 7, 8 and 8a —
+criterion 7 asserts the **peak** against a budget derived from `resident_bytes_per_series`, and
+nothing anywhere states that those are different readings of different moments.
+
+> **AND THE MODEL IS RIGHT ABOUT WHAT IT MODELS, WHICH IS HOW THE AMBIGUITY SURVIVED.** The
+> difference between the two working-set readings is **533.5 B/series** against a charged
+> `n_time · 9` = **540** — the data term, exactly. `resident_bytes_per_series` charges the block
+> correctly and is **silent about everything else**, so every check pointed at residency agreed
+> and every check pointed at the peak was off by 2.6×. **A model that is exact on its own subject
+> and mute on the rest is the hardest kind to catch**, because its agreements are real.
+
+**The repair is one clause per criterion**: which instrument, at which moment, with what alive.
+It costs a line and it is what makes the verdict a fact rather than a choice.
 
 ### (i9) A FIXTURE WHOSE WINDOW IS NARROWER THAN THE MACHINE'S JITTER CANNOT EXPRESS ITS CONDITION
 
@@ -1858,6 +1967,27 @@ tests could not see.** `pixi run test-fast` would have shipped both.
   > Task 7, where the "fix" changed the number that was already right. A constant that keeps
   > attracting corrections which do not survive checking is one whose **preconditions are
   > under-recorded**, not one that keeps being wrong. Fix the recording.
+  >
+  > **AND THE RULE APPLIES TO BOUNDS EXACTLY AS IT APPLIES TO VALUES, WHICH IS WHERE IT KEEPS
+  > BEING FORGOTTEN.** A bound reads as a *property of the phenomenon* — "at most a megabyte",
+  > "no more than 152 B/series" — where a value visibly belongs to a run. **It does not. A bound
+  > measured at one fixture is a bound at that fixture**, and quoting it without its fixture
+  > converts a local observation into a general guarantee, which is worse than doing the same to
+  > a value because downstream reasoning is built on the guarantee rather than on the number.
+  >
+  > **TWO INSTANCES, BOTH CORRECTED BY THE NEXT TASK'S MEASUREMENT, 2026-08-17 TO 2026-08-19:**
+  >
+  > | the bound | where it came from | measured later |
+  > |---|---|---|
+  > | Task 8i: *"a watermark degrades by ~1 MB where a working set degrades by ~135"*, so peak-based criteria survive | one constructed known-bad, side 48, masked, one fixture | **−2.74 MB at 1048 s and −8.32 MB at 2060 s**, no constructed pressure. Right in kind, **low in scale by 8×** |
+  > | Task 8a: *"transient ≤ 152 B/series"*, which excluded the headroom explanation as **sufficient** | one run's `peak − current_end` at side 96, on a ladder point since shown to be contaminated | **905.9 B/series** at the duration-controlled fixture — **6× the bound**, and 37.6% of the peak against a shipped 15% headroom. **The exclusion is withdrawn** |
+  >
+  > **THAT IS THE THIRD AND FOURTH CORRECTION OF A PROMOTED RULE BY ITS OWN SUCCESSOR TASK IN FOUR
+  > DAYS** — after the "~33%" implied headroom (51.29%) and 8a's decay rule (an interaction, not a
+  > main effect). **The pattern is not that the rules were careless; it is that a bound derived
+  > from one fixture is a hypothesis with a citation, and the register is worth keeping precisely
+  > because the next task measures against it rather than around it.** The failure mode to fear is
+  > a rule nobody re-measures, and it is invisible exactly because nothing contradicts it.
 - **ONE LIBRARY REFUSES LOUDLY, THE OTHER LIES QUIETLY — AND ONLY THE SECOND IS DANGEROUS.**
   The whole argument for **observing** rather than asserting, delivered by measurement rather
   than by reasoning. Requesting 1000 threads on a 4-core box (Phase 2a Task 5, 2026-08-12):

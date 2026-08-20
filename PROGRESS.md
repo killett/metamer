@@ -3,14 +3,14 @@
 ## Start here (cold-start summary)
 
 1. **Branch `main`, everything on it, every commit pushed by a hook** — https://github.com/killett/metamer.
-2. **DONE:** Phase 1 (0–18), Phase 2 preliminaries P0–P4, **Phase 2a (0–13)**, **Phase 2b Tasks 0–8, Task 9 NARROWED, Task 8a (verdict: neither excluded), Task 8i (the instrument)**, open questions 1, 4, 9, 11, 12, 15.
-3. **NEXT ACTION: 2b TASK 8b — UNBLOCKED ON THE INSTRUMENT, STILL BLOCKED ON THE FIXTURE.** Read [What Task 8b inherits](#what-task-8b-inherits-2026-08-17--the-cold-start-handoff-read-this-before-designing-anything) FIRST; it is the handoff and it says what 8b must build before it may measure. In one line: **Task 8's ladder cannot be rebuilt from what was recorded**, so the disputed **1.86×** stays disputed until a completely-recorded fixture with constant run length replaces it. The published side stays **272 carrying its dispute**.
-4. **Tests: 1067 passed, 0 failed, 0 indeterminate — 2026-08-19, 1239 s, box quiet. And separately 1044 passed under `-m "not machine"` in a pip-installed venv (PyPI wheels, numpy 2.5.2), which is what CI runs and is NOT the same evidence** — see the 2026-08-19 entry under [Gotchas](#gotchas-discovered) for the seven failures and three errors that only that second environment could show. **GREEN, and the conditions are part of the claim**: the same suite was 1049/3-failed at 1906 MB available on 2026-08-17, on the same code. The three failures were **ambient-conditional, not code** — see [What Task 8i established](#what-task-8i-established-done-2026-08-17--read-before-writing-any-rss-assertion-or-trusting-the-validity-gate), which is also where the survey of every RSS assertion lives. **Every sweep prints `RSS measurement validity` and it now has TWO conditions**, the second being the one that can see quiet reclaim.
+2. **DONE:** Phase 1 (0–18), Phase 2 preliminaries P0–P4, **Phase 2a (0–13)**, **Phase 2b Tasks 0–8, Task 9 NARROWED, Task 8a (verdict: neither excluded), Task 8i (the instrument), Task 8b (verdict: the dispute is resolved, no term moved)**, open questions 1, 4, 9, 11, 12, 15.
+3. **NEXT ACTION: A SCOPE DECISION, NOT A TASK. IT IS OPEN QUESTION 17 AND NOTHING SHOULD BE IMPLEMENTED UNTIL IT IS MADE.** Read [What Task 8b established](#what-task-8b-established-done-2026-08-19--read-before-quoting-the-per-series-cost-criterion-6-or-criterion-7) FIRST. In one line: **the 1.86× was one confound acting on both ladders, the clean per-series peak is 2410.0 ± 46.0 against an analytic 926, and the correction's SHAPE is undetermined because the ratio is 1.888 / 2.603 / 3.850 at three fixtures** — so `PUBLISHED_TILE_SIDE` stays **272, with a rewritten caveat and a 160–272 spread**, criterion 6 is **not met and never named its reading**, and criterion 7 is **recorded as FAILED with its regime named: above roughly B = 1500, at all three fixtures.** **`memory.resident_bytes_per_series` describes residency and not peak, and the budget bounds the peak** — closing that gap is a modelling task nobody owns. **Task 10 is the only 2b work that can proceed as written.**
+4. **Tests: 1067 passed, 0 failed, 0 indeterminate — 2026-08-19 after Task 8b, 1273.9 s, 4214 MB available, 20 s idle at 0.0096 ms/s. The count did NOT move at Task 8b and that is correct**: its deliverable is a measurement, which by Tasks 4, 7 and 8's precedent does not enter the suite, and the two tests it touched already existed to fail when the published record changed. Earlier the same day, before 8b, 1067 passed in 1239 s, box quiet. And separately 1044 passed under `-m "not machine"` in a pip-installed venv (PyPI wheels, numpy 2.5.2), which is what CI runs and is NOT the same evidence** — see the 2026-08-19 entry under [Gotchas](#gotchas-discovered) for the seven failures and three errors that only that second environment could show. **GREEN, and the conditions are part of the claim**: the same suite was 1049/3-failed at 1906 MB available on 2026-08-17, on the same code. The three failures were **ambient-conditional, not code** — see [What Task 8i established](#what-task-8i-established-done-2026-08-17--read-before-writing-any-rss-assertion-or-trusting-the-validity-gate), which is also where the survey of every RSS assertion lives. **Every sweep prints `RSS measurement validity` and it now has TWO conditions**, the second being the one that can see quiet reclaim.
 5. **`pixi run test` is the full sweep and every end-of-task verification must run it; `test-fast` and `test-ci` are not evidence.** It has caught **seven** things a fast run could not, two of them in Task 8. **Every run prints `RSS measurement validity`, including at zero** — a nonzero count is INDETERMINATE, neither pass nor fail.
 6. **Verify a fresh checkout with `pixi run test && pixi run typecheck && pixi run lint`**, plus `pixi run pre-commit run --all-files` before every commit.
 7. **THE METHOD IS THE PRE-FLIGHT AND IT LIVES IN EXACTLY ONE PLACE:** [`phase1-to-phase2-handoff.md`](docs/superpowers/notes/phase1-to-phase2-handoff.md) §1 — (a0)–(a8), (a)–(k), **three new at Tasks 8a/8i: decay as an INTERACTION, right-in-kind-wrong-in-scale, and a zero reading is not evidence of absence**, the five causes of a surviving mutation, the standing rules, the fixture facts. **Run it against the task brief before code**, append to [`phase2b-preflight.md`](docs/superpowers/notes/phase2b-preflight.md). **Do not restate it here** — the two copies drifted once already.
 8. **The plan is [`2026-08-14-metamer-phase2b.md`](docs/superpowers/plans/2026-08-14-metamer-phase2b.md)** — 11 tasks, 16 exit criteria, approved 2026-08-14, **amended in place by every task so far, because every one contradicted its brief — including Tasks 8a and 8i, which corrected briefs I had written myself.** Tasks **8a**, **8i** and **8b** were added after approval; the execution order is at the task index.
-9. **Read, in order:** [What Task 8b inherits](#what-task-8b-inherits-2026-08-17--the-cold-start-handoff-read-this-before-designing-anything), [What Task 8i established](#what-task-8i-established-done-2026-08-17--read-before-writing-any-rss-assertion-or-trusting-the-validity-gate) — the instrument, the 2×2 and the survey of every RSS assertion — [What Task 8a established](#what-task-8a-established-done-2026-08-17--read-before-quoting-any-long-running-rss-reading), [What Task 9 (narrowed) established](#what-task-9-narrowed-established-done-2026-08-17--read-before-quoting-the-tile-side-the-floor-or-the-blocker) — **the tile side is `batch.tiling.PUBLISHED_TILE_SIDE`, in code, not in any document** — then [What Task 8 established](#what-task-8-established-done-2026-08-16--read-before-quoting-the-per-series-cost-criterion-6-or-criterion-7), which **opens by stating its ladder cannot be reproduced**.
+9. **Read, in order:** [What Task 8b established](#what-task-8b-established-done-2026-08-19--read-before-quoting-the-per-series-cost-criterion-6-or-criterion-7) — the resolution, the three readings and the two corrected rules — then [What Task 8i established](#what-task-8i-established-done-2026-08-17--read-before-writing-any-rss-assertion-or-trusting-the-validity-gate) — the instrument, the 2×2 and the survey of every RSS assertion — [What Task 8a established](#what-task-8a-established-done-2026-08-17--read-before-quoting-any-long-running-rss-reading), [What Task 9 (narrowed) established](#what-task-9-narrowed-established-done-2026-08-17--read-before-quoting-the-tile-side-the-floor-or-the-blocker) — **the tile side is `batch.tiling.PUBLISHED_TILE_SIDE`, in code, not in any document** — then [What Task 8 established](#what-task-8-established-done-2026-08-16--read-before-quoting-the-per-series-cost-criterion-6-or-criterion-7), which **opens by stating its ladder cannot be reproduced**.
 10. **Precedence: the design doc is authoritative on INTENT; a measured, dated number supersedes an unmeasured one wherever it lives, including in the design doc. Any measurement stated twice has one copy DELETED, never reconciled.**
 
 ---
@@ -1726,6 +1726,203 @@ or recorded as a known limitation with the failing regime named.
 
 ---
 
+### What Task 8b established (done 2026-08-19 — read before quoting the per-series cost, criterion 6 or criterion 7)
+
+> ## THE 1.86× IS NOT A DISAGREEMENT BETWEEN TWO INSTRUMENTS. BOTH PUBLISHED SLOPES ARE UNDERESTIMATES OF ONE QUANTITY, BY ONE MECHANISM.
+>
+> Each ladder's **run length grew with its own abscissa** — Task 8's from 45.6 s to 1780.1 s,
+> Task 7's further — and a long run under memory pressure loses working set and takes its
+> watermark down with it. **Restricted to the points its own run length cannot have damaged,
+> Task 8's ladder gives 2584.3 ± 127.0 B/series and a duration-controlled ladder gives
+> 2574.9 ± 236.1 over the same three sides. Two independent lines, 0.4% apart.**
+>
+> **AND NO TERM MOVED, WHICH IS THE OTHER HALF OF THE RESULT.** The measured peak-to-analytic
+> ratio is **1.888 at M = 6, 2.603 at M = 2, 3.850 at N = 240** — not a constant of the code — so
+> a multiplier is the wrong *shape* and a coefficient fitted to one fixture is (a7) and F5.
+> `PUBLISHED_TILE_SIDE` keeps **272 / 144** and keeps a caveat, **rewritten** because its old
+> subject no longer exists. **The published spread moves from 192–272 to 160–272.**
+
+Box: 2026-08-19, 20 s idle at **0.0000 ms/s** of cgroup full stall, 4.5–5.0 GB available across
+every point, max per-point stall 10.23 ms/s. Eighty points in
+[`task-8b-measured.jsonl`](docs/superpowers/notes/task-8b-measured.jsonl), harness in
+[`task-8b-harness.py`](docs/superpowers/notes/task-8b-harness.py), predictions in
+[`task-8b-predictions.json`](docs/superpowers/notes/task-8b-predictions.json) and
+[`task-8b-predictions-fixture2.json`](docs/superpowers/notes/task-8b-predictions-fixture2.json),
+**both committed before the runs they cover.**
+
+#### THE REBUILD, AND THE WITNESS FIRES EXACTLY WHERE IT DIVERGES
+
+Task 8's fixture, rebuilt: `grid = side`, all series live, `to_zarr`'s default chunking,
+`max_iter = 1`, floor measured on each input and pinned.
+
+| side | B | wall | shortfall at tile | rebuilt `ru_maxrss` | Task 8 recorded | diff |
+|---|---|---|---|---|---|---|
+| 16 | 256 | 67.8 s | 0.483 MB | 228.794 MB | 228.033 MB | **+0.762** |
+| 32 | 1 024 | 287.4 s | 0.000 MB | 230.502 MB | 229.773 MB | **+0.729** |
+| 48 | 2 304 | 738.1 s | 0.000 MB | 232.591 MB | 233.288 MB | **−0.696** |
+| 64 | 4 096 | 1 048.3 s | **85.799 MB** | 233.132 MB | 235.872 MB | −2.740 |
+| 96 | 9 216 | 2 060.0 s | **75.735 MB** | 237.040 MB | 245.363 MB | **−8.323** |
+
+**Task 8's ladder IS reproducible**, at every point short enough not to be damaged, to ±0.76 MB.
+`machine.reclaim_shortfall_bytes`, read **in the child** as Task 8i required, fired at the two
+long points and **nowhere else in 45 runs**. Its noise floor is the floor measurement's own
+between-process scatter: **up to 0.795 MB on a clean 30 s run**, which the constant's docstring
+does not mention and now must.
+
+#### THE THREE LADDERS ORDER BY HOW MUCH THEIR RUN LENGTH GROWS WITH B
+
+| ladder | run length across the ladder | slope, B/series | rel. SE |
+|---|---|---|---|
+| **masked, padded to a constant 30 s** | **30.0–30.1 s** | **2410.0 ± 46.0** | **1.9%** |
+| Task 8, full-live | 45.6 → 1780.1 s | 1900.9 ± 84.1 | 4.4% |
+| the rebuild, full-live | 67.8 → 2060.0 s | 845.0 ± 121.3 | 14.4% |
+| Task 7, full-live | ~74 → ~3638 s | 1021.6 ± 134.7 | 13.2% |
+
+**The rebuild is MORE contaminated than Task 8 was** — the box has less available RAM today — and
+that is what makes the ordering evidence rather than coincidence. **Task 8a's predicted direction
+is confirmed with a magnitude.**
+
+#### THREE QUANTITIES ON ONE RUN, AND `resident_bytes_per_series` DESCRIBES EXACTLY ONE OF THEM
+
+Fifteen points, five sides, three repeats, N = 60, M = 2, chunk (60, 16, 16):
+
+| reading | slope | ratio to the analytic 926 | inside `slope_band` (617.3–1389.0)? |
+|---|---|---|---|
+| working set at **end of run** | **970.6 ± 47.6** | 1.048 | **yes** |
+| working set at **end of tile**, block alive | **1504.1 ± 21.4** | 1.624 | **no** |
+| **peak** (best of four instruments) | **2410.0 ± 46.0** | 2.603 | **no, by 22σ** |
+
+At-tile minus at-end is **533.5**, which is `n_time · 9` = 540 — the data term, exactly as
+charged. **So the formula is right about what a process still holds after the tile and wrong
+about everything during it.**
+
+> **AND CRITERION 6 NEVER SAID WHICH READING IT MEANT.** *"Measured slope and intercept match the
+> corrected formula within a two-sided band"* is met on one of three readings of the same run and
+> failed on the other two. **(a5) at an acceptance criterion**, and it is the fourth time a
+> figure here has been quoted without the precondition that decides it.
+
+#### CRITERION 7, MEASURED CLEANLY, FAILS ABOVE ROUGHLY B = 1500 AT EVERY FIXTURE
+
+Peak against the minimal budget for each side — Task 8's own convention:
+
+| fixture | passes | fails, and by how much |
+|---|---|---|
+| N = 60, M = 2 | B = 256, 1024 | 2304 **+1.0 MB** → 9216 **+11.0 MB** |
+| N = 60, M = 6 | B = 256 | 1024 **+1.2 MB** → 9216 **+11.2 MB** |
+| N = 240, M = 2 | B = 256 | 1024 **+5.1 MB** → 9216 **+61.1 MB** |
+
+~~The crossover is at B ≈ 4893, side ≈ 70~~ — struck 2026-08-19; that was read off a ladder whose
+top points were depressed by their own run length. **Twelve of fifteen clean points fail.**
+
+#### THE TWO LEVERS: DEPENDENCE IS ESTABLISHED FOR ONE UNACCOUNTED TERM AND REFUSED FOR THE OTHER
+
+`resident_bytes_per_series` is `n_time·9 + output_slot_bytes(n_models, p_max, k_beta)`, so
+**`n_time` moves the first term alone and the candidate count moves the second alone.** Three
+fixtures on one harness, fine chunking, live = 16, fifteen points and three repeats each, `p_max`
+held at 3 and `k_beta` at 4 in all three:
+
+| fixture | analytic | data term<br>(at-tile − at-end) | unaccounted resident<br>(at-end − charged slots) | transient<br>(peak − at-tile) | peak | ratio |
+|---|---|---|---|---|---|---|
+| N = 60, M = 2 | 926 | **533.5** (charged 540) | **584.6** | **905.9** | 2410.0 ± 46.0 | 2.603 |
+| N = 60, M = 6 | 1698 | **542.2** (charged 540) | **1544.9** | **−39.9** | 3205.2 ± 51.3 | 1.888 |
+| N = 240, M = 2 | 2546 | **1954.3** (charged 2160) | **475.3** | **6985.8** | 9801.3 ± 40.9 | 3.850 |
+
+- **THE DATA TERM IS `n_time`-SHAPED AND THE FORMULA OVERCHARGES IT SLIGHTLY.** Ratios across the
+  levers: **3.66** against 4.00 for the `n_time` lever, **1.02** against 1.00 for the candidate
+  lever. The fitted coefficient is **7.89 B per time step**, against the charged **9** = float64
+  block (8) + mask (1). **The mask is not resident at the tile boundary the way the formula
+  assumes** — worth 240 B/series at N = 240 and in the safe direction, so it is recorded and not
+  chased.
+- **THE UNACCOUNTED RESIDENT TERM IS SLOT-SHAPED, AND ITS DEPENDENCE IS ESTABLISHED.** ×**2.64**
+  under a ×3 candidate lever and **flat** (0.81) under a ×4 `n_time` lever, which is the signature
+  of a per-candidate term. Solved over the three fixtures: **≈ 240 B per candidate per series**,
+  `n_time`-independent, against the **193** `output_slot_bytes` charges. **The slot inventory is
+  understated by about 2.24× at the end of a run** — F3's shape, a third time, in the same
+  function F3 corrected. Three points determine a two-parameter shape with one degree of freedom
+  spare, and the leftover is 584.6 against 475.3, about 2σ on the ±47.6 standard error. **That is
+  a determination, not a fit, and it is thin.**
+- **THE TRANSIENT HAS NEITHER SHAPE, AND THE REASON IS THAT IT IS NOT ONE EVENT.** 905.9 →
+  **−39.9** under the candidate lever and 905.9 → **6985.8** under the `n_time` lever: no constant,
+  no `n_time` multiple, no candidate multiple fits three points. **The sampler's own timestamp
+  says why.** At M = 2 the peak lands at **1.6–2.3 s**, which is tile assembly; at M = 6 it lands
+  at **45.02 s at every side**, which is the end of the pad — the store write. **The peak changes
+  LOCATION between fixtures**, so a single term fitted across them is a term fitted across two
+  different allocations.
+- **AND IT IS NOT LINEAR IN B EITHER.** Per point, N = 240: **1381 → 5161 → 6197 → 6614 → 6799
+  B/series**, saturating rather than constant; N = 60, M = 2: 1109 → 335 → 147 → 611 → 798, with
+  no transient at all at the two smallest sides. **A straight line through a saturating quantity
+  reports the transition as a rate** — the (k) register, and it is why the two chunking arms
+  returned curvature of **+0.054 ± 0.010 (5.3σ)** and **−0.037 ± 0.013 (2.8σ)**, opposite signs,
+  both "significant", on the same measurement. **Curvature is not established here and the two
+  arms disagreeing about its sign is the evidence that it is not.**
+
+> **SO ONE TERM'S DEPENDENCE IS ESTABLISHED AND THE OTHER'S IS REFUSED, AND THE ONE THAT IS
+> ESTABLISHED IS NOT THE ONE CRITERION 7 NEEDS.** The slot term is residency; criterion 7 bounds
+> the **peak**, and the peak's excess over residency is the term whose shape three fixtures could
+> not determine. **Correcting the slot term would move `PUBLISHED_TILE_SIDE` — the cascade — for
+> a term that does not close the failing criterion.** That is the whole argument for changing
+> nothing here.
+
+#### TWO STANDING RULES CORRECTED BY THIS TASK'S MEASUREMENT
+
+- **Task 8i bounded watermark damage at ~1 MB** — *"peak-based criteria survive with a stated
+  margin"*. Measured here: **−2.74 MB at 1048 s and −8.32 MB at 2060 s**, with no constructed
+  pressure. The rule is right in kind and **low in scale**, which is the same correction 8i itself
+  applied to 8a, now applied to 8i.
+- **Task 8a bounded the transient at ≤ 152 B/series** from one run's `peak − current_end`, and
+  that bound is what excluded the headroom explanation as *sufficient*. Measured at this fixture
+  the transient is **905.9 B/series — 37.6% of the peak, against a shipped `HEADROOM_FRACTION` of
+  15%.** The headroom is back as a **partial** explanation; `headroom_fraction_required` is now
+  **0.61577**, from `926 / (1 − h) ≥ 2410.0`.
+
+#### AND TWO PREDICTIONS THIS TASK WROTE DOWN AND THEN REFUTED
+
+- **The chunking does not reach the peak.** `assemble_tile` holds one span's float32 and its
+  float64 cast alive together — 720 B per series of the span at N = 60 — and its docstring's
+  *"both full representations never coexist"* is true only per span. Whole-grid against fine
+  chunking, fifteen points each: **−35 ± 60 B/series.** No effect. The term is real by reading and
+  invisible by measurement.
+- **The two disputed instruments agree.** Task 7's 2 ms sampler over the working set against
+  Task 8's `ru_maxrss`: **93 ± 67 B/series apart**, ≤ 0.8 MB at every point. **And neither
+  dominates the other** — the sampler reads *above* `VmHWM` at many points, and `VmHWM` read at
+  the end of a run came in **below** `VmHWM` read earlier in the same run at **6 of 45 points**,
+  because `/proc/self/status` prints `max(hiwater_rss, current)` without storing it back. **No
+  single peak instrument on this box is both monotone and complete; the four disagree by a median
+  of 0.50 MB and the honest peak is their maximum.**
+
+#### WHAT WAS RECOVERABLE FROM THE RECORD WITHOUT A MEASUREMENT — (j4), THREE TIMES
+
+- **Task 8's iteration cap was 1**, and it divides out of its own published wall clocks: 178.1,
+  190.0, 190.5, 189.1, 193.2 ms/series across a **36× range in B**, flat, which is the
+  `max_iter = 1` rate. Task 8a's rebuild ran at **1767.8 ms/series, 9.28×** — the uncapped rate.
+  **The "7–9× too expensive, therefore not the same fixture" finding WAS the cap.**
+- **The chunking reads back out of the fixtures' own construction**, and it is a second variable
+  that moved with the abscissa: the largest assembly span goes 256, 1024, 2304, **2048**, 2304
+  across Task 8's five sides — non-monotonic, falling between its last two.
+- **`memory._CALIBRATION_CHILD` already computes the watermark and `_measure_point` discards it**,
+  so the reading separating the two instruments cost a field, not a run. **It is still discarded**
+  — wiring it into `CalibrationPoint` touches a schema Tasks 4, 5 and 7 pin, and this task's
+  measurements did not need it.
+
+#### THE COST MODEL FAILED TO TRANSFER A FOURTH TIME, AND THIS TIME CHEAPLY
+
+A masked point at side 96 with a **constant live count** costs **6.7 s** in the child, against
+Task 8a's 223.6 s for a masked side 96 and Task 8's 1780.1 s full-live. That is what made three
+fixtures, two chunkings and three repeats affordable in one afternoon — and **the fourth closure
+boundary was priced against a full-live ladder and needs re-reading.**
+
+#### WHAT SHIPPED IN CODE
+
+`batch.tiling.PerSeriesDispute`'s fields, because its subject changed:
+`transient_bound_bytes_per_series`/`transient_bound_is_an_upper_bound` are gone (the transient is
+measured, not bounded) and `resident_at_tile_bytes_per_series`, `transient_bytes_per_series` and
+`peak_to_analytic_by_fixture` replace them. **The value did not move and the caveat did.** Four
+mutations bite: the owner reverted to 8a, the transient, the hypothesis sides, and the three
+fixtures' ratios pulled together — the last being the assertion that says *"the multiplier
+hypothesis is back"* if a later measurement ever brings them within 2×.
+
+---
+
 ## Things a cold session cannot re-derive
 
 **PRECEDENCE, AMENDED 2026-08-12.** The rule carried since Phase 1 was *"if PROGRESS.md and the
@@ -2195,6 +2392,12 @@ measurement is evidence rather than history, (a)'s limit clause on what a differ
 effect an instrument says is absent. **Read them there, not here.**
 
 ---
+
+> **RESOLVED 2026-08-19 BY TASK 8b, AND THE BLOCK BELOW IS KEPT BECAUSE ITS REASONING IS THE
+> TRANSFERABLE PART.** Everything from *"8b stays blocked"* onward is superseded: the fixture
+> **was** rebuildable, the iteration cap divides out of Task 8's own wall clocks, and the ladder
+> that resolved the dispute was a three-point refit of Task 8's published table. What follows is
+> what was believed on 2026-08-17.
 
 **Next action: TASK 8b — and it is unblocked on the instrument but NOT on the fixture.**
 Task 8i shipped `machine.reclaim_shortfall_bytes` and validated it against both sides, so a
@@ -5851,6 +6054,39 @@ Still open. **A new session must not assume these were settled.**
     lengths, caps — run on both stacks, with the populations and the chosen threshold
     derived from the union. **Do not close it by widening the margin further**: the margin
     is the constant's validation, and a stack-dependent converged tail is the finding.
+
+18. **`resident_bytes_per_series` DESCRIBES RESIDENCY AND THE BUDGET BOUNDS THE PEAK, AND
+    NOTHING IN 2b CLOSES THAT GAP.** Opened 2026-08-19 by Task 8b, and it is a **scope
+    decision before it is a measurement**. The model is exact on its own subject — the
+    at-tile-minus-at-end difference is **533.5 B/series** against a charged `n_time·9` = 540 —
+    and silent about everything else, so the peak sits at **2410.0 ± 46.0** against an
+    analytic **926** at one fixture and at a **different multiple** at every other:
+    **1.888 / 2.603 / 3.850** across M = 6, M = 2 and N = 240. **No coefficient fixes all
+    three**, which is why Task 8b changed nothing.
+
+    **What Task 8b established about the two unaccounted terms:**
+
+    | term | magnitude at N = 60, M = 2 | dependence |
+    |---|---|---|
+    | resident, above the charged slots | **584.6 B/series** | **ESTABLISHED: slot-shaped, ≈ 240 B per candidate per series, `n_time`-independent**, against the 193 `output_slot_bytes` charges |
+    | transient, peak above at-tile residency | **905.9 B/series** | **REFUSED. Not one event**: at M = 2 the peak is at tile assembly (1.6–2.3 s), at M = 6 it is at store finalisation (45.02 s at every side). It is also **saturating in B**, not linear |
+
+    **Why the established one does not license a correction anyway:** it corrects **residency**,
+    and criterion 7 bounds the **peak**. Landing it would move `PUBLISHED_TILE_SIDE` — the
+    cascade, for the fifth time — for a term that leaves the failing criterion failing.
+
+    **What would close it**, and it is a modelling task rather than a measurement:
+    **(a)** identify the peak's *location* per regime, since a term fitted across two different
+    allocations is not a term; **(b)** measure on a **crossed** design — at least 2 × 2 in
+    `n_time` and `n_models`, not the L this task ran — so an interaction is visible; and
+    **(c)** decide whether the budget should bound the peak or the residency, because those are
+    different guarantees and §9.4 never said which it meant. **Sizing a tile against residency
+    while asserting a bound on the peak is the defect, and it is a design question, not an
+    arithmetic one.**
+
+    **Do not close it by fitting a coefficient.** One was available at the fixture criterion 7
+    was measured at, it was one edit, and it would have turned a failing acceptance criterion
+    into a passing one — which is the whole reason the refusal is recorded.
 
 13. **THE PACKAGING GUARD CANNOT RESOLVE DEPENDENCIES, SO A WRONG VERSION FLOOR IS
     UNCAUGHT.** `tests/test_packaging.py` installs the wheel with `--no-deps --no-index`,

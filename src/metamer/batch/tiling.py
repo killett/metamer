@@ -109,34 +109,59 @@ class DisputedHypothesis:
 
 @dataclass(frozen=True)
 class PerSeriesDispute:
-    """Two instruments disagreeing about the per-series cost, as a value.
+    """The unsettled per-series cost under the published side, as a value.
 
     **THIS IS A FIELD RATHER THAN A PARAGRAPH BECAUSE A CAVEAT MUST NOT OUTLIVE
-    ITS SUBJECT.** A number published with its dispute is honest; a dispute
-    still attached after the dispute is settled is (a6) -- a description of
-    something that no longer exists, unfalsifiable because nothing exercises it,
-    which is what `Backend` was. Every number here is recomputed by a test, so
-    the task that resolves this deletes the field in the same edit that moves
-    the value, or the suite fails.
+    ITS SUBJECT.** A number published with its caveat is honest; a caveat still
+    attached after its subject is settled is (a6) -- a description of something
+    that no longer exists, unfalsifiable because nothing exercises it, which is
+    what `Backend` was. Every number here is recomputed by a test, so the task
+    that settles this deletes the field in the edit that moves the value, or the
+    suite fails.
+
+    > **THE SUBJECT CHANGED AT PHASE 2b TASK 8b AND THE FIELDS CHANGED WITH IT.**
+    > It used to be *"two instruments disagree by 1.86x"* -- Task 7's 1021.6 +/-
+    > 134.7 against Task 8's 1900.9 +/- 84.1. **That is settled: both are
+    > underestimates and the mechanism is the same one in both.** Each ladder's
+    > run length grew with its own abscissa, from 45.6 s to 1780.1 s in Task 8's
+    > case, and a long run under memory pressure loses working set and takes its
+    > watermark down with it. Restricted to the points its run length cannot have
+    > damaged -- the three under 440 s -- **Task 8's own ladder gives 2584.3 +/-
+    > 127.0**, and a duration-controlled ladder at the same fixture and the same
+    > three sides gives **2574.9 +/- 236.1**. Two independent lines, 0.4% apart.
+    >
+    > **SO WHAT REMAINS IS NOT A DISAGREEMENT, IT IS AN UNMODELLED GAP**, and it
+    > is why no term has moved: the ratio of measured peak to the analytic
+    > formula is **not a constant of the code**. Measured at three fixtures it is
+    > 1.888, 2.603 and 3.850, so a multiplier is the wrong SHAPE of correction
+    > and fitting one to a fixture is (a7) and F5 exactly.
 
     Attributes:
-        owner: The task that resolves it.
+        owner: Who owns what is left. **Not the same question 8a and 8b were
+            given** -- the instrument question is closed and the shape of the
+            correction is what is open.
         analytic_bytes_per_series: What the formula predicts at the ladder
             fixture -- **not** at the published model.
-        measured_bytes_per_series: The five-point production ladder's slope at
-            that fixture.
-        measured_standard_error: Its standard error. 4.4% relative, so it
-            resolves, against the earlier ladder's 13.2% which did not.
-        ladder_fixture: The configuration both figures belong to. A slope
-            without one is not a number.
-        transient_bound_bytes_per_series: How much of the excess can be a
-            transient rather than resident cost.
-        transient_bound_is_an_upper_bound: **True, and the direction is the
-            whole value of the number.** It excludes the headroom explanation as
-            *sufficient*; it does not establish the transient as zero.
+        measured_bytes_per_series: The duration-controlled ladder's peak slope
+            at that fixture, over fifteen points at five sides.
+        measured_standard_error: Its standard error. **1.9% relative, against
+            Task 8's 4.4% and Task 7's 13.2%**, because holding run length
+            constant removes the variable that was moving the long points.
+        ladder_fixture: The configuration every figure here belongs to, and the
+            controls it was taken under. A slope without them is not a number.
+        resident_at_tile_bytes_per_series: What the process still HOLDS at the
+            end of the tile, with the block alive. The peak's excess over this
+            is transient by construction.
+        transient_bytes_per_series: **MEASURED, not bounded.** Task 8a inferred
+            `<= 152` from one contaminated run's `peak - current_end`; measured
+            at this fixture it is 905.9, so that bound does not hold and the
+            headroom explanation is back in play as a *partial* one.
+        peak_to_analytic_by_fixture: The ratio at each fixture measured, keyed
+            by `N=<n_time> M=<n_models>`. **The reason no correction has
+            landed**: three values spanning 2x say the gap is not a multiplier.
         headroom_fraction_required: What `HEADROOM_FRACTION` would have to
-            become for the measured peak to sit inside the budget as B grows,
-            if the formula is right and the excess is transient.
+            become for the measured peak to sit inside the budget as B grows.
+            Derived from the two slopes so it cannot drift from them.
         hypotheses: The readings that remain live, by name.
     """
 
@@ -145,8 +170,9 @@ class PerSeriesDispute:
     measured_bytes_per_series: float
     measured_standard_error: float
     ladder_fixture: str
-    transient_bound_bytes_per_series: float
-    transient_bound_is_an_upper_bound: bool
+    resident_at_tile_bytes_per_series: float
+    transient_bytes_per_series: float
+    peak_to_analytic_by_fixture: Mapping[str, float]
     headroom_fraction_required: float
     hypotheses: Mapping[str, DisputedHypothesis]
 
@@ -283,14 +309,42 @@ PUBLISHED_TILE_SIDE = PublishedTileSide(
     shared=272,
     per_point=144,
     dispute=PerSeriesDispute(
-        owner="Phase 2b Task 8a (the second-fixture discriminator)",
+        owner=(
+            "unowned. Phase 2b Task 8b closed the instrument question -- both "
+            "published slopes are duration-contaminated underestimates of one "
+            "quantity -- and did NOT determine the correction's shape, which is "
+            "what a later task has to own. The measured peak-to-analytic ratio "
+            "is 1.888, 2.603 and 3.850 at three fixtures, so no multiplier and "
+            "no single added term reproduces all three"
+        ),
         analytic_bytes_per_series=926.0,
-        measured_bytes_per_series=1900.9,
-        measured_standard_error=84.1,
-        ladder_fixture="N = 60, M = 2, k_beta = 4, p_max = 3, grid = side",
-        transient_bound_bytes_per_series=152.0,
-        transient_bound_is_an_upper_bound=True,
-        headroom_fraction_required=1.0 - 926.0 / 1900.9,
+        measured_bytes_per_series=2410.0,
+        measured_standard_error=46.0,
+        ladder_fixture=(
+            "N = 60, M = 2, k_beta = 4, p_max = 3, grid = side, "
+            "standard-normal float32 from rng(0) with all but 16 series wholly "
+            "masked, an explicit (60, 16, 16) chunking so the largest "
+            "assembly span is 256 series at every side, max_iter = 1, criteria "
+            "['aic'], objective reml, threads 1, floor measured on this input "
+            "and pinned; fifteen points at sides 16/32/48/64/96, three repeats, "
+            "EVERY POINT PADDED TO A CONSTANT 30 s WALL CLOCK so run length is "
+            "not confounded with B, and every point's reclaim shortfall read in "
+            "the child (max 0.344 MB, which is the floor measurement's own "
+            "between-process scatter). Measured 2026-08-19 on the development "
+            "machine, 20 s idle at 0.0000 ms/s of full stall, 4.5-5.0 GB "
+            "available. Task 8's own ladder over the three sides its run length "
+            "cannot have damaged gives 2584.3 +/- 127.0 and this one gives "
+            "2574.9 +/- 236.1 over the same three -- two independent lines, "
+            "0.4% apart"
+        ),
+        resident_at_tile_bytes_per_series=1504.1,
+        transient_bytes_per_series=905.9,
+        peak_to_analytic_by_fixture={
+            "N=60 M=6": 1.888,
+            "N=60 M=2": 2.603,
+            "N=240 M=2": 3.850,
+        },
+        headroom_fraction_required=1.0 - 926.0 / 2410.0,
         hypotheses={
             "published": DisputedHypothesis(
                 per_series_bytes=8274.0,
@@ -298,32 +352,54 @@ PUBLISHED_TILE_SIDE = PublishedTileSide(
                 basis="the corrected analytic formula, Task 0",
             ),
             "additive": DisputedHypothesis(
-                per_series_bytes=8274.0 + (1900.9 - 926.0),
+                per_series_bytes=8274.0 + (2410.0 - 926.0),
                 side=256,
                 basis=(
-                    "the 974.9 B/series excess is a per-series term independent "
-                    "of the configuration; open question 16's instrument shows "
-                    "an N-independent excess at a different magnitude"
+                    "the 1484.0 B/series excess is a per-series term "
+                    "independent of the configuration. **Refuted at the second "
+                    "fixture and kept for the spread**: at N = 240 the excess "
+                    "is 7255 B/series, not 1484"
                 ),
             ),
             "multiplicative": DisputedHypothesis(
-                per_series_bytes=8274.0 * 1900.9 / 926.0,
-                side=192,
-                basis="the formula understates every per-series term by 2.053x",
+                per_series_bytes=8274.0 * 2410.0 / 926.0,
+                side=160,
+                basis=(
+                    "the formula understates every per-series term by 2.603x. "
+                    "**Refuted at the second and third fixtures**: the ratio is "
+                    "1.888 at M = 6 and 3.850 at N = 240"
+                ),
             ),
         },
     ),
 )
-"""**`tile_side` IS 272 SHARED / 144 PER-POINT, AND THE PER-SERIES COST IT RESTS
-ON IS UNDER DISPUTE BY 1.86x** -- Task 7's ladder gave 1021.6 +/- 134.7 B/series
-and did not resolve, Task 8's five-point production ladder gave 1900.9 +/- 84.1
-and does, Task 7's rung 48 does not reproduce, and **Phase 2b Task 8a owns the
-measurement that separates them; until it lands the published side is 272 and
-the live readings span 192 to 272.**
+"""**`tile_side` IS 272 SHARED / 144 PER-POINT, AND THE MEASURED PEAK PER-SERIES
+COST IS 2.60x THE FORMULA THE SIDE IS DERIVED FROM** -- 2410.0 +/- 46.0 B/series
+against an analytic 926 at the ladder fixture, measured 2026-08-19 over fifteen
+duration-controlled points. **The published side is 272 and the live readings
+now span 160 to 272**, which is wider than the 192-272 this record carried while
+the cost was thought to be 1900.9.
+
+~~Under dispute by 1.86x between Task 7's 1021.6 +/- 134.7 and Task 8's 1900.9
++/- 84.1~~ -- struck 2026-08-19. **Both are underestimates of one quantity, by
+one mechanism**: each ladder's run length grew with its own abscissa, and a long
+run under memory pressure loses working set and takes its watermark down with
+it. Task 8's own three points under 440 s give **2584.3 +/- 127.0**; the new
+ladder gives **2574.9 +/- 236.1** over the same three sides.
+
+**THE VALUE STILL DOES NOT MOVE, AND THAT IS A DECISION WITH A REASON.** The
+measured ratio of peak to formula is **1.888 at M = 6, 2.603 at M = 2 and 3.850
+at N = 240**, so the gap is not a multiplier and not a single added term, and a
+coefficient fitted to one fixture is right at that fixture and wrong everywhere
+else -- which is F5 and (a7). **Exit criterion 7 is therefore recorded as a
+known limitation rather than closed**, with its failing regime named: measured
+cleanly, peak RSS exceeds the budget at every tile above roughly B = 1500 at
+three fixtures, by 11 MB at side 96 with N = 60 and by 61 MB at side 96 with
+N = 240.
 
 That sentence is the number's, not a footnote's, and `dispute` is what makes it
 one: every figure in it is recomputed by `tests/test_tiling.py`, so the task
-that settles the dispute deletes the field in the edit that moves the value.
+that settles the remainder deletes the field in the edit that moves the value.
 
 **WHAT IS NOT IN DISPUTE:** that the floor, the headroom, the base and the model
 are preconditions of the answer; that the placement moves a constant and not the
