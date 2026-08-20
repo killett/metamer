@@ -950,9 +950,30 @@ nothing in the fit can report that it is not — the residuals look like noise o
 Worked instance, Phase 2b Task 8b. The transient — peak above end-of-tile residency — went
 **905.9 B/series** at N = 60, M = 2, **−39.9** at N = 60, M = 6 and **6985.8** at N = 240, M = 2.
 No constant, no `n_time` multiple, no candidate multiple fits three points. **The sampler's
-timestamp says why in one column:** at M = 2 the peak lands at **1.6–2.3 s**, which is tile
-assembly, and at M = 6 it lands at **45.02 s at every single side**, which is the store write.
-**Two allocations, one name.**
+timestamp says why in one column**, and there are indeed **two allocations wearing one name** —
+~~at M = 2 tile assembly and at M = 6 the store write~~, **struck 2026-08-19: both labels were
+wrong**, and which two they are is the corollary below.
+
+#### AND ITS COROLLARY, MEASURED THE HARD WAY: A TIMESTAMP IS NOT A LOCATION
+
+> **An argmax in seconds is not a location until something records where the phase boundaries
+> are.** Reading a phase off a timestamp is an inference made by whoever knows what the code does,
+> and it is made at precisely the moment the code is not doing what they think. **Timestamp the
+> boundaries and take a maximum per phase.**
+
+**Phase 2b OQ18 Task A, and BOTH of the labels above were wrong.** With the boundaries actually
+recorded — assemble, fit, write, callback, pad, completion bit, tail — the M = 2 argmax is inside
+**`fit`** (every point at side ≥ 48) and the M = 6 argmax is inside the **pad**, a window in which
+the workload is asleep. The 1.6–2.3 s had been read as assembly because assembly comes first;
+assembly at those sides takes **about two milliseconds**. The 45.02 s had been read as the store
+write because it was the largest timestamp on the page; it is the pad's own target, and the write
+had finished twenty-eight seconds earlier.
+
+**The cost of the wrong labels was a task.** OQ18's first hypothesis — free the block before the
+store write — was derived from *"the peak is at the store write"*, and the measurement that tested
+it found the peak was at `fit`, where the block is alive by necessity and no free can reach it.
+**The hypothesis was refutable and worth running; what made it the FIRST hypothesis was an
+inference nobody had marked as one.**
 
 > **AND THE SYMPTOM WAS ALREADY VISIBLE AS AN IMPOSSIBLE STATISTIC.** The same measurement, split
 > by chunking, returned curvature of **+0.054 ± 0.010 (5.3σ)** and **−0.037 ± 0.013 (2.8σ)** —

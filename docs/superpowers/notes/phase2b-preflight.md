@@ -2409,3 +2409,20 @@ is also a reproduction of 8b's ladder, and every point carries stall rate, recla
 Ninety points: three fixtures x five sides x three repeats x two arms, at 8b's own prices --
 about **63 minutes**, against the crossed 2 x 2 that B would need. That ratio is the second
 reason A goes first.
+
+### WHAT THE RUNS FOUND, AND THIS AUDIT'S OWN LEADING CANDIDATE WAS AMONG THE REFUTED
+
+Four of ten predictions were refuted and one could not be tested; the table and the numbers are in
+`PROGRESS.md`'s *What OQ18 Task A established* and are not repeated here. **What this audit got
+right was that the M = 2 fixtures are controls rather than chances**, and that OQ18's
+*"store finalisation"* label is an inference. **What it got wrong is the shape of the same
+mistake it had just diagnosed**: it accepted 8b's *"tile assembly"* label for the M = 2 argmax
+while rejecting the M = 6 one, on no better evidence — and the phase boundaries put that argmax
+in **`fit`**, with assembly measured at about two milliseconds at those sides. Rejecting one
+inference and keeping its twin is where a partial audit lands.
+
+**And P3 is the instructive refutation.** It predicted that a free below glibc's 128 kB mmap
+threshold returns nothing and that everything above it returns the block. Measured: nothing is
+returned below about 1.5 MB **inside a run**, while a fresh interpreter returns every one of the
+same sizes. **The threshold is dynamic and the process's own history moves it**, so an allocator
+prediction read out of a manual page is a prediction about a program with no history.

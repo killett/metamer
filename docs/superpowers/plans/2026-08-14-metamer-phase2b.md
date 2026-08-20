@@ -1292,7 +1292,7 @@ after the measurement under it was withdrawn.**
 
 | open | closer | machine |
 |---|---|---|
-| **OQ18** — the budget bounds the peak (Q1) and the tile is sized from a model of residency (8b) | decide what the budget bounds or make the two agree; **first hypothesis is a pipeline change**, freeing the block before the store write; then instrument the peak's *location* per regime and measure on a **crossed 2 × 2**, never an L | this one; the masked duration-controlled ladder is ~30 s a point |
+| **OQ18** — the budget bounds the peak (Q1) and the tile is sized from a model of residency (8b) | decide what the budget bounds or make the two agree. ~~first hypothesis is a pipeline change, freeing the block before the store write~~ — **run 2026-08-19 as Task A and REFUSED as a repair**: the peak is `max(fit-phase transient, end-of-tile residency)`, the M = 2 maximum is attained inside `fit` with the block alive, and criterion 7 fails in both arms. The peak's *location* is now instrumented per phase, which was the second closer. What remains is the **crossed 2 × 2**, never an L — and it must report **per phase** rather than a run maximum | this one; the masked duration-controlled ladder is ~30 s a point |
 | **OQ16** — the batched-evaluation instrument's ~2.7 kB/series its oracle does not charge | a second instrument on the same workload, or the term named by reading | this one |
 | the **slot term** at ≈ 240 B/candidate/series against a charged 193 | a fourth fixture; three points determine a two-parameter shape with ~2σ spare, which is **thin** | this one, ~10 min |
 | the **data term** at 7.89 B/time-step against a charged 9 | read `fit`'s mask lifetime; the overcharge is in the safe direction | none — reading |
