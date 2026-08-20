@@ -290,6 +290,16 @@ def _stub_the_floor_probe(request, monkeypatch):
 #: reading rather than asserting a corrupted one.** The suite was otherwise
 #: green at 1074 passed, 0 failed.
 #:
+#: **AND IT FIRED A SECOND TIME THE NEXT DAY, ON A DIFFERENT TEST AND A MUCH
+#: SHORTER WINDOW.** 2026-08-20, after the OQ18 Task A ladder left the box at
+#: 2.3 GB available: *the floor with the input open* went INDETERMINATE at
+#: **58 ms/s over 2.5 s**, suite otherwise green. **The window is the part
+#: worth reading**: a rate over 2.5 s is an average over far fewer reclaim
+#: events than one over 14.1 s, so a short-window measurement crosses this
+#: limit on less provocation. **That is (i9) pointed at a gate rather than at a
+#: fixture** -- the gate's own precision is set by the window it is asked to
+#: judge, and the two firings so far are 53 and 58 ms/s, both narrow.
+#:
 #: **DO NOT READ THIS AS THE KNOWN-BAD THE CONSTANT STILL LACKS.** It is a
 #: THRASHING reading, which is the failure mode the number was built from and
 #: is valid for; the failure mode it is blind to is the one above, and Task 8i
