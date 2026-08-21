@@ -4,7 +4,7 @@
 
 1. **Branch `main`, everything on it, every commit pushed by a hook** — https://github.com/killett/metamer.
 2. **DONE:** Phase 1 (0–18), Phase 2 preliminaries P0–P4, **Phase 2a (0–13)**, and **PHASE 2b IS COMPLETE — Tasks 0–10, with 9 narrowed plus 8a, 8i and 8b, closing 10 met / 4 met with reduced scope / 2 FAILED**, open questions 1, 4, 9, 11, 12, 15.
-3. **NEXT ACTION: 2b IS CLOSED, OQ18's FIRST HYPOTHESIS HAS BEEN TESTED, AND WHAT IS OPEN IS AGAIN A DECISION RATHER THAN A TASK. NOTHING SHOULD BE IMPLEMENTED UNTIL IT IS MADE.** Read [What OQ18 Task A established](#what-oq18-task-a-established-done-2026-08-19--read-before-proposing-any-pipeline-or-formula-repair) FIRST, **including its 2026-08-20 correction of its own first reading** — **the peak is `max(fit-phase transient, post-write plateau)` and which wins crosses over in B; freeing the block takes the peak down by nearly the whole block where the write's plateau is the peak (1.87 MB against 1.97 MB at M = 6) and moves it 0.30 MB against a 17.69 MB block where `fit`'s transient is the peak, which is every production-scale point; and criterion 7 fails in both arms at every fixture.** So the pipeline arm of OQ18's closer (a) is **narrowed, not spent**, and the elimination argument is **re-aimed at the fit transient** — +862 B/series at N = 60 and +6859 at N = 240 above the plateau — which is cheaper to name than a crossed 2 × 2 and comes before it. **Then** read [What Task 8b established](#what-task-8b-established-done-2026-08-19--read-before-quoting-the-per-series-cost-criterion-6-or-criterion-7). In one line: **the 1.86× was one confound acting on both ladders, the clean per-series peak is 2410.0 ± 46.0 against an analytic 926, and the correction's SHAPE is undetermined because the ratio is 1.888 / 2.603 / 3.850 at three fixtures** — so `PUBLISHED_TILE_SIDE` stays **272, with a rewritten caveat and a 160–272 spread**, criterion 6 is **not met and never named its reading**, and criterion 7 is **recorded as FAILED with its regime named: above roughly B = 1500, at all three fixtures.** **`memory.resident_bytes_per_series` describes residency and not peak, while Q1 settled that `--memory-budget` bounds process PEAK RSS** — so the sizing quantity and the bounded quantity are different quantities, which is an inconsistency between two settled decisions rather than an open modelling choice, and its first hypothesis is a **pipeline** change (free the block before the store write) rather than a formula one. **Task 10 has landed and closed the sub-phase**; its closing table, the unclosed items with their closers and what 2c inherits are in the plan's *THE CLOSING TABLE*, once, and the verdicts are also data in `tests/exit_criteria_2b.py`.
+3. **NEXT ACTION: 2b IS CLOSED, OQ18's FIRST HYPOTHESIS HAS BEEN TESTED, AND WHAT IS OPEN IS AGAIN A DECISION RATHER THAN A TASK. NOTHING SHOULD BE IMPLEMENTED UNTIL IT IS MADE.** Read [What OQ18 Task A established](#what-oq18-task-a-established-done-2026-08-19--read-before-proposing-any-pipeline-or-formula-repair) FIRST, **including its 2026-08-20 correction of its own first reading** — **the peak is `max(fit-phase transient, post-write plateau)` and which wins crosses over in B; freeing the block takes the peak down by nearly the whole block where the write's plateau is the peak (1.87 MB against 1.97 MB at M = 6) and moves it 0.30 MB against a 17.69 MB block where `fit`'s transient is the peak, which is every production-scale point; and criterion 7 fails in both arms at every fixture.** So the pipeline arm of OQ18's closer (a) is **narrowed, not spent**, and the elimination argument was **re-aimed at the fit transient** — which **Task A-prime then named on 2026-08-21: `signal.py:660`, the tier-3 batched design tensor, `B · N · k_beta · 8` bytes, one allocation, the fit maximum at 17 of 17 points, and larger than the entire per-series model it is missing from (1920 against 926 at N = 60; 1.49 GB at §9.4's worked example).** Read [What OQ18 Task A-prime established](#what-oq18-task-a-prime-established-done-2026-08-21--read-before-touching-design_info-tile_side_for-or-criterion-7) SECOND. **The crossed 2 × 2 is now well-posed and has a subject; an elimination is available and is NOT authorized.** **Then** read [What Task 8b established](#what-task-8b-established-done-2026-08-19--read-before-quoting-the-per-series-cost-criterion-6-or-criterion-7). In one line: **the 1.86× was one confound acting on both ladders, the clean per-series peak is 2410.0 ± 46.0 against an analytic 926, and the correction's SHAPE is undetermined because the ratio is 1.888 / 2.603 / 3.850 at three fixtures** — so `PUBLISHED_TILE_SIDE` stays **272, with a rewritten caveat and a 160–272 spread**, criterion 6 is **not met and never named its reading**, and criterion 7 is **recorded as FAILED with its regime named: above roughly B = 1500, at all three fixtures.** **`memory.resident_bytes_per_series` describes residency and not peak, while Q1 settled that `--memory-budget` bounds process PEAK RSS** — so the sizing quantity and the bounded quantity are different quantities, which is an inconsistency between two settled decisions rather than an open modelling choice, and its first hypothesis is a **pipeline** change (free the block before the store write) rather than a formula one. **Task 10 has landed and closed the sub-phase**; its closing table, the unclosed items with their closers and what 2c inherits are in the plan's *THE CLOSING TABLE*, once, and the verdicts are also data in `tests/exit_criteria_2b.py`.
 4. **Tests: 1074 passed, 0 failed, 1 INDETERMINATE — 2026-08-20 after OQ18 Task A, 1646.9 s, on a box the ladder had left at 2.3 GB available.** The indeterminate is *the floor with the input open* at **58 ms/s of cgroup full stall over 2.5 s** — **the SECOND firing of `RSS_STALL_LIMIT_US_PER_S`, on a different test and a much shorter window**, and the window is the part worth reading: a rate over 2.5 s averages far fewer reclaim events than one over 14.1 s, so a short window crosses the limit on less provocation. The previous sweep, 2026-08-19 after Task 10, was **1074 passed, 0 failed, 1 INDETERMINATE at 1106.3 s and 3397 MB**, and that first firing was `test_the_floor_ladder_reproduces_the_recorded_rungs` at **53 ms/s over 14.1 s** — the reading the constant's own docstring had been asking for. Neither pass nor fail: the gate refused to judge, said so in the summary, and cost one reading rather than asserting a corrupted one. **It is a THRASHING reading and not the known-bad the constant still lacks**, and one of criterion 4's two witnesses therefore did not report on this run, which does not move its verdict. Before Task 10, and before the box's available RAM fell through the day: 1067 passed, 0 failed, 0 indeterminate, 1273.9 s at 4214 MB, 20 s idle at 0.0096 ms/s. The count did NOT move at Task 8b and that is correct**: its deliverable is a measurement, which by Tasks 4, 7 and 8's precedent does not enter the suite, and the two tests it touched already existed to fail when the published record changed. And separately 1044 passed under `-m "not machine"` in a pip-installed venv (PyPI wheels, numpy 2.5.2), which is what CI runs and is NOT the same evidence** — see the 2026-08-19 entry under [Gotchas](#gotchas-discovered) for the seven failures and three errors that only that second environment could show. **GREEN, and the conditions are part of the claim**: the same suite was 1049/3-failed at 1906 MB available on 2026-08-17, on the same code. The three failures were **ambient-conditional, not code** — see [What Task 8i established](#what-task-8i-established-done-2026-08-17--read-before-writing-any-rss-assertion-or-trusting-the-validity-gate), which is also where the survey of every RSS assertion lives. **Every sweep prints `RSS measurement validity` and it now has TWO conditions**, the second being the one that can see quiet reclaim.
 5. **`pixi run test` is the full sweep and every end-of-task verification must run it; `test-fast` and `test-ci` are not evidence.** It has caught **seven** things a fast run could not, two of them in Task 8. **Every run prints `RSS measurement validity`, including at zero** — a nonzero count is INDETERMINATE, neither pass nor fail.
 6. **Verify a fresh checkout with `pixi run test && pixi run typecheck && pixi run lint`**, plus `pixi run pre-commit run --all-files` before every commit.
@@ -2140,6 +2140,100 @@ points are **excluded** from every figure above; the surviving pair at side 96 i
 which is why that row carries no scatter. **The tell was in the data rather than in a crash**:
 `freed_bytes` came back as 491 520 where the block should be 17 694 720, because the last of four
 tiles is the 16 × 16 corner.
+
+---
+
+### What OQ18 Task A-prime established (done 2026-08-21 — read before touching `design_info`, `tile_side_for` or criterion 7)
+
+> ## THE PRODUCTION PEAK IS ONE NAMED ALLOCATION: `signal.py:660`, THE TIER-3 BATCHED DESIGN TENSOR. IT IS `B x N x k_beta x 8` BYTES EXACTLY, IT IS RELEASED BEFORE `design_info` RETURNS, AND IT IS THE FIT-PHASE MAXIMUM AT 17 OF 17 TIER-3 POINTS.
+>
+> `SignalSpec._restricted_singular_values` takes its third tier when the per-series masks
+> differ — which is every real dataset and every fixture this project measures — and builds
+> `x[None, :, :] * mask[:, :, None]` for one batched `svdvals`. **Read off the argument at the
+> call, not computed: 4 423 680 / 7 864 320 / 17 694 720 B at N = 60 and 17 694 720 /
+> 31 457 280 / 70 778 880 at N = 240, which is `B · N · k_beta · 8` to a ratio of 1.000 at all
+> six cells.** The resident set rises across the call by **1.00–1.03×** that, and a
+> before/after difference across `design_info` sees only **0.26–1.08 MB** of it.
+>
+> **AND IT IS ONE ALLOCATION, NOT SEVERAL — WHICH IS THE PRECONDITION B NEEDED.** Across the
+> whole series loop the resident set rises **0.16–0.79 MB** over 72 to 288 progress samples,
+> at both fixtures and both arms. Nothing accumulates per series. **The crossed 2 × 2 is
+> therefore well-posed, and it now has a subject rather than a sum.**
+
+Thirty-seven points: two fixtures × three sides × three repeats × two tier arms, plus two
+tracemalloc naming points. Box quiet at 0.0000 ms/s idle, **4.45–7.62 GB available**, and this is
+the first ladder in three days with **zero reclaim shortfall and zero stall exceedances at every
+point.** Harness in [`oq18-aprime-harness.py`](docs/superpowers/notes/oq18-aprime-harness.py),
+predictions in [`oq18-aprime-predictions.json`](docs/superpowers/notes/oq18-aprime-predictions.json)
+**committed before any ladder point ran**, points in
+[`oq18-aprime-measured.jsonl`](docs/superpowers/notes/oq18-aprime-measured.jsonl).
+
+#### THE TIER IS THE ARM, AND THE CONTROL SEPARATES THE TENSOR FROM EVERYTHING ELSE IN `fit`
+
+Fit-phase maximum above the resident set at the start of `fit`, fitted against B:
+
+| fixture | tier 3 (`live = 16`, masks differ) | tier 2 (`live = 0`, masks identical) | the tensor |
+|---|---|---|---|
+| N = 60, M = 2 | **1996.0 ± 0.3 B/series** | 618.3 ± 30.5 | **1920** |
+| N = 240, M = 2 | **7577.7 ± 33.6 B/series** | 514.3 ± 74.2 | **7680** |
+
+**The tier-3 slope is the tensor to within 4% and 1%, and the tier-2 arm's maximum is not in
+`design_info` at all** — it lands in the series loop or elsewhere in `fit`, at a slope three to
+fifteen times smaller. **The two arms are not additive and must not be read as terms**: each is a
+maximum, and switching the tier changes which allocation the maximum is.
+
+#### AND THE NAMING ARM PUT A FILE AND A LINE ON IT
+
+`tracemalloc`, snapshotted while the tensor is alive — its own RSS is not a measurement and is
+not published:
+
+| site | N = 60 | N = 240 | what it is |
+|---|---|---|---|
+| **`core/signal.py:660`** | **17.69 MB, 3 blocks** | **70.78 MB, 3 blocks** | **the tier-3 tensor** |
+| `<frozen importlib._bootstrap_external>:781` | 31.74 MB, 206 860 blocks | 31.74 MB | the interpreter's own imports, flat in B and N |
+| `batch/tiling.py:934` | 4.42 MB, 2 blocks | 17.69 MB, 2 blocks | the tile block — Task A's subject, corroborated |
+| `batch/run.py:940` | 0.55 MB | 2.21 MB | `np.isfinite(block)`, at one byte per point |
+
+**At N = 240 the tensor is the largest single allocation in the process.** At N = 60 it is second
+to the import machinery, which is 206 860 blocks of constant and is not a transient.
+
+#### WHAT THIS MEANS FOR THE MODEL, AND THE ARITHMETIC IS WORTH DOING BEFORE ANY REPAIR
+
+`resident_bytes_per_series` charges `n_time·9 + output_slot_bytes(...)` — **926 B/series at
+N = 60 and 2546 at N = 240.** The tensor alone is `n_time · k_beta · 8` = **1920 and 7680**, so
+**the single unmodelled transient is larger than the entire modelled per-series cost, by 2.1× and
+3.0×.** Projected to §9.4's worked example — N = 630, `PUBLISHED_TILE_SIDE` = 272, B = 73 984 —
+it is **20 160 B/series and 1.49 GB in one allocation**, against a 16 GB budget and a 15%
+headroom. **That is the term criterion 7 has been failing on**, and it is a transient at fit
+setup rather than anything the residency model was ever built to describe.
+
+> **THE ELIMINATION IS AVAILABLE AND IS NOT AUTHORIZED HERE.** The tier-3 route needs only the
+> `(B, k)` singular values, so chunking the batched `svdvals` over blocks of series bounds the
+> temporary at `chunk · N · k_beta · 8` without changing a single returned number, and the
+> function's own docstring already names the size it is guarding against. **A-prime measures; it
+> does not repair.** Nothing here moves `PUBLISHED_TILE_SIDE`, `resident_bytes_per_series` or any
+> exit-criterion verdict, and **criterion 7's verdict stands until a correction is measured.**
+
+#### EIGHT PREDICTIONS, EIGHT HELD — AND THAT IS ITSELF A FINDING ABOUT THE METHOD
+
+B1 (the tensor is `B·N·k·8` read off the argument), B2 (the rise is 0.9–1.1× it and is released
+before the call returns), B3 (one allocation, no accumulation), B4 (the tier-2 arm loses the
+B-slope), B5 (the tensor exceeds Task A's transient at both fixtures), B6 (`tracemalloc`'s top
+site is signal.py's tier-3 line — **top at N = 240, second at N = 60 behind the import
+machinery**, which is the caveat its own prediction wrote down), B7 (the arms' digests differ at
+every pair), B8 (nothing changed). **Task 8b had four of seven wrong and Task A four of ten; this
+one has none, and the reason is not that the predictions got better** — it is that the suspect was
+**already documented in the tree with its magnitude** and a smoke point had already been run
+against it. **A clean sweep of predictions means the work was confirmatory, and confirmatory work
+is cheap precisely because someone else did the expensive part** — here, whoever wrote that
+docstring.
+
+#### AND TWO POINTS TILED THEMSELVES DIFFERENTLY AGAIN, THE SAME WAY
+
+`s96 / N = 240 / live = 0`, repeats **a** and **c**: derived side **80**, four tiles. Same cause as
+Task A's four — the budget is written at `%.9f` GB and one byte of rounding lands the run on a
+smaller multiple of the base at that fixture. **Excluded, and the fix belongs to whichever task
+next writes a harness**: pass the side through rather than round-tripping it through a budget.
 
 ---
 
@@ -6353,6 +6447,24 @@ Still open. **A new session must not assume these were settled.**
     N = 60 and **+6859 B/series at N = 240** above the write's plateau. **Naming that allocation
     is cheaper than a crossed 2 × 2 and comes before it**, on the same argument that put the
     pipeline first: eliminating an allocation beats modelling it.
+
+    **NAMED 2026-08-21 BY TASK A-PRIME, AND IT IS ONE ALLOCATION.** It is
+    `signal.py:660` — `SignalSpec._restricted_singular_values`' third tier, taken whenever the
+    per-series masks differ, which is every real dataset — building
+    `x[None, :, :] * mask[:, :, None]` for one batched `svdvals`. **`B · N · k_beta · 8` bytes,
+    read off the argument at the call at a ratio of 1.000 across six cells**, released before
+    `design_info` returns, and the fit-phase maximum at **17 of 17** tier-3 points. Nothing
+    accumulates across the series loop: **0.16–0.79 MB over the whole batch.** The record is in
+    [What OQ18 Task A-prime established](#what-oq18-task-a-prime-established-done-2026-08-21--read-before-touching-design_info-tile_side_for-or-criterion-7).
+
+    **THAT CHANGES THIS QUESTION'S SHAPE, BECAUSE THE UNMODELLED TERM IS NOW LARGER THAN THE
+    MODEL.** `resident_bytes_per_series` charges 926 B/series at N = 60 and 2546 at N = 240; the
+    tensor alone is **1920 and 7680**. At §9.4's worked example — N = 630, side 272 — it is
+    **1.49 GB in one allocation.** So closer (a)'s first arm is no longer *"decide what the budget
+    bounds"* in the abstract: **the peak has one dominant term, it is a transient at fit setup,
+    and it is removable in principle** — the tier needs only the `(B, k)` singular values, so
+    chunking the batched `svdvals` bounds it at `chunk · N · k_beta · 8` while returning the same
+    numbers. **Not authorized here, and not measured as a repair.**
 
     **What Task 8b established about the two unaccounted terms:**
 

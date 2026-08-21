@@ -2480,3 +2480,19 @@ the largest**, so a `(1, 4, 4)` call from inside the objective stood where the `
 tensor belonged: **128 bytes in the slot where 4.42 MB belongs.** Recorded here because the fix
 is the reason the ladder's numbers mean anything, and because a smoke point that changes an
 instrument is the smoke point earning its keep.
+
+### WHAT THE RUNS FOUND, AND ALL EIGHT PREDICTIONS HELD
+
+The numbers are in `PROGRESS.md`'s *What OQ18 Task A-prime established*. **The audit's own
+suspect was right and its magnitudes were right**, which is the first time in this sub-phase that
+has happened — and the reason is worth recording rather than celebrating: **the suspect was
+already documented in the tree, with its size, in the docstring of the function that allocates
+it.** (j4) says an existing measurement is evidence rather than history; this is the same rule at
+a *description*, and the cost of not having read it was Task A.
+
+**The one prediction that needed its own caveat is the one that shows the instrument's limit.**
+B6 predicted `tracemalloc`'s top site would be signal.py's tier-3 line, and wrote down that the
+ranking might be dominated by Python-object sites instead. Measured: **top at N = 240 (70.78 MB
+in 3 blocks) and second at N = 60**, behind 31.74 MB of import machinery spread over 206 860
+blocks. **The block count is what separates them** — three blocks is an array, two hundred
+thousand is an interpreter — and a ranking by size alone would have read the second as a rival.
