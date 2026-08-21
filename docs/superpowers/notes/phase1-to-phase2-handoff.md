@@ -378,6 +378,34 @@ the rate is not the right quantity.
 > what it was built from, and it is not a certificate that an RSS difference is sound. So it was
 > **neither widened nor narrowed**; what changed is the claim written next to it.
 
+#### AND THE FOURTH REGISTER, MEASURED 2026-08-21: "THE INSTRUMENT IS BLIND" CAN BE "THE STATISTIC IS DILUTED"
+
+> **Before concluding that a counter cannot see an effect, check whether the STATISTIC taken from
+> it can.** A cumulative counter read as an average over a long block divides a brief, intense
+> event by the block's own length; the event is in the data and the summary is what lost it.
+> **A null from an instrument is a claim about the reduction as much as about the sensor.**
+
+**Phase 2b open question 19, and it narrows (a2)-at-the-instrument above rather than overturning
+it.** The claim carried since Task 8a was that PSI `full` *cannot* see quiet reclaim, with a
+mechanism attached: reclaiming clean pages the workload has stopped touching costs no wait, so
+there is nothing to count. Task 8i's own constructed known-bad, re-read under a **fixed one-second
+window**: **0.2 ms/s as a whole-block average over 600 s, and 61.3 ms/s over its worst second.**
+The reclaim burst was always in the counter. **Ten minutes of averaging divided it by about three
+hundred.**
+
+**What survives the correction is narrower and still load-bearing**: the counter is
+**per-cgroup**, so a firing does not establish that the measured *process* waited, and reclaim
+caused from outside the cgroup leaves it nothing to attribute. **The reclaim-shortfall witness
+remains the condition that reports on the subject.** The full table is in
+[`oq19-gate-validation.md`](oq19-gate-validation.md).
+
+> **AND THE CONSTRUCTION FAILED FIRST, WHICH IS THE OTHER HALF OF THE LESSON.** The first
+> known-bad re-touched **anonymous** memory under a bounded pressure generator that stops at a
+> 2 GB floor — so nothing the process wanted was ever taken, and the gate read **0.13 ms/s**.
+> That is (i2) at the construction rather than at the test: **a null from a fixture that does not
+> build the effect is a claim about the fixture.** The working set had to be **file-backed**
+> before the kernel would take it and the refault would cost a wait.
+
 **AND REFUSING TO GATE WITH A BLIND INSTRUMENT IS THE RIGHT CALL, FOR A REASON WORTH RECORDING.**
 Three `machine` tests then failed on this box. The standing rule says *"if a gated test fails,
 gate it; never widen it"* — but gating them with **this** gate would convert a **visible failure

@@ -222,14 +222,23 @@ def _stub_the_floor_probe(request, monkeypatch):
 # The validity gate for RSS-difference measurements
 # --------------------------------------------------------------------------
 
-#: POLICY. **A THRASHING GATE.** Microseconds of full memory stall per second
-#: of wall clock above which an RSS-difference reading is INDETERMINATE rather
-#: than pass or fail -- and **thrashing is the whole of what it can see.** The
-#: name says RSS and the subject is narrower: Task 8a measured that quiet
-#: reclaim over a long window costs no stall at all, so a reading this gate
-#: passes is a reading that was not thrashed, never a reading that is sound.
-#: `rss_validity`'s `reference_bytes` condition is the one that can see the
-#: other failure, and the two are not interchangeable.
+#: POLICY. **A THRASHING GATE, READ OVER A FIXED WINDOW.** Microseconds of full
+#: memory stall per second above which an RSS-difference reading is INDETERMINATE
+#: rather than pass or fail, taken as the **maximum over any
+#: `stall.STALL_WINDOW_S` window inside the measurement** -- never as an average
+#: over whatever block the caller brackets, which is the defect open question 19
+#: removed. One limit, one meaning, at every call site.
+#:
+#: **WHAT IT CAN AND CANNOT SEE, CORRECTED 2026-08-21 AND WEAKER THAN IT WAS
+#: WRITTEN.** Task 8a established that quiet reclaim costs no stall and concluded
+#: the gate is blind to it; the constructed known-bad reproduces that reading
+#: whole-block -- **0.2 ms/s over 600 s** -- and reads **61.3 ms/s over its worst
+#: second**. **So the blindness was partly DILUTION and not only definition.**
+#: What still holds: the counter is **per-cgroup**, so a firing does not
+#: establish that the measured PROCESS waited, and reclaim caused from outside
+#: this cgroup leaves it nothing to attribute. `rss_validity`'s
+#: `reference_bytes` remains the condition that witnesses the subject itself,
+#: and the two are not interchangeable.
 #:
 #: **AN RSS DIFFERENCE HAS A VALIDITY CONDITION AND THESE TESTS USED TO ASSUME
 #: IT.** Resident set size counts what a process currently holds; reclaim takes
@@ -241,91 +250,29 @@ def _stub_the_floor_probe(request, monkeypatch):
 #: 16 MB came out **36.1 MB** apart -- and both passed in isolation minutes
 #: later on the same box.
 #:
-#: **THE VALUE IS SET FROM A MEASUREMENT AND ITS LIMIT IS STATED.** On this box,
-#: 20 s idle gave a cgroup full-stall rate of **0.9 ms/s**, and a 17.7 s
-#: `measure_floor` whose answer was CORRECT gave **5.3 ms/s** -- five times
-#: idle, from our own allocations. So a nonzero stall is normal and the gate
-#: must be a rate. **50 ms/s is 5% of wall clock and roughly ten times the
-#: known-good rate** -- and **that margin is over KNOWN-GOOD, which is not the
-#: margin that matters.** Against the worst window a real sweep has produced,
-#: recorded below at the firing of 2026-08-19, the margin is **1.06x, not
-#: 10x.** The 10x figure describes
-#: the distance from idle; the 1.06x describes the distance from the readings
-#: the gate has to sit above, and only the second one predicts how often it
-#: fires.
+#: **THE VALUE IS NOW BOUNDED ON BOTH SIDES BY MEASUREMENT, WHICH IS NEW.** Every
+#: earlier version of this number was a multiple of idle -- a distance from
+#: known-good with nothing on the other side. The four cells and their readings
+#: are in [`oq19-gate-validation.md`](../docs/superpowers/notes/oq19-gate-validation.md),
+#: once; in one line, **a full clean sweep's worst window is 0.2 ms/s and the two
+#: constructed known-bads are 61.3 and 76.5 ms/s.** 25 ms/s sits **125x above the
+#: sweep** and **2.5x below the nearer known-bad**.
 #:
-#: **AND THE KNOWN-BAD READINGS ARRIVED AT PHASE 2b TASK 8a, 2026-08-17: THE
-#: GATE DOES NOT SEE THIS FAILURE MODE AT ALL.** Two one-tile runs lost most of
-#: their resident set to reclaim and both read far INSIDE the limit -- a 4073 s
-#: fit whose working set ended **85 MB below its own measured floor** read
-#: **0.0876 ms/s**, which is below the 0.9 ms/s idle rate, and a control that
-#: added 600 s of idle and lost **92 MB** read **1.2489 ms/s**. **Both would
-#: pass.** The mechanism is in the counter's definition: PSI `full` counts time
-#: the workload was **stalled waiting** on memory, and reclaiming clean
-#: file-backed pages the workload has stopped touching costs **no stall at
-#: all**. So this gate catches **thrashing** and is **blind to quiet reclaim
-#: over a long window**.
+#: **THE ASYMMETRY, AND BOTH DIRECTIONS STILL COST SOMETHING.** Too loose and a
+#: corrupted measurement is asserted as a fact. Too tight and these tests stop
+#: running, which is how a `machine` test decays into one nobody notices. **The
+#: tie is broken by making INDETERMINATE loud** -- a gate that is too tight
+#: announces itself in the summary and gets re-run, a gate that is too loose is
+#: silent -- so the bias is toward tight, and 25 000 is the tighter of the two
+#: values the measurements admit.
 #:
-#: **THE NUMBER IS THEREFORE NOT WIDENED AND NOT NARROWED -- ITS SUBJECT IS.**
-#: It is a valid gate on the failure it was built from and it is not a
-#: certificate that an RSS difference is sound. **A long-running RSS difference
-#: needs its own control**: hold the fixture and vary only elapsed time, which
-#: is what exposed this. See `PROGRESS.md`'s *What Task 8a established*.
-#:
-#: **THE ASYMMETRY IS UNUSUAL BECAUSE BOTH DIRECTIONS COST SOMETHING.** Too
-#: loose and a corrupted measurement is asserted as a fact. Too tight and these
-#: tests stop running, which is how a `machine` test decays into a test nobody
-#: notices. **The tie is broken by making INDETERMINATE loud**: a gate that is
-#: too tight announces itself in the summary and gets re-run, and a gate that is
-#: too loose is silent -- so the bias is toward tight.
-#:
-#: **AND IT FIRED FOR THE FIRST TIME ON 2026-08-19, WHICH IS THE READING THIS
-#: DOCSTRING HAS BEEN ASKING FOR SINCE IT WAS WRITTEN.**
-#: `test_the_floor_ladder_reproduces_the_recorded_rungs` went INDETERMINATE at
-#: **53 ms/s of cgroup full stall over 14.1 s**, on a box down to **3.4 GB
-#: available** after a day of measurement -- against 0.9 ms/s idle and 5.3 ms/s
-#: during a `measure_floor` whose answer was correct. **The gate behaved exactly
-#: as designed: it refused to judge, said so in the summary, and cost one
-#: reading rather than asserting a corrupted one.** The suite was otherwise
-#: green at 1074 passed, 0 failed.
-#:
-#: **AND IT FIRED A SECOND TIME THE NEXT DAY, ON A DIFFERENT TEST AND A MUCH
-#: SHORTER WINDOW.** 2026-08-20, after the OQ18 Task A ladder left the box at
-#: 2.3 GB available: *the floor with the input open* went INDETERMINATE at
-#: **58 ms/s over 2.5 s**, suite otherwise green. **The window is the part
-#: worth reading**: a rate over 2.5 s is an average over far fewer reclaim
-#: events than one over 14.1 s, so a short-window measurement crosses this
-#: limit on less provocation. **That is (i9) pointed at a gate rather than at a
-#: fixture** -- the gate's own precision is set by the window it is asked to
-#: judge, and the two firings so far are 53 and 58 ms/s, both narrow.
-#:
-#: **DO NOT READ THIS AS THE KNOWN-BAD THE CONSTANT STILL LACKS.** It is a
-#: THRASHING reading, which is the failure mode the number was built from and
-#: is valid for; the failure mode it is blind to is the one above, and Task 8i
-#: shipped `machine.reclaim_shortfall_bytes` for that. What this datum settles
-#: is narrower and worth having: **at 53 ms/s the limit is close enough to a
-#: real sweep's worst window to fire about once a day on a loaded box**, so the
-#: 10x margin over known-good is roughly 1.06x over what actually occurs. **If
-#: it starts firing on most runs the repair is the box or the fixture, never the
-#: number** -- widening it is how the tests stop running.
-#: **AND THE WINDOW IS NOW A CONSTANT RATHER THAN THE CALLER'S, WHICH CLOSES THE
-#: THIRD DEFECT (open question 19, 2026-08-21).** The rate below is read as the
-#: **maximum over any `stall.STALL_WINDOW_S` window inside the measurement**, not
-#: as an average over whatever block the caller brackets, so one limit means one
-#: thing at every call site. See `tests/stall.py` for the window's own asymmetry
-#: and for why a block too short to hold a window is **abstained on and reported**
-#: rather than judged.
-#:
-#: **THE VALUE BELOW IS INHERITED AND HAS NOT YET BEEN RE-DERIVED UNDER THE NEW
-#: READING, WHICH IS SAID HERE BECAUSE IT MATTERS.** 50 000 was set from
-#: whole-block averages, and a windowed maximum can only be **larger** on the
-#: same box -- a burst that averaging diluted now reports its own height. So the
-#: number is provisional in one direction: it may fire on healthy sweeps until it
-#: is re-derived from the `worst window judged` line the summary now prints.
-#: **Do not widen it to silence a firing** -- that is the failure mode this
-#: docstring has warned about since it was written. Open question 19 carries the
-#: derivation and the two known-bads it owes.
-RSS_STALL_LIMIT_US_PER_S = 50_000
+#: **EXPECT IT TO FIRE MORE OFTEN THAN THE OLD ONE DID, AND THAT IS THE REPAIR
+#: WORKING.** The firings of 2026-08-19 and 2026-08-20 read 53 and 58 ms/s as
+#: whole-block averages over 14.1 s and 2.5 s; the same events under a windowed
+#: maximum read far higher. **If it starts firing on most runs the repair is the
+#: box or the fixture, never the number** -- widening it is how the tests stop
+#: running.
+RSS_STALL_LIMIT_US_PER_S = 25_000
 
 #: Every indeterminate measurement this session, for the terminal summary.
 #: **A SKIP NOBODY SEES IS HOW A MACHINE-MARKED TEST DECAYS INTO ONE THAT NEVER
