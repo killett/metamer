@@ -965,15 +965,23 @@ wrong**, and which two they are is the corollary below.
 recorded — assemble, fit, write, callback, pad, completion bit, tail — the M = 2 argmax is inside
 **`fit`** (every point at side ≥ 48) and the M = 6 argmax is inside the **pad**, a window in which
 the workload is asleep. The 1.6–2.3 s had been read as assembly because assembly comes first;
-assembly at those sides takes **about two milliseconds**. The 45.02 s had been read as the store
-write because it was the largest timestamp on the page; it is the pad's own target, and the write
-had finished twenty-eight seconds earlier.
+assembly at those sides takes **about two milliseconds**.
 
-**The cost of the wrong labels was a task.** OQ18's first hypothesis — free the block before the
-store write — was derived from *"the peak is at the store write"*, and the measurement that tested
-it found the peak was at `fit`, where the block is alive by necessity and no free can reach it.
-**The hypothesis was refutable and worth running; what made it the FIRST hypothesis was an
-inference nobody had marked as one.**
+> **AND THE SECOND HALF OF THIS RULE COST A SECOND CORRECTION, THIS TIME OF THE TASK'S OWN
+> REPORT.** *"The argmax is in the pad"* was then read as *"the store write is not the dominant
+> allocation"*, which does not follow and is false: the trace **rises during `write` by
+> 0.97–4.15 MB** at M = 6 and the pad adds **0.007–0.139 MB** on top. The write builds the
+> plateau; the pad is where a flat trace's last noise tick lands. **A maximum has a location only
+> where the trace has a slope** — so the fix is not "trust the phase label instead of the
+> timestamp", it is **read the phase MAXIMA, not the argmax**, whenever the quantity plateaus.
+> Task 8b's *"45.02 s at every side"* and Task A's scatter from 3.99 s to 45.02 s are the same
+> reading of the same flat plateau, and neither is evidence about an allocation.
+
+**The cost of the wrong labels was a task's framing, twice.** OQ18's first hypothesis — free the
+block before the store write — was derived from *"the peak is at the store write"*, which is true
+at M = 6 and false at production B, where the peak is `fit`'s and the block is alive by necessity.
+**The hypothesis was refutable, worth running, and held where its premise held**; what the labels
+cost was knowing in advance which regime it applied to.
 
 > **AND THE SYMPTOM WAS ALREADY VISIBLE AS AN IMPOSSIBLE STATISTIC.** The same measurement, split
 > by chunking, returned curvature of **+0.054 ± 0.010 (5.3σ)** and **−0.037 ± 0.013 (2.8σ)** —

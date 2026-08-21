@@ -4,7 +4,7 @@
 
 1. **Branch `main`, everything on it, every commit pushed by a hook** — https://github.com/killett/metamer.
 2. **DONE:** Phase 1 (0–18), Phase 2 preliminaries P0–P4, **Phase 2a (0–13)**, and **PHASE 2b IS COMPLETE — Tasks 0–10, with 9 narrowed plus 8a, 8i and 8b, closing 10 met / 4 met with reduced scope / 2 FAILED**, open questions 1, 4, 9, 11, 12, 15.
-3. **NEXT ACTION: 2b IS CLOSED, OQ18's FIRST HYPOTHESIS HAS BEEN TESTED AND REFUSED, AND WHAT IS OPEN IS AGAIN A DECISION RATHER THAN A TASK. NOTHING SHOULD BE IMPLEMENTED UNTIL IT IS MADE.** Read [What OQ18 Task A established](#what-oq18-task-a-established-done-2026-08-19--read-before-proposing-any-pipeline-or-formula-repair) FIRST — **the peak is `max(fit-phase transient, end-of-tile residency)`, the store write is the dominant allocation nowhere, freeing the block moves the peak by 0.30 MB against a 17.69 MB block at M = 2 and by 1.87 MB against a 1.97 MB block at M = 6, and criterion 7 fails in both arms at every fixture.** The pipeline arm of OQ18's closer (a) is therefore **spent**; what is left on it is shortening the `fit` transient, which is a different order of change. **Then** read [What Task 8b established](#what-task-8b-established-done-2026-08-19--read-before-quoting-the-per-series-cost-criterion-6-or-criterion-7). In one line: **the 1.86× was one confound acting on both ladders, the clean per-series peak is 2410.0 ± 46.0 against an analytic 926, and the correction's SHAPE is undetermined because the ratio is 1.888 / 2.603 / 3.850 at three fixtures** — so `PUBLISHED_TILE_SIDE` stays **272, with a rewritten caveat and a 160–272 spread**, criterion 6 is **not met and never named its reading**, and criterion 7 is **recorded as FAILED with its regime named: above roughly B = 1500, at all three fixtures.** **`memory.resident_bytes_per_series` describes residency and not peak, while Q1 settled that `--memory-budget` bounds process PEAK RSS** — so the sizing quantity and the bounded quantity are different quantities, which is an inconsistency between two settled decisions rather than an open modelling choice, and its first hypothesis is a **pipeline** change (free the block before the store write) rather than a formula one. **Task 10 has landed and closed the sub-phase**; its closing table, the unclosed items with their closers and what 2c inherits are in the plan's *THE CLOSING TABLE*, once, and the verdicts are also data in `tests/exit_criteria_2b.py`.
+3. **NEXT ACTION: 2b IS CLOSED, OQ18's FIRST HYPOTHESIS HAS BEEN TESTED, AND WHAT IS OPEN IS AGAIN A DECISION RATHER THAN A TASK. NOTHING SHOULD BE IMPLEMENTED UNTIL IT IS MADE.** Read [What OQ18 Task A established](#what-oq18-task-a-established-done-2026-08-19--read-before-proposing-any-pipeline-or-formula-repair) FIRST, **including its 2026-08-20 correction of its own first reading** — **the peak is `max(fit-phase transient, post-write plateau)` and which wins crosses over in B; freeing the block takes the peak down by nearly the whole block where the write's plateau is the peak (1.87 MB against 1.97 MB at M = 6) and moves it 0.30 MB against a 17.69 MB block where `fit`'s transient is the peak, which is every production-scale point; and criterion 7 fails in both arms at every fixture.** So the pipeline arm of OQ18's closer (a) is **narrowed, not spent**, and the elimination argument is **re-aimed at the fit transient** — +862 B/series at N = 60 and +6859 at N = 240 above the plateau — which is cheaper to name than a crossed 2 × 2 and comes before it. **Then** read [What Task 8b established](#what-task-8b-established-done-2026-08-19--read-before-quoting-the-per-series-cost-criterion-6-or-criterion-7). In one line: **the 1.86× was one confound acting on both ladders, the clean per-series peak is 2410.0 ± 46.0 against an analytic 926, and the correction's SHAPE is undetermined because the ratio is 1.888 / 2.603 / 3.850 at three fixtures** — so `PUBLISHED_TILE_SIDE` stays **272, with a rewritten caveat and a 160–272 spread**, criterion 6 is **not met and never named its reading**, and criterion 7 is **recorded as FAILED with its regime named: above roughly B = 1500, at all three fixtures.** **`memory.resident_bytes_per_series` describes residency and not peak, while Q1 settled that `--memory-budget` bounds process PEAK RSS** — so the sizing quantity and the bounded quantity are different quantities, which is an inconsistency between two settled decisions rather than an open modelling choice, and its first hypothesis is a **pipeline** change (free the block before the store write) rather than a formula one. **Task 10 has landed and closed the sub-phase**; its closing table, the unclosed items with their closers and what 2c inherits are in the plan's *THE CLOSING TABLE*, once, and the verdicts are also data in `tests/exit_criteria_2b.py`.
 4. **Tests: 1074 passed, 0 failed, 1 INDETERMINATE — 2026-08-20 after OQ18 Task A, 1646.9 s, on a box the ladder had left at 2.3 GB available.** The indeterminate is *the floor with the input open* at **58 ms/s of cgroup full stall over 2.5 s** — **the SECOND firing of `RSS_STALL_LIMIT_US_PER_S`, on a different test and a much shorter window**, and the window is the part worth reading: a rate over 2.5 s averages far fewer reclaim events than one over 14.1 s, so a short window crosses the limit on less provocation. The previous sweep, 2026-08-19 after Task 10, was **1074 passed, 0 failed, 1 INDETERMINATE at 1106.3 s and 3397 MB**, and that first firing was `test_the_floor_ladder_reproduces_the_recorded_rungs` at **53 ms/s over 14.1 s** — the reading the constant's own docstring had been asking for. Neither pass nor fail: the gate refused to judge, said so in the summary, and cost one reading rather than asserting a corrupted one. **It is a THRASHING reading and not the known-bad the constant still lacks**, and one of criterion 4's two witnesses therefore did not report on this run, which does not move its verdict. Before Task 10, and before the box's available RAM fell through the day: 1067 passed, 0 failed, 0 indeterminate, 1273.9 s at 4214 MB, 20 s idle at 0.0096 ms/s. The count did NOT move at Task 8b and that is correct**: its deliverable is a measurement, which by Tasks 4, 7 and 8's precedent does not enter the suite, and the two tests it touched already existed to fail when the published record changed. And separately 1044 passed under `-m "not machine"` in a pip-installed venv (PyPI wheels, numpy 2.5.2), which is what CI runs and is NOT the same evidence** — see the 2026-08-19 entry under [Gotchas](#gotchas-discovered) for the seven failures and three errors that only that second environment could show. **GREEN, and the conditions are part of the claim**: the same suite was 1049/3-failed at 1906 MB available on 2026-08-17, on the same code. The three failures were **ambient-conditional, not code** — see [What Task 8i established](#what-task-8i-established-done-2026-08-17--read-before-writing-any-rss-assertion-or-trusting-the-validity-gate), which is also where the survey of every RSS assertion lives. **Every sweep prints `RSS measurement validity` and it now has TWO conditions**, the second being the one that can see quiet reclaim.
 5. **`pixi run test` is the full sweep and every end-of-task verification must run it; `test-fast` and `test-ci` are not evidence.** It has caught **seven** things a fast run could not, two of them in Task 8. **Every run prints `RSS measurement validity`, including at zero** — a nonzero count is INDETERMINATE, neither pass nor fail.
 6. **Verify a fresh checkout with `pixi run test && pixi run typecheck && pixi run lint`**, plus `pixi run pre-commit run --all-files` before every commit.
@@ -1847,8 +1847,9 @@ held at 3 and `k_beta` at 4 in all three:
   says why.** ~~At M = 2 the peak lands at 1.6–2.3 s, which is tile assembly; at M = 6 it lands
   at 45.02 s at every side, which is the end of the pad — the store write.~~ **STRUCK 2026-08-19
   BY OQ18 TASK A: both labels were read into timestamps and both are wrong.** With the phase
-  boundaries timestamped, the argmax is inside **`fit`** at M = 2 and inside the **pad** at M = 6;
-  the two allocations and their table are in
+  boundaries timestamped, the M = 2 peak is inside **`fit`** from side 48 up, and the M = 6 peak
+  is the plateau the **write** phase builds — its argmax wanders into the pad only because the
+  trace is flat there to within 0.139 MB. The two allocations and their table are in
   [What OQ18 Task A established](#what-oq18-task-a-established-done-2026-08-19--read-before-proposing-any-pipeline-or-formula-repair)
   and are not repeated here. **The conclusion stands and its derivation does not: the peak changes
   LOCATION between fixtures**, so a single term fitted across them is a term fitted across two
@@ -2008,19 +2009,34 @@ boundary needs re-reading rather than quoting.
 
 ### What OQ18 Task A established (done 2026-08-19 — read before proposing ANY pipeline or formula repair)
 
-> ## THE PEAK IS `max(FIT-PHASE TRANSIENT, END-OF-TILE RESIDENCY)`, AND WHICH ONE WINS IS SET BY THE CANDIDATE COUNT. THE STORE WRITE IS NOT THE DOMINANT ALLOCATION AT ANY FIXTURE.
+> ## THE PEAK IS `max(FIT-PHASE TRANSIENT, POST-WRITE PLATEAU)`, AND WHICH ONE WINS MOVES WITH BOTH THE CANDIDATE COUNT AND B. THE HYPOTHESIS HELD WHERE THE WRITE DOMINATES AND COULD NOT REACH THE PEAK WHERE FIT DOMINATES.
 >
-> Freeing the block before the store write **does not move the peak** where the peak is the fit
-> transient — **−3.8 ± 44.0 B/series at N = 60, M = 2 and +55.8 ± 113.4 at N = 240, M = 2**, with
-> 4.42 MB and 17.69 MB of block demonstrably returned to the kernel at those points' top sides.
-> It **does** move the peak where the peak is the residency plateau: **+1.87 ± 0.36 MB at
-> N = 60, M = 6, side 64, against a 1.97 MB block.** **Criterion 7 fails in both arms at every
-> fixture** — +11.5, +7.9 and +62.0 MB over budget at side 96.
+> Freeing the block before the store write **moves the peak by about the whole block where the
+> write plateau is the peak**: **+1.87 ± 0.36 MB at N = 60, M = 6, side 64, against a 1.97 MB
+> block.** It **does not move it where the fit transient is the peak** — **−3.8 ± 44.0 B/series at
+> N = 60, M = 2 and +55.8 ± 113.4 at N = 240, M = 2** — with 4.42 MB and 17.69 MB of block
+> demonstrably returned to the kernel at those points' top sides, and the peak standing still
+> because it had already been attained inside `fit`, where the block is alive by necessity.
+> **Criterion 7 fails in both arms at every fixture** — +11.5, +7.9 and +62.0 MB over budget at
+> side 96 — **so the pipeline change closes nothing, which is a different statement from the
+> hypothesis being wrong.**
 >
-> **AND BOTH RECORDED LOCATIONS WERE WRONG.** Not tile assembly and not the store write: with
-> phase boundaries actually timestamped, the argmax is inside **`fit`** at both M = 2 fixtures
-> (9 of 15 and 13 of 15 points, and every point at side ≥ 48) and inside the **pad** at M = 6,
-> which is a window where the workload is asleep.
+> **AND BOTH OF THE RECORDED LOCATIONS WERE STILL WRONG, JUST NOT IN THE DIRECTION FIRST WRITTEN
+> DOWN HERE.** Not tile assembly — assembly takes about two milliseconds at these sides. The
+> M = 2 peak is inside **`fit`** from side 48 up at N = 60 and at every side at N = 240. The M = 6
+> peak's **value** is the plateau the **write phase** builds, and its **argmax** wanders into the
+> pad only because the trace is flat there to within 0.007–0.139 MB.
+
+> **CORRECTED 2026-08-20, AND THE CORRECTION IS THIS SECTION'S OWN.** The first version of this
+> block said *"the store write is not the dominant allocation at any fixture"* and filed the M = 6
+> result under *"the peak is the residency plateau"*. **The per-phase maxima were in the data and
+> had not been read**: RSS rises during `write` by **+0.97, +2.24, +3.24, +4.15 and +3.69 MB**
+> across sides 16→96 at M = 6, and the pad adds **0.007–0.139 MB** on top of that. So the write
+> **is** the dominant allocation at M = 6 and below the crossover at M = 2, the plateau is
+> something the write builds rather than something residency alone explains, and **the hypothesis
+> was tested as intended at M = 6 and held there.** Filing that as *"refused"* was wrong, and it
+> was wrong in the direction that would have authorized an expensive next step — (a4)'s third
+> register at this task's own report.
 
 Ninety points, three fixtures × five sides × three repeats × two arms, arms **back to back** at
 each cell. Box: 2.25–2.72 GB available — **Task 8b ran at 4.5–5.0 GB, and this matters below** —
@@ -2029,22 +2045,25 @@ predictions in [`oq18-a-predictions.json`](docs/superpowers/notes/oq18-a-predict
 **committed before any ladder point ran**, points in
 [`oq18-a-measured.jsonl`](docs/superpowers/notes/oq18-a-measured.jsonl).
 
-#### THE TWO ALLOCATIONS BEHIND 8b's UNSTABLE ARGMAX, SEPARATED
+#### THE TWO ALLOCATIONS BEHIND 8b's UNSTABLE ARGMAX, SEPARATED — AND THE CROSSOVER IS IN B
 
-Off arm, mean over repeats, MB — the fit phase's own maximum against the end-of-tile working set:
+Off arm, mean over repeats: **the fit phase's own maximum minus the write phase's**, in MB and in
+B/series. Positive means the fit transient sets the peak; negative means the write's plateau does.
 
-| fixture | side 16 | 32 | 48 | 64 | 96 | where the argmax lands |
-|---|---|---|---|---|---|---|
-| N = 60, M = 2 | −0.79 | −0.26 | **+0.85** | **+2.85** | **+7.89** | `fit` from side 48 up |
-| N = 240, M = 2 | **+0.95** | **+5.68** | **+14.97** | **+27.59** | **+63.06** | `fit`, every point |
-| N = 60, M = 6 | −0.97 | −2.24 | −3.32 | −4.17 | −3.81 | **`pad`** — fit never reaches the plateau |
+| fixture | side 16 | 32 | 48 | 64 | 96 |
+|---|---|---|---|---|---|
+| N = 60, M = 2 | −0.79 / −3093 | −0.26 / −259 | **+0.91 / +393** | **+2.93 / +715** | **+7.94 / +862** |
+| N = 240, M = 2 | **+0.95 / +3728** | **+5.68 / +5548** | **+15.02 / +6518** | **+27.65 / +6750** | **+63.21 / +6859** |
+| N = 60, M = 6 | −0.97 / −3776 | −2.24 / −2184 | −3.24 / −1407 | −4.15 / −1012 | −3.69 / −401 |
 
 **So 8b's transient of 905.9 / −39.9 / 6985.8 B/series across three fixtures was never one
-quantity taking three values.** At M = 2 the fit phase allocates above the tile's own residency
-and sets the peak; at M = 6 the extra output slots raise the residency plateau **above** anything
-fit reaches, so there is no transient at all and the maximum is wherever the trace last ticked up.
-**The candidate count is the switch**, which is exactly the interaction an L-shaped design aliases
-— (a7)'s corollary, confirmed by the design that was told it would be needed.
+quantity taking three values, and the switch is not the candidate count alone — it is which of two
+allocations is larger, and that crosses over IN B.** At N = 60, M = 2 the write plateau wins at
+sides 16 and 32 and the fit transient wins from 48 up; at N = 240 the fit transient wins
+everywhere; at M = 6 the extra output slots make the write's plateau win at every side measured.
+**Production tiles sit far above every crossover here**, which is why the M = 2 negative is the
+one that governs, and it is still an interaction an L-shaped design aliases — (a7)'s corollary,
+confirmed by the design that was told it would be needed.
 
 #### WHY THE M = 2 PEAK CANNOT MOVE, AND IT IS ARITHMETIC RATHER THAN A NULL
 
@@ -2060,8 +2079,17 @@ free demonstrably reached the kernel:
 
 **The block leaves the resident set and the peak does not follow it** — 17.7 MB returned, 0.3 MB
 of peak movement. That is the discriminating pair of numbers in this whole task, and the third row
-is what stops it being read as "the free does nothing": where the peak IS the plateau, the same
-free takes the peak down with it.
+is what stops it being read as "the free does nothing": **where the write's plateau is the peak,
+the same free takes the peak down with it, by very nearly the whole block.** The two rows are the
+hypothesis holding and the hypothesis being out of reach, on one harness, in one afternoon.
+
+> **AND THE ARGMAX AT M = 6 IS NOT A LOCATION, WHICH IS WHY 8b's 45.02 s AND THIS TASK'S SCATTER
+> DO NOT DISAGREE.** Task 8b recorded the M = 6 argmax at **45.02 s at every side**; the same
+> instrument here lands it anywhere from **3.99 s to 45.02 s** across fifteen points. Neither is
+> wrong and they are not rival readings: after the write, the trace is flat to within
+> **0.007–0.139 MB** for the whole sleep, so the argmax is choosing between noise ticks. **A
+> maximum has a location only where the trace has a slope.** What moved between the arms at M = 6
+> is the plateau's **value**, and that is the reading with a subject.
 
 #### AND A SECOND-ORDER FACT ANY REPAIR HAS TO CARRY: `free()` DOES NOT RETURN THE BLOCK BELOW ~2 MB
 
@@ -5967,6 +5995,37 @@ question; compute/bandwidth roofline pair for cross-machine prediction) are in d
 
 Still open. **A new session must not assume these were settled.**
 
+19. **`RSS_STALL_LIMIT_US_PER_S` HAS THREE INDEPENDENT DEFECTS AND NEEDS A DECISION, NOT A
+    TUNE.** Opened 2026-08-20, after its second firing.
+
+    | defect | measured |
+    |---|---|
+    | it cannot see the failure mode it is named for | Task 8a: a run that lost **85 MB** read **0.0876 ms/s**, below the idle baseline |
+    | its margin over what actually occurs is **1.06×**, not the 10× its docstring derived from idle | firings at **53** and **58 ms/s** against a 50 limit, on two consecutive days |
+    | **its sensitivity depends on the caller's window** | the two firings are over **14.1 s** and **2.5 s**; a rate over a short window averages far fewer reclaim events, so the same box crosses the limit on less provocation |
+
+    **The third is the one that makes it a decision.** A threshold whose meaning changes with
+    the length of the measurement it is judging is not one threshold; it is a different gate per
+    caller, and no value of the constant fixes that. **`reference_bytes` — the reclaim-shortfall
+    condition Task 8i shipped — is the one that can see the failure, and it is optional.**
+
+    **The two candidate resolutions, and they are not equivalent:**
+
+    - **Give it a FIXED measurement window.** Sample the stall counter over a fixed interval
+      inside the block rather than differencing across whatever the caller happens to take, so
+      the threshold means one thing everywhere. Keeps a gate, costs an instrument.
+    - **Demote it from a gate to a recorded DIAGNOSTIC**, and let `reference_bytes` be the gate.
+      A stall rate then appears in the summary beside every measurement and skips nothing. This
+      is the honest reading of *"it is a valid gate on thrashing and not a certificate that an
+      RSS difference is sound"* — but note what it costs: **thrashing would stop being caught at
+      all** where a caller cannot supply a reference honestly, which is most of this repo's RSS
+      measurements, since they are taken in children.
+
+    **Do not close it by widening the limit** — that is how a `machine` test decays into one that
+    never runs, and the docstring already says so. **Do not let it accumulate a third firing
+    without the decision**: two firings in two days is a rate, and the next one is evidence about
+    nothing new.
+
 1. **CI.** ~~Not specified anywhere.~~ **CLOSED 2026-08-07** by the publishing run.
    `.github/workflows/test.yml` runs lint plus **ubuntu-latest × 3.12/3.13/3.14**, the full
    sweep with `slow` included and `machine` deselected. The celerite2 agreement test **is**
@@ -6272,20 +6331,28 @@ Still open. **A new session must not assume these were settled.**
     finalisation (45.02 s at every side), by the sampler's own timestamps. **Freeing the block
     before the store write moves the M = 6 peak.**~~
 
-    **TESTED 2026-08-19 BY TASK A AND THE HYPOTHESIS IS REFUSED AS A REPAIR.** Ninety points,
-    both arms, three fixtures. The full record is in
-    [What OQ18 Task A established](#what-oq18-task-a-established-done-2026-08-19--read-before-proposing-any-pipeline-or-formula-repair);
-    in one line: **the peak is `max(fit-phase transient, end-of-tile residency)` and the store
-    write is the dominant allocation nowhere.** Freeing the block moves the peak by **0.22 MB
-    against a 4.42 MB block** at N = 60, M = 2 and by **0.30 MB against 17.69 MB** at N = 240,
-    M = 2, because at those fixtures the maximum is attained inside `fit`, **while the block is
-    necessarily alive**, and no free placed after `fit` can lower it. It does move the M = 6 peak
-    — **+1.87 ± 0.36 MB against a 1.97 MB block** — because there the peak is the residency
-    plateau. **Criterion 7 fails in both arms at every fixture**, so nothing here closes it.
+    **TESTED 2026-08-19 BY TASK A. THE HYPOTHESIS HELD WHERE THE WRITE DOMINATES AND WAS OUT OF
+    REACH WHERE `fit` DOES — AND IT CLOSES CRITERION 7 NOWHERE.** Ninety points, both arms, three
+    fixtures; the full record, including this entry's own correction of 2026-08-20, is in
+    [What OQ18 Task A established](#what-oq18-task-a-established-done-2026-08-19--read-before-proposing-any-pipeline-or-formula-repair).
+    In one line: **the peak is `max(fit-phase transient, post-write plateau)`, and which one wins
+    crosses over in B.** Where the write's plateau is the peak — M = 6 at every side measured, and
+    M = 2 below side 48 — freeing the block first takes the peak down with it, **+1.87 ± 0.36 MB
+    against a 1.97 MB block.** Where the fit transient is the peak — **every production-scale
+    M = 2 point** — it moves **0.22 MB against a 4.42 MB block** and **0.30 MB against 17.69 MB**,
+    because the maximum was attained inside `fit`, **with the block alive by necessity**.
+    **Criterion 7 fails in both arms at every fixture.**
 
     **AND THE TWO ALLOCATIONS ARE NOW NAMED, WHICH IS WHAT (b) BELOW WAS FOR:** the fit-phase
-    transient and the residency plateau, with **the candidate count as the switch between them**.
-    That is the interaction, and it is the one an L-shaped design aliases.
+    transient and the plateau the **write** builds. **The switch between them is which is larger,
+    and it moves with B as well as with the candidate count** — that is the interaction, and it is
+    the one an L-shaped design aliases.
+
+    **SO THE ELIMINATION ARGUMENT IS NOT SPENT — IT IS RE-AIMED.** The block's lifetime is the
+    wrong target at production B; the target is the **fit transient itself**, +862 B/series at
+    N = 60 and **+6859 B/series at N = 240** above the write's plateau. **Naming that allocation
+    is cheaper than a crossed 2 × 2 and comes before it**, on the same argument that put the
+    pipeline first: eliminating an allocation beats modelling it.
 
     **What Task 8b established about the two unaccounted terms:**
 
@@ -6303,10 +6370,11 @@ Still open. **A new session must not assume these were settled.**
     **(a) Decide what the budget bounds, or make the two agree.** Either the sizing model
     becomes a model of the peak, or the pipeline stops letting two allocations coexist so that
     peak and residency converge. **This is the head of the list and the other two serve it** —
-    and **Task A removed one of its two arms**: the pipeline cannot make them converge by
-    releasing the block, because the M = 2 maximum is set inside `fit` with the block alive. What
-    is left on that arm is **shortening the fit transient itself**, which is a different and much
-    larger change than moving a `del`. ~~**(b) Instrument the peak's LOCATION before fitting its
+    and **Task A narrowed it rather than closing it**: releasing the block converges the two
+    only where the write's plateau is the peak, which is not the production regime, because at
+    production B the maximum is set inside `fit` with the block alive. What is left on that arm
+    is **the fit transient itself**, and the next step on it is to NAME that allocation, which is
+    cheaper than (c). ~~**(b) Instrument the peak's LOCATION before fitting its
     magnitude**~~ — **DONE 2026-08-19, and it is the one deliverable Task A did close**: the
     argmax is in `fit` at M = 2 and in the pad at M = 6, per-phase maxima recorded per point.
     **(c) Measure on a CROSSED design** — at least 2 × 2 in `n_time` and `n_models`, never the L
