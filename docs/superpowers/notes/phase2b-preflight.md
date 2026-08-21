@@ -2426,3 +2426,57 @@ threshold returns nothing and that everything above it returns the block. Measur
 returned below about 1.5 MB **inside a run**, while a fresh interpreter returns every one of the
 same sizes. **The threshold is dynamic and the process's own history moves it**, so an allocator
 prediction read out of a manual page is a prediction about a program with no history.
+
+---
+
+## OQ18 Task A-prime — naming the fit transient, audited before the harness exists
+
+**THE BRIEF.** Task A left the production peak inside `fit` and unnamed. A′ names it. **The
+precondition it establishes for B is not a number**: if the transient is several allocations, a
+crossed 2 × 2 measures their sum and no shape fits it — 8b's failure, one level in.
+
+### (j4) THE SUSPECT IS NAMED IN A DOCSTRING ALREADY IN THE TREE, WITH ITS MAGNITUDE
+
+`SignalSpec._restricted_singular_values` has three tiers and says so: the third builds
+`x[None] * mask[..., None]` for `svdvals` and **"the batched route allocates `B * N * k * 8`
+bytes (320 MB at B = 10⁴, N = 10³, k = 4)"**. At this project's fixtures that is **1920 B/series
+at N = 60 and 7680 at N = 240**, against Task A's measured transient of **1017 and 6974**. **The
+tell that this is (j4) rather than a hypothesis: the number was written down before anyone
+measured the transient, and nobody compared them.**
+
+**AND THE FIXTURE SELECTS THE TIER, WHICH IS WHY THIS PROJECT SEES TIER 3 AT ALL.** Sixteen live
+series and the rest wholly masked is precisely *"masks differ"*. **A production run is the same
+shape** — real data has gaps that differ per series — so this is not an artefact of the harness.
+
+### (a7) THE HARNESS MEASURES THE TENSOR RATHER THAN COMPUTING IT
+
+`B * N * k * 8` is an arithmetic claim about an allocation, and Task A's own P3 is what happens to
+arithmetic claims about allocations. So the wrapper reads **`nbytes` off `svdvals`'s argument at
+the call**: that object *is* the allocation. The dependence then falls out of two fixtures without
+being assumed — and if the reading disagrees with `B * N * k * 8`, the reading wins.
+
+### (i2) THE POSITIVE CONTROL IS A TIER, AND IT IS FREE
+
+`live = 0` masks every series identically, so tier 2 fires and no per-series tensor exists. **The
+discriminator is the B-slope, not the level**: sixteen series of optimizer work is a constant in B
+and the tensor is not. The two arms also differ in whether any fit runs, which is why the slope
+and not the difference is what is read.
+
+### (j2) AND THE NAMING INSTRUMENT IS QUARANTINED BEFORE IT IS USED
+
+`tracemalloc` keeps a frame record per live allocation, so its arm's resident set is not a
+measurement of this program. It is flagged in the payload, its RSS is not published, and its
+snapshot is taken at the one moment the temporary can be attributed — inside the `svdvals` call
+that holds it, gated to calls above 1 MB so the per-series calls cannot bury it.
+
+### (e) WHAT THE SMOKE POINT ALREADY BIT, AND IT IS AN INSTRUMENT DEFECT
+
+Side 48, N = 60, `live = 16`: the fit phase's maximum is **inside `design_info`**, the resident
+set rises **4.5 MB across the `svdvals` call against a predicted 4.42 MB tensor** and comes back
+down — a before/after difference across `design_info` sees only **+0.27 MB** of it — and RSS
+across the batch is **flat to 0.15 MB over 4608 `optimize_series` calls**, so there is no
+accumulation. **And the first version of the wrapper recorded the LAST `svdvals` call rather than
+the largest**, so a `(1, 4, 4)` call from inside the objective stood where the `(2304, 60, 4)`
+tensor belonged: **128 bytes in the slot where 4.42 MB belongs.** Recorded here because the fix
+is the reason the ladder's numbers mean anything, and because a smoke point that changes an
+instrument is the smoke point earning its keep.

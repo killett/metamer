@@ -1,0 +1,82 @@
+{
+  "task": "OQ18 Task A-prime - name the fit-phase transient that sets the production peak",
+  "written": "2026-08-21",
+  "committed_before_any_ladder_point_ran": true,
+  "honesty_note": "One smoke point at side 48, N = 60, live = 16 ran BEFORE this file was written, and it is recorded below with everything it showed. It is why the suspect is stated as a suspect rather than as a hypothesis, and it is why the svdvals wrapper records the largest call rather than the last. Every prediction below is about a fixture, an arm or a scaling that smoke point could not reach.",
+  "design": {
+    "arms": "tier3 (live = 16, per-series masks differ) and tier2 (live = 0, every mask identical), run back to back at each (fixture, side, repeat)",
+    "fixtures": [
+      {"name": "m2-n60", "n_time": 60, "candidate_set": "m2", "target_s": 30, "tensor_bytes_per_series": 1920},
+      {"name": "m2-n240", "n_time": 240, "candidate_set": "m2", "target_s": 45, "tensor_bytes_per_series": 7680}
+    ],
+    "sides": [48, 64, 96],
+    "repeats": 3,
+    "note_on_sides": "Sides 16 and 32 are dropped: Task A measured the write plateau winning there, so the fit transient is not the peak and the point measures a different regime.",
+    "naming_arm": "two tracemalloc points, one per fixture, RSS not published"
+  },
+  "what_the_smoke_point_showed": {
+    "point": "side 48, N = 60, m2, live = 16, no pad",
+    "fit_phase_max_is_inside_design_info": true,
+    "rss_rise_across_the_svdvals_call_mb": 4.5,
+    "predicted_tensor_mb": 4.42,
+    "design_info_before_after_difference_mb": 0.27,
+    "series_loop_flatness": "230.19 -> 230.65 MB across 4608 optimize_series calls, 72 progress samples",
+    "instrument_defect_found_and_fixed": "the wrapper recorded the last svdvals call, not the largest; a (1, 4, 4) call from inside the objective overwrote the (2304, 60, 4) tensor"
+  },
+  "predictions": [
+    {
+      "id": "B1",
+      "statement": "The largest svdvals input is exactly B * N * k * 8 bytes with k = 4, at every tier3 point: 4 423 680 at side 48 / N = 60, 7 864 320 at side 64, 17 694 720 at side 96, and four times each at N = 240.",
+      "refuted_if": "the read nbytes differs from B * N * k * 8 at any tier3 point",
+      "confidence": "high"
+    },
+    {
+      "id": "B2",
+      "statement": "The resident set rises across the svdvals call by 0.9x to 1.1x the tensor's own nbytes, at every tier3 point, and the rise is released before design_info returns - so the before/after difference across design_info stays under 0.5 MB while the phase maximum carries the whole tensor.",
+      "refuted_if": "the rise is under 0.7x or over 1.5x the tensor, or the before/after difference exceeds 1 MB",
+      "confidence": "medium-high - the smoke point gave 1.02x at one size, and the allocator lesson from Task A's P3 is that size boundaries move with process history"
+    },
+    {
+      "id": "B3",
+      "statement": "THE TRANSIENT IS ONE ALLOCATION, NOT SEVERAL. The series loop's own maximum stays within 1 MB of the resident set at its start, at every point of both fixtures, and the progress curve is flat rather than ramped - so nothing accumulates across the batch.",
+      "refuted_if": "the series-loop maximum exceeds its start by more than 1 MB at any point, or the progress curve rises monotonically with call index",
+      "confidence": "medium-high at N = 60 from the smoke point; UNTESTED at N = 240, where the per-series objective allocations are four times larger"
+    },
+    {
+      "id": "B4",
+      "statement": "THE POSITIVE CONTROL. In the tier2 arm the fit-phase maximum's excess over the start of fit loses its B-slope: fitted against B, the tier2 slope is under 200 B/series at N = 60 and under 800 at N = 240, against tier3 slopes near 1920 and 7680.",
+      "refuted_if": "the tier2 arm keeps a B-slope within 2 sigma of tier3's",
+      "confidence": "high"
+    },
+    {
+      "id": "B5",
+      "statement": "The tensor accounts for MORE than Task A's measured transient, not less: A measured the fit maximum above the END-OF-TILE plateau, and part of the tensor is hidden under the plateau's own growth. So tensor bytes per series (1920, 7680) exceed A's transient slopes (1017, 6974) at both fixtures, and the gap is larger at N = 60.",
+      "refuted_if": "the measured tensor comes in below A's transient slope at either fixture",
+      "confidence": "high"
+    },
+    {
+      "id": "B6",
+      "statement": "tracemalloc's top site at the moment the tensor is alive is the multiply inside _restricted_singular_values - signal.py's tier-3 line - and not a site inside optimize, objective, kalman or zarr.",
+      "refuted_if": "the top site by size is anywhere else",
+      "confidence": "medium - tracemalloc attributes numpy data to the numpy domain only when the domain is enabled, and this arm does not enable it, so the ranking may show Python-object sites instead and be silent about the array"
+    },
+    {
+      "id": "B7",
+      "statement": "The result digests match between the two arms at NO point, because the arms change the fixture rather than the pipeline: tier2 fits nothing and tier3 fits sixteen series.",
+      "refuted_if": "any tier2/tier3 pair produces identical digests, which would mean the live count is not reaching the fit at all",
+      "confidence": "high - this is the inverse of Task A's safety check and it is here so that a fixture that silently stopped varying would be caught"
+    },
+    {
+      "id": "B8",
+      "statement": "Criterion 7's verdict does not move. No code changes here, and A-prime measures rather than repairs.",
+      "refuted_if": "anything in this task changes a constant or a formula",
+      "confidence": "certain"
+    }
+  ],
+  "the_three_outcomes_restated_for_this_arm": {
+    "one_allocation_and_nameable": "proceed to elimination or to B with a known subject",
+    "several_with_stable_composition": "B is well-posed, proceed",
+    "composition_varies_with_the_fixture": "B is not well-posed and the answer is architectural - report and stop"
+  },
+  "not_licensed_by_this_measurement": "changing _restricted_singular_values, tile_side_for, PUBLISHED_TILE_SIDE or any exit-criterion verdict. Naming an allocation is not authorisation to remove it."
+}
