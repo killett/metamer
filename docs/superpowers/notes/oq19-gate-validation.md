@@ -48,3 +48,45 @@ pages at will.**
 the clean reading and 1.2x below the lower known-bad**, which is the first time this constant has
 had a two-sided derivation instead of a multiple of idle. The full sweep's own worst *passing*
 window — printed by the summary since this change — is what decides whether it stays.
+
+---
+
+## THE FIFTH CELL, AND IT UNDERMINES THE STATISTIC RATHER THAN THE CONSTANT
+
+Added 2026-08-21 after the post-rework sweeps produced **two INDETERMINATE readings per run on a
+settled box** — 251 and 271 ms/s, from `the floor ladder's rungs` and `peak residency across the
+iteration cap`. **Both of those measurements spawn child probes that each build a ~220 MB working
+set from nothing**, so the `probe` cell reproduces that with **no external pressure whatever**:
+`measure_floor` in a loop for 60 s, on an idle box at 6.7 GB available.
+
+| reading | probe cell (self-inflicted, no pressure) |
+|---|---|
+| windowed max, 1 s | **223.4 ms/s** |
+| whole-block average, 61 s | 14.1 ms/s |
+| **reclaim shortfall** | **0.00 MB** |
+
+**And the window spectrum says no window length separates it from the known-bads:**
+
+| window | 0.5 s | 1 s | 2 s | 5 s | 10 s | 30 s |
+|---|---|---|---|---|---|---|
+| self-inflicted | 102.4 | 102.4 | 102.4 | 63.5 | 38.7 | **26.7 ms/s** |
+
+The constructed known-bads read **61.3** and **76.5 ms/s at one second**. **A process allocating
+hard is at or above them at every window this box can measure**, and at 30 s the self-inflicted
+case is still 26.7 ms/s while the quiet known-bad's whole 600 s average is 0.2. **The ordering
+inverts as the window grows**, so there is no length at which the gate catches the failure and
+spares the measurement.
+
+> ## THE INSTRUMENT CANNOT DISTINGUISH "THIS MEASUREMENT IS ALLOCATING" FROM "THIS MEASUREMENT IS BEING SQUEEZED", AND THE WITNESS CAN.
+>
+> PSI `full` counts direct reclaim from **any** cause in this cgroup, and a probe ladder is a
+> cause. In the same cell where the stall rate reads **223 ms/s**, `reclaim_shortfall_bytes`
+> reads **0.00 MB** — correctly, because nothing was taken from this process. On Task 8i's
+> known-bad the witness reads **25.35 MB** while the whole-block stall reads **0.2 ms/s**.
+> **The two instruments are complementary and only one of them has the process as its subject.**
+
+**AND THE CONSTANT IS NOT WHAT COSTS THE TWO TESTS.** At 50 000 µs/s the same sweeps would have
+fired on 251, 271, 465 and 257 ms/s exactly as they did at 25 000; only one marginal reading of
+25 ms/s differs. **The skip rate is a property of the windowed statistic, not of the value** —
+so reverting the number would not restore those assertions, and choosing between gate and
+diagnostic is the decision that would.

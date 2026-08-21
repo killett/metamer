@@ -72,8 +72,10 @@ def main() -> None:
     cell = sys.argv[1]
     seconds = float(sys.argv[2]) if len(sys.argv) > 2 else 30.0
     touch_mb = int(sys.argv[3]) if len(sys.argv) > 3 else 1536
-    if cell not in {"clean", "thrash", "refault", "quiet"}:
-        raise SystemExit(f"cell must be clean, thrash, refault or quiet, got {cell!r}")
+    if cell not in {"clean", "thrash", "refault", "quiet", "probe"}:
+        raise SystemExit(
+            f"cell must be clean, thrash, refault, quiet or probe, got {cell!r}"
+        )
 
     # THE WORKING SET IS ALLOCATED AND TOUCHED BEFORE THE WINDOW OPENS, so the
     # reference below describes a process that is already holding it. A reference
@@ -81,7 +83,37 @@ def main() -> None:
     # above, and the witness would read zero for the wrong reason.
     scratch: Path | None = None
     mapped: np.memmap | None = None
-    if cell == "refault":
+    if cell == "probe":
+        # A REAL INPUT, BECAUSE `measure_floor` OPENS ONE. Built once, before the
+        # window opens, so the build's own allocation is not what gets measured.
+        if len(sys.argv) <= 4:
+            raise SystemExit("the probe cell needs a scratch path as argv[4]")
+        scratch = Path(sys.argv[4])
+        if not scratch.exists():
+            import xarray as xr
+
+            grid, n_time = 32, 60
+            rng = np.random.default_rng(0)
+            xr.Dataset(
+                {
+                    "sla": (
+                        ("time", "y", "x"),
+                        rng.standard_normal((n_time, grid, grid)).astype("float32"),
+                    )
+                },
+                coords={
+                    "time": np.array(
+                        [
+                            np.datetime64("2000-01-01") + np.timedelta64(31 * i, "D")
+                            for i in range(n_time)
+                        ]
+                    ),
+                    "y": np.arange(grid, dtype="float64"),
+                    "x": np.arange(grid, dtype="float64"),
+                },
+            ).to_zarr(scratch, mode="w")
+        held = np.ones(1024 * 1024 // 8, dtype="float64")
+    elif cell == "refault":
         # A FILE-BACKED WORKING SET, WHICH IS THE SAFE WAY TO CONSTRUCT A REAL
         # STALL. The `thrash` cell asks the kernel to take anonymous pages this
         # process is touching, and the bounded generator will not push it that
@@ -136,6 +168,17 @@ def main() -> None:
                 # a page back; the quiet cell exists to show the same pressure
                 # with that want removed.
                 held += 1.0
+            elif cell == "probe":
+                # THE MEASUREMENT'S OWN ALLOCATION, WHICH IS THE CASE THE
+                # WINDOWED READING TURNED OUT TO BE SENSITIVE TO. `measure_floor`
+                # spawns a five-rung ladder of children, each of which imports
+                # numpy, numba and zarr and builds a ~220 MB working set from
+                # nothing -- a burst inside one second, on a box whose page cache
+                # the kernel must then evict. **No external pressure at all in
+                # this cell**: whatever it reads, this process caused.
+                from metamer.core.memory import measure_floor
+
+                measure_floor(data_uri=str(scratch), variable="sla")
             elif cell == "refault" and mapped is not None:
                 # SWEEP THE WHOLE MAPPING, so every page the kernel dropped is
                 # asked for again. The sum is not the point and is discarded.
@@ -178,6 +221,15 @@ def main() -> None:
                 "windowed_max_from_own_samples": max_windowed_rate(
                     samples, STALL_WINDOW_S
                 ),
+                # **THE SPECTRUM, BECAUSE THE WINDOW IS NOW THE LIVE PARAMETER.**
+                # A self-inflicted allocation burst is sub-second and a sustained
+                # external squeeze is not, so the two separate by window length
+                # if they separate at all -- and that is a measurement rather
+                # than an argument about which one a limit should catch.
+                "window_spectrum_us_per_s": {
+                    str(w): max_windowed_rate(samples, w)
+                    for w in (0.5, 1.0, 2.0, 5.0, 10.0, 30.0)
+                },
                 "own_samples": len(samples),
                 # THE CONDITION THAT CAN SEE QUIET RECLAIM.
                 "reference_bytes": reference,
