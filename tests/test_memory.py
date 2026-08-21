@@ -22,6 +22,7 @@ from __future__ import annotations
 import dataclasses
 import subprocess
 import sys
+import time
 from pathlib import Path
 from types import SimpleNamespace
 from typing import TypedDict
@@ -1997,23 +1998,36 @@ def test_the_validity_gate_fires_and_records_why(
     and by a gate that cannot fire at all -- and the second is indistinguishable
     from the first in the summary.
 
-    Expected values derived by hand: the stubbed counter advances by 10 s of
-    stall across a window of at most a few milliseconds, which is a rate far
-    above the 50 ms/s limit however long the block takes.
+    Expected values derived by hand: the stubbed counter advances **1 s of stall
+    per reading**, and the watch samples six times a second, so any window it can
+    form carries at least 6 s of stall per second of wall clock -- 6 000 000 us/s
+    against a 50 000 limit, two orders clear whatever the sampling jitter.
+
+    **AND THE BLOCK MUST OUTLAST THE WINDOW, WHICH IS NEW AT OPEN QUESTION 19.**
+    Before the fixed window this test passed `pass` as its body and relied on the
+    counter jumping across a few milliseconds; under a windowed rate that block
+    is **too short to judge** and correctly returns no verdict at all. The sleep
+    is not padding -- it is the precondition the gate now states.
 
     Bug this catches: a gate wired to a counter that never moves, or a
     comparison whose sense is inverted -- both leave every run reporting zero
     indeterminate measurements, which reads as evidence the machine was quiet.
     """
     from metamer.core import machine as machine_module
+    from tests.stall import STALL_WINDOW_S
 
-    readings = iter([(0, "cgroup"), (10_000_000, "cgroup")])
-    monkeypatch.setattr(machine_module, "memory_stall_us", lambda: next(readings))
+    ticks = [0.0]
+
+    def stalling() -> tuple[float, str]:
+        ticks[0] += 1_000_000.0
+        return ticks[0], "cgroup"
+
+    monkeypatch.setattr(machine_module, "memory_stall_us", stalling)
     before = len(conftest.INDETERMINATE_RSS)
 
     with pytest.raises(Skipped) as skipped:
         with rss_validity("a constructed stall"):
-            pass
+            time.sleep(STALL_WINDOW_S * 1.2)
 
     assert "a constructed stall" in str(skipped.value)
     assert "ms/s of full memory stall" in str(skipped.value)
@@ -2519,7 +2533,7 @@ def test_the_validity_gate_stays_quiet_when_the_working_set_holds():
     gate** -- the failure mode this repo already names for warnings, arriving
     here through a reference that is checked with the wrong sign.
     """
-    from tests.conftest import INDETERMINATE_RSS, rss_validity
+    from tests.conftest import INDETERMINATE_RSS, UNJUDGED_RSS, rss_validity
 
     before = len(INDETERMINATE_RSS)
     ran = False
@@ -2529,3 +2543,46 @@ def test_the_validity_gate_stays_quiet_when_the_working_set_holds():
         ran = True
     assert ran
     assert len(INDETERMINATE_RSS) == before
+    # THIS BLOCK IS INSTANT, SO IT IS TOO SHORT TO JUDGE FOR THRASHING, and the
+    # gate says so rather than calling it clean. Popped for the same reason the
+    # constructed entries above are: a permanent line in the summary teaches the
+    # reader that the healthy count is nonzero.
+    assert UNJUDGED_RSS and "a healthy window" in UNJUDGED_RSS[-1]
+    UNJUDGED_RSS.pop()
+
+
+def test_the_stall_condition_passes_a_quiet_window_and_records_the_reading(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The stall condition's own negative control, which the reference one is not.
+
+    The test above constructs a healthy `reference_bytes` and returns in
+    microseconds, so it never reaches the windowed rate at all. **A gate has two
+    conditions and each needs its own pair** -- otherwise "the gate is not
+    always-on" is established for one of them and assumed for the other.
+
+    Expected value derived independently: a counter frozen at one value cannot
+    accumulate stall, so the worst window over a block longer than the window is
+    exactly **0.0 us/s**, which is below any positive limit.
+
+    Bug this catches: a windowed rate that reports something other than zero on a
+    counter that did not move -- an off-by-one over the sample pairs, or a
+    fallback that substitutes the whole-block average when the counter is flat.
+    Either would make every quiet measurement indeterminate and the suite would
+    lose its RSS assertions to a gate nobody could satisfy.
+    """
+    from metamer.core import machine as machine_module
+    from tests.conftest import OBSERVED_STALL_RATES, rss_validity
+    from tests.stall import STALL_WINDOW_S
+
+    monkeypatch.setattr(machine_module, "memory_stall_us", lambda: (4_242.0, "cgroup"))
+    before = len(OBSERVED_STALL_RATES)
+
+    with rss_validity("a quiet window"):
+        time.sleep(STALL_WINDOW_S * 1.2)
+
+    assert len(OBSERVED_STALL_RATES) == before + 1
+    what, rate = OBSERVED_STALL_RATES[-1]
+    assert what == "a quiet window"
+    assert rate == 0.0
+    OBSERVED_STALL_RATES.pop()
