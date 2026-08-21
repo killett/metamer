@@ -679,11 +679,19 @@ def test_criteria_6_and_7_peak_rss_is_bounded_and_does_not_track_the_grid(
         import sys
         from metamer.batch.run import run
         from metamer.core import machine
+        # THE WITNESS IS READ WHERE THE MEASUREMENT HAPPENS. A reference taken in
+        # the parent describes the parent, and this watermark is the child's --
+        # which is the whole reason `reference_bytes` could not reach this
+        # assertion. Open question 19's survey.
+        reference = machine.current_rss_bytes()
         report = run(sys.argv[1], sys.argv[2])
         print(report.tiles_total)
         print(machine.peak_rss_bytes())
+        print(machine.reclaim_shortfall_bytes(reference))
         """
     )
+
+    shortfalls: list[float] = []
 
     def peak(config: Path, store: Path) -> tuple[int, float]:
         """Run in a fresh process and report its watermark.
@@ -702,7 +710,8 @@ def test_criteria_6_and_7_peak_rss_is_bounded_and_does_not_track_the_grid(
             check=False,
         )
         assert result.returncode == 0, result.stderr
-        tiles, watermark = result.stdout.splitlines()[-2:]
+        tiles, watermark, shortfall = result.stdout.splitlines()[-3:]
+        shortfalls.append(float(shortfall))
         return int(tiles), float(watermark)
 
     # **THE PEAK-DIFFERENCE ASSERTION HAS A VALIDITY CONDITION AND SO DOES THE
@@ -712,7 +721,10 @@ def test_criteria_6_and_7_peak_rss_is_bounded_and_does_not_track_the_grid(
     # is the specific failure to avoid in the test whose subject is peak RSS.
     # See `tests/conftest.py`'s `rss_validity`; Phase 2b Task 7 found two other
     # `machine` tests failing this way inside one sweep.
-    with rss_validity("criterion 7's peak against the budget and the grid"):
+    with rss_validity(
+        "criterion 7's peak against the budget and the grid",
+        witness=lambda: max(shortfalls, default=0.0),
+    ):
         many_tiles, many_peak = peak(
             _config(tmp_path, uri, name="small.toml"), tmp_path / "many.zarr"
         )

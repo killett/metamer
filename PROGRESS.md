@@ -6112,6 +6112,34 @@ Still open. **A new session must not assume these were settled.**
     the measured *process* waited, and reclaim caused from outside this cgroup leaves it nothing
     to attribute. `reference_bytes` remains the condition that witnesses the subject.
 
+    **AND THE SURVEY REDEFINED THE FIX, 2026-08-21.** Five assertions consult the gate, **all
+    five measure in a CHILD**, and **not one of them is structurally unable to witness its own
+    subject** — two need no production change at all, two share the floor payload, one adds a
+    field to a schema Tasks 4, 5 and 7 pin. **And all five allocate hard**, so a stall fallback
+    would have abstained on every member routinely. **So the compound rule collapsed: the
+    reclaim witness is the only gate, and the stall statistic is a per-assertion diagnostic that
+    skips nothing.** The survey table is in
+    [`oq19-gate-validation.md`](docs/superpowers/notes/oq19-gate-validation.md), once.
+
+    **THE GATE GAINED THE FORM THAT ACTUALLY REACHES THOSE ASSERTIONS.** `reference_bytes` is
+    read in the *test* process and every one of the five measures in a child, which is why it
+    had no users; `rss_validity(..., witness=...)` takes a callable evaluated after the block
+    that returns **the shortfall the child computed against its own reference**. Two assertions
+    are wired — criterion 7's peak and the recompute loop — and **both of them ran in the sweep
+    that follows, each with a HIGH stall diagnostic beside a passing assertion**, which is the
+    whole point of demoting the statistic.
+
+    **THREE REMAIN ON `gate=margin` AND ARE NAMED RATHER THAN COUNTED**: the floor ladder's
+    rungs, the floor with the input open, and peak residency across the iteration cap. They are
+    carried by ±25% / >1 MB / 16 MB windows against a ~1 MB watermark drift, which is the
+    footing Task 8i put the ungated five on. **`the floor with the input open` is the one to
+    wire first** — its window is the same order as the drift and 8i already flagged it AT RISK.
+    Wiring the three costs a field in the floor payload and one in `CalibrationPoint`.
+
+    **AND THE VALUE'S SUBJECT IS SETTLED BY DEMOTION RATHER THAN BY RE-DERIVATION.** 25 000
+    µs/s stays, now as the threshold at which the diagnostic prints HIGH. **It gates nothing**,
+    so the question of what it should be to gate correctly no longer arises.
+
     **WHAT IS STILL OWED, AND IT IS SMALL.** The attribution question above — a stall reading
     that belongs to whatever else shares this cgroup — has no instrument here.
     `/proc/self/stat`'s own delay accounting would answer it per process and nothing in this

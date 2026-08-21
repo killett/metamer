@@ -826,8 +826,10 @@ def test_the_recompute_loop_retains_nothing_that_survives_its_warm_up(
         """
         import json, sys
         from metamer.batch.run import run
-        from metamer.core.machine import current_rss_bytes
+        from metamer.core.machine import current_rss_bytes, reclaim_shortfall_bytes
 
+        # READ IN THE CHILD, which is where the per-tile readings below are taken.
+        reference = current_rss_bytes()
         readings = []
         report = run(
             sys.argv[1],
@@ -835,11 +837,19 @@ def test_the_recompute_loop_retains_nothing_that_survives_its_warm_up(
             reuse_fits_from=sys.argv[3],
             on_tile_written=lambda _tile: readings.append(current_rss_bytes()),
         )
-        print(json.dumps({"tiles": report.tiles_written, "readings": readings}))
+        print(json.dumps({
+            "tiles": report.tiles_written,
+            "readings": readings,
+            "shortfall": reclaim_shortfall_bytes(reference),
+        }))
         """
     )
     second = _config(tmp_path, uri, name="two.toml", criteria='["aic", "hqic"]')
-    with rss_validity("the recompute loop's per-tile resident set"):
+    witnessed: dict[str, float] = {}
+    with rss_validity(
+        "the recompute loop's per-tile resident set",
+        witness=lambda: witnessed.get("shortfall", 0.0),
+    ):
         result = subprocess.run(
             [
                 sys.executable,
@@ -858,6 +868,7 @@ def test_the_recompute_loop_retains_nothing_that_survives_its_warm_up(
         )
         assert result.returncode == 0, result.stderr
         payload = json.loads(result.stdout.splitlines()[-1])
+        witnessed["shortfall"] = float(payload["shortfall"])
         assert payload["tiles"] == 16
 
         report = accumulation_report(payload["readings"])

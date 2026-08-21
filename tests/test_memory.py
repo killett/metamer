@@ -1988,30 +1988,28 @@ def test_a_converging_cap_reaches_a_regime_a_capped_one_does_not(tmp_path):
     )
 
 
-def test_the_validity_gate_fires_and_records_why(
+def test_a_high_stall_reading_is_flagged_and_skips_nothing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The positive control: an indeterminate measurement is reachable and loud.
+    """The stall statistic is a diagnostic, and a diagnostic must not abstain.
 
-    **"0 INDETERMINATE" IS A PURE NEGATIVE** (i2), and every sweep so far has
-    printed it. Without this, that line is satisfied equally by a quiet machine
-    and by a gate that cannot fire at all -- and the second is indistinguishable
-    from the first in the summary.
+    **THIS TEST'S SUBJECT INVERTED AT OPEN QUESTION 19'S SURVEY.** It used to be
+    the positive control for the stall gate firing; the gate is now the reclaim
+    witness alone, because the stall counter is per-cgroup and reads a
+    measurement's OWN allocation as pressure -- measured, a `measure_floor`
+    ladder under no external pressure at all reads **223 ms/s with a witness of
+    0.00 MB**. A statistic that cannot tell an allocator from a victim may
+    report and may not skip.
 
     Expected values derived by hand: the stubbed counter advances **1 s of stall
-    per reading**, and the watch samples six times a second, so any window it can
-    form carries at least 6 s of stall per second of wall clock -- 6 000 000 us/s
-    against a 50 000 limit, two orders clear whatever the sampling jitter.
+    per reading** and the watch samples six times a second, so any window carries
+    at least 6 000 000 us/s -- two orders above the diagnostic threshold whatever
+    the sampling jitter, and it must still leave the block asserted.
 
-    **AND THE BLOCK MUST OUTLAST THE WINDOW, WHICH IS NEW AT OPEN QUESTION 19.**
-    Before the fixed window this test passed `pass` as its body and relied on the
-    counter jumping across a few milliseconds; under a windowed rate that block
-    is **too short to judge** and correctly returns no verdict at all. The sleep
-    is not padding -- it is the precondition the gate now states.
-
-    Bug this catches: a gate wired to a counter that never moves, or a
-    comparison whose sense is inverted -- both leave every run reporting zero
-    indeterminate measurements, which reads as evidence the machine was quiet.
+    Bug this catches: reintroducing the stall skip. Every one of the five gated
+    assertions spawns child probes that build ~220 MB working sets, so a stall
+    skip abstains on them routinely and they stop asserting while still looking
+    gated -- which is the failure this whole line of work exists to prevent.
     """
     from metamer.core import machine as machine_module
     from tests.stall import STALL_WINDOW_S
@@ -2024,18 +2022,22 @@ def test_the_validity_gate_fires_and_records_why(
 
     monkeypatch.setattr(machine_module, "memory_stall_us", stalling)
     before = len(conftest.INDETERMINATE_RSS)
+    ran = False
 
-    with pytest.raises(Skipped) as skipped:
-        with rss_validity("a constructed stall"):
-            time.sleep(STALL_WINDOW_S * 1.2)
+    with rss_validity("a constructed stall"):
+        time.sleep(STALL_WINDOW_S * 1.2)
+        ran = True
 
-    assert "a constructed stall" in str(skipped.value)
-    assert "ms/s of full memory stall" in str(skipped.value)
-    # AND IT IS RECORDED, NOT ONLY RAISED: the summary is what makes an
-    # indeterminate outcome visible rather than a skip nobody reads.
-    assert len(conftest.INDETERMINATE_RSS) == before + 1
-    assert "a constructed stall" in conftest.INDETERMINATE_RSS[-1]
-    conftest.INDETERMINATE_RSS.pop()
+    assert ran
+    assert len(conftest.INDETERMINATE_RSS) == before
+    record = conftest.RSS_MEASUREMENTS[-1]
+    assert record.what == "a constructed stall"
+    assert record.stall_flagged is True
+    assert record.indeterminate is False
+    assert record.gate == "margin"
+    assert record.stall_us_per_s is not None
+    assert record.stall_us_per_s > conftest.RSS_STALL_LIMIT_US_PER_S
+    conftest.RSS_MEASUREMENTS.pop()
 
 
 # --------------------------------------------------------------------------
@@ -2515,11 +2517,17 @@ def test_the_validity_gate_declares_indeterminate_on_a_constructed_reclaim():
     # indeterminate outcome visible rather than a skip nobody reads.
     assert len(INDETERMINATE_RSS) == before + 1
     assert "a constructed reclaim" in INDETERMINATE_RSS[-1]
-    # POPPED, as the constructed-stall test above pops its own. A test that
-    # leaves its own construction in the summary teaches every reader that "1
-    # indeterminate" is the healthy count, which destroys the loudness the
-    # section exists for.
+    # POPPED FROM BOTH, as the constructed-stall test above pops its own. A test
+    # that leaves its own construction in the summary teaches every reader that
+    # "1 indeterminate" is the healthy count, which destroys the loudness the
+    # section exists for -- and since the summary became per-assertion, the
+    # RECORD is the copy that shows, so popping only the reason list left the
+    # line standing. Caught in the first sweep under the new summary.
     INDETERMINATE_RSS.pop()
+    record = conftest.RSS_MEASUREMENTS.pop()
+    assert record.what == "a constructed reclaim"
+    assert record.indeterminate is True
+    assert record.gate == "witness"
 
 
 def test_the_validity_gate_stays_quiet_when_the_working_set_holds():
@@ -2533,7 +2541,7 @@ def test_the_validity_gate_stays_quiet_when_the_working_set_holds():
     gate** -- the failure mode this repo already names for warnings, arriving
     here through a reference that is checked with the wrong sign.
     """
-    from tests.conftest import INDETERMINATE_RSS, UNJUDGED_RSS, rss_validity
+    from tests.conftest import INDETERMINATE_RSS, RSS_MEASUREMENTS, rss_validity
 
     before = len(INDETERMINATE_RSS)
     ran = False
@@ -2543,46 +2551,54 @@ def test_the_validity_gate_stays_quiet_when_the_working_set_holds():
         ran = True
     assert ran
     assert len(INDETERMINATE_RSS) == before
-    # THIS BLOCK IS INSTANT, SO IT IS TOO SHORT TO JUDGE FOR THRASHING, and the
-    # gate says so rather than calling it clean. Popped for the same reason the
-    # constructed entries above are: a permanent line in the summary teaches the
-    # reader that the healthy count is nonzero.
-    assert UNJUDGED_RSS and "a healthy window" in UNJUDGED_RSS[-1]
-    UNJUDGED_RSS.pop()
+    record = RSS_MEASUREMENTS[-1]
+    assert record.what == "a healthy window"
+    assert record.indeterminate is False
+    # **AND THE GATE IS NAMED IN THE RECORD**, which is what lets a reader tell an
+    # assertion the witness governs from one carried by its own margin. Popped
+    # for the same reason the constructed entries are: a permanent line in the
+    # summary teaches the reader that the healthy count is nonzero.
+    assert record.gate == "witness"
+    # THIS BLOCK IS INSTANT, so it is too short to hold a window and the stall
+    # diagnostic has nothing to report -- distinct from reporting zero.
+    assert record.stall_us_per_s is None
+    RSS_MEASUREMENTS.pop()
 
 
-def test_the_stall_condition_passes_a_quiet_window_and_records_the_reading(
+def test_a_measurement_with_no_reference_is_recorded_as_carried_by_its_margin(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The stall condition's own negative control, which the reference one is not.
+    """The other half of the record: which gate governs each measurement.
 
-    The test above constructs a healthy `reference_bytes` and returns in
-    microseconds, so it never reaches the windowed rate at all. **A gate has two
-    conditions and each needs its own pair** -- otherwise "the gate is not
-    always-on" is established for one of them and assumed for the other.
+    **THE SURVEY'S OUTPUT HAS TO BE READABLE AT RUNTIME, NOT ONLY IN A NOTE.**
+    Five assertions consult this gate and every one of them can supply a witness
+    in principle; until each is wired, it is carried by the size of its own
+    window instead. **A reader must be able to tell which**, or an assertion that
+    silently lost its witness looks exactly like one that never had it.
 
     Expected value derived independently: a counter frozen at one value cannot
     accumulate stall, so the worst window over a block longer than the window is
-    exactly **0.0 us/s**, which is below any positive limit.
+    exactly **0.0 us/s** -- a number, and not the `None` that means "too short to
+    judge".
 
-    Bug this catches: a windowed rate that reports something other than zero on a
-    counter that did not move -- an off-by-one over the sample pairs, or a
-    fallback that substitutes the whole-block average when the counter is flat.
-    Either would make every quiet measurement indeterminate and the suite would
-    lose its RSS assertions to a gate nobody could satisfy.
+    Bug this catches: a `gate` field that is constant, or a windowed rate that
+    reports something other than zero on a counter that did not move. The first
+    makes the survey's distinction invisible; the second would flag every quiet
+    measurement as HIGH and train the reader to ignore the line.
     """
     from metamer.core import machine as machine_module
-    from tests.conftest import OBSERVED_STALL_RATES, rss_validity
+    from tests.conftest import RSS_MEASUREMENTS, rss_validity
     from tests.stall import STALL_WINDOW_S
 
     monkeypatch.setattr(machine_module, "memory_stall_us", lambda: (4_242.0, "cgroup"))
-    before = len(OBSERVED_STALL_RATES)
 
     with rss_validity("a quiet window"):
         time.sleep(STALL_WINDOW_S * 1.2)
 
-    assert len(OBSERVED_STALL_RATES) == before + 1
-    what, rate = OBSERVED_STALL_RATES[-1]
-    assert what == "a quiet window"
-    assert rate == 0.0
-    OBSERVED_STALL_RATES.pop()
+    record = RSS_MEASUREMENTS[-1]
+    assert record.what == "a quiet window"
+    assert record.gate == "margin"
+    assert record.stall_us_per_s == 0.0
+    assert record.stall_flagged is False
+    assert record.indeterminate is False
+    RSS_MEASUREMENTS.pop()

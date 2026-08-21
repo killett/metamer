@@ -31,7 +31,7 @@ the limit executable rather than advisory.
 from __future__ import annotations
 
 import contextlib
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -279,21 +279,50 @@ RSS_STALL_LIMIT_US_PER_S = 25_000
 #: RUNS**, so the count and the reasons are reported at the end of the run.
 INDETERMINATE_RSS: list[str] = []
 
-#: Measurements too short to hold one window, and therefore **not judged for
-#: thrashing at all**. A third state, printed beside the other two: "not judged"
-#: and "judged clean" are different facts and a summary that shows only a count
-#: of failures turns the first into the second.
-UNJUDGED_RSS: list[str] = []
 
-#: The worst windowed rate seen this session, whatever the verdict. **The
-#: constant above is only re-derivable if the passing readings are on the
-#: record**, and every previous attempt to set it had known-good from idle and
-#: from one `measure_floor` and nothing from a real sweep.
-OBSERVED_STALL_RATES: list[tuple[str, float]] = []
+@dataclass
+class RssMeasurement:
+    """One bracketed measurement, its governing gate, and its stall diagnostic.
+
+    **PER ASSERTION AND NOT PER COUNT.** A summary that reports *"2
+    INDETERMINATE"* says how many and never which, so an assertion that has not
+    run for three sweeps is indistinguishable from one that skipped once. The
+    name is carried so the reader can tell a permanent abstention from a
+    transient one.
+
+    Attributes:
+        what: The measurement's name, as the caller gave it.
+        gate: `witness` where a reference was supplied and the reclaim witness
+            governs, `margin` where none was and the assertion is carried by the
+            size of its own window.
+        stall_us_per_s: The worst windowed rate, or None when the block was too
+            short to hold a window.
+        stall_flagged: Whether that rate is above `RSS_STALL_LIMIT_US_PER_S`.
+            **Never a verdict** -- see the constant's docstring for why the stall
+            statistic cannot tell an allocator from a victim.
+        indeterminate: Whether the witness refused to judge.
+        reason: The witness's reason, when it refused.
+    """
+
+    what: str
+    gate: str
+    stall_us_per_s: float | None
+    stall_flagged: bool
+    indeterminate: bool
+    reason: str | None = None
+
+
+#: Every bracketed measurement this session, in order.
+RSS_MEASUREMENTS: list[RssMeasurement] = []
 
 
 @contextlib.contextmanager
-def rss_validity(what: str, *, reference_bytes: float | None = None) -> Iterator[None]:
+def rss_validity(
+    what: str,
+    *,
+    reference_bytes: float | None = None,
+    witness: Callable[[], float] | None = None,
+) -> Iterator[None]:
     """Bracket an RSS-difference measurement and refuse to judge an invalid one.
 
     **INDETERMINATE IS NOT PASS AND NOT FAIL**, which is the same shape as
@@ -341,12 +370,23 @@ def rss_validity(what: str, *, reference_bytes: float | None = None) -> Iterator
     with StallWatch(reader=machine.memory_stall_us) as watch:
         yield
 
-    # **CHECKED FIRST, BECAUSE IT IS THE CONDITION THAT CAN SEE THE FAILURE.**
-    # The stall gate below missed a run that lost 85 MB; this one is what Task 8i
-    # validated against both sides. Ordering matters only for which reason gets
-    # reported, and the more specific one is worth more to the reader.
-    if reference_bytes is not None:
-        shortfall = machine.reclaim_shortfall_bytes(reference_bytes)
+    flagged = watch.rate is not None and watch.rate > RSS_STALL_LIMIT_US_PER_S
+    gate = (
+        "witness" if (reference_bytes is not None or witness is not None) else "margin"
+    )
+
+    # **THE WITNESS IS THE GATE, AND IT IS THE ONLY GATE.** It answers whether
+    # THIS process lost working set, which is the question every RSS assertion
+    # actually asks. The stall rate answers whether anything in the cgroup waited
+    # on memory -- measured 2026-08-21, a `measure_floor` ladder allocating
+    # nothing but its own probes reads 223 ms/s with a witness of 0.00 MB -- so
+    # it cannot tell an allocator from a victim, and it skips nothing.
+    if reference_bytes is not None or witness is not None:
+        shortfall = (
+            witness()
+            if witness is not None
+            else machine.reclaim_shortfall_bytes(float(reference_bytes or 0.0))
+        )
         if shortfall > 0:
             reason = (
                 f"{what}: this process's working set ended "
@@ -356,80 +396,65 @@ def rss_validity(what: str, *, reference_bytes: float | None = None) -> Iterator
                 f"by an unknown amount"
             )
             INDETERMINATE_RSS.append(reason)
+            RSS_MEASUREMENTS.append(
+                RssMeasurement(what, gate, watch.rate, flagged, True, reason)
+            )
             pytest.skip(reason)
 
-    if watch.samples == 0:
-        # **THE KERNEL DOES NOT EXPOSE PSI, SO THE CONDITION CANNOT BE CHECKED.**
-        # Reported rather than assumed clean: "unknown" and "fine" are the same
-        # observation otherwise, which is the fill-value rule at a gate.
-        INDETERMINATE_RSS.append(f"{what}: memory-pressure counter unavailable")
-        return
-
-    if watch.rate is None:
-        # TOO SHORT TO HOLD A WINDOW. Judged against nothing rather than against
-        # a limit that would mean something else at this duration -- the third
-        # state, and it is printed.
-        UNJUDGED_RSS.append(f"{what}: {watch.unjudged_reason}")
-        return
-
-    if watch.rate > RSS_STALL_LIMIT_US_PER_S:
-        reason = (
-            f"{what}: {watch.rate / 1000:.0f} ms/s of full memory stall over the "
-            f"worst {watch.window_s:.0f} s window ({watch.counter} counter, "
-            f"{watch.samples} samples), above the "
-            f"{RSS_STALL_LIMIT_US_PER_S / 1000:.0f} ms/s limit -- pages were "
-            f"being reclaimed, so an RSS difference understates by an unknown "
-            f"amount"
-        )
-        INDETERMINATE_RSS.append(reason)
-        pytest.skip(reason)
-
-    # RECORDED ONLY ONCE IT HAS PASSED, so the summary's "worst window judged"
-    # line describes what a HEALTHY sweep produces. A fired reading in that list
-    # would be the one number nobody may re-derive the limit from.
-    OBSERVED_STALL_RATES.append((what, watch.rate))
+    RSS_MEASUREMENTS.append(RssMeasurement(what, gate, watch.rate, flagged, False))
 
 
 def pytest_terminal_summary(terminalreporter: Any) -> None:
-    """Report every indeterminate RSS measurement, or say there were none.
+    """Report every RSS measurement by name, with its gate and its diagnostic.
 
-    **BOTH BRANCHES PRINT.** A section that appears only on failure trains a
-    reader to see nothing and conclude nothing happened; the line that says
-    "0 indeterminate" is what makes the silence evidence.
+    **PER ASSERTION, BECAUSE A COUNT HIDES A PERMANENT ABSTENTION.** "2
+    INDETERMINATE" tells a reader how many and never which, so a criterion that
+    has not run for three sweeps looks exactly like one that skipped once. Every
+    bracketed measurement prints a line whether it passed, abstained or was never
+    judged.
+
+    **AND BOTH BRANCHES PRINT.** A section that appears only on failure trains a
+    reader to see nothing and conclude nothing happened.
+
+    Args:
+        terminalreporter: pytest's reporter, which owns the section.
     """
     from tests.stall import STALL_WINDOW_S
 
     terminalreporter.write_sep("=", "RSS measurement validity")
-    if INDETERMINATE_RSS:
+    if not RSS_MEASUREMENTS:
+        terminalreporter.write_line("no RSS-difference measurement ran this session")
+        return
+
+    for record in RSS_MEASUREMENTS:
+        if record.stall_us_per_s is None:
+            stall = f"stall not judged (under the {STALL_WINDOW_S:.0f} s window)"
+        else:
+            stall = f"stall {record.stall_us_per_s / 1000:.1f} ms/s"
+            if record.stall_flagged:
+                stall += " HIGH"
+        verdict = "INDETERMINATE" if record.indeterminate else "asserted"
         terminalreporter.write_line(
-            f"{len(INDETERMINATE_RSS)} INDETERMINATE -- neither passed nor failed:"
-        )
-        for reason in INDETERMINATE_RSS:
-            terminalreporter.write_line(f"  - {reason}")
-    else:
-        terminalreporter.write_line(
-            "0 indeterminate: every RSS-difference measurement ran under a "
-            f"full-stall rate below {RSS_STALL_LIMIT_US_PER_S / 1000:.0f} ms/s "
-            f"over its worst {STALL_WINDOW_S:.0f} s window, and every one that "
-            "supplied a reference ended at or above it"
+            f"  {record.what}: gate={record.gate}, {verdict}, {stall}"
         )
 
-    # **THE WORST PASSING READING IS PRINTED WHETHER OR NOT ANYTHING FIRED.** The
-    # limit is only re-derivable from readings that passed, and every previous
-    # attempt to set it had idle and one `measure_floor` and nothing from a real
-    # sweep. Open question 19 is what this line feeds.
-    if OBSERVED_STALL_RATES:
-        what, rate = max(OBSERVED_STALL_RATES, key=lambda entry: entry[1])
+    indeterminate = [r for r in RSS_MEASUREMENTS if r.indeterminate]
+    on_margin = [r for r in RSS_MEASUREMENTS if r.gate == "margin"]
+    flagged = [r for r in RSS_MEASUREMENTS if r.stall_flagged]
+    terminalreporter.write_line(
+        f"{len(RSS_MEASUREMENTS)} measured, {len(indeterminate)} INDETERMINATE "
+        f"(the reclaim witness refused), {len(on_margin)} carried by their margin "
+        f"with no witness, {len(flagged)} above the "
+        f"{RSS_STALL_LIMIT_US_PER_S / 1000:.0f} ms/s stall diagnostic"
+    )
+    if flagged:
+        # **A DIAGNOSTIC AND NOT A VERDICT**, said in the summary as well as in
+        # the constant's docstring, because a HIGH line next to a passing
+        # assertion is exactly where a reader would otherwise infer a gate.
         terminalreporter.write_line(
-            f"worst window judged: {rate / 1000:.1f} ms/s ({what}), across "
-            f"{len(OBSERVED_STALL_RATES)} judged measurements"
+            "  a HIGH stall reading skips nothing: the counter is per-cgroup and "
+            "cannot tell a measurement that allocates hard from one that is "
+            "being squeezed -- see open question 19"
         )
-
-    # NOT JUDGED IS NOT CLEAN, AND IT GETS ITS OWN COUNT.
-    if UNJUDGED_RSS:
-        terminalreporter.write_line(
-            f"{len(UNJUDGED_RSS)} not judged for thrashing -- shorter than the "
-            f"{STALL_WINDOW_S:.0f} s window:"
-        )
-        for reason in UNJUDGED_RSS:
-            terminalreporter.write_line(f"  - {reason}")
+    for record in indeterminate:
+        terminalreporter.write_line(f"  - {record.reason}")

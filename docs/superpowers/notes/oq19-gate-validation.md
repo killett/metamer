@@ -90,3 +90,37 @@ fired on 251, 271, 465 and 257 ms/s exactly as they did at 25 000; only one marg
 25 ms/s differs. **The skip rate is a property of the windowed statistic, not of the value** —
 so reverting the number would not restore those assertions, and choosing between gate and
 diagnostic is the decision that would.
+
+---
+
+## THE SURVEY, 2026-08-21 — WHICH ASSERTIONS CAN WITNESS THEIR OWN SUBJECT
+
+Five assertions consult `rss_validity`. The other five in Task 8i's table are ungated on margin
+(200 MB to 400 MiB against a ~1 MB watermark drift) and nothing here changes them.
+
+**Every measurement below is taken in a CHILD**, which is the constraint that made
+`reference_bytes` optional in the first place: a reference read in the test process witnesses the
+wrong process.
+
+| assertion | where the measurement happens | can the measuring process read a reference? | structural or incidental | does its workload allocate hard? |
+|---|---|---|---|---|
+| `the floor ladder's rungs` | `memory._FLOOR_CHILD`, five rungs | **yes** — its own last rung is a figure it cannot honestly end below | **incidental**; costs a field in the floor payload, which provenance records and exit criterion 1 already excludes by name | **yes** — five child probes, each ~220 MB from nothing |
+| `the floor with the input open` | the same child, twice | **yes**, same | **incidental**, same | **yes** |
+| `peak residency across the iteration cap` | `memory._CALIBRATION_CHILD`, three caps | **yes** — `CalibrationPoint.baseline_bytes` is already exactly that reference, carried and unused for this purpose | **incidental**; adds a field to a schema Tasks 4, 5 and 7 pin | **yes** — three children |
+| `criterion 7's peak against the budget and the grid` | an inline program **written in the test** | **yes** | **incidental, and free** — no production code involved | **yes** — two runs |
+| `the recompute loop's per-tile resident set` | an inline program **written in the test** | **yes** | **incidental, and free** | **yes** — a 16-tile recompute |
+
+### SO (c) COLLAPSES TO (b) PLUS A DIAGNOSTIC, AND THE COMPOUND RULE HAS NO PERMANENT MEMBERS
+
+**Not one of the five is structurally unable to witness its own subject.** Two need no production
+change at all; two share the floor payload; one touches a pinned schema. **And all five allocate
+hard**, which is the other half: under a stall fallback every one of them would abstain routinely,
+so the compound rule's fallback arm would be outcome (a) applied to whichever subset had not been
+wired yet — assertions that look gated and do not run.
+
+**The transitional set is real and is named rather than discovered.** Until a witness is wired,
+an assertion is carried by its **margin**, which is the same footing Task 8i put the ungated five
+on: rungs at ±25% with two >30 MB steps, the iteration cap at 16 MB, criterion 7 at 64 MB, the
+recompute loop at 6 MB — all far above the ~1 MB watermark drift. **The exception is
+`the floor with the input open`, whose window is >1 MB against that same drift**; Task 8i already
+flagged it AT RISK, and it is therefore the one to wire first rather than last.
