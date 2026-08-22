@@ -448,9 +448,11 @@ def test_every_verdict_states_a_reading_or_states_that_it_has_none():
     """A criterion over a measured quantity must name which reading.
 
     **One run yields several readings and criteria 6 and 7 were written as
-    though it yielded one.** Task 8b measured 970.6, 1504.1 and 2410.0 B/series
-    on a single ladder, and criterion 6 is met on the first and failed on the
-    other two.
+    though it yielded one.** Re-measured 2026-08-22 at Task 8b's own fixture:
+    931.7, 1470.9 and 1468.8 B/series on a single ladder, and criterion 6 is met
+    on the first and failed on the other two. (~~970.6, 1504.1 and 2410.0~~ --
+    the peak was superseded when `SVD_CHUNK_SERIES` bounded the fit phase's
+    maximum; the other two reproduce.)
 
     Expected values determined independently: the readings a harness here can
     take are the three in `READINGS`, and the criteria whose subject is an RSS
@@ -499,11 +501,19 @@ def test_criterion_6_and_7_move_with_the_published_record():
     anyone revisiting the criteria -- or the criteria marked met while the
     caveat stood.
 
-    Expected values determined independently, from Task 8b's ladder: the peak is
-    **2410.0 B/series** against an analytic **926**, so the ratio is **2.603**
-    and `slope_band(926)` at `SLOPE_BAND_FACTOR = 1.5` is **617.3 to 1389.0** --
-    2410 is outside it, which is what makes criterion 6's verdict FAILED on the
-    peak reading. Both criteria name the peak.
+    Expected values determined independently, from the 2026-08-22 ladder: the
+    peak is **1468.8 B/series** against an analytic **926**, so the ratio is
+    **1.586** and `slope_band(926)` at `SLOPE_BAND_FACTOR = 1.5` is **617.3 to
+    1389.0** -- 1468.8 is outside it by **79.8 B/series, 4.3 sigma on its own
+    18.4**, which is what makes criterion 6's verdict FAILED on the peak
+    reading. Both criteria name the peak.
+
+    ~~2410.0, ratio 2.603, outside by 22 sigma~~ -- superseded 2026-08-22, and
+    **the verdict did not move because the margin narrowed**: it is the same
+    verdict on a smaller margin, which is the improvement `SVD_CHUNK_SERIES`
+    earned and it should be legible here rather than hidden behind an unchanged
+    word. **A margin of 4.3 sigma is close enough that the next bounding could
+    flip this criterion**, and that is the state, not a warning.
 
     Bug this catches: the dispute field deleted in a commit that settles the
     per-series cost, leaving criteria 6 and 7 marked failed for a reason that no
@@ -525,7 +535,7 @@ def test_criterion_6_and_7_move_with_the_published_record():
     )
     measured = dispute.measured_bytes_per_series
     analytic = dispute.analytic_bytes_per_series
-    assert round(measured / analytic, 3) == 2.603
+    assert round(measured / analytic, 3) == 1.586
     low, high = analytic / SLOPE_BAND_FACTOR, analytic * SLOPE_BAND_FACTOR
     assert round(low, 1) == 617.3
     assert round(high, 1) == 1389.0

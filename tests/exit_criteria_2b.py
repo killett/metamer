@@ -28,12 +28,19 @@ from enum import StrEnum
 #:
 #: **A CRITERION OVER A MEASURED QUANTITY MUST NAME ITS READING**, because one
 #: run yields several and criteria 6 and 7 were written as though it yielded
-#: one. Measured at Task 8b on a single duration-controlled ladder: the working
-#: set at end of run is **970.6 +/- 47.6 B/series**, at end of tile **1504.1 +/-
-#: 21.4**, and the peak **2410.0 +/- 46.0** -- a factor of 2.5 between the
-#: extremes, against an analytic 926 and a band of 617.3-1389.0. **Criterion 6
+#: one. Re-measured 2026-08-22 on a duration-controlled ladder at Task 8b's own
+#: fixture and arm: the working set at end of run is **931.7 +/- 41.9
+#: B/series**, at end of tile **1470.9 +/- 16.2**, and the peak **1468.8 +/-
+#: 18.4** -- against an analytic 926 and a band of 617.3-1389.0. **Criterion 6
 #: is met on the first and failed on the other two**, and until Task 8b it did
 #: not say which it meant.
+#:
+#: ~~970.6 / 1504.1 / 2410.0, a factor of 2.5 between the extremes~~ --
+#: superseded 2026-08-19 -> 2026-08-22, and superseded is not wrong: those
+#: numbers were correct for code that `SVD_CHUNK_SERIES` changed on 2026-08-21.
+#: **Only the peak moved** -- the other two reproduce within 3.2% and 1.6% --
+#: so the three readings now span 1.58x rather than 2.5x, and the criterion's
+#: structure is unchanged.
 #:
 #: The vocabulary is closed on purpose: a verdict quoting a reading no harness
 #: can take is a verdict about nothing.
@@ -197,13 +204,18 @@ PHASE_2B_EXIT_CRITERIA: tuple[ExitCriterion, ...] = (
         verdict=Verdict.FAILED,
         reading="peak",
         scope=(
-            "FAILS ON THE PEAK at 2410.0 +/- 46.0 against a band of "
-            "617.3-1389.0, ratio 2.603, outside by 22 sigma; fails on the "
-            "end-of-tile working set at 1504.1 +/- 21.4, ratio 1.624; and is "
-            "MET on the end-of-run working set at 970.6 +/- 47.6, ratio 1.048. "
-            "Three readings of one run and the criterion never said which it "
-            "meant. Task 7's 1021.6 and Task 8's 1900.9 are both withdrawn as "
-            "underestimates -- each ladder's run length grew with its abscissa"
+            "FAILS ON THE PEAK at 1468.8 +/- 18.4 against a band of "
+            "617.3-1389.0, ratio 1.586, outside by 79.8 B/series or 4.3 sigma; "
+            "fails on the end-of-tile working set at 1470.9 +/- 16.2, ratio "
+            "1.588; and is MET on the end-of-run working set at 931.7 +/- "
+            "41.9, ratio 1.006. Three readings of one run and the criterion "
+            "never said which it meant. Task 7's 1021.6 and Task 8's 1900.9 "
+            "are both withdrawn as underestimates -- each ladder's run length "
+            "grew with its abscissa. RE-MEASURED 2026-08-22: the verdict was "
+            "carried on Task 8b's 2410.0 +/- 46.0, ratio 2.603, outside by 22 "
+            "sigma, which described code `SVD_CHUNK_SERIES` changed on "
+            "2026-08-21. The verdict does not move; its margin does, from 22 "
+            "sigma to 4.3, and it now rests on the shipping number"
         ),
         established_by=(
             "test_the_dispute_states_its_direction_its_owner_and_its_spread",
@@ -231,8 +243,12 @@ PHASE_2B_EXIT_CRITERIA: tuple[ExitCriterion, ...] = (
             "B = 256 only, failing by 11.2 MB and 61.1 MB at B = 9216. Budgets "
             "are the minimal budget per side, which is Task 8's convention. "
             "Not closed by a correction because the peak-to-analytic ratio is "
-            "1.888 / 2.603 / 3.850 across those fixtures, so no coefficient "
-            "fits all three. Owned by open question 18"
+            "1.076 / 1.586 / 1.794 across those fixtures, so no coefficient "
+            "fits all three. Owned by open question 18. THE MARGINS ABOVE ARE "
+            "PRE-BOUNDING and so were the ratios (1.888 / 2.603 / 3.850): "
+            "`SVD_CHUNK_SERIES` landed 2026-08-21 and the post-bounding excess "
+            "at side 96 is +4.63 MB, down from +12.03, measured by OQ18 Task "
+            "A-double-prime. The verdict is unchanged and only the margin moved"
         ),
         established_by=(
             "test_criteria_6_and_7_peak_rss_is_bounded_and_does_not_track_the_grid",

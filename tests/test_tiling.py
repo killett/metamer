@@ -971,16 +971,20 @@ def test_the_disputes_hypothesis_sides_are_recomputed_and_not_transcribed():
     `(10**9 - 228 200 000) x 0.85 - 11 984`, and it does not depend on the
     per-series cost, so only the divisor moves between rows:
 
-        published, 8274 B/series                      79 285.5 -> 281 -> **272**
-        additive, 8274 + 1484.0 = 9758.0              67 228.7 -> 259 -> **256**
-        multiplicative, 8274 x 2410.0/926 = 21 533.8  30 464.5 -> 174 -> **160**
-        headroom 61.577%, block 771 800 000 x 0.38423
-                          - 11 984 = 296 538 555      35 839.8 -> 189 -> **176**
+        published, 8274 B/series                      79 286.7 -> 281 -> **272**
+        additive, 8274 + 542.8 = 8816.8               74 405.5 -> 272 -> **272**
+        multiplicative, 8274 x 1468.8/926 = 13 124.0  49 986.0 -> 223 -> **208**
+        headroom 36.955%, block 771 800 000 x 0.63045
+                          - 11 984 = 486 566 720      58 806.7 -> 242 -> **240**
 
-    ~~Under the 1900.9 reading these were 272 / 256 / 192 / 208~~, struck
-    2026-08-19: Task 8b measured 2410.0 +/- 46.0 on a duration-controlled ladder
-    and both earlier slopes are underestimates. **The spread moves, 192 to 160**,
-    which the Task 9 note said had survived a correction only by coincidence.
+    ~~Under the 1900.9 reading these were 272 / 256 / 192 / 208; under 2410.0
+    they were 272 / 256 / 160 / 176~~, struck 2026-08-22: the peak was
+    re-measured at **1468.8 +/- 18.4** after `SVD_CHUNK_SERIES` bounded the fit
+    phase's maximum, and the 2410.0 reading describes code that no longer runs.
+    **The spread narrows, 160 to 208**, and the additive row now lands on the
+    published side itself -- which is a narrowed spread, NOT agreement: that
+    hypothesis is refuted by the other two fixtures, where the excess is 192.4
+    and 1347.5 B/series against its 542.8.
 
     Bug this catches: a hypothesis side transcribed from a report rather than
     derived -- (a4)'s review-side register, which has fired three times here --
@@ -1006,13 +1010,16 @@ def test_the_disputes_hypothesis_sides_are_recomputed_and_not_transcribed():
     # two slopes on purpose -- it cannot drift from them -- so re-deriving it
     # here would be an oracle sharing its subject's derivation path (j). The
     # check that bites is the hand-computed value: criterion 7 asymptotically
-    # needs the budget's slope to reach the peak's, `926 / (1 - h) >= 2410.0`,
-    # so `h >= 1 - 926/2410.0 = 0.61577`. ~~0.51286 against 1900.9~~, struck
-    # 2026-08-19. **AND THE HEADROOM IS NO LONGER EXCLUDED AS A PARTIAL
-    # EXPLANATION**: Task 8a inferred a transient of at most 152 B/series from
-    # one contaminated run, and measured at this fixture the transient is 905.9
-    # -- 37.6% of the 2410.0 peak, against a shipped headroom of 15%.
-    assert dispute.headroom_fraction_required == pytest.approx(0.61577, abs=5e-6)
+    # needs the budget's slope to reach the peak's, `926 / (1 - h) >= 1468.8`,
+    # so `h >= 1 - 926/1468.8 = 0.36955`. ~~0.51286 against 1900.9; 0.61577
+    # against 2410.0~~, struck 2026-08-22 with the peak re-measurement.
+    # **THE REQUIRED HEADROOM FELL AND THE SHIPPED ONE DID NOT MOVE**: 36.955%
+    # against a shipped `headroom_fraction` of 15%, where it was 61.577%. That
+    # gap closing by 25 points is what `SVD_CHUNK_SERIES` bought, and it is
+    # still a gap -- the shipped fraction is a policy constant and this is a
+    # measurement, so they are not the same kind of number and the second does
+    # not license moving the first.
+    assert dispute.headroom_fraction_required == pytest.approx(0.36955, abs=5e-6)
 
 
 def test_the_dispute_states_its_direction_its_owner_and_its_spread():
@@ -1024,16 +1031,31 @@ def test_the_dispute_states_its_direction_its_owner_and_its_spread():
 
     Expected values determined independently, from Task 8b's ladders:
 
-      - the peak is 2410.0 B/series and the process still holds 1504.1 at the
-        end of the tile, so the transient is `2410.0 - 1504.1 =` **905.9** by
-        subtraction. **Every figure comes from the one arm** -- fifteen
-        fine-chunked points, best-of-four peak instrument -- because a peak from
-        one arm minus a residency from another is a difference of two fixtures.
-      - the ratio is `2410.0 / 926 = 2.603`, and it is **not** the ratio at the
-        other two fixtures -- 1.888 at M = 6 and 3.850 at N = 240 -- which is
+      - the peak is 1468.8 B/series and the process still holds 1470.9 at the
+        end of the tile, so the transient is `1468.8 - 1470.9 =` **-2.1** by
+        subtraction -- **inside both fits' standard errors, 18.4 and 16.2, so
+        it is zero to this instrument.** The transient this record carried at
+        905.9 is gone: `SVD_CHUNK_SERIES` bounded the allocation that was it.
+        **Every figure comes from the one arm** -- ten fine-chunked points at a
+        constant 30 s -- because a peak from one arm minus a residency from
+        another is a difference of two fixtures.
+      - the ratio is `1468.8 / 926 = 1.586`, and it is **not** the ratio at the
+        other two fixtures -- 1.794 at M = 6 and 1.076 at N = 240 -- which is
         the whole reason no term has moved.
-      - the spread is 160 to 272, the extremes of the hypothesis sides.
+      - the spread is 208 to 272, the extremes of the hypothesis sides.
       - the owner is nobody. 8a and 8b answered the question they were given.
+
+    **THE SPREAD ASSERTION CHANGED ITS FORM AND NOT ITS CLAIM, AND THAT IS THE
+    POINT OF THIS PARAGRAPH.** It used to require the ratios to sit more than
+    **2x** apart. Post-bounding they sit **1.667x** apart -- 1.794 against 1.076
+    -- so the old proxy fires, exactly as its own message said it would. **The
+    claim underneath is that no SINGLE multiplier reproduces three fixtures, and
+    that claim is stronger than ever**: the ratios disagree by **48.3% of their
+    mean** while this instrument's precision at the measured fixture is
+    **1.25%** (18.4 on 1468.8), so they are tens of standard errors apart. The
+    threshold below is therefore derived from the INSTRUMENT -- ten times its
+    precision -- rather than from the observed spread, which is what stops it
+    being a number chosen to make the suite green.
 
     Bug this catches: the record still naming 8a as the owner and 1900.9 as the
     measurement after 8b, and a ratio published as though it were a constant of
@@ -1045,25 +1067,37 @@ def test_the_dispute_states_its_direction_its_owner_and_its_spread():
     assert "8a" not in dispute.owner
     assert "unowned" in dispute.owner
     sides = [h.side for h in dispute.hypotheses.values()]
-    assert min(sides) == 160
+    assert min(sides) == 208
     assert max(sides) == PUBLISHED_TILE_SIDE.shared == 272
-    assert dispute.transient_bytes_per_series == pytest.approx(905.9)
-    assert dispute.resident_at_tile_bytes_per_series == pytest.approx(1504.1)
+    assert dispute.transient_bytes_per_series == pytest.approx(-2.1)
+    assert dispute.resident_at_tile_bytes_per_series == pytest.approx(1470.9)
     assert (
         dispute.measured_bytes_per_series - dispute.resident_at_tile_bytes_per_series
         == pytest.approx(dispute.transient_bytes_per_series, abs=0.05)
     )
     assert (
         round(dispute.measured_bytes_per_series / dispute.analytic_bytes_per_series, 3)
-        == 2.603
+        == 1.586
     )
     ratios = dispute.peak_to_analytic_by_fixture
     assert set(ratios) == {"N=60 M=2", "N=60 M=6", "N=240 M=2"}
-    assert min(ratios.values()) == 1.888
-    assert max(ratios.values()) == 3.850
-    assert max(ratios.values()) / min(ratios.values()) > 2.0, (
-        "the three fixtures' ratios must stay more than 2x apart, because that "
-        "spread is the evidence that a multiplicative correction is the wrong "
-        "shape. If a later measurement brings them together, the multiplier "
-        "hypothesis is back and this assertion is what says so"
+    assert min(ratios.values()) == 1.076
+    assert max(ratios.values()) == 1.794
+    spread = max(ratios.values()) - min(ratios.values())
+    mean_ratio = sum(ratios.values()) / len(ratios)
+    # **THE THRESHOLD IS THE INSTRUMENT'S, NOT THE DATA'S.** The measured
+    # standard error is 18.4 on 1468.8 = 1.25%, so ratios produced by one
+    # multiplier would agree to a few percent. Ten times that precision is the
+    # bar; the observed disagreement is 48.3% of the mean, so this passes by a
+    # factor of nearly four and would fail long before the fixtures converged.
+    assert spread / mean_ratio > 0.125, (
+        "the three fixtures' ratios must disagree by more than ten times this "
+        "instrument's precision, because that disagreement is the evidence "
+        "that a multiplicative correction is the wrong shape. If a later "
+        "measurement brings them together, the multiplier hypothesis is back "
+        "and this assertion is what says so. **It previously required a 2x "
+        "ratio between the extremes and fired when the bounding narrowed them "
+        "to 1.667x** -- the proxy went stale, the claim did not, and the "
+        "replacement is derived from the measurement's own error rather than "
+        "from the spread it is testing"
     )

@@ -133,8 +133,12 @@ class PerSeriesDispute:
     > **SO WHAT REMAINS IS NOT A DISAGREEMENT, IT IS AN UNMODELLED GAP**, and it
     > is why no term has moved: the ratio of measured peak to the analytic
     > formula is **not a constant of the code**. Measured at three fixtures it is
-    > 1.888, 2.603 and 3.850, so a multiplier is the wrong SHAPE of correction
-    > and fitting one to a fixture is (a7) and F5 exactly.
+    > **1.076, 1.586 and 1.794** (~~1.888, 2.603 and 3.850~~ before
+    > `SVD_CHUNK_SERIES`, 2026-08-21), so a multiplier is the wrong SHAPE of
+    > correction and fitting one to a fixture is (a7) and F5 exactly. **The
+    > spread narrowed from 2.0x to 1.67x and the shape conclusion is unchanged**
+    > -- the ratios still disagree by 48% of their mean against an instrument
+    > precision of 1.25%.
 
     Attributes:
         owner: Who owns what is left. **Not the same question 8a and 8b were
@@ -153,9 +157,15 @@ class PerSeriesDispute:
             end of the tile, with the block alive. The peak's excess over this
             is transient by construction.
         transient_bytes_per_series: **MEASURED, not bounded.** Task 8a inferred
-            `<= 152` from one contaminated run's `peak - current_end`; measured
+            `<= 152` from one contaminated run's `peak - current_end`; ~~measured
             at this fixture it is 905.9, so that bound does not hold and the
-            headroom explanation is back in play as a *partial* one.
+            headroom explanation is back in play as a *partial* one~~ --
+            **struck 2026-08-22.** Re-measured after `SVD_CHUNK_SERIES` it is
+            **-2.1 B/series**, inside both fits' standard errors, so **8a's
+            bound holds again and the headroom explanation is back OUT**: there
+            is no transient left at this fixture for headroom to explain. The
+            field is kept, and kept negative, because a transient asserted at
+            zero and a transient measured at zero are different claims.
         peak_to_analytic_by_fixture: The ratio at each fixture measured, keyed
             by `N=<n_time> M=<n_models>`. **The reason no correction has
             landed**: three values spanning 2x say the gap is not a multiplier.
@@ -314,37 +324,43 @@ PUBLISHED_TILE_SIDE = PublishedTileSide(
             "published slopes are duration-contaminated underestimates of one "
             "quantity -- and did NOT determine the correction's shape, which is "
             "what a later task has to own. The measured peak-to-analytic ratio "
-            "is 1.888, 2.603 and 3.850 at three fixtures, so no multiplier and "
-            "no single added term reproduces all three"
+            "is 1.076, 1.586 and 1.794 at three fixtures, so no multiplier and "
+            "no single added term reproduces all three. **The spread NARROWED "
+            "when the SVD temporary was bounded** -- it was 1.888, 2.603 and "
+            "3.850 against the same analytics before 2026-08-21 -- and 1.076 "
+            "against 1.794 is still 1.67x apart, so the conclusion is unchanged "
+            "and its margin is smaller"
         ),
         analytic_bytes_per_series=926.0,
-        measured_bytes_per_series=2410.0,
-        measured_standard_error=46.0,
+        measured_bytes_per_series=1468.8,
+        measured_standard_error=18.4,
         ladder_fixture=(
             "N = 60, M = 2, k_beta = 4, p_max = 3, grid = side, "
             "standard-normal float32 from rng(0) with all but 16 series wholly "
             "masked, an explicit (60, 16, 16) chunking so the largest "
             "assembly span is 256 series at every side, max_iter = 1, criteria "
             "['aic'], objective reml, threads 1, floor measured on this input "
-            "and pinned; fifteen points at sides 16/32/48/64/96, three repeats, "
+            "and pinned; ten points at sides 16/32/48/64/96, two repeats, "
             "EVERY POINT PADDED TO A CONSTANT 30 s WALL CLOCK so run length is "
-            "not confounded with B, and every point's reclaim shortfall read in "
-            "the child (max 0.344 MB, which is the floor measurement's own "
-            "between-process scatter). Measured 2026-08-19 on the development "
-            "machine, 20 s idle at 0.0000 ms/s of full stall, 4.5-5.0 GB "
-            "available. Task 8's own ladder over the three sides its run length "
-            "cannot have damaged gives 2584.3 +/- 127.0 and this one gives "
-            "2574.9 +/- 236.1 over the same three -- two independent lines, "
-            "0.4% apart"
+            "not confounded with B -- achieved 31.0-31.1 s -- and stall at or "
+            "below 1.5 ms/s throughout. Measured 2026-08-22 on the development "
+            "machine at 6.7-6.8 GB available. **THIS SUPERSEDES THE 2026-08-19 "
+            "READING OF 2410.0 +/- 46.0, WHICH WAS CORRECT FOR THE CODE IT "
+            "MEASURED**: `SVD_CHUNK_SERIES` bounded the fit phase's maximum on "
+            "2026-08-21, two days after those points. The same re-measurement "
+            "reproduces that ladder's end-of-run and end-of-tile readings "
+            "within 3.2% and 1.6%, so only the PEAK moved -- and it moved at "
+            "the two fixtures whose peak stood above their own tile reading and "
+            "not at the one whose peak was already the write plateau"
         ),
-        resident_at_tile_bytes_per_series=1504.1,
-        transient_bytes_per_series=905.9,
+        resident_at_tile_bytes_per_series=1470.9,
+        transient_bytes_per_series=-2.1,
         peak_to_analytic_by_fixture={
-            "N=60 M=6": 1.888,
-            "N=60 M=2": 2.603,
-            "N=240 M=2": 3.850,
+            "N=60 M=6": 1.794,
+            "N=60 M=2": 1.586,
+            "N=240 M=2": 1.076,
         },
-        headroom_fraction_required=1.0 - 926.0 / 2410.0,
+        headroom_fraction_required=1.0 - 926.0 / 1468.8,
         hypotheses={
             "published": DisputedHypothesis(
                 per_series_bytes=8274.0,
@@ -352,33 +368,47 @@ PUBLISHED_TILE_SIDE = PublishedTileSide(
                 basis="the corrected analytic formula, Task 0",
             ),
             "additive": DisputedHypothesis(
-                per_series_bytes=8274.0 + (2410.0 - 926.0),
-                side=256,
+                per_series_bytes=8274.0 + (1468.8 - 926.0),
+                side=272,
                 basis=(
-                    "the 1484.0 B/series excess is a per-series term "
-                    "independent of the configuration. **Refuted at the second "
-                    "fixture and kept for the spread**: at N = 240 the excess "
-                    "is 7255 B/series, not 1484"
+                    "the 542.8 B/series excess is a per-series term "
+                    "independent of the configuration. **Refuted at both other "
+                    "fixtures and kept for the spread**: the excess is 192.4 "
+                    "B/series at N = 240 and 1347.5 at M = 6, not 542.8. **It "
+                    "now derives the published side itself**, 272, which is "
+                    "what a narrowed spread looks like and is NOT agreement -- "
+                    "the hypothesis is refuted by two fixtures, not endorsed by "
+                    "the side it happens to give at this one"
                 ),
             ),
             "multiplicative": DisputedHypothesis(
-                per_series_bytes=8274.0 * 2410.0 / 926.0,
-                side=160,
+                per_series_bytes=8274.0 * 1468.8 / 926.0,
+                side=208,
                 basis=(
-                    "the formula understates every per-series term by 2.603x. "
+                    "the formula understates every per-series term by 1.586x. "
                     "**Refuted at the second and third fixtures**: the ratio is "
-                    "1.888 at M = 6 and 3.850 at N = 240"
+                    "1.794 at M = 6 and 1.076 at N = 240"
                 ),
             ),
         },
     ),
 )
 """**`tile_side` IS 272 SHARED / 144 PER-POINT, AND THE MEASURED PEAK PER-SERIES
-COST IS 2.60x THE FORMULA THE SIDE IS DERIVED FROM** -- 2410.0 +/- 46.0 B/series
-against an analytic 926 at the ladder fixture, measured 2026-08-19 over fifteen
+COST IS 1.59x THE FORMULA THE SIDE IS DERIVED FROM** -- 1468.8 +/- 18.4 B/series
+against an analytic 926 at the ladder fixture, measured 2026-08-22 over ten
 duration-controlled points. **The published side is 272 and the live readings
-now span 160 to 272**, which is wider than the 192-272 this record carried while
-the cost was thought to be 1900.9.
+now span 208 to 272.**
+
+~~2410.0 +/- 46.0, 2.60x, spanning 160 to 272~~ -- **superseded 2026-08-22, and
+superseded is not the same as wrong.** That reading was correct for the code in
+front of it; `SVD_CHUNK_SERIES` bounded the fit phase's maximum on 2026-08-21,
+two days after those points were taken. The re-measurement reproduces the same
+ladder's end-of-run and end-of-tile readings within 3.2% and 1.6% and moves only
+the peak, at the two fixtures whose peak stood above their own tile reading and
+not at the one whose peak was already the write plateau. **The peak now sits
+within 2.1 B/series of the end-of-tile reading, which is inside both fits'
+standard errors: the transient this record carried at 905.9 B/series is gone,
+and what remains is a plateau rather than a maximum.**
 
 ~~Under dispute by 1.86x between Task 7's 1021.6 +/- 134.7 and Task 8's 1900.9
 +/- 84.1~~ -- struck 2026-08-19. **Both are underestimates of one quantity, by
@@ -388,14 +418,18 @@ it. Task 8's own three points under 440 s give **2584.3 +/- 127.0**; the new
 ladder gives **2574.9 +/- 236.1** over the same three sides.
 
 **THE VALUE STILL DOES NOT MOVE, AND THAT IS A DECISION WITH A REASON.** The
-measured ratio of peak to formula is **1.888 at M = 6, 2.603 at M = 2 and 3.850
+measured ratio of peak to formula is **1.794 at M = 6, 1.586 at M = 2 and 1.076
 at N = 240**, so the gap is not a multiplier and not a single added term, and a
 coefficient fitted to one fixture is right at that fixture and wrong everywhere
-else -- which is F5 and (a7). **Exit criterion 7 is therefore recorded as a
-known limitation rather than closed**, with its failing regime named: measured
-cleanly, peak RSS exceeds the budget at every tile above roughly B = 1500 at
-three fixtures, by 11 MB at side 96 with N = 60 and by 61 MB at side 96 with
-N = 240.
+else -- which is F5 and (a7). ~~1.888, 2.603 and 3.850~~, superseded with the
+value above: **the spread narrowed from 2.0x to 1.67x and the conclusion did
+not change.** **Exit criterion 7 is therefore recorded as a known limitation
+rather than closed**, with its failing regime named: measured cleanly, peak RSS
+exceeds the budget at every tile above roughly B = 1500 at three fixtures. ~~By
+11 MB at side 96 with N = 60 and by 61 MB at side 96 with N = 240~~ -- those
+margins are pre-bounding too; **the post-bounding excess is +4.63 MB at side 96,
+measured 2026-08-21 by OQ18 Task A-double-prime, down from +12.03.** The verdict
+is unchanged and only the margin moved.
 
 That sentence is the number's, not a footnote's, and `dispute` is what makes it
 one: every figure in it is recomputed by `tests/test_tiling.py`, so the task

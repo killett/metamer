@@ -7,7 +7,7 @@
 
 3. **DONE:** Phase 1 (0–18), Phase 2 preliminaries P0–P4, **Phase 2a (0–13)**, and **PHASE 2b IS COMPLETE — Tasks 0–10, with 9 narrowed plus 8a, 8i and 8b, closing 10 met / 4 met with reduced scope / 2 FAILED**, open questions 1, 4, 9, 11, 12, 15.
 4. **THE SCOPE DECISION IS TAKEN, 2026-08-22: THE MODELLING SUB-PHASE DOES NOT OPEN, AND IT IS ILL-POSED RATHER THAN PREMATURE** — its only two completion routes are fitting a coefficient to the remainder and publishing a number correct at one fixture, and both are forbidden. **The criterion for opening it is written down** so a later session cannot open it on enthusiasm: [THE SCOPE DECISION](#the-scope-decision-taken-2026-08-22-the-modelling-sub-phase-does-not-open-and-the-reason-is-well-posedness). **2c proceeds on the residency model**, with the limitation stated in what 2c inherits. **NEXT ACTION: RE-TAKE THE SCOPE DECISION — both blocking facts are now closed.** The
-[193-versus-240 reconciliation is CLOSED](#what-the-fourth-fixture-established-2026-08-22--read-before-quoting-8bs-peak-column-or-the-240): the per-candidate term is **388 B, 2.01× the charged 193, linear across four counts**, the named arrays read **exactly `193·M`** at M = 2 / 6 / 7 with zero deviation, so **`output_slot_bytes` is not understated and the ~195 B/candidate of extra residency is NOT in the result arrays** — it has a shape and no location. The CI fixture decision is closed and verified. **AND ONE THING IS OWED THAT THIS SESSION DID NOT DECIDE: `src/metamer/batch/tiling.py` still publishes `measured_bytes_per_series=2410.0`**, which [the re-measurement shows describes superseded code](#the-peak-re-measured-after-the-bounding-2026-08-22--read-before-quoting-any-peak-figure-or-criterion-6s) — criterion 6 stays FAILED on a fresh **1468.8 ± 18.4**, and correcting the published figure moves `headroom_fraction_required` from **0.61577 to 0.36955**, which is a cascade and a decision. The OQ18 characterisation line is CLOSED: four tasks (A, A-prime, A-double-prime, A-triple-prime) took the production peak from a term of unknown shape to a composition whose parts are named, measured, and — where they refuse a shape — refused rather than fitted. **Read [THE PEAK, END TO END](#the-peak-end-to-end--the-state-at-the-close-of-the-oq18-characterisation-line-2026-08-21) FIRST; it is the assembled answer and the only place the four parts appear together.** In one line: **one allocation was bounded and that is a real reduction, two-thirds of what remained is named and deliberately NOT repaired, the last third refuses a shape across three fixtures, and criterion 7 is FAILED at +4.63 MB — understood now rather than merely recorded.** ~~The decision is whether a modelling sub-phase opens at all~~ — **taken 2026-08-22, and it does not.** What it would have owed is unchanged and is what the criterion for reopening is written against: a model of the PEAK rather than of residency, the 193-versus-240 reconciliation, and a remainder that no coefficient may be fitted to.
+[193-versus-240 reconciliation is CLOSED](#what-the-fourth-fixture-established-2026-08-22--read-before-quoting-8bs-peak-column-or-the-240): the per-candidate term is **388 B, 2.01× the charged 193, linear across four counts**, the named arrays read **exactly `193·M`** at M = 2 / 6 / 7 with zero deviation, so **`output_slot_bytes` is not understated and the ~195 B/candidate of extra residency is NOT in the result arrays** — it has a shape and no location. The CI fixture decision is closed and verified. **AND THE 2410.0 CASCADE IS TAKEN, 2026-08-22:** `tiling.py` now publishes **1468.8 ± 18.4** with its date and preconditions, `headroom_fraction_required` fell out at **0.36955** against a shipped `HEADROOM_FRACTION` that **stayed at 15%**, `PUBLISHED_TILE_SIDE` **did not move** (checked: `rg 'dispute\.' src/` is empty), and criterion 6 still reads FAILED — now on the shipping number, outside its band by **4.3σ where it was 22σ**. The OQ18 characterisation line is CLOSED: four tasks (A, A-prime, A-double-prime, A-triple-prime) took the production peak from a term of unknown shape to a composition whose parts are named, measured, and — where they refuse a shape — refused rather than fitted. **Read [THE PEAK, END TO END](#the-peak-end-to-end--the-state-at-the-close-of-the-oq18-characterisation-line-2026-08-21) FIRST; it is the assembled answer and the only place the four parts appear together.** In one line: **one allocation was bounded and that is a real reduction, two-thirds of what remained is named and deliberately NOT repaired, the last third refuses a shape across three fixtures, and criterion 7 is FAILED at +4.63 MB — understood now rather than merely recorded.** ~~The decision is whether a modelling sub-phase opens at all~~ — **taken 2026-08-22, and it does not.** What it would have owed is unchanged and is what the criterion for reopening is written against: a model of the PEAK rather than of residency, the 193-versus-240 reconciliation, and a remainder that no coefficient may be fitted to.
 5. **Tests: 1090 passed, 0 failed, 0 INDETERMINATE — 2026-08-21, 849.96 s on a box at 7.2 GB available.** ~~1089~~ — that count was written down one commit after the sweep that produced it, while the commit in between added a test, so it was stale by one from the moment it was recorded. **It was corrected by running the sweep, never by adding one to a collection count**: a collected count is not a passing count, and 1089 + 1 is an inference. The RSS summary is now **per assertion**: `criterion 7's peak`, `the floor with the input open` and `the recompute loop` report `gate=witness`; `the floor ladder's rungs` and `peak residency across the iteration cap` remain `gate=margin` **and are named there rather than counted**. **A HIGH stall reading skips nothing** — see open question 19. **CI IS NOT A SUBSTITUTE AND IS SHARPER THAN THAT:** it runs `-m "not machine"` and therefore executes **exactly one** of the nine RSS assertions, which is also the one whose fixture cannot express its condition on that hardware — 11.3 MB of input contribution here against **913 408 B** on the runner, failing once and passing on a re-run of the same commit.
 6. **`pixi run test` is the full sweep and every end-of-task verification must run it; `test-fast` and `test-ci` are not evidence.** It has caught **seven** things a fast run could not, two of them in Task 8. **Every run prints `RSS measurement validity`, including at zero** — a nonzero count is INDETERMINATE, neither pass nor fail.
 7. **Verify a fresh checkout with `pixi run test && pixi run typecheck && pixi run lint`**, plus `pixi run pre-commit run --all-files` before every commit.
@@ -2588,7 +2588,63 @@ met on the end-of-run. What changes is that the peak's margin over the band fall
 4.3σ.** No other criterion is re-judged here, and **criterion 7 is not on this ladder** — it is a
 different assertion at a different budget.
 
-#### THE CORRECTION HAS A DETERMINATE LANDING SITE, AND IT IS A CASCADE THAT WAS NOT TAKEN
+#### THE CASCADE WAS TAKEN, 2026-08-22 — THE NUMBER MOVED AND `HEADROOM_FRACTION` DID NOT
+
+**`src/metamer/batch/tiling.py` now publishes the shipping number.** `PUBLISHED_TILE_SIDE.dispute`
+carries **1468.8 ± 18.4** with its date, its ten duration-controlled points and its preconditions,
+and every figure derived from it moved with it in the same edit:
+
+| field | was | is | how it is derived |
+|---|---|---|---|
+| `measured_bytes_per_series` | 2410.0 | **1468.8** | the 2026-08-22 ladder at 8b's own fixture and arm |
+| `measured_standard_error` | 46.0 | **18.4** | 1.25% relative |
+| `resident_at_tile_bytes_per_series` | 1504.1 | **1470.9** | same arm, same points |
+| `transient_bytes_per_series` | 905.9 | **−2.1** | subtraction; **inside both fits' errors, so zero to this instrument** |
+| `peak_to_analytic_by_fixture` | 1.888 / 2.603 / 3.850 | **1.794 / 1.586 / 1.076** | peak ÷ analytic at each fixture |
+| `headroom_fraction_required` | 0.61577 | **0.36955** | `1 − 926/1468.8`, falls out of the field above |
+| `hypotheses["additive"]` | 9758.0 → side 256 | **8816.8 → side 272** | `8274 + (1468.8 − 926)`, side recomputed through `tile_side_for` |
+| `hypotheses["multiplicative"]` | 21 533.8 → side 160 | **13 124.0 → side 208** | `8274 × 1468.8/926`, side recomputed |
+| the live spread | 160–272 | **208–272** | the hypothesis sides' extremes |
+
+- **`HEADROOM_FRACTION` STAYS AT 15% AND NOTHING HERE LICENSES MOVING IT.** What moved is the
+  **required** figure, which is a measurement; the shipped one is a policy constant. **The gap is
+  the honest statement of the problem and it narrowed by 25 points** — 36.955% against 15%, where
+  it was 61.577% against 15%. **That improvement is `SVD_CHUNK_SERIES`'s and it is now visible in
+  the source rather than only in this file.**
+- **`PUBLISHED_TILE_SIDE` DID NOT MOVE, AND THE SEPARATION WAS CHECKED IN THE CODE BEFORE THE
+  EDIT.** `rg 'dispute\.' src/` returns **nothing**: the field is descriptive, the side is derived
+  by `tile_side_for` from `resident_bytes_per_series`, and the two only share an object. **272 /
+  144 stand.**
+- **THE CAVEAT TEXT MOVED WITH THE NUMBER, WHICH IS THE SAME DISCIPLINE AS DELETING IT.** The
+  docstring described a 2.60× disagreement; it now describes a 1.59× one, names `SVD_CHUNK_SERIES`
+  as what moved it, and says **superseded is not wrong** — that reading was correct for the code
+  in front of it.
+- **AND ONE ATTRIBUTE'S MEANING REVERSED, WHICH IS WORTH MORE THAN THE NUMBER.**
+  `transient_bytes_per_series` used to say Task 8a's inferred bound of `≤ 152 B/series` did **not**
+  hold and *"the headroom explanation is back in play as a partial one"*. At −2.1 B/series **8a's
+  bound holds again and the headroom explanation is back OUT**: there is no transient left at this
+  fixture for headroom to explain. **The field is kept, and kept negative, because a transient
+  asserted at zero and a transient measured at zero are different claims.**
+
+**CRITERION 6's VERDICT QUOTES THE SHIPPING NUMBER.** `tests/exit_criteria_2b.py` now records
+FAILED on **1468.8 ± 18.4**, ratio **1.586**, outside the 617.3–1389.0 band by **79.8 B/series =
+4.3σ**, met on the end-of-run reading at **931.7**, failed on end-of-tile at **1470.9** — with the
+narrowing from 22σ stated, because **that is the same direction of improvement and it should be
+legible**. **A 4.3σ margin is close enough that the next bounding could flip this criterion**, and
+that is recorded as the state rather than as a warning.
+
+**A TEST'S PROXY WENT STALE AND ITS CLAIM DID NOT, AND THE REPAIR IS NOT A LOOSENED THRESHOLD.**
+`test_the_dispute_states_its_direction_its_owner_and_its_spread` required the three fixtures'
+ratios to sit **more than 2× apart**, on the reasoning that such a spread is what refutes a
+multiplicative correction. Post-bounding they sit **1.667× apart**, so it fired — exactly as its
+own failure message predicted it would. **The claim underneath is stronger than ever**: the ratios
+disagree by **48.3% of their mean** against an instrument precision of **1.25%**. So the assertion
+now tests the claim rather than the proxy, at **ten times the instrument's precision**, a
+threshold taken from the measurement's own error and **not** from the spread being tested. **Both
+new assertions were mutation-checked**: converging the ratios and moving the peak inside the band
+each fail the suite.
+
+#### ~~THE CORRECTION HAS A DETERMINATE LANDING SITE, AND IT IS A CASCADE THAT WAS NOT TAKEN~~ — TAKEN 2026-08-22, ABOVE
 
 **`src/metamer/batch/tiling.py` still carries `measured_bytes_per_series=2410.0` inside
 `PUBLISHED_TILE_SIDE.dispute`**, with `headroom_fraction_required = 1 − 926/2410 = 0.61577`
@@ -2596,12 +2652,10 @@ computed from it, and `tests/exit_criteria_2b.py` quotes the same figures in cri
 `test_criterion_6_and_7_move_with_the_published_record` binds them, **by design**, so the number
 cannot be changed in one place.
 
-**Updating it would move a shipped derived quantity: the required headroom becomes
-`1 − 926/1468.8 = 0.36955`, against a shipped `HEADROOM_FRACTION` of 15%.** That is a cascade with
-a live consequence, `HEADROOM_FRACTION` is on the do-not-move list, and **this session re-measured
-a number rather than deciding a cascade — so nothing in `src/` was touched.** The gap between what
-the record now knows and what the code publishes is **deliberate, dated and stated here**, which is
-the only honest form for it until the cascade is decided.
+~~That is a cascade with a live consequence and this session re-measured a number rather than
+deciding one, so nothing in `src/` was touched.~~ **The cascade was decided and taken on
+2026-08-22 — see the section above.** The required headroom is now `1 − 926/1468.8 = 0.36955` in
+the source, `HEADROOM_FRACTION` stayed at 15%, and `PUBLISHED_TILE_SIDE` did not move.
 
 ---
 
@@ -2753,7 +2807,22 @@ in this driver and no reading here separates them.
 
 **AND NOTHING MOVES ON THIS.** `output_slot_bytes` is not raised to 388. Charging an unlocated
 allocation to a named term is the defect this line of work exists to avoid, and the cascade is
-still a fifth move of `PUBLISHED_TILE_SIDE`.
+still a fifth move of `PUBLISHED_TILE_SIDE`. **The general form is promoted** to
+[Cross-cutting decisions](#cross-cutting-decisions-most-likely-to-be-violated-by-accident): an
+exact match redirects rather than confirms, and raising an exact charge destroys the only term
+whose contents are known.
+
+**WHAT WHOEVER OPENS THE SUB-PHASE INHERITS, AND IT IS BETTER THAN BEFORE.** Not a bigger slot
+charge and not a question: a **determinate magnitude with an honest label** — ~195 B per candidate
+per series of residency that is **not in the result arrays**, linear in M across four counts on
+two readings. The scope decision itself is unchanged and the new evidence **strengthens** it: the
+excess is shaped but unlocated, so both completion routes are exactly as closed as they were.
+
+**TWO SMALLER ITEMS, RECORDED AND NOT SCHEDULED.** The **693 B/series intercept** — 540 is the
+charged `n_time·9` data term, ~153 unexplained, measured at a single `n_time` so its shape is
+untested. And **G4**: a candidate **is** an optimizer call in this driver, so no reading in it
+separates *per candidate* from *per optimizer call*. Both are named, both are cheap to state, and
+neither is a task.
 
 ---
 
@@ -6314,6 +6383,39 @@ cannot reconstruct them.
 ---
 
 ## Cross-cutting decisions most likely to be violated by accident
+
+- **AN EXACT MATCH REDIRECTS; IT DOES NOT CONFIRM (promoted 2026-08-22, from G5).**
+  **When a charged term matches its inventory EXACTLY, a measured excess is not a correction to
+  that term. It is a SECOND term with the same shape.** Raising the exact charge would attribute
+  an unlocated allocation to a named and complete one, and **destroy the only term whose contents
+  are known** — after which nothing in the model can be checked against anything.
+  **The instance:** `output_slot_bytes` charges 193 B/candidate; the `FitResult` arrays read
+  **exactly `193·M`** at M = 2, 6 and 7, zero deviation; residency carries **388**. The obvious
+  repair — 193 → 388 — would have been wrong in the worst available way, because the 193 was not
+  approximately right, it was **exactly** right about **its own subject**.
+  **This is the shape-before-magnitude family with the signs reversed**: the usual trap is a
+  magnitude that fits while the shape is wrong, and this is the case where **the magnitude is
+  right and the COINCIDENCE OF SHAPE is the trap** — both terms scale per candidate, so a
+  residency measurement and an inventory look like two estimates of one quantity when they are
+  one estimate each of two. **Test for it by asking what the exact term contains**, not by
+  comparing totals: `resident − charged` is a difference of two things only if they are the same
+  thing.
+
+- **TWO COUNTS OF DIFFERENT THINGS, COMPARED BECAUSE ONE RECORD MENTIONED BOTH (promoted
+  2026-08-22).** A record that names two quantities in one paragraph invites the next reader to
+  put them in a ratio. **Before comparing two figures from one record, establish that they have
+  the same subject — the paragraph's proximity is not evidence.**
+  **Three instances, all this week, at three scales.** The **24%**: a summary compared a charge of
+  193 with an excess of 240 that sat *on top of* it, when the comparable figure was 433 — a factor
+  of ten in the framing, surviving a review. **H5**: predicted ~69 inventory sites from *"29 at
+  M = 2, 61 at M = 6"*, which count **allocation sites seen during the fit**, while the instrument
+  reports **13 named `FitResult` fields** — two payloads, one record. **H1**: predicted
+  `193·M + 32` from a reading that covers `FitResult` only, so it missed by exactly the site it
+  wrongly included.
+  **BOTH H1 AND H5 FAILED ON BOOKKEEPING RATHER THAN ON THE CLAIMS UNDERNEATH, AND BOTH ARE
+  RECORDED THAT WAY ROUND.** Smoothing either into a confirmation would have cost the thing that
+  makes the same run's **H4 refutation** informative: a prediction set where the misses are
+  reported honestly is evidence about the hits.
 
 - **`(B, N)` is the only code path.** `B=1` is a shape, never a separate implementation.
 - **Every per-series concept must be per series.** Outcomes are shape `(B,)` `uint8`, never
