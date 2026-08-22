@@ -2565,8 +2565,15 @@ harness and instrument:
 **The cause is a code change, and it is dated.** `SVD_CHUNK_SERIES` landed in **0b53296,
 2026-08-21** — *"bound the restricted SVD's temporary, which is the fit phase's maximum"* — **two
 days after** 8b's points were measured. In this ladder the peak and the end-of-tile readings agree
-to within 1% at every M, i.e. **the maximum is now at the tile**, where in 8b's arm it was 62%
-above it and inside `fit`. That is the bounding working, observed from a second direction.
+to within 1% at every M, where in 8b's arm the peak stood 62% above the tile reading and inside
+`fit`. That is the bounding working, observed from a second direction.
+
+> **AND THE CLAIM IS "THE GAP CLOSED", NOT "THE MAXIMUM MOVED TO THE TILE" — THE STRONGER
+> PHRASING WAS WRONG AND IS CORRECTED HERE.** A maximum has a location only where the trace has a
+> slope. Peak and end-of-tile agreeing to 1% means the trace is **flat from the tile onward**, so
+> the argmax timestamp is not evidence of where the maximum lives — it lands at 45.02 s, in the
+> pad, for the same reason 8b's M = 6 argmax did. **What is measured is that the excess over the
+> tile reading is gone**, which is the fit-phase transient having been bounded away.
 
 > **SO ANY QUOTATION OF 8b's PEAK — 2410.0 / 3205.2 / 9801.3, ratios 2.603 / 1.888 / 3.850 — IS A
 > QUOTATION ABOUT SUPERSEDED CODE.** Criterion 6's FAILED verdict rests on 2410.0 ± 46.0 *"outside
@@ -6043,6 +6050,32 @@ loop already built in Task 13.
 - Hooks are not tracked by git, so **a fresh clone will not have it.** Recreate it or push
   manually.
 - Never push tags without deciding to: a `v*` tag is the release trigger.
+
+### A SECOND PUSH CANCELS THE RUN VERIFYING THE FIRST (2026-08-22 — a standing rule, not an anecdote)
+
+**THE RULE: a commit that changes `tests/` or `src/` must have its own COMPLETED run before the
+next push lands.** Otherwise its verification is a green tick attached to a different commit.
+
+The workflow's concurrency group supersedes in-flight runs on the same ref, and the post-commit
+hook pushes every commit within seconds of it being made, so the two together **cancel
+verifications by default** rather than by accident. **Two of the five runs in the 2026-08-22
+history are `cancelled` for exactly this.** The fixture repair's own run was cancelled six minutes
+in by a docs commit; nothing was lost **only because the later run happened to contain the same
+tree**, and that is luck, not process. **A cancelled run is evidence of nothing** — already the
+rule for the watermark incident, and this is the mechanism that manufactures them.
+
+Docs-only commits may follow each other freely: they cannot change what a run would find.
+
+### WHAT EACH COMMIT OWES THE SUITE, STATED AS AN ALLOCATION (2026-08-22)
+
+**A commit that touches `tests/` or `src/` owes a full `pixi run test` — ~850 s — on the tree that
+ships**, plus `typecheck`, `lint` and `pre-commit run --all-files`. **A docs-only commit owes
+`pre-commit run --all-files`** (which is ruff, ruff-format and mypy over the tree) **and not a
+sweep**, because it cannot move a test result.
+
+Stated as the standard rather than as an exception, so that a session which ran three docs commits
+between two sweeps has followed the rule rather than bent it — and so that the opposite, a `src/`
+change riding along inside a docs commit, is visibly not allowed.
 
 ### THE HOOK MAKES EVERY COMMIT A PUBLISHED COMMIT, SO EVERY AMEND IS A REWIND (2026-08-17)
 
