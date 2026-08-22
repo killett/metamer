@@ -1,0 +1,71 @@
+{
+  "task": "OQ18 Task A-triple-prime - name the 618 B/series fit-phase residue",
+  "written": "2026-08-21",
+  "committed_before_any_ladder_point_ran": true,
+  "the_question": "Is the residue one allocation group, several with a stable composition, or a composition that varies with the fixture?",
+  "design": {
+    "primary_fixture": "tier 2 (live = 0, every mask identical, no per-series tensor at all)",
+    "arms": [
+      {"name": "n60-m2", "n_time": 60, "candidates": "m2", "target_s": 30},
+      {"name": "n60-m6", "n_time": 60, "candidates": "m6", "target_s": 45},
+      {"name": "n240-m2", "n_time": 240, "candidates": "m2", "target_s": 45}
+    ],
+    "sides": [48, 64, 96],
+    "repeats": 3,
+    "why_tier_2_is_primary": "it carries the residue with the tensor structurally absent, so nothing has to be chunked and 17.69 MB is not sitting on top of the subject"
+  },
+  "what_the_smoke_point_already_read": {
+    "fixture": "side 48, N = 60, M = 2, tier 2",
+    "fit_py_200_to_211_preallocated_block_b_per_series": 368,
+    "signal_py_509_b_per_series": 32,
+    "named_total_b_per_series": 400,
+    "fit_result_arrays_deduped_b_per_series": 386,
+    "measured_residue_b_per_series": 618.4,
+    "unexplained_b_per_series": 218,
+    "instrument_defect_found_and_fixed": "FitResult.loglik and scores.loglik are one array under two names; the first inventory double-counted them by 18 B/series"
+  },
+  "predictions": [
+    {
+      "id": "D1",
+      "statement": "THE NAMED BLOCK IS READ, NOT FITTED, AND IT MATCHES ITS HAND-DERIVATION. The recorded allocations at fit.py:200-211 sum to 193 * M + 16 - 16 = 368 B/series at M = 2 and 1158 at M = 6, and signal.py:509 adds a further 32 at both, independent of n_time.",
+      "refuted_if": "the recorded sum differs from the hand-derivation by more than 5 B/series at any arm",
+      "confidence": "high - it was read at one fixture already and the arithmetic is a schema, not a model"
+    },
+    {
+      "id": "D2",
+      "statement": "THE RESIDUE IS ONE GROUP, NOT AN ACCUMULATION. The resident set across the whole series loop rises under 1 MB at every point of every arm, as it did for the tensor.",
+      "refuted_if": "the loop's own maximum exceeds its start by more than 1 MB at any point",
+      "confidence": "medium-high - A-prime measured 0.16-0.79 MB at tier 2, but never at M = 6, where there are three times as many per-candidate temporaries"
+    },
+    {
+      "id": "D3",
+      "statement": "THE LEVER, AND THE DISCRIMINATOR. If the ~218 B/series of unexplained cost is M-independent, the M = 6 residue is about 1390 B/series; if it scales with the candidate count, about 1790.",
+      "refuted_if": "the M = 6 residue falls outside 1250 to 1950",
+      "confidence": "this is the measurement, and I hold no prior between the two - which is why both numbers are written down"
+    },
+    {
+      "id": "D4",
+      "statement": "THE DOUBTED HORN. The named allocations will NOT close the gap: even at M = 6 the measured residue exceeds the read inventory by at least 150 B/series, so a second unnamed source remains and the answer is a composition rather than one name.",
+      "refuted_if": "the measured residue at any arm sits within 100 B/series of the read inventory",
+      "confidence": "medium, and it is the horn I expect to hold - which is the opposite posture from C2, where I doubted the horn the repair needed. If D4 holds, the permitted outcome is 'several with a stable composition' and a repair's claim is a sum."
+    },
+    {
+      "id": "D5",
+      "statement": "n_time INDEPENDENCE CONFIRMED. The N = 240 arm's residue lands within 2 sigma of the N = 60 arm's, in the 450 to 700 B/series band.",
+      "refuted_if": "the N = 240 residue scales with n_time, which would mean 2472 B/series",
+      "confidence": "high - A-prime measured 618.3 and 514.3 at the two lengths, 1.3 sigma apart"
+    },
+    {
+      "id": "D6",
+      "statement": "THE PAGE FLOOR IS A CANDIDATE FOR PART OF THE GAP AND IS TESTABLE HERE. Twelve arrays each rounded up to a 4096-byte page boundary costs at most 12 * 4096 bytes per TILE, which is 21 B/series at B = 2304 and 5 B/series at B = 9216 - so it cannot explain 218 and its signature is a gap that SHRINKS with B.",
+      "refuted_if": "the unexplained gap per series is constant in B rather than shrinking, which would exclude page rounding as any part of it",
+      "confidence": "high on the arithmetic, and it is here so the cheapest explanation is excluded by measurement rather than by argument"
+    }
+  ],
+  "permitted_outcomes": {
+    "one_allocation_named": "proceed to elimination, or characterise its removal as A-double-prime did",
+    "several_with_stable_composition": "a repair is possible and its claim is a sum; the composition is what gets recorded",
+    "composition_varies_with_fixture": "report and stop - the answer is architectural, and criterion 7's failure is a design fact rather than a missing term"
+  },
+  "not_licensed_by_this_measurement": "moving PUBLISHED_TILE_SIDE, resident_bytes_per_series, output_slot_bytes, or any exit-criterion verdict. Naming a term is not authorisation to charge it."
+}

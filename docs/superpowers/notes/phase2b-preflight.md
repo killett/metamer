@@ -2545,3 +2545,59 @@ differ, which is what selects the batched path — a fixture whose masks are uni
 tier 1 or 2 and return a null that says nothing about the change. **The A-prime arm this is
 compared against used exactly that fixture**, and the `svdvals_max_input_bytes` field is what
 proves the path was taken at every point rather than assumed.
+
+---
+
+## OQ18 Task A-triple-prime — naming the residue, audited before the ladder
+
+**THE BRIEF.** Name the **618.4 ± 24.2 B/series** fit-phase residue that survived bounding the
+tensor, and which criterion 7's remaining **+4.63 MB** is made of.
+
+### (a7) THE SHAPE IS ALREADY CONSTRAINED BEFORE ANY CANDIDATE IS PROPOSED
+
+A-prime's tier-2 arm gave **618.3 ± 30.5 at N = 60** and **514.3 ± 74.2 at N = 240** — 1.3σ
+apart, so the residue is **`n_time`-independent**. That excludes every data-shaped term outright:
+the block, the mask, the design tensor, anything charged per time step. **What is left is
+per-candidate and per-series**, which is the shape of `fit`'s preallocated output arrays — and
+also the shape of the slot term 8b measured at **≈ 240 B per candidate per series against a
+charged 193.**
+
+### THE TIER-2 ARM IS PROMOTED FROM CONTROL TO SUBJECT, AND IT IS ALSO THE CHEAPER ONE
+
+`live = 0` makes every mask identical, so tier 2 fires and **no per-series tensor exists at
+all** — the residue is isolated without the chunking in the picture and without 17.69 MB sitting
+on top of it. **A-double-prime used tier 2 to check tier 3; this reverses that**, and the bounded
+tier-3 arm becomes the confirmation.
+
+### (j2)/(a7) THE SIZES ARE READ, AND THE SMOKE POINT ALREADY READ THEM
+
+Two instruments, both reading rather than fitting: `np.full`/`np.empty`/`np.zeros` recorded
+during the fit call **with the caller's file and line**, and every array `FitResult` carries
+summed by `nbytes` **deduped by identity**. Measured at side 48, N = 60, M = 2 before this audit
+was written:
+
+| what | B/series |
+|---|---|
+| `fit.py:200-211` — the preallocated output block, twelve arrays | **368** |
+| `signal.py:509` — a `(B, k_beta)` float64 inside `design_info` | **32** |
+| **named total** | **400** |
+| **measured residue** | **618.4 ± 24.2** |
+| **unexplained** | **≈ 218** |
+
+**AND THE DEDUPE WAS NOT COSMETIC.** `FitResult.loglik` and `scores.loglik` are one allocation
+under two names; summing both inflated the inventory by **18 B/series** and would have made the
+residue look better explained than it is. **(a) at an inventory**, caught by the smoke point.
+
+### (i2) WHAT WOULD MAKE THIS MEASUREMENT WORTHLESS
+
+An instrument patched in one module namespace and read in another comes back empty and reads as
+an absence. `run` looks `fit` up in **its own** namespace, so the counter is installed in both —
+and the smoke point's nonzero `allocation_count` is what proves it fired rather than the fixture
+being quiet.
+
+### THE LEVER, AND IT IS THE DISCRIMINATOR THIS TASK TURNS ON
+
+The named block scales with the **candidate count**: hand-derived, `193·M + 16` per series, so
+**400 at M = 2 and 1190 at M = 6**. The unexplained ~218 either scales with M or does not, and
+those give **1790** against **1390** at M = 6. **One ladder at M = 6 chooses between them**, and
+neither answer is the one I would assume.
