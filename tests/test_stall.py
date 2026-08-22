@@ -148,3 +148,42 @@ def test_the_shipped_window_is_a_second_and_the_constant_is_what_sets_it() -> No
         time.sleep(0.01)
 
     assert watch.window_s == STALL_WINDOW_S
+
+
+def test_the_summary_prints_diagnostic_lines_rather_than_swallowing_them() -> None:
+    """The diagnostic channel is not wired to nothing.
+
+    **THIS TEST EXISTS BECAUSE THE FIRST WIRING WAS.** The printing loop was
+    inserted against an anchor comment that no longer existed, so
+    `DIAGNOSTIC_LINES` was declared, appended to, and never read -- and the local
+    run looked exactly like a run with nothing to report. **An instrument
+    connected to nothing produces the same output as a quiet subject**, which is
+    (i2), and the only defence is a test that makes the channel carry something.
+
+    Expected value determined independently: the hook must write back every line
+    it was given, so a fake reporter that records its writes must contain the
+    sentinel afterwards.
+
+    Bug this catches: exactly the one that happened -- a summary that drops the
+    lines. On CI, where stdout from a passing test is hidden, that turns the only
+    reading available from that hardware into silence.
+    """
+    from tests import conftest
+
+    written: list[str] = []
+
+    class _Reporter:
+        def write_sep(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+        def write_line(self, line: str) -> None:
+            written.append(line)
+
+    sentinel = "floor ladder (MB): sentinel-for-the-channel-test"
+    conftest.DIAGNOSTIC_LINES.append(sentinel)
+    try:
+        conftest.pytest_terminal_summary(_Reporter())
+    finally:
+        conftest.DIAGNOSTIC_LINES.remove(sentinel)
+
+    assert sentinel in written

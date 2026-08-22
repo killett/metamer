@@ -324,6 +324,15 @@ class RssMeasurement:
 #: Every bracketed measurement this session, in order.
 RSS_MEASUREMENTS: list[RssMeasurement] = []
 
+#: Lines a test wants in the terminal summary whatever its verdict.
+#:
+#: **THE ONLY CHANNEL THAT REACHES A CI LOG FROM A PASSING TEST.** pytest hides
+#: stdout for tests that pass, so a diagnostic printed inside one is invisible
+#: exactly where it is needed -- on hardware nobody can attach to. The summary
+#: hook prints unconditionally, which is what makes a number measurable on a
+#: runner rather than only on a box someone owns.
+DIAGNOSTIC_LINES: list[str] = []
+
 
 @contextlib.contextmanager
 def rss_validity(
@@ -433,6 +442,10 @@ def pytest_terminal_summary(terminalreporter: Any) -> None:
     terminalreporter.write_sep("=", "RSS measurement validity")
     if not RSS_MEASUREMENTS:
         terminalreporter.write_line("no RSS-difference measurement ran this session")
+        # **NO EARLY RETURN.** Diagnostics are printed by the loop at the end and
+        # are not conditional on an RSS measurement having run -- an early return
+        # here dropped them silently, which the channel's own test caught.
+        _write_diagnostics(terminalreporter)
         return
 
     for record in RSS_MEASUREMENTS:
@@ -467,3 +480,19 @@ def pytest_terminal_summary(terminalreporter: Any) -> None:
         )
     for record in indeterminate:
         terminalreporter.write_line(f"  - {record.reason}")
+
+    _write_diagnostics(terminalreporter)
+
+
+def _write_diagnostics(terminalreporter: Any) -> None:
+    """Write every diagnostic line, whatever else the summary reported.
+
+    **PRINTED UNCONDITIONALLY.** These are readings a test wants on the record
+    whatever its verdict, and the summary is the only channel that survives a
+    PASSING test into a CI log.
+
+    Args:
+        terminalreporter: pytest's reporter, or anything with `write_line`.
+    """
+    for line in DIAGNOSTIC_LINES:
+        terminalreporter.write_line(line)

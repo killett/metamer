@@ -1164,6 +1164,23 @@ def test_the_floor_with_the_input_open_exceeds_the_floor_without_it(tmp_path):
         report = measure_floor(data_uri=_floor_input(tmp_path), variable="sla")
         witnessed["shortfall"] = float(report.reclaim_shortfall_bytes or 0.0)
 
+        # **THE LADDER GOES TO THE SUMMARY WHATEVER THE VERDICT**, because this
+        # is the ONE RSS assertion CI runs and its margin there is unknown from
+        # here: 11.3 MB on this project's box, 0.91 MB on a CI runner on
+        # 2026-08-22, a 12x spread on identical code and fixture. **Whether the
+        # input's contribution is genuinely smaller there, or both rungs are
+        # higher and it is absorbed, decides between enlarging the CI fixture and
+        # marking this test `machine`** -- and only a reading from that hardware
+        # can say which. A diagnostic, not an assertion.
+        conftest.DIAGNOSTIC_LINES.append(
+            "floor ladder (MB): "
+            + ", ".join(
+                f"{name}={value / 1e6:.1f}" for name, value in report.components.items()
+            )
+            + f" | input contribution="
+            f"{(report.with_input_bytes - report.post_warm_bytes) / 1e6:.2f} MB"
+        )
+
         assert report.with_input_bytes > report.post_warm_bytes
         assert report.with_input_bytes - report.post_warm_bytes > 1e6
         assert report.components["input_open"] == report.with_input_bytes
