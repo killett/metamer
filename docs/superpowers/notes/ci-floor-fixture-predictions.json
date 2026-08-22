@@ -1,0 +1,55 @@
+{
+  "task": "CI fixture enlargement for test_the_floor_with_the_input_open_exceeds_the_floor_without_it",
+  "written": "2026-08-21",
+  "decision_already_taken": "ENLARGE the CI fixture. The criterion was set before the diagnostic ran and the diagnostic answered it: every rung is LOWER on the runner and the input's contribution is genuinely smaller there (1.00 MB against 11.20 MB locally), not absorbed into a higher floor. The 1 MB bound is not touched. Marking the test `machine` is rejected: it costs CI its only RSS assertion of nine.",
+
+  "what_is_being_measured": "The input's contribution to the floor, `with_input_bytes - post_warm_bytes`, as a function of the fixture's time-axis length, on this box, in a fresh child per reading (`measure_floor` spawns one per call).",
+
+  "why_a_ladder_and_not_an_arithmetic_pick": "The two known contributions -- 11.20 MB here, 1.00 MB on the runner -- are for the SAME 24x4x4 fixture whose data is 1536 bytes. So the recorded contribution is dominated by a machine-dependent term that is NOT a function of input size, and an 11.2x spread on identical input refutes any multiplier taken from one machine to the other. The ladder measures the part that IS a function of input size, so the fixture can be sized from a slope rather than from a ratio.",
+
+  "the_lever": "n_time, the length of the time coordinate. xarray materialises a dim coordinate as a pandas index on open and the opened dataset RETAINS it, so it is resident for as long as the handle lives. The data array is deliberately NOT the lever: the probe reads one column and drops it, and a large transient freed before the reading can be returned to the OS by the allocator (glibc munmaps allocations above the mmap threshold), so a data-sized fixture could raise the contribution by nothing at all.",
+
+  "fixture_shape": "n_time x 1 x 1 float32, so the written data is 4*n_time bytes and the lever costs disk and write time in proportion to the term it is moving, not to the grid.",
+
+  "predictions": [
+    {
+      "id": "E1",
+      "claim": "CONTROL: the existing fixture (n_time=24, 4x4) reproduces a contribution of 11.20 MB +/- 3 MB on this box today.",
+      "why": "Ties this ladder to the recorded 2026-08-22 reading. If it does not reproduce, the ladder is measuring a different quantity than the one the CI decision rests on and the fixture must not be sized from it.",
+      "refuted_if": "outside 8.2-14.2 MB"
+    },
+    {
+      "id": "E2",
+      "claim": "The contribution grows with n_time at a slope s between 8 and 24 B per time step.",
+      "why": "A datetime64 index is 8 B/step. The upper horn allows one retained copy plus the pandas index's own structures.",
+      "refuted_if": "s outside [8, 24] B/step"
+    },
+    {
+      "id": "E3",
+      "claim": "THE HORN I DOUBT: s is approximately 0 because the index is not materialised on open, or is materialised lazily and never touched by the probe.",
+      "why": "The probe opens the store and reads one column; nothing in it indexes by time. If xarray defers the pandas index until an indexing operation asks for it, the time axis is resident only as an undecoded array and this whole lever fails. Stated because it is the failure mode that would otherwise be discovered as a green measurement at the wrong size.",
+      "action_if_true": "the time-coordinate lever is abandoned, the fixture is NOT enlarged on the strength of it, and the alternative levers (a retained variable count, or a chunk large enough to survive the read) are measured instead. Report and stop rather than pick a size."
+    },
+    {
+      "id": "E4",
+      "claim": "ADDITIVITY: contribution(n) = intercept + s*n, with the intercept within 3 MB of E1's control across the whole ladder.",
+      "why": "The size choice below assumes the machine-dependent term and the size-dependent term ADD. If they do not -- if the intercept moves with n -- then the runner's contribution cannot be predicted from its own 1.00 MB intercept plus this box's slope, and the size is not calculable.",
+      "refuted_if": "the fitted intercept varies by more than 3 MB across the ladder, or the residuals are not flat in n"
+    }
+  ],
+
+  "ladder": {
+    "n_time_points": [24, 65536, 262144, 1048576],
+    "grid": "1x1 for every point, including a 24x4x4 control for E1",
+    "repeats": 3,
+    "order": "interleaved round-robin over sizes, never all repeats of one size together, because available RAM on this box drifts through a session and a size-ordered ladder confounds the lever with the drift"
+  },
+
+  "how_the_size_will_be_chosen": {
+    "target": "the SIZE-DEPENDENT part alone, s*n_time, is at least 10 MB -- 10x the 1 MB bound -- so the assertion clears its bound on the runner even if that hardware's machine-dependent intercept fell to ZERO.",
+    "margin_and_why_that_margin": "10x. The only measured between-machine spread on the machine-dependent term is 11.20 MB here against 1.00 MB on the runner, an order of magnitude. A margin smaller than the one spread that has actually been measured is not defensible; a margin of 10x means the assertion holds on a machine whose intercept is anywhere in that observed range, and on one below it.",
+    "what_is_NOT_being_done": "the 1 MB bound is not widened, the test is not marked, and no assertion is added on the contribution's size. What is pinned stays the SIGN."
+  },
+
+  "verification": "CI itself. The diagnostic line already prints the runner's whole ladder and its input contribution into the summary unconditionally, so the first run after the fixture change reports that hardware's new contribution. The prediction committed here is: runner contribution after the change = 1.00 MB +/- its own spread + s*n_time, i.e. at least 10 MB and comfortably above the bound. If the runner comes back below that, the additivity assumption E4 is refuted ON THAT HARDWARE and the fixture size is re-taken rather than nudged."
+}
