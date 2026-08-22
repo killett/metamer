@@ -4,8 +4,8 @@
 
 1. **Branch `main`, everything on it, every commit pushed by a hook** — https://github.com/killett/metamer.
 2. **DONE:** Phase 1 (0–18), Phase 2 preliminaries P0–P4, **Phase 2a (0–13)**, and **PHASE 2b IS COMPLETE — Tasks 0–10, with 9 narrowed plus 8a, 8i and 8b, closing 10 met / 4 met with reduced scope / 2 FAILED**, open questions 1, 4, 9, 11, 12, 15.
-3. **NEXT ACTION: 2b IS CLOSED, OQ18's FIRST HYPOTHESIS HAS BEEN TESTED, AND WHAT IS OPEN IS AGAIN A DECISION RATHER THAN A TASK. NOTHING SHOULD BE IMPLEMENTED UNTIL IT IS MADE.** Read [What OQ18 Task A established](#what-oq18-task-a-established-done-2026-08-19--read-before-proposing-any-pipeline-or-formula-repair) FIRST, **including its 2026-08-20 correction of its own first reading** — **the peak is `max(fit-phase transient, post-write plateau)` and which wins crosses over in B; freeing the block takes the peak down by nearly the whole block where the write's plateau is the peak (1.87 MB against 1.97 MB at M = 6) and moves it 0.30 MB against a 17.69 MB block where `fit`'s transient is the peak, which is every production-scale point; and criterion 7 fails in both arms at every fixture.** So the pipeline arm of OQ18's closer (a) is **narrowed, not spent**, and the elimination argument was **re-aimed at the fit transient** — which **Task A-prime then named on 2026-08-21: `signal.py:660`, the tier-3 batched design tensor, `B · N · k_beta · 8` bytes, one allocation, the fit maximum at 17 of 17 points, and larger than the entire per-series model it is missing from (1920 against 926 at N = 60; 1.49 GB at §9.4's worked example).** Read [What OQ18 Task A-prime established](#what-oq18-task-a-prime-established-done-2026-08-21--read-before-touching-design_info-tile_side_for-or-criterion-7) SECOND. **The crossed 2 × 2 is well-posed; the elimination LANDED as the instrument of Task A-double-prime and its claim is narrow — the peak does not collapse onto residency, a 618 B/series residue becomes dominant, and criterion 7 stays FAILED at +4.63 MB. Task A-triple-prime then named two-thirds of that residue and found the last third refuses a shape.** **Then** read [What Task 8b established](#what-task-8b-established-done-2026-08-19--read-before-quoting-the-per-series-cost-criterion-6-or-criterion-7). In one line: **the 1.86× was one confound acting on both ladders, the clean per-series peak is 2410.0 ± 46.0 against an analytic 926, and the correction's SHAPE is undetermined because the ratio is 1.888 / 2.603 / 3.850 at three fixtures** — so `PUBLISHED_TILE_SIDE` stays **272, with a rewritten caveat and a 160–272 spread**, criterion 6 is **not met and never named its reading**, and criterion 7 is **recorded as FAILED with its regime named: above roughly B = 1500, at all three fixtures.** **`memory.resident_bytes_per_series` describes residency and not peak, while Q1 settled that `--memory-budget` bounds process PEAK RSS** — so the sizing quantity and the bounded quantity are different quantities, which is an inconsistency between two settled decisions rather than an open modelling choice, and its first hypothesis is a **pipeline** change (free the block before the store write) rather than a formula one. **Task 10 has landed and closed the sub-phase**; its closing table, the unclosed items with their closers and what 2c inherits are in the plan's *THE CLOSING TABLE*, once, and the verdicts are also data in `tests/exit_criteria_2b.py`.
-4. **Tests: 1085 passed, 0 failed, 0 INDETERMINATE — 2026-08-21 after OQ18 Task A-prime and the open-question-19 gate rework, 941.1 s on a quiet box at 4.5–7.6 GB available.** The eleven new tests are the stall gate's window arithmetic and its repaired controls. **The sweep's worst PASSING window was 0.2 ms/s across five judged measurements**, which is the reading the limit is now derived from — see open question 19. The two sweeps before it each carried one INDETERMINATE, at **53 ms/s over 14.1 s** and **58 ms/s over 2.5 s**, both **whole-block averages under the old reading**; the same events under a windowed maximum read higher, and the gate is expected to fire more often on a loaded box than it used to. Neither pass nor fail: the gate refused to judge, said so in the summary, and cost one reading rather than asserting a corrupted one. **It is a THRASHING reading and not the known-bad the constant still lacks**, and one of criterion 4's two witnesses therefore did not report on this run, which does not move its verdict. Before Task 10, and before the box's available RAM fell through the day: 1067 passed, 0 failed, 0 indeterminate, 1273.9 s at 4214 MB, 20 s idle at 0.0096 ms/s. The count did NOT move at Task 8b and that is correct**: its deliverable is a measurement, which by Tasks 4, 7 and 8's precedent does not enter the suite, and the two tests it touched already existed to fail when the published record changed. And separately 1044 passed under `-m "not machine"` in a pip-installed venv (PyPI wheels, numpy 2.5.2), which is what CI runs and is NOT the same evidence** — see the 2026-08-19 entry under [Gotchas](#gotchas-discovered) for the seven failures and three errors that only that second environment could show. **GREEN, and the conditions are part of the claim**: the same suite was 1049/3-failed at 1906 MB available on 2026-08-17, on the same code. The three failures were **ambient-conditional, not code** — see [What Task 8i established](#what-task-8i-established-done-2026-08-17--read-before-writing-any-rss-assertion-or-trusting-the-validity-gate), which is also where the survey of every RSS assertion lives. **Every sweep prints `RSS measurement validity` and it now has TWO conditions**, the second being the one that can see quiet reclaim.
+3. **NEXT ACTION: A SCOPE DECISION ABOUT A MODELLING SUB-PHASE, AND IT NEEDS A FULL WINDOW. NOTHING SHOULD BE IMPLEMENTED UNTIL IT IS MADE.** The OQ18 characterisation line is CLOSED: four tasks (A, A-prime, A-double-prime, A-triple-prime) took the production peak from a term of unknown shape to a composition whose parts are named, measured, and — where they refuse a shape — refused rather than fitted. **Read [THE PEAK, END TO END](#the-peak-end-to-end--the-state-at-the-close-of-the-oq18-characterisation-line-2026-08-21) FIRST; it is the assembled answer and the only place the four parts appear together.** In one line: **one allocation was bounded and that is a real reduction, two-thirds of what remained is named and deliberately NOT repaired, the last third refuses a shape across three fixtures, and criterion 7 is FAILED at +4.63 MB — understood now rather than merely recorded.** **The decision is whether a modelling sub-phase opens at all**, and what it would owe: a model of the PEAK rather than of residency, the 193-versus-240 reconciliation, and a remainder that no coefficient may be fitted to.
+4. **Tests: 1089 passed, 0 failed, 0 INDETERMINATE — 2026-08-21, 775.5 s on a box at 8.4 GB available.** The RSS summary is now **per assertion**: `criterion 7's peak`, `the floor with the input open` and `the recompute loop` report `gate=witness`; `the floor ladder's rungs` and `peak residency across the iteration cap` remain `gate=margin` **and are named there rather than counted**. **A HIGH stall reading skips nothing** — see open question 19. **CI IS NOT A SUBSTITUTE AND IS SHARPER THAN THAT:** it runs `-m "not machine"` and therefore executes **exactly one** of the nine RSS assertions, which is also the one whose fixture cannot express its condition on that hardware — 11.3 MB of input contribution here against **913 408 B** on the runner, failing once and passing on a re-run of the same commit.
 5. **`pixi run test` is the full sweep and every end-of-task verification must run it; `test-fast` and `test-ci` are not evidence.** It has caught **seven** things a fast run could not, two of them in Task 8. **Every run prints `RSS measurement validity`, including at zero** — a nonzero count is INDETERMINATE, neither pass nor fail.
 6. **Verify a fresh checkout with `pixi run test && pixi run typecheck && pixi run lint`**, plus `pixi run pre-commit run --all-files` before every commit.
 7. **THE METHOD IS THE PRE-FLIGHT AND IT LIVES IN EXACTLY ONE PLACE:** [`phase1-to-phase2-handoff.md`](docs/superpowers/notes/phase1-to-phase2-handoff.md) §1 — (a0)–(a8), (a)–(k), **three new at Tasks 8a/8i: decay as an INTERACTION, right-in-kind-wrong-in-scale, and a zero reading is not evidence of absence**, the five causes of a surviving mutation, the standing rules, the fixture facts. **Run it against the task brief before code**, append to [`phase2b-preflight.md`](docs/superpowers/notes/phase2b-preflight.md). **Do not restate it here** — the two copies drifted once already.
@@ -2402,6 +2402,50 @@ it.**
 **AND NOTHING HERE CLOSES CRITERION 7.** The bounded peak carries 536 B/series of unmodelled cost
 against the analytic 926; this task names about two-thirds of it and moves no constant. The
 verdict stays FAILED until it is re-measured.
+
+---
+
+### THE COLD-START HANDOFF FOR THE SCOPE DECISION (written 2026-08-22)
+
+**THE DECISION IS WHETHER A MODELLING SUB-PHASE OPENS, AND IT IS NOT A TASK.** Everything below
+is state. Nothing here is a plan, and no part of it should be implemented before the decision is
+made.
+
+**WHAT IS SETTLED AND NEEDS NO RE-MEASUREMENT.** The peak's composition, end to end — see
+[THE PEAK, END TO END](#the-peak-end-to-end--the-state-at-the-close-of-the-oq18-characterisation-line-2026-08-21).
+One allocation is **bounded in production** (`SVD_CHUNK_SERIES`, bit-identical, 28% faster);
+two-thirds of what remained is **named and read off the objects**; the last third **refuses a
+shape** across three fixtures. **The residue was measured three times by two independent routes
+and agreed every time.** Criterion 7 is **FAILED at +4.63 MB**, down from +12.03, and every
+cheaper explanation for the rest has been excluded **by measurement**, not by argument.
+
+**WHAT THE DECISION WOULD OWE, IF IT OPENS ONE.**
+
+| owed | why it is not optional |
+|---|---|
+| a model of the **PEAK**, not of residency | criterion 7 bounds the peak; `resident_bytes_per_series` is exact about residency and mute about the rest, which is how it stayed unfalsified for four tasks |
+| the **193-versus-240 reconciliation** | `output_slot_bytes` charges 193/candidate, A-triple-prime reads exactly `193·M` off the objects, 8b measured ≈ 240 at end of run. **Two provenances, 24% apart, both dated** |
+| a rule for the **remainder** | it holds no shape (×2.2 under a ×3 candidate lever, ×0.38 under a ×4 `n_time` lever). **No coefficient may be fitted to it** — that is 8b's refusal and it stands |
+| the **cascade cost, stated in advance** | any correction moves `PUBLISHED_TILE_SIDE` a **fifth** time. That is the reason the nameable thirds were left unrepaired, and it does not go away because a sub-phase is opened |
+
+**WHAT IS OPEN AND SMALL, IN THE ORDER IT COSTS THE LEAST TO CLOSE.**
+
+1. **The CI fixture decision** for `the floor with the input open` — the one RSS assertion CI
+   runs, and marginal there. **A diagnostic now prints that runner's whole floor ladder into the
+   CI summary**; one green run yields the numbers. **Enlarge the CI fixture** if the input's
+   contribution is genuinely smaller there, **or mark it `machine`** if both rungs are higher and
+   the difference is absorbed. **Do not widen the 1 MB bound** — it is the sign of a real effect.
+2. **Two assertions still on `gate=margin`** — the floor ladder's rungs and peak residency across
+   the iteration cap. Wiring costs a field in the floor payload and one in `CalibrationPoint`,
+   which Tasks 4, 5 and 7 pin. **Their margins are ±25%/30 MB and 16 MB against a ~1 MB drift**,
+   so they are not urgent.
+3. **The watermark incident** — open, conditions recorded, and it now arrives with its assertion
+   text when it recurs.
+
+**WHAT A NEW SESSION MUST NOT DO.** Move `PUBLISHED_TILE_SIDE`, `resident_bytes_per_series`,
+`output_slot_bytes`, `SVD_CHUNK_SERIES` or any exit-criterion verdict on the strength of anything
+in this record. **Criterion 7 is re-measured, never inferred** — including from a change to the
+code it judges.
 
 ---
 
@@ -6138,6 +6182,14 @@ question; compute/bandwidth roofline pair for cross-machine prediction) are in d
 
 ## Gotchas discovered
 
+- **FULL-LOG RETENTION PAID ONE TASK AFTER IT WAS WIRED, AND CI IS WHERE IT PAID.** There are now
+  **five** ambient-conditional `machine`-adjacent failures on this record, and 2026-08-22's is
+  **the first whose assertion text exists** — `assert (200466432 - 199553024) > 1000000.0`. It
+  exists because **CI keeps full logs where the local sweep kept a tail**, which is the gap named
+  one task earlier when the watermark incident could not be diagnosed. **The repair was recorded
+  as owed, and the next failure is what showed it was the right one.** Local sweeps now retain
+  their full output for the same reason.
+
 - **THE ONE RSS ASSERTION CI RUNS IS MARGINAL ON CI HARDWARE, AND IT FAILED THERE ON 2026-08-22.**
   `test_the_floor_with_the_input_open_exceeds_the_floor_without_it` asserts that opening the input
   adds **more than 1 MB** to the floor. Locally that gap is **11.3 MB**; on the CI runner it came
@@ -6161,8 +6213,11 @@ question; compute/bandwidth roofline pair for cross-machine prediction) are in d
   deterministic; it says nothing about how often it recurs, and the next occurrence is the
   datum that would size that.
 
-- **CI RUNS `-m "not machine"`, SO A GREEN CI IS SILENT ABOUT EIGHT OF THE NINE RSS
-  ASSERTIONS — AND THE NINTH IS THE ONE THAT BROKE IT.** Standing, and not specific to any one
+- **CI RUNS EXACTLY ONE RSS ASSERTION, AND IT IS THE ONE WHOSE FIXTURE CANNOT EXPRESS ITS
+  CONDITION THERE. THAT IS WORSE THAN ZERO COVERAGE IN ONE SPECIFIC RESPECT.** Zero coverage is
+  silent; this produces **red that means nothing about the code**, on exactly the class of
+  assertion CI cannot otherwise see — which trains a reader to discount CI precisely where it is
+  the only witness. **The remedy is not to make it green.** Standing, and not specific to any one
   incident. ~~All nine are `machine`-marked, so none of them has ever run in CI.~~ **CORRECTED
   2026-08-22, and CI itself is what corrected it**: `rg` over the marks says
   **`test_the_floor_with_the_input_open_exceeds_the_floor_without_it` carries no mark at all**
