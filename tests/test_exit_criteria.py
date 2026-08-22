@@ -33,6 +33,7 @@ import numpy as np
 import pytest
 import xarray as xr
 import zarr
+from zarr.errors import GroupNotFoundError
 
 from metamer.batch.completion import completed_tiles
 from metamer.batch.ragged import (
@@ -339,10 +340,22 @@ def test_criterion_1_a_killed_and_resumed_run_is_byte_identical(
     )
     deadline = time.monotonic() + 120.0
     while time.monotonic() < deadline:
+        # **`store.exists()` IS TRUE AT `mkdir` AND THE GROUP LANDS AFTER IT.**
+        # This loop watches a store being built by another process, so it sees
+        # every intermediate state -- including the window between the directory
+        # appearing and zarr's group document being written, where
+        # `completed_tiles` raises `GroupNotFoundError` rather than the
+        # `ValidationError` its docstring promises. On this box that window is
+        # too narrow to hit; it failed on a CI runner on 2026-08-22, on one job
+        # of three, at `tests/test_exit_criteria.py:343`.
+        # **The window is this test's own construction and no assertion below
+        # changes**: an uninitialised store is "not ready yet", exactly like a
+        # missing bitmap, and both mean keep waiting. A store that never gets a
+        # group still fails, at the deadline, on the assertions after the kill.
         try:
             if store.exists() and completed_tiles(store).any():
                 break
-        except ValidationError:
+        except (ValidationError, GroupNotFoundError):
             pass
         if child.poll() is not None:
             break
@@ -770,10 +783,22 @@ def test_criterion_8_every_set_bit_in_a_killed_store_has_its_data(
     )
     deadline = time.monotonic() + 120.0
     while time.monotonic() < deadline:
+        # **`store.exists()` IS TRUE AT `mkdir` AND THE GROUP LANDS AFTER IT.**
+        # This loop watches a store being built by another process, so it sees
+        # every intermediate state -- including the window between the directory
+        # appearing and zarr's group document being written, where
+        # `completed_tiles` raises `GroupNotFoundError` rather than the
+        # `ValidationError` its docstring promises. On this box that window is
+        # too narrow to hit; it failed on a CI runner on 2026-08-22, on one job
+        # of three, at `tests/test_exit_criteria.py:343`.
+        # **The window is this test's own construction and no assertion below
+        # changes**: an uninitialised store is "not ready yet", exactly like a
+        # missing bitmap, and both mean keep waiting. A store that never gets a
+        # group still fails, at the deadline, on the assertions after the kill.
         try:
             if store.exists() and completed_tiles(store).any():
                 break
-        except ValidationError:
+        except (ValidationError, GroupNotFoundError):
             pass
         if child.poll() is not None:
             break
