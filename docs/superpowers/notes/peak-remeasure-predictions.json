@@ -1,0 +1,46 @@
+{
+  "task": "Re-measure all three readings at 8b's three fixtures, after the SVD bounding",
+  "written": "2026-08-22",
+
+  "why": "Criterion 6's FAILED verdict rests on a peak of 2410.0 +/- 46.0 B/series measured 2026-08-19. `SVD_CHUNK_SERIES` landed in 0b53296 on 2026-08-21 and its subject is the fit phase's maximum, so that verdict rests on a number describing code that no longer exists -- a description whose subject changed, at an acceptance criterion. `Likely survives` is an inference and a verdict has to stand on a measurement of the code that ships.",
+
+  "arms": "8b's own three fixtures and its own arm settings, so the comparison is not confounded by the harness: fine chunking, live=16, sides 16/32/48/64/96 (B = 256..9216), and 8b's per-fixture duration target -- 30 s at (n_time=60, M=2), 45 s at (60, 6) and (240, 2). Two repeats, interleaved by repeat then fixture then side. Run length is constant within each ladder, which is the rule; it differs BETWEEN fixtures exactly as 8b's did.",
+
+  "all_three_readings_not_just_the_peak": "end-of-run (`current_end`), end-of-tile (`current_at_tile`) and sampled peak are all fitted against B. If the peak now coincides with end-of-tile, that is a structural finding about what the criterion measures, not a smaller number for the same thing.",
+
+  "the_argmax_rule_applies": "`sampled_peak_at_s` is reported against the phase boundaries, but A MAXIMUM HAS A LOCATION ONLY WHERE THE TRACE HAS A SLOPE. Where peak and end-of-tile agree to within a few tenths of a MB the trace is flat from the tile onward and the argmax timestamp means nothing -- 8b's own M=6 arm had its argmax wander into the pad for exactly that reason. So the reported quantity is the GAP between peak and end-of-tile, and a location is claimed only when that gap is material.",
+
+  "predictions": [
+    {
+      "id": "P1",
+      "claim": "(60, 2): the peak drops to 1467 +/- 100 B/series, from 8b's 2424.3, and comes within 2% of its own end-of-tile reading.",
+      "basis": "measured 1466.9 +/- 19.6 on 2026-08-22 at a 45 s target; this arm re-runs it at 8b's 30 s target to remove the duration difference as a candidate cause."
+    },
+    {
+      "id": "P2",
+      "claim": "THE DISCRIMINATING ONE -- (60, 6): the peak does NOT move. It comes back within 5% of 8b's 3241.3, because its maximum was already the write plateau and not the fit transient (Task A), so bounding the SVD temporary has nothing to take away there.",
+      "why_it_discriminates": "if the bounding is the cause, the fixture whose peak was inside `fit` falls and the fixture whose peak was at the write does not. A drop at BOTH would mean something else changed and the `superseded` reading would be wrong.",
+      "refuted_if": "the (60, 6) peak moves by more than 5%"
+    },
+    {
+      "id": "P3",
+      "claim": "(240, 2): the peak falls a long way, from 9800.9 to somewhere in 2800-5000 B/series, and certainly below 7000.",
+      "basis": "8b's peak there was 3.5x its own end-of-tile reading of 2814.7, the largest fit-phase transient of the three, and `n_time` is the lever that grew it.",
+      "refuted_if": "the peak comes back at or above 7000"
+    },
+    {
+      "id": "P4",
+      "claim": "THE HORN I DOUBT -- (60, 2)'s peak does not reproduce 1467 at the 30 s target, i.e. the duration control moves the peak and the 2026-08-22 ladder's comparison against 8b was confounded by its longer pad.",
+      "why_it_is_doubted": "the pad follows the work, so it should not be able to lower a maximum already attained. Written down because if it happens, the `superseded` claim is not established and the whole re-measurement has to be read as an instrument result instead."
+    },
+    {
+      "id": "P5",
+      "claim": "end-of-run and end-of-tile reproduce 8b within 5% at ALL THREE fixtures, as they did at (60, 2) on 2026-08-22 (933 against 962, 1469 against 1496).",
+      "why_it_matters": "it is what separates SUPERSEDED from STALE. If only the peak column moves while the other two reproduce, 8b's peak was correct for the code it measured and the change is the bounding. If the other columns move too, something else changed and 8b's numbers were not describing what they claimed."
+    }
+  ],
+
+  "superseded_versus_stale": "SUPERSEDED means the code changed and 8b's number was right for its code; STALE means it was wrong when it was taken. The distinction protects 8b's other conclusions, which do not depend on the peak column. P5 is the test, and the answer is stated explicitly in the record either way.",
+
+  "what_this_does_to_the_verdict": "Criterion 6's band is 617.3-1389.0 B/series against an analytic 926. WHATEVER THE VERDICT BECOMES, IT MOVES ON THIS MEASUREMENT AND NOTHING ELSE. If the (60, 2) peak lands above 1389 the FAILED verdict holds, on a number that describes shipping code. If it lands inside the band the verdict changes, on the same evidence. No other criterion is touched, and criterion 7 is not re-judged here -- it is a different assertion at a different budget and it is not on this ladder."
+}
