@@ -129,6 +129,12 @@ SEED = 0
 PROGRESS_EVERY = 64
 
 CANDIDATE_SETS = {
+    # **m7 WAS ADDED 2026-08-22 FOR G5**, the in-process inventory at the
+    # largest candidate count `p_max = 3` admits. Every set here holds `p_max`
+    # at 3, so the charged `24*p_max + 16*k_beta + 57` = 193 is the same across
+    # all of them and the lever moves M alone. Seven is the ceiling: white has
+    # one free parameter, matern12 and matern32 have two, so the candidates
+    # with p <= 3 are exactly these seven.
     "m2": ("white", "white + matern12"),
     "m6": (
         "white",
@@ -137,6 +143,15 @@ CANDIDATE_SETS = {
         "white + white",
         "white + matern12",
         "white + matern32",
+    ),
+    "m7": (
+        "white",
+        "matern12",
+        "matern32",
+        "white + white",
+        "white + matern12",
+        "white + matern32",
+        "white + white + white",
     ),
 }
 

@@ -1,0 +1,47 @@
+{
+  "task": "G5 -- the in-process object inventory at M = 7",
+  "written": "2026-08-22",
+
+  "the_question_it_closes": "The fourth fixture established that per-series residency carries 388 B per candidate against the charged 193, linear across M in {1, 2, 4, 7} on both stable readings. G5 asks the only question that turns that into a correction or into another remainder: IS THE EXTRA ~195 B PER CANDIDATE IN NAMED ARRAYS? If it is, `output_slot_bytes` has a determinate correction waiting for whoever opens the sub-phase. If it is not, the extra is an unlocated allocation, it is another remainder, and the ill-posedness argument gets stronger rather than weaker.",
+
+  "instrument": "OQ18 Task A-triple-prime's, unchanged: `fit` is wrapped, and every array the returned `FitResult` carries is summed by `nbytes` DEDUPED BY IDENTITY, because `scores` holds the same allocations under other names -- summing both inflated an earlier smoke reading by 18 B/series. The harness already records `result_arrays`, `result_arrays_total` and the count of all sites. Only the candidate set is new.",
+
+  "why_this_is_not_a_residency_measurement": "It reads what the objects ARE, not what the process holds, so it is arithmetic over array shapes and should be exact. That is what makes it able to falsify the read provenance: an inventory that comes back at anything other than its hand-derivation is an inventory with a site nobody has named.",
+
+  "hand_derivation": "At p_max = 3 and k_beta = 4: theta, theta_err and theta_unconstrained at (B, M, 3) float64 = 72*M; beta and beta_err at (B, M, 4) float64 = 64*M; loglik, k, n, n_eff_bic, n_eff_trend at (B, M) float64 = 40*M; n_iter int64 = 8*M; init_rung object pointer = 8*M; outcome uint8 = 1*M. Total 193*M, which is `24*p_max + 16*k_beta + 57` per candidate. Plus `signal.py:509`'s (B, k_beta) float64 = 32 B/series, which does not scale with M.",
+
+  "predictions": [
+    {
+      "id": "H1",
+      "claim": "M = 7 reads EXACTLY 193*7 + 32 = 1383 B/series.",
+      "refuted_if": "the total differs from 1383 by more than one byte"
+    },
+    {
+      "id": "H2",
+      "claim": "CONTROLS: M = 2 reads exactly 418 and M = 6 exactly 1190, reproducing A-triple-prime.",
+      "why": "the same instrument on the same code must reproduce its own earlier reading, or the instrument moved and H1 says nothing."
+    },
+    {
+      "id": "H3",
+      "claim": "The record's `hand-derived 368 at M = 2` is a transposition of 386 -- the arrays alone, before signal.py:509's 32. 193*2 = 386, and the same paragraph's table gives 418 = 386 + 32 and 1190 = 1158 + 32, which are consistent only with 386.",
+      "refuted_if": "the instrument reads 368 for the arrays at M = 2, in which case the hand-derivation is wrong rather than the transcription"
+    },
+    {
+      "id": "H4",
+      "claim": "THE HORN I DOUBT: the inventory does NOT come back at 193*M + 32 at M = 7 -- an object array, a per-candidate Python structure, or a site the twelve-largest payload truncates away scales differently once there are seven candidates.",
+      "why_it_is_doubted": "A-triple-prime's payload keeps the twelve largest sites while COUNTING 29 at M = 2 and 61 at M = 6, so the recorded sums are lower bounds and only the FitResult totals are complete. A truncated inventory read as a complete one is exactly how a gap gets attributed to the wrong place, and it is the failure mode this prediction exists to catch."
+    },
+    {
+      "id": "H5",
+      "claim": "The site COUNT is about 8 per candidate: 29 at M = 2 and 61 at M = 6 differ by 32 over 4 candidates, so M = 7 should count about 69.",
+      "note": "a count is not a size and this is a consistency check, not a term."
+    }
+  ],
+
+  "what_each_outcome_means": {
+    "H1_holds": "the extra ~195 B/candidate measured in residency is NOT in the FitResult arrays. `output_slot_bytes` is right about what it charges for and wrong about nothing; the excess is unlocated, and raising the charge to 388 would attribute an unnamed allocation to a named term. THE RECONCILIATION CLOSES AS: two provenances, both correct, measuring different things.",
+    "H1_fails": "the read provenance is incomplete, the missing sites are named from `result_arrays`, and the correction is determinate -- which is the outcome that would hand whoever opens the sub-phase a number instead of a question."
+  },
+
+  "run": "side 32 (B = 1024), live 16, fine chunking, padding disabled, trace off, one point per candidate set at M = 2, 6 and 7. This is an inventory read and not a residency ladder, so it needs no repeats and no duration control -- the arrays are the shapes they are. Ambient conditions are recorded beside it anyway."
+}
