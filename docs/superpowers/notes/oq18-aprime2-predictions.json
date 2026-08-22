@@ -1,0 +1,61 @@
+{
+  "task": "OQ18 Task A-double-prime - what the fit-phase maximum becomes once the tier-3 tensor is bounded",
+  "written": "2026-08-21",
+  "committed_before_any_ladder_point_ran": true,
+  "the_one_question": "With the tensor chunked, does the fit-phase maximum fall to the modelled residency, or does a second allocation become dominant?",
+  "design": {
+    "arm": "one ladder, N = 60, M = 2, sides 48/64/96, three repeats, live = 16, fine chunking, 30 s pad -- the same harness and fixture as Task A-prime's tier-3 arm",
+    "compared_against": "A-prime's tier-3 arm, already measured: fit-phase excess above the start of fit fitted against B at 1996.0 +/- 0.3 B/series, against a 1920 B/series tensor",
+    "chunk_constant": 512,
+    "why_no_crossed_design": "the term's shape is known and verified at a ratio of 1.000 across six cells; a 2 x 2 would measure a known quantity at four points and say nothing about the residue"
+  },
+  "predictions": [
+    {
+      "id": "C1",
+      "statement": "The tensor is bounded at the constant. The largest svdvals input at every point is 512 * 60 * 4 * 8 = 983 040 bytes, independent of B -- not 4 423 680 / 7 864 320 / 17 694 720 as A-prime read at sides 48 / 64 / 96.",
+      "refuted_if": "the read nbytes still scales with B, or exceeds 983 040 at any point",
+      "confidence": "high - the suite already asserts the blocking with a call recorder"
+    },
+    {
+      "id": "C2",
+      "statement": "THE MAIN QUESTION, FIRST HORN. If the tensor was the only unmodelled fit-phase allocation, the fit-phase maximum's excess above the start of fit loses its B-slope: fitted against B it falls from 1996.0 +/- 0.3 to under 300 B/series, and the fit-phase maximum stops being design_info's maximum at most points.",
+      "refuted_if": "the slope stays above 600 B/series",
+      "confidence": "medium - this is the horn the repair's value depends on and it is the one I would not bet on, because A-prime's tier-2 arm still showed 618.3 +/- 30.5 B/series of B-dependence with no tensor at all"
+    },
+    {
+      "id": "C3",
+      "statement": "SECOND HORN, AND THE ONE THE TIER-2 ARM POINTS AT. A second allocation becomes dominant and the residual slope lands near tier 2's 618.3 +/- 30.5 B/series -- which is what fit's maximum was when no tensor existed. Predicted residual: 400 to 800 B/series.",
+      "refuted_if": "the residual falls outside 300 to 900 B/series",
+      "confidence": "medium-high - tier 2 is the same code path with the tensor structurally absent, so it is the best available prediction of the residue, and it is why C2 is doubted"
+    },
+    {
+      "id": "C4",
+      "statement": "The peak (max of the four instruments over the whole run) falls by approximately the tensor at the largest side: 17.69 MB of tensor at side 96 becomes 0.98 MB, so the run's peak falls by 10 to 17 MB there and by 3 to 7 MB at side 64.",
+      "refuted_if": "the peak falls by less than 5 MB at side 96",
+      "confidence": "medium - the peak falls only to whatever the next-highest allocation is, which is what C2 and C3 are about"
+    },
+    {
+      "id": "C5",
+      "statement": "Criterion 7 is NOT closed by this change at this fixture. Peak still exceeds the minimal budget above roughly B = 1500.",
+      "refuted_if": "peak sits at or below the budget at every side",
+      "confidence": "medium - A-prime measured the overrun at +11.5 MB at side 96 and the tensor there is 17.69 MB, so this is the one prediction whose refutation would be the good news"
+    },
+    {
+      "id": "C6",
+      "statement": "Run time does not rise. The design_info phase is no slower chunked than whole at this fixture, within the between-run scatter.",
+      "refuted_if": "design_info takes more than 20% longer than A-prime's arm at the same side",
+      "confidence": "high - measured at B = 9216 before the change, flat at N = 60"
+    },
+    {
+      "id": "C7",
+      "statement": "The results are unchanged. Every point's store digest equals the digest A-prime's tier-3 arm produced at the same side and tag.",
+      "refuted_if": "any digest differs",
+      "confidence": "high - the suite asserts bit-for-bit equality of the singular values, and this is that assertion carried through a whole run"
+    }
+  ],
+  "what_each_outcome_licenses": {
+    "peak_collapses_onto_residency": "the repair is a repair; criterion 7 is re-measured behind it and PUBLISHED_TILE_SIDE's caveat is revisited by measurement, never by inference",
+    "a_second_allocation_surfaces": "the next term is found before the cascade is spent; the repair still lands but its claim narrows to bounding one named allocation"
+  },
+  "not_licensed_by_this_measurement": "moving PUBLISHED_TILE_SIDE, resident_bytes_per_series, or any exit-criterion verdict. A criterion is re-measured, never inferred from a change to the code it judges."
+}

@@ -2496,3 +2496,52 @@ ranking might be dominated by Python-object sites instead. Measured: **top at N 
 in 3 blocks) and second at N = 60**, behind 31.74 MB of import machinery spread over 206 860
 blocks. **The block count is what separates them** — three blocks is an array, two hundred
 thousand is an interpreter — and a ranking by size alone would have read the second as a rival.
+
+---
+
+## OQ18 Task A-double-prime — the characterisation, audited before the ladder
+
+**THE BRIEF, AND IT IS ONE QUESTION.** With the tier-3 tensor chunked, does the fit-phase
+maximum fall to the modelled residency, or does a second allocation become dominant? **Not a
+study**: the term's size is already known exactly — `B · N · k_beta · 8`, read off the argument
+at a ratio of 1.000 across six cells — so what is unknown is only what remains once it is
+bounded.
+
+### (j4) THE MEASUREMENT THIS IS COMPARED AGAINST IS ALREADY IN HAND
+
+Task A-prime's tier-3 arm at N = 60, M = 2 — sides 48, 64, 96, three repeats, same harness, same
+fixture, same masked duration-controlled construction. **So this ladder is one arm, not two**,
+and the comparison costs nothing beyond running it. The A-prime arm's fit-phase excess above the
+start of `fit` was **1996.0 ± 0.3 B/series against a 1920 B tensor.**
+
+### (a7) THE SHAPE IS KNOWN, WHICH IS WHY A CROSSED DESIGN IS THE WRONG INSTRUMENT HERE
+
+B was specified to characterize a term whose shape refused three fixtures. **That was the
+transient, and the transient is now named.** A crossed 2 × 2 over a term whose dependence is
+`n_time · k_beta · 8` per series, verified at a ratio of 1.000, would be measuring a known
+quantity at four points — and it would say nothing about what this measurement asks, which is
+about the *residue*.
+
+### (i2) THE CHUNKING'S OWN POSITIVE CONTROL LANDED BEFORE THE LADDER
+
+*"The results are identical"* is satisfied by never chunking, so the suite records every
+`svdvals` call and asserts **five batched calls of at most five series at a chunk of five**.
+Without it the equality test is an equality between one implementation and itself. **It caught
+its own first assertion** — `design_info` also takes a two-dimensional `svdvals` of the
+unrestricted design, so the count came back 6 against 5.
+
+### (k) AND THE RUNTIME COST IS MEASURED RATHER THAN ARGUED, BECAUSE THE TRADE IS THE DECISION
+
+A memory repair that doubles fit time is a different trade from one that costs nothing, and the
+fit is expensive. Measured at B = 9216 across chunk sizes 64 to 9216: **flat at N = 60, and at
+N = 240 chunking is faster than not** — 121.3 ms at 512 against 161.2 ms whole. **The constant is
+therefore chosen for the bound and not for the clock**, which is only sayable because the clock
+was measured first.
+
+### WHAT WOULD MAKE THIS MEASUREMENT WORTHLESS, NAMED IN ADVANCE
+
+The fixture must reach **tier 3**. Sixteen live series among wholly-masked ones makes the masks
+differ, which is what selects the batched path — a fixture whose masks are uniform would measure
+tier 1 or 2 and return a null that says nothing about the change. **The A-prime arm this is
+compared against used exactly that fixture**, and the `svdvals_max_input_bytes` field is what
+proves the path was taken at every point rather than assumed.
