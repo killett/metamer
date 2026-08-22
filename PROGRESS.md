@@ -5981,6 +5981,16 @@ question; compute/bandwidth roofline pair for cross-machine prediction) are in d
 
 ## Gotchas discovered
 
+- **CI RUNS `-m "not machine"`, SO A GREEN CI IS SILENT ABOUT EVERY RSS ASSERTION IN THIS
+  PROJECT.** Standing, and not specific to any one incident. The nine RSS assertions Task 8i
+  surveyed — the five that consult `rss_validity` and the four carried by margin — are **all
+  `machine`-marked**, so **none of them has ever run in CI**. What CI checks is that the code
+  imports, the logic tests pass and the packaging holds; **what it cannot see is every claim this
+  sub-phase has been arguing about.** The only instrument for those is `pixi run test` on a box
+  whose conditions are recorded, which is why every sweep in this file carries its available RAM
+  beside its counts. **A future reader treating CI as the gate is treating a suite that skips the
+  subject as evidence about the subject.**
+
 - **AN UNGATED WATERMARK TEST FAILED ONCE IN A SWEEP AT 2.1 GB AVAILABLE, AND THE ASSERTION TEXT
   WAS LOST — WHICH IS THE PART TO FIX.** 2026-08-21:
   `test_a_child_inherits_the_parents_own_high_water_mark_and_not_its_current_rss` failed inside a
