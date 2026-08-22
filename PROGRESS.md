@@ -3,10 +3,11 @@
 ## Start here (cold-start summary)
 
 1. **Branch `main`, everything on it, every commit pushed by a hook** — https://github.com/killett/metamer.
-2. ## CI IS RED ON `main` DELIBERATELY AND IS PENDING A SCOPE DECISION. **DO NOT WIDEN THE BOUND. DO NOT MARK THE TEST TO MAKE CI GREEN.** The failing assertion is `test_the_floor_with_the_input_open_exceeds_the_floor_without_it`, at **995 328 B against a 1 000 000 B threshold** — **0.5% inside its own bound**, which is why it fails intermittently rather than always. **It is ambient-conditional and not a code defect**: the same commit **passed on re-run**, and the witness landed the same day computes its shortfall **strictly after both readings**, so it cannot move either. **THE DIAGNOSTIC HAS ALREADY RUN** — every rung is lower on the runner, `xarray_zarr` **128.2 MB against 163.7**, and the input's contribution is **1.00 MB there against 11.20 locally**: genuinely smaller, **not absorbed** into a higher floor. By the criterion set **before** that measurement, **enlarging the CI fixture is the honest repair and its size is calculable from the table** in [Gotchas](#gotchas-discovered). **THE TWO OPTIONS ARE: enlarge the CI input so the store's residency clears the window, or mark the test `machine`, which costs CI its ONLY RSS assertion. THIS IS A SCOPE DECISION AND IT IS THE USER'S.** **And this is the only RSS assertion CI runs at all** — eight of the nine are `machine`-marked and this one is not, which was itself a correction CI forced two commits ago.
+2. ## CI IS GREEN AS OF 2026-08-22, AND THE DELIBERATE RED IS CLOSED BY THE REPAIR ITS OWN CRITERION CHOSE. The bound was **not** widened, the test was **not** marked: the CI fixture was enlarged, and the one CI-visible RSS assertion now reads **58.29 / 57.30 / 58.96 MB** of input contribution on Python 3.14 / 3.13 / 3.12 against its **1 MB** bound, where it read **995 328 B** and failed. **THE SIZE WAS MEASURED, NOT PICKED, AND THE RECORD THAT SAID IT WAS CALCULABLE FROM THE RUNNER LADDER WAS WRONG** — both figures in that ladder, 11.20 MB here and 1.00 MB there, are for the **same 24×4×4 fixture whose data is 1536 bytes**, so they are two intercepts an order of magnitude apart on identical input and the table contains **no slope at all**. The slope was measured first, on the time axis: **197–235 B per time step**, against a committed prediction of 8–24 that is **REFUTED by a factor of ten**. `CI_FLOOR_N_TIME = 262_144`, in `tests/test_memory.py`, once. See [THE CI FIXTURE DECISION](#the-ci-fixture-decision--taken-measured-and-verified-2026-08-22).
+
 3. **DONE:** Phase 1 (0–18), Phase 2 preliminaries P0–P4, **Phase 2a (0–13)**, and **PHASE 2b IS COMPLETE — Tasks 0–10, with 9 narrowed plus 8a, 8i and 8b, closing 10 met / 4 met with reduced scope / 2 FAILED**, open questions 1, 4, 9, 11, 12, 15.
-4. **NEXT ACTION: A SCOPE DECISION ABOUT A MODELLING SUB-PHASE, AND IT NEEDS A FULL WINDOW. NOTHING SHOULD BE IMPLEMENTED UNTIL IT IS MADE.** The OQ18 characterisation line is CLOSED: four tasks (A, A-prime, A-double-prime, A-triple-prime) took the production peak from a term of unknown shape to a composition whose parts are named, measured, and — where they refuse a shape — refused rather than fitted. **Read [THE PEAK, END TO END](#the-peak-end-to-end--the-state-at-the-close-of-the-oq18-characterisation-line-2026-08-21) FIRST; it is the assembled answer and the only place the four parts appear together.** In one line: **one allocation was bounded and that is a real reduction, two-thirds of what remained is named and deliberately NOT repaired, the last third refuses a shape across three fixtures, and criterion 7 is FAILED at +4.63 MB — understood now rather than merely recorded.** **The decision is whether a modelling sub-phase opens at all**, and what it would owe: a model of the PEAK rather than of residency, the 193-versus-240 reconciliation, and a remainder that no coefficient may be fitted to.
-5. **Tests: 1089 passed, 0 failed, 0 INDETERMINATE — 2026-08-21, 775.5 s on a box at 8.4 GB available.** The RSS summary is now **per assertion**: `criterion 7's peak`, `the floor with the input open` and `the recompute loop` report `gate=witness`; `the floor ladder's rungs` and `peak residency across the iteration cap` remain `gate=margin` **and are named there rather than counted**. **A HIGH stall reading skips nothing** — see open question 19. **CI IS NOT A SUBSTITUTE AND IS SHARPER THAN THAT:** it runs `-m "not machine"` and therefore executes **exactly one** of the nine RSS assertions, which is also the one whose fixture cannot express its condition on that hardware — 11.3 MB of input contribution here against **913 408 B** on the runner, failing once and passing on a re-run of the same commit.
+4. **THE SCOPE DECISION IS TAKEN, 2026-08-22: THE MODELLING SUB-PHASE DOES NOT OPEN, AND IT IS ILL-POSED RATHER THAN PREMATURE** — its only two completion routes are fitting a coefficient to the remainder and publishing a number correct at one fixture, and both are forbidden. **The criterion for opening it is written down** so a later session cannot open it on enthusiasm: [THE SCOPE DECISION](#the-scope-decision-taken-2026-08-22-the-modelling-sub-phase-does-not-open-and-the-reason-is-well-posedness). **2c proceeds on the residency model**, with the limitation stated in what 2c inherits. **NEXT ACTION: re-take the decision once the 193-versus-240 reconciliation closes** — the CI fixture decision is already closed and verified. The OQ18 characterisation line is CLOSED: four tasks (A, A-prime, A-double-prime, A-triple-prime) took the production peak from a term of unknown shape to a composition whose parts are named, measured, and — where they refuse a shape — refused rather than fitted. **Read [THE PEAK, END TO END](#the-peak-end-to-end--the-state-at-the-close-of-the-oq18-characterisation-line-2026-08-21) FIRST; it is the assembled answer and the only place the four parts appear together.** In one line: **one allocation was bounded and that is a real reduction, two-thirds of what remained is named and deliberately NOT repaired, the last third refuses a shape across three fixtures, and criterion 7 is FAILED at +4.63 MB — understood now rather than merely recorded.** ~~The decision is whether a modelling sub-phase opens at all~~ — **taken 2026-08-22, and it does not.** What it would have owed is unchanged and is what the criterion for reopening is written against: a model of the PEAK rather than of residency, the 193-versus-240 reconciliation, and a remainder that no coefficient may be fitted to.
+5. **Tests: 1090 passed, 0 failed, 0 INDETERMINATE — 2026-08-21, 849.96 s on a box at 7.2 GB available.** ~~1089~~ — that count was written down one commit after the sweep that produced it, while the commit in between added a test, so it was stale by one from the moment it was recorded. **It was corrected by running the sweep, never by adding one to a collection count**: a collected count is not a passing count, and 1089 + 1 is an inference. The RSS summary is now **per assertion**: `criterion 7's peak`, `the floor with the input open` and `the recompute loop` report `gate=witness`; `the floor ladder's rungs` and `peak residency across the iteration cap` remain `gate=margin` **and are named there rather than counted**. **A HIGH stall reading skips nothing** — see open question 19. **CI IS NOT A SUBSTITUTE AND IS SHARPER THAN THAT:** it runs `-m "not machine"` and therefore executes **exactly one** of the nine RSS assertions, which is also the one whose fixture cannot express its condition on that hardware — 11.3 MB of input contribution here against **913 408 B** on the runner, failing once and passing on a re-run of the same commit.
 6. **`pixi run test` is the full sweep and every end-of-task verification must run it; `test-fast` and `test-ci` are not evidence.** It has caught **seven** things a fast run could not, two of them in Task 8. **Every run prints `RSS measurement validity`, including at zero** — a nonzero count is INDETERMINATE, neither pass nor fail.
 7. **Verify a fresh checkout with `pixi run test && pixi run typecheck && pixi run lint`**, plus `pixi run pre-commit run --all-files` before every commit.
 8. **THE METHOD IS THE PRE-FLIGHT AND IT LIVES IN EXACTLY ONE PLACE:** [`phase1-to-phase2-handoff.md`](docs/superpowers/notes/phase1-to-phase2-handoff.md) §1 — (a0)–(a8), (a)–(k), **three new at Tasks 8a/8i: decay as an INTERACTION, right-in-kind-wrong-in-scale, and a zero reading is not evidence of absence**, the five causes of a surviving mutation, the standing rules, the fixture facts. **Run it against the task brief before code**, append to [`phase2b-preflight.md`](docs/superpowers/notes/phase2b-preflight.md). **Do not restate it here** — the two copies drifted once already.
@@ -2425,7 +2426,7 @@ cheaper explanation for the rest has been excluded **by measurement**, not by ar
 | owed | why it is not optional |
 |---|---|
 | a model of the **PEAK**, not of residency | criterion 7 bounds the peak; `resident_bytes_per_series` is exact about residency and mute about the rest, which is how it stayed unfalsified for four tasks |
-| the **193-versus-240 reconciliation** | `output_slot_bytes` charges 193/candidate, A-triple-prime reads exactly `193·M` off the objects, 8b measured ≈ 240 at end of run. **Two provenances, 24% apart, both dated** |
+| the **193-versus-240 reconciliation** | `output_slot_bytes` charges 193/candidate, A-triple-prime reads exactly `193·M` off the objects, and 8b measured an excess **on top of** that charge at end of run. ~~Two provenances, 24% apart~~ — **struck 2026-08-22: the 240 is the slope of the EXCESS OVER the 193, not a rival value for it, so the gap is 8b's own 2.24× and not 24%.** The figures live once, in [What Task 8b established](#what-task-8b-established-done-2026-08-19--read-before-quoting-the-per-series-cost-criterion-6-or-criterion-7); this row points at them rather than restating them, which is how the misreading happened |
 | a rule for the **remainder** | it holds no shape (×2.2 under a ×3 candidate lever, ×0.38 under a ×4 `n_time` lever). **No coefficient may be fitted to it** — that is 8b's refusal and it stands |
 | the **cascade cost, stated in advance** | any correction moves `PUBLISHED_TILE_SIDE` a **fifth** time. That is the reason the nameable thirds were left unrepaired, and it does not go away because a sub-phase is opened |
 
@@ -2447,6 +2448,127 @@ cheaper explanation for the rest has been excluded **by measurement**, not by ar
 `output_slot_bytes`, `SVD_CHUNK_SERIES` or any exit-criterion verdict on the strength of anything
 in this record. **Criterion 7 is re-measured, never inferred** — including from a change to the
 code it judges.
+
+---
+
+### THE SCOPE DECISION, TAKEN 2026-08-22: THE MODELLING SUB-PHASE DOES NOT OPEN, AND THE REASON IS WELL-POSEDNESS
+
+**IT IS NOT DEFERRED AND IT IS NOT A SCHEDULING CALL.** A sub-phase whose only two completion
+routes are both forbidden is **ill-posed**, and saying so is what gives the re-take a criterion
+instead of a mood.
+
+**THE ARGUMENT, IN THREE LINES.** Criterion 7 bounds the peak, so closing it needs a model of the
+peak. A model of the peak needs the remainder to hold a shape. **The remainder holds no shape** —
+139.5 / 308.6 / 52.8 B/series across three fixtures, ×2.2 under a ×3 candidate lever and ×0.38
+under a ×4 `n_time` lever. So a sub-phase opened today can finish only by **fitting a coefficient
+to the remainder**, which 8b's refusal forbids, or by **publishing a number correct at one
+fixture**, which is the defect 8b refused. Both routes are closed, so the work is not
+under-resourced — it is **not yet a well-posed problem.**
+
+> ## THE CRITERION FOR OPENING IT, SO A LATER SESSION CANNOT OPEN IT ON ENTHUSIASM
+>
+> **The modelling sub-phase opens when EITHER (a) the remainder holds a shape — a dependence
+> established across at least three fixtures on at least two levers, by the standard 8b applied
+> to the slot term and refused for the transient — OR (b) it opens as something OTHER than a
+> modelling sub-phase, with its completion route named in advance and neither of the two
+> forbidden routes among them.** Nothing else opens it. Not a new idea about where the bytes go,
+> not a tidier formula, and not the discomfort of shipping a FAILED criterion.
+
+**2c PROCEEDS ON THE RESIDENCY MODEL, AND THAT IS A DECISION RATHER THAN A CONCESSION.** Three
+reasons, recorded because 2c is the phase that sizes tiles and will be tempted to reopen this:
+
+1. **2c's subject does not depend on the tile side being optimal.** It is the two-pass warm start
+   and its barrier — coarse-to-fine initialisation, the hysteresis audit, bitwise determinism.
+   Those depend on the side being **derived the same way every time**, which it is.
+2. **A tile sized from residency errs in the safe direction for 2c specifically.** It undersizes
+   against a peak-aware model, so 2c runs smaller tiles than optimal: **slower, not unsafe.**
+3. **2c inheriting a stated limitation is normal; 2c inheriting a cascade mid-flight is not.** If
+   the sub-phase opened first and moved `PUBLISHED_TILE_SIDE` a fifth time, 2c would build on a
+   number that moves **again** when the remainder is finally named.
+
+**THE HEADROOM ROUTE: CONSIDERED, REACHABLE, AND REJECTED ON ITS OWN TERMS.** Redefining
+`--memory-budget` to bound modelled residency plus a declared headroom, and restating criterion 7
+to match, is reachable today — and it makes the criterion pass **by weakening the claim**, which
+is the same move as fitting a coefficient. It also fails arithmetically: `HEADROOM_FRACTION` is on
+the do-not-move list, so a headroom claiming to cover this gap must be **measured**, and **the gap
+grows with both B and `n_time` while a fraction is blind to both.** **A fraction cannot cover a
+term that grows in a variable the fraction does not see.** Recorded as considered, with that
+reason, so it is not re-proposed as new.
+
+**WHAT WAS DONE INSTEAD, AND WHAT THE RE-TAKE WAITS ON.** Two cheap facts, in cost order: the
+**CI fixture decision** (closed, verified on the runner — see below) and the **193-versus-240
+reconciliation** (a fourth fixture on the candidate lever). The decision is re-taken on a **closed**
+reconciliation, not an open one.
+
+---
+
+### THE CI FIXTURE DECISION — taken, measured and verified (2026-08-22)
+
+**READ BEFORE TOUCHING THE FLOOR FIXTURES OR THE ONE ASSERTION CI RUNS.** The decision was
+**enlarge the CI input**, by the criterion set before the diagnostic ran and answered by it: every
+rung is lower on the runner and the input's contribution is genuinely smaller there, **not**
+absorbed into a higher floor. The bound is untouched at 1 MB and the test is unmarked.
+
+**THE RECORD SAID THE SIZE WAS CALCULABLE FROM THE RUNNER LADDER. IT WAS NOT, AND THAT IS THE
+TRANSFERABLE PART.** Both numbers in that table — 11.20 MB here, 1.00 MB there — are for the
+**same 24×4×4 fixture whose data is 1536 bytes**. Two intercepts an order of magnitude apart on
+**identical input**, and **no slope anywhere in the table**. The contribution it records is
+dominated by a machine-dependent term that is **not a function of input size**, so any size
+derived by scaling either number is a multiplier carried between machines that those same two
+numbers refute. **(a4)'s shape at a repair: the arithmetic was never checked because nobody
+disputed it.**
+
+**SO THE SLOPE WAS MEASURED FIRST.** Fifteen readings, four sizes plus the existing fixture as a
+control, three repeats, interleaved, fresh child per reading, **reclaim shortfall 0 throughout**.
+Predictions committed before the run in
+[`ci-floor-fixture-predictions.json`](docs/superpowers/notes/ci-floor-fixture-predictions.json),
+points in
+[`ci-floor-fixture-measured.jsonl`](docs/superpowers/notes/ci-floor-fixture-measured.jsonl).
+
+| n_time (1×1 grid) | contribution | incremental |
+|---|---|---|
+| 24 | 11.25 MB | — |
+| 65 536 | 26.68 MB | 235.5 B/step |
+| 262 144 | 65.37 MB | 196.8 B/step |
+| 1 048 576 | 225.13 MB | 203.1 B/step |
+
+- **THE PREDICTED SLOPE WAS 8–24 B/step AND IT IS REFUTED BY A FACTOR OF TEN.** The prediction was
+  the datetime64 arithmetic — 8 B a step, allowing one retained copy. Measured **197–235**. The
+  lever is far stronger than the reasoning behind it, and **the size comes from the measurement,
+  not from the prediction.** The increments are **not constant** (235.5 against 196.8, 20% apart),
+  so the term is stated as a range and no multiplier is taken from it.
+- **The control reproduced the record**: 11.21 MB at 24×4×4 against the recorded 11.20, and the
+  same day's full sweep printed 11.40 before the change.
+- **The grid is not a lever**: 11.25 MB at 1×1 against 11.21 at 4×4, same 24 steps. The fixture is
+  1×1 so the disk cost is proportional to the term being moved and not to a grid nobody is using.
+- **The mechanism**: xarray materialises a dim coordinate as an index and the opened dataset
+  **retains** it. The data is deliberately not the lever — the probe reads one column and drops
+  it, and a large transient freed before the reading **can be handed back to the OS** by the
+  allocator, so a data-sized fixture could move the contribution by nothing at all.
+
+**THE SIZE, AND THE MARGIN, STATED WITH ITS REASON.** `CI_FLOOR_N_TIME = 262_144`, which puts the
+size-dependent part at **54 MB, 54× the bound** here. The margin is an order of magnitude more
+than needed **because the one between-machine spread ever measured for this quantity is an order
+of magnitude**: at 1/11 of this box's per-step term the runner would still clear the bound five
+times over.
+
+**VERIFIED ON THE RUNNER, 2026-08-22, AND THE PESSIMISTIC ARM DID NOT HAPPEN.** Input contribution
+**58.29 / 57.30 / 58.96 MB** on Python 3.14 / 3.13 / 3.12, against **1.00 MB** before. So the
+per-step term on that hardware is **≈ 0.87× this box's, not 1/11** — the size-dependent term is
+effectively machine-independent while the intercept is not, which is exactly the split the lever
+was chosen for, and **additivity held across machines as well as within one.** The rungs are still
+lower there: `xarray_zarr` **126.7–138.3 MB against 163.7**.
+
+**A BY-PRODUCT WORTH KEEPING.** The fixture build was inside the `rss_validity` window and a
+262 144-step write reads **121.3 ms/s**, printing the HIGH stall diagnostic on every run — this
+process **allocating**, not this process being **squeezed**, which is exactly open question 19's
+ambiguity. Built outside the window, the same assertion reads **0.0 ms/s**. **A gate that fires on
+the fixture is a gate reporting on the wrong process.**
+
+**WHAT THIS DID NOT DO.** It did not widen the bound, mark the test, add an assertion about the
+contribution's size, or touch the other three floor tests — those keep the small fixture, because
+the ladder's bands are about readings recorded on it and moving the fixture would move what they
+are about. **What is pinned is still the sign.**
 
 ---
 
@@ -2486,11 +2608,29 @@ made and was right to make.
 #### AN OPEN RECONCILIATION: 193 CHARGED, 193 READ, 240 MEASURED
 
 `output_slot_bytes` charges **193 B per candidate per series**. A-triple-prime reads **exactly
-193·M** off `fit.py:200-212`. **Task 8b measured ≈ 240** at end of run — a three-point
-determination with ~2σ of leftover, called thin in its own record. **Two provenances for one
-term, 24% apart, and they are not reconciled.** The read figure is what the arrays *are*; the
-measured figure is what a run's residency *showed*. **Whoever corrects the model owns closing
-that gap**, and it does not belong bolted onto a characterisation.
+193·M** off `fit.py:200-212`. **Task 8b measured an excess ON TOP of that charge** at end of run.
+The read figure is what the arrays *are*; the measured figure is what a run's residency *showed*.
+**Whoever corrects the model owns closing that gap**, and it does not belong bolted onto a
+characterisation.
+
+> **~~Two provenances for one term, 24% apart~~ — STRUCK 2026-08-22, AND THE MISREADING IS WORTH
+> MORE THAN THE NUMBER.** 8b's ≈ 240 is the **slope of the unaccounted term**, `at-end − charged
+> slots`, so it sits **on top of** the 193 rather than replacing it: the end-of-run per-candidate
+> total is ≈ 433, which is 8b's own *"understated by about 2.24×"*, and **the gap is a factor of
+> 2.24, not 24%.** Recomputed from
+> [`task-8b-measured.jsonl`](docs/superpowers/notes/task-8b-measured.jsonl) on 2026-08-21,
+> filtered to 8b's own arm (fine chunking, `live = 16`), and the published columns reproduce: data
+> term **533.4 / 542.2 / 1954.3** against 533.5 / 542.2 / 1954.3, end-of-run slope **962.1**
+> against 970.6, end-of-tile **1495.5** against 1504.1, peak **2424.3** against 2410.0, unaccounted
+> **576.1 / 1542.7 / 474.4** against 584.6 / 1544.9 / 475.3. **A summary restated a measurement
+> instead of pointing at it, and a factor of ten in the framing survived a review** — the same
+> defect this file has now recorded five times, one level up. **The figures live once, in
+> [What Task 8b established](#what-task-8b-established-done-2026-08-19--read-before-quoting-the-per-series-cost-criterion-6-or-criterion-7).**
+>
+> **AND THE THINNESS IS SHARPER THAN "THREE POINTS".** The 240 is a slope through **two** M
+> values, 584.6 at M = 2 and 1544.9 at M = 6, so it is a two-parameter line fitted to two points:
+> **zero residual, and linearity in M has therefore never been tested at all.** The third fixture
+> moves `n_time`, not M, and leaves 19% unexplained (475.3 against 584.6).
 
 #### CRITERION 7: FAILED, AND NOW UNDERSTOOD RATHER THAN MERELY RECORDED
 
@@ -6217,10 +6357,18 @@ question; compute/bandwidth roofline pair for cross-machine prediction) are in d
   | **input contribution** | **1.00 MB** | **11.20 MB** |
 
   **Every rung is LOWER there and the input's contribution is genuinely smaller — it is not
-  absorbed into a higher floor.** So the honest repair is **enlarging the CI fixture**, and its
-  size is calculable from this table rather than guessed. The failing run read **995 328 B against
-  a 1 000 000 B bound**: the fixture sits within 0.5% of its own threshold on that hardware, which
-  is why it fails intermittently rather than always.
+  absorbed into a higher floor.** So the honest repair is **enlarging the CI fixture**. The failing
+  run read **995 328 B against a 1 000 000 B bound**: the fixture sat within 0.5% of its own
+  threshold on that hardware, which is why it failed intermittently rather than always.
+
+  ~~and its size is calculable from this table rather than guessed~~ — **STRUCK 2026-08-22, AND
+  THE STRIKE IS THE LESSON.** Both figures above are for the **same** fixture, so the table holds
+  **two intercepts and no slope**, and the contribution it records is dominated by a term that is
+  not a function of input size at all. The size was measured instead — 197–235 B per time step,
+  against a committed prediction of 8–24 that was refuted by ten — and the whole derivation lives
+  in [THE CI FIXTURE DECISION](#the-ci-fixture-decision--taken-measured-and-verified-2026-08-22).
+  **CLOSED: the fixture is 262 144 steps, CI is green, and the runner's contribution is
+  58.29 / 57.30 / 58.96 MB across three Python versions.**
 
   **THE REPAIR IS THE FIXTURE OR THE MARK, NEVER THE BOUND.** The 1 MB is the **sign** of a real
   effect — an opened store's residency belongs to the floor and not to the tile term — and
@@ -6229,7 +6377,9 @@ question; compute/bandwidth roofline pair for cross-machine prediction) are in d
   but removes CI's *only* RSS coverage; or **enlarge the CI input** so the store's residency
   clears the window. **That is a scope decision and it is recorded, not made.**
 
-  **CI IS RED ON `main` AS THIS IS WRITTEN, AND IT WAITS ON PURPOSE.** The standing rule is that
+  **~~CI IS RED ON `main` AS THIS IS WRITTEN, AND IT WAITS ON PURPOSE.~~ RESOLVED 2026-08-22 —
+  kept below because the reasoning for making a red run wait is the transferable part.** The
+  standing rule is that
   red CI is the next task; the exception it allows is writing down why it waits and what unblocks
   it. **It waits because the repair is a scope decision, not a fix** — enlarging a fixture changes
   what the one CI-visible RSS assertion measures, and doing that to make a suite green is the move
@@ -6241,6 +6391,18 @@ question; compute/bandwidth roofline pair for cross-machine prediction) are in d
   **AND A PASSING RE-RUN IS NOT A CLEAN BILL.** It establishes that the failure is not
   deterministic; it says nothing about how often it recurs, and the next occurrence is the
   datum that would size that.
+
+- **A SECOND PUSH CANCELS THE RUN THAT WAS VERIFYING THE FIRST, AND THE POST-COMMIT HOOK MAKES
+  THAT EASY TO DO BY ACCIDENT (2026-08-22).** The fixture repair was pushed, its run started, and
+  a docs commit pushed six minutes later **cancelled it** — the workflow's concurrency group
+  supersedes in-flight runs on the same ref. Nothing was lost only because the later run contained
+  the same tree, so it verified the same change; had the docs commit touched `tests/`, the repair
+  would have been verified by **nothing** while the run list showed a green tick against a
+  different commit. **A cancelled run is evidence of nothing** — that rule was already written
+  here for the watermark incident, and this is the mechanism that manufactures cancelled runs.
+  **Check the run for a push before making the next commit, or accept that the verification you
+  are waiting on is the one you are about to discard.** Two of the five runs in the history above
+  are `cancelled` for exactly this reason.
 
 - **CI RUNS EXACTLY ONE RSS ASSERTION, AND IT IS THE ONE WHOSE FIXTURE CANNOT EXPRESS ITS
   CONDITION THERE. THAT IS WORSE THAN ZERO COVERAGE IN ONE SPECIFIC RESPECT.** Zero coverage is
