@@ -915,3 +915,158 @@ def test_design_info_slices_to_a_single_series():
     # The rows really do differ, so the loop above could fail.
     assert info.n_rows[0] != info.n_rows[1]
     assert bool(info.is_deficient[2])
+
+
+# --------------------------------------------------------------------------
+# The restricted SVD's third tier, and the bound on its temporary
+# --------------------------------------------------------------------------
+
+
+def _tier_three_mask(batch: int, n_time: int) -> np.ndarray:
+    """A mask whose rows DIFFER, which is what selects the batched tier.
+
+    Tiers 1 and 2 take one SVD of a single matrix, so a fixture whose masks are
+    all-true or all-identical never reaches the path under test -- (i7) at a
+    branch rather than at a value.
+
+    Args:
+        batch: Series count.
+        n_time: Epochs per series.
+
+    Returns:
+        A `(batch, n_time)` mask with a different gap pattern per series, one
+        series kept whole and one reduced below the column count so the
+        structural-zero padding is exercised too.
+    """
+    mask = np.ones((batch, n_time), dtype=bool)
+    for series in range(batch):
+        mask[series, series % n_time :: max(n_time // 3, 1)] = False
+    mask[0] = True
+    mask[batch - 1] = False
+    mask[batch - 1, :2] = True
+    return mask
+
+
+def test_the_restricted_svd_agrees_bitwise_whether_or_not_it_chunks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Chunking the batched tier changes no returned bit.
+
+    The oracle is the whole-batch call the docstring specifies --
+    `svdvals(x[None] * mask[..., None])` -- computed here, so the comparison is
+    against the definition rather than against a second call to the code under
+    test. Equality is **exact**: LAPACK decomposes each `(n_time, k)` matrix
+    independently, so blocking changes what is allocated and not what is
+    computed. Measured across chunk sizes 64 to 9216 before this test was
+    written, at two series lengths, and equal at every one.
+
+    Bug this catches: an off-by-one in the block bounds, which pairs a series'
+    row of the mask with another series' output and returns plausible singular
+    values for the wrong series -- invisible to any check on shapes, and it
+    would corrupt `gram_logdet` and `rank` for every series past the first
+    block.
+    """
+    from metamer.core import signal as signal_module
+
+    t = np.arange(9.0)
+    spec = SignalSpec([Constant(), Trend(), Annual()])
+    batch = 23
+    mask = _tier_three_mask(batch, t.size)
+    matrix = spec.design_matrix(t)[0]
+    expected = np.linalg.svdvals(matrix[None, :, :] * mask[:, :, None])
+
+    monkeypatch.setattr(signal_module, "SVD_CHUNK_SERIES", 5)
+    chunked = spec.design_info(t, mask)
+    monkeypatch.setattr(signal_module, "SVD_CHUNK_SERIES", 10_000)
+    whole = spec.design_info(t, mask)
+
+    np.testing.assert_array_equal(chunked.condition_number, whole.condition_number)
+    np.testing.assert_array_equal(chunked.gram_logdet, whole.gram_logdet)
+    np.testing.assert_array_equal(chunked.rank, whole.rank)
+    # AND AGAINST THE DEFINITION, not only against the other arm: two arms that
+    # agree can be wrong together, which is the relation-instead-of-observation
+    # failure (i3).
+    values = signal_module.SignalSpec._restricted_singular_values(matrix, mask)
+    np.testing.assert_array_equal(values[:, : expected.shape[1]], expected)
+
+
+def test_the_batched_tier_bounds_its_temporary_by_the_chunk_constant(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The positive control: identical results are also what NOT chunking gives.
+
+    **This is the half that can fail.** A chunked implementation and an
+    unchunked one return the same numbers, so an equality test alone is
+    satisfied by never chunking at all -- the (i2) shape, where the observable
+    is an absence. Here every `svdvals` call is recorded, so the blocking is
+    witnessed rather than inferred, and the largest input is asserted against
+    the constant.
+
+    Expected values by hand: 23 series at a chunk of 5 is `ceil(23/5)` = **5**
+    batched calls, and no call may carry more than 5 series. **Only the batched
+    calls are counted**: `design_info` also takes one two-dimensional `svdvals`
+    of the unrestricted design for the whole-batch diagnostics, and counting it
+    was this test's own first failure -- 6 against 5, from a call that is not
+    the tier under test.
+
+    Bug this catches: a loop that computes the blocks and then falls back to one
+    whole-batch call, or a constant that is read once at import and ignored --
+    both leave the 1.49 GB temporary that open question 18 measured at the
+    published tile side, while every equality test stays green.
+    """
+    from metamer.core import signal as signal_module
+
+    calls: list[tuple[int, ...]] = []
+    real = np.linalg.svdvals
+
+    def recording(a, *args, **kwargs):
+        array = np.asarray(a)
+        if array.ndim == 3:
+            calls.append(tuple(array.shape))
+        return real(a, *args, **kwargs)
+
+    monkeypatch.setattr(np.linalg, "svdvals", recording)
+    monkeypatch.setattr(signal_module, "SVD_CHUNK_SERIES", 5)
+
+    t = np.arange(9.0)
+    spec = SignalSpec([Constant(), Trend(), Annual()])
+    mask = _tier_three_mask(23, t.size)
+    spec.design_info(t, mask)
+
+    assert len(calls) == 5
+    assert max(shape[0] for shape in calls) == 5
+
+
+def test_a_batch_inside_one_chunk_takes_a_single_call(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The boundary, and it is where an extra empty block would appear.
+
+    Expected value by hand: 5 series at a chunk of 5 is exactly one batched call,
+    not two -- `range(0, 5, 5)` yields one start, and an implementation that adds a
+    trailing block would hand `svdvals` a zero-length stack.
+
+    Bug this catches: `range(0, batch + chunk, chunk)` or a `while start <=
+    batch` bound. numpy raises on an empty stack, so the failure is loud here --
+    but only if a fixture lands exactly on the boundary, which no other test in
+    this module does.
+    """
+    from metamer.core import signal as signal_module
+
+    calls: list[tuple[int, ...]] = []
+    real = np.linalg.svdvals
+
+    def recording(a, *args, **kwargs):
+        array = np.asarray(a)
+        if array.ndim == 3:
+            calls.append(tuple(array.shape))
+        return real(a, *args, **kwargs)
+
+    monkeypatch.setattr(np.linalg, "svdvals", recording)
+    monkeypatch.setattr(signal_module, "SVD_CHUNK_SERIES", 5)
+
+    t = np.arange(9.0)
+    spec = SignalSpec([Constant(), Trend(), Annual()])
+    spec.design_info(t, _tier_three_mask(5, t.size))
+
+    assert len(calls) == 1

@@ -66,6 +66,30 @@ from numpy.typing import NDArray
 
 from metamer.core.registry import signal_registry
 
+#: How many series the batched restricted SVD decomposes per call.
+#:
+#: **POLICY, AND IT BOUNDS THE LARGEST TEMPORARY IN A FIT.**
+#: `_restricted_singular_values`' third tier builds `x[None] * mask[..., None]`,
+#: which is `B * N * k_beta * 8` bytes -- **1.49 GB at the design doc's worked
+#: example**, N = 630 and the published tile side of 272, and measured at Phase
+#: 2b's OQ18 Task A-prime as **the fit phase's maximum at 17 of 17 points** and
+#: the single largest unmodelled term in the memory model. Chunking bounds it at
+#: `SVD_CHUNK_SERIES * N * k_beta * 8` and changes no returned bit, because
+#: LAPACK decomposes each `(N, k)` matrix independently.
+#:
+#: **THE ASYMMETRY, AND ONLY ONE SIDE OF IT COSTS ANYTHING MEASURABLE.** Too
+#: large and the temporary is unbounded again, which is the defect. Too small
+#: and per-call overhead should dominate -- **measured, and it does not**: at
+#: B = 9216 the whole ladder from 64 to 9216 series per call is flat at
+#: **48.9-66.7 ms** at N = 60, and at N = 240 chunking is **faster** than not,
+#: **121.3 ms at 512 against 161.2 ms whole**. So the constant is chosen for the
+#: bound rather than for the clock.
+#:
+#: **512 PUTS THE TEMPORARY AT ABOUT 1 MB AT N = 60, 3.9 MB AT N = 240 AND
+#: 10.3 MB AT THE WORKED EXAMPLE'S N = 630** -- three orders below what it
+#: replaces, and below the window of every RSS assertion in the suite.
+SVD_CHUNK_SERIES: int = 512
+
 X_RANK_RTOL: float = float(np.finfo(np.float64).eps) ** 0.5
 """Relative singular-value tolerance for the numerical rank of X. sqrt(eps).
 
@@ -636,7 +660,9 @@ class SignalSpec:
 
           1. The mask keeps every row for every series: one SVD of X itself.
           2. Every series shares one mask: one SVD of the zero-masked design.
-          3. Masks differ: one batched SVD.
+          3. Masks differ: a batched SVD **per `SVD_CHUNK_SERIES` block**, which
+             is what bounds the temporary -- see that constant for the measured
+             runtime trade and for the 1.49 GB it replaces at the worked example.
 
         The result is padded to width `n_beta` so callers can index `[:, -1]`
         for the smallest singular value even when `N < k` (`svdvals` returns
@@ -652,12 +678,25 @@ class SignalSpec:
             Descending singular values per series, shape (B, k).
         """
         batch, n_beta = mask.shape[0], x.shape[-1]
+        # READ AT CALL TIME, not bound as a default: a module-level default is
+        # captured at import and a test that sets the constant would be patching
+        # something nothing reads.
+        step = max(int(SVD_CHUNK_SERIES), 1)
         if bool(mask.all()):
             values = np.linalg.svdvals(x)[None, :]
         elif bool(np.array_equal(mask, np.broadcast_to(mask[0], mask.shape))):
             values = np.linalg.svdvals(x * mask[0][:, None])[None, :]
         else:
-            values = np.linalg.svdvals(x[None, :, :] * mask[:, :, None])
+            # CHUNKED, so the temporary is `SVD_CHUNK_SERIES * N * k * 8` rather
+            # than `B * N * k * 8`. Each block's matrices are decomposed
+            # independently by LAPACK, so this is the same arithmetic in the same
+            # order and the values are bit-for-bit what one call returns; the
+            # test asserts that rather than assuming it.
+            blocks = [
+                np.linalg.svdvals(x[None, :, :] * mask[start : start + step, :, None])
+                for start in range(0, batch, step)
+            ]
+            values = blocks[0] if len(blocks) == 1 else np.concatenate(blocks)
         if values.shape[1] < n_beta:
             values = np.pad(values, ((0, 0), (0, n_beta - values.shape[1])))
         return np.asarray(np.broadcast_to(values, (batch, n_beta)), dtype=np.float64)
