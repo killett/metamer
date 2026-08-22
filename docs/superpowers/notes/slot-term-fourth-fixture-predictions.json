@@ -1,0 +1,71 @@
+{
+  "task": "The 193-versus-240 reconciliation: a fourth fixture on the candidate lever",
+  "written": "2026-08-21",
+
+  "what_the_dispute_actually_is": {
+    "read_provenance": "`output_slot_bytes` charges 193 B per candidate per series (`24*p_max + 16*k_beta + 57` at p_max=3, k_beta=4). OQ18 Task A-triple-prime read `193*M + 32` off the objects in `fit.py:200-212` and `signal.py:509`, deduped by identity, matching its hand-derivation to the byte at M=2 and M=6. THIS IS AN INVENTORY OF NAMED ARRAYS AND IT IS NOT FALSIFIABLE BY A RESIDENCY MEASUREMENT -- the arrays are the shapes they are.",
+    "measured_provenance": "Task 8b fitted end-of-run resident bytes against B on a duration-controlled ladder and subtracted the charged slots. The excess is 584.6 B/series at M=2 and 1544.9 at M=6, both at n_time=60, giving a slope of (1544.9-584.6)/4 = 240.1 B per candidate ON TOP of the charged 193, and an intercept of 104.4 B/series.",
+    "the_framing_correction": "The cold-start handoff states this as `193 charged against 240 measured, 24% apart`. RECOMPUTED FROM `task-8b-measured.jsonl` on 2026-08-21, filtering to 8b's own arm (fine chunking, live=16), the published columns reproduce: data term 533.4/542.2/1954.3 against 533.5/542.2/1954.3, end-of-run slope 962.1 against 970.6, end-of-tile 1495.5 against 1504.1, peak 2424.3 against 2410.0, and excess 576.1/1542.7/474.4 against 584.6/1544.9/475.3. The 240 is therefore an EXCESS OVER the 193, not an alternative value FOR it: the end-of-run per-candidate total is about 433, which is 8b's own `understated by about 2.24x`. The gap is a factor of 2.24, not 24%, and this file's predictions are stated against the 2.24x reading.",
+    "why_it_is_thin": "Two points determine a two-parameter line with ZERO residual. Linearity in M cannot fail against two points, so it has never been tested. The third fixture (n_time=240, M=2) tests n_time-independence instead, and leaves 19% unexplained: 475.3 against 584.6."
+  },
+
+  "the_lever_and_why_it_separates": "M, the candidate count, at fixed n_time, fixed p_max, fixed k_beta, fixed chunking, fixed live count and a constant padded wall clock. It separates the provenances because both are per-candidate claims about the SAME quantity: the read says the named arrays cost 193 per candidate and the measurement says residency costs about 433. A third and fourth M turn a line with no residual into a shape that can be refuted. n_time is NOT the lever -- 8b already moved it and the read inventory contains no n_time term.",
+
+  "the_ceiling_and_why_M_stops_at_7": "Holding p_max at 3 caps the candidate set at SEVEN. The vocabulary is three families -- white (1 free parameter), matern12 (2), matern32 (2) -- so the candidates with p <= 3 are exactly `white`, `matern12`, `matern32`, `white + white`, `white + matern12`, `white + matern32` and `white + white + white`, verified by `parse_candidate` + `free_param_index` on 2026-08-21. Going past 7 raises p_max, which moves the charged 193 itself (`24*p_max + ...`), confounding the lever with the quantity under measurement.",
+
+  "ladder": {
+    "M_points": [1, 2, 4, 7],
+    "candidate_sets": {
+      "m1": ["white + matern12"],
+      "m2": ["white", "white + matern12"],
+      "m4": ["white", "matern12", "white + white", "white + matern12"],
+      "m7": ["white", "matern12", "matern32", "white + white", "white + matern12", "white + matern32", "white + white + white"]
+    },
+    "p_max_is_3_in_every_set": "each set contains at least one 3-parameter candidate and no 4-parameter candidate, so the charged 193 is identical across the ladder and the lever moves M alone",
+    "n_time": 60,
+    "sides": [16, 32, 48, 64, 96],
+    "batch_sizes": [256, 1024, 2304, 4096, 9216],
+    "chunking": "fine",
+    "live": 16,
+    "target_s": 45,
+    "repeats": 2,
+    "order": "interleaved: repeat, then M, then side. Never all repeats of one M together -- available RAM on this box has ranged 1.9 to 9.4 GB and three prior tasks were confounded by comparing arms taken at different times.",
+    "M_2_is_re_measured_rather_than_quoted": "8b's M=2 arm ran at target_s=30 on 2026-08-19; this ladder runs every M at 45 in one session. The 8b points are the cross-day control, not a point in this fit."
+  },
+
+  "predictions": [
+    {
+      "id": "G1",
+      "claim": "LINEAR-240, 8b's determination extrapolated: excess(M) = 104.4 + 240.1*M. M=1 -> 344, M=2 -> 585, M=4 -> 1065, M=7 -> 1785 B/series.",
+      "refuted_if": "M=7's excess is outside 1785 +/- 200"
+    },
+    {
+      "id": "G2",
+      "claim": "PROPORTIONAL, no intercept: excess(M) ~ 275*M. M=1 -> 275, M=4 -> 1100, M=7 -> 1925.",
+      "note": "G1 and G2 are only ~3 sigma apart at M=7 and ~1.5 sigma at M=1, so this ladder discriminates them weakly and will say so rather than pick one."
+    },
+    {
+      "id": "G3",
+      "claim": "THE READ IS COMPLETE: the excess is an M-independent constant near 585, and the 240 slope is an artefact of two points and a coincidence between the M=2 and M=6 arms.",
+      "refuted_if": "the excess at M=7 exceeds 1000 B/series"
+    },
+    {
+      "id": "G4",
+      "claim": "THE HORN I DOUBT: the excess is not per-candidate at all. It tracks the number of optimizer calls, the tile's model dimension, or something else that co-varies with M, and a per-candidate coefficient is being fitted to a quantity that merely correlates with candidates.",
+      "why_it_is_doubted": "the duration control holds wall clock constant across M, so run length is excluded -- but a candidate IS an optimizer call in this driver, and NOTHING IN THIS LADDER CAN SEPARATE `per candidate` FROM `per optimizer call`. That limitation is stated in advance rather than discovered afterwards, and it bounds what this fixture can conclude no matter which prediction survives."
+    },
+    {
+      "id": "G5",
+      "claim": "THE INVENTORY HOLDS AT M=7: the FitResult arrays read off the objects are exactly 193*7 + 32 = 1383 B/series.",
+      "why": "it is arithmetic over array shapes, so it should hold exactly, and if it does NOT the read provenance is incomplete and that is the reconciliation. A-triple-prime's payload kept only the twelve largest sites while counting 29 at M=2 and 61 at M=6, so a truncated inventory read as a complete one is a live failure mode here.",
+      "refuted_if": "the read total differs from 1383 by more than one byte"
+    }
+  ],
+
+  "what_the_outcome_means_for_the_model": {
+    "if_G1_or_G2_holds_and_G5_holds": "BOTH PROVENANCES ARE RIGHT ABOUT DIFFERENT THINGS. 193 is what the named arrays cost; there is a further ~240 B per candidate per series of end-of-run residency that is NOT in those arrays. Raising `output_slot_bytes` to ~433 would then charge an UNLOCATED allocation to a named term, and the record must say so rather than absorb it.",
+    "if_G3_holds": "the 240 does not survive a third point and 8b's determination was the two-point line it warned it was. The charge stays 193 and the reconciliation closes on the read.",
+    "if_G5_fails": "the read is incomplete, the missing sites are named, and the reconciliation closes on the inventory rather than on a residency coefficient.",
+    "what_stays_unmoved_either_way": "`output_slot_bytes`, `resident_bytes_per_series`, `PUBLISHED_TILE_SIDE`, `HEADROOM_FRACTION` and every exit-criterion verdict. This fixture closes a reconciliation; it does not authorise a cascade."
+  }
+}

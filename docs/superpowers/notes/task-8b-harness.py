@@ -90,6 +90,16 @@ SEED = 0
 #: A term measured at one fixture has an unknown DEPENDENCE, and correcting a
 #: magnitude without its variables is (a7) and F5 exactly.
 CANDIDATE_SETS = {
+    # **m1, m4 AND m7 WERE ADDED 2026-08-21 FOR THE 193-VERSUS-240
+    # RECONCILIATION, AND THEY CHANGE NOTHING m2 OR m6 DO.** Every set holds
+    # `p_max` at 3 -- each contains a 3-parameter candidate and none contains a
+    # 4-parameter one -- so the charged `24*p_max + 16*k_beta + 57` = 193 is
+    # identical across the ladder and the lever moves M alone. **SEVEN IS THE
+    # CEILING at p_max = 3**: the vocabulary is white (1 free parameter),
+    # matern12 (2) and matern32 (2), so the candidates with p <= 3 are exactly
+    # the seven in `m7`. An eighth raises `p_max`, which moves the charged
+    # figure itself and confounds the lever with the quantity under measurement.
+    "m1": ("white + matern12",),
     "m2": ("white", "white + matern12"),
     "m6": (
         "white",
@@ -98,6 +108,21 @@ CANDIDATE_SETS = {
         "white + white",
         "white + matern12",
         "white + matern32",
+    ),
+    "m4": (
+        "white",
+        "matern12",
+        "white + white",
+        "white + matern12",
+    ),
+    "m7": (
+        "white",
+        "matern12",
+        "matern32",
+        "white + white",
+        "white + matern12",
+        "white + matern32",
+        "white + white + white",
     ),
 }
 
