@@ -2459,8 +2459,9 @@ shrink), and a multiplier of any kind (8b's three ratios, still more than 2× ap
 
 #### WHAT THE SUITE CAN AND CANNOT SEE, AND IT IS NOT SYMMETRIC
 
-**CI has never run a single one of these assertions** — all nine are `machine`-marked and CI runs
-`-m "not machine"`. **`the floor with the input open` is now witnessed from inside the probe
+**CI runs exactly one of these assertions** — `the floor with the input open`, which carries no
+mark; the other eight are `machine`-marked and CI runs `-m "not machine"`, so it has never
+executed them. **`the floor with the input open` is now witnessed from inside the probe
 child** (2026-08-21), which was the assertion whose `> 1 MB` window sat at the same order as the
 drift it was exposed to. **The floor ladder's rungs and peak residency across the iteration cap
 remain carried by margin** — ±25% with two >30 MB steps, and 16 MB, against a ~1 MB drift — and
@@ -6137,10 +6138,39 @@ question; compute/bandwidth roofline pair for cross-machine prediction) are in d
 
 ## Gotchas discovered
 
-- **CI RUNS `-m "not machine"`, SO A GREEN CI IS SILENT ABOUT EVERY RSS ASSERTION IN THIS
-  PROJECT.** Standing, and not specific to any one incident. The nine RSS assertions Task 8i
-  surveyed — the five that consult `rss_validity` and the four carried by margin — are **all
-  `machine`-marked**, so **none of them has ever run in CI**. What CI checks is that the code
+- **THE ONE RSS ASSERTION CI RUNS IS MARGINAL ON CI HARDWARE, AND IT FAILED THERE ON 2026-08-22.**
+  `test_the_floor_with_the_input_open_exceeds_the_floor_without_it` asserts that opening the input
+  adds **more than 1 MB** to the floor. Locally that gap is **11.3 MB**; on the CI runner it came
+  in at **913 408 B** and the assertion failed. **A re-run of the same commit passed**, so the
+  condition is non-deterministic on that hardware rather than systematic — and the numbers say
+  why: the window is 1 MB and the between-machine spread is an order of magnitude wider than the
+  margin.
+
+  **IT WAS NOT CAUSED BY THE WITNESS LANDED THE SAME DAY, AND THAT WAS CHECKED RATHER THAN
+  ASSUMED.** The probe computes its shortfall **after** both readings — `rungs["input_open"]` and
+  `peak` are taken above it — so it cannot move either number.
+
+  **THE REPAIR IS THE FIXTURE OR THE MARK, NEVER THE BOUND.** The 1 MB is the **sign** of a real
+  effect — an opened store's residency belongs to the floor and not to the tile term — and
+  widening it to fit a runner deletes the claim. The two honest options, neither taken here:
+  **mark it `machine`**, which stops it running where the fixture cannot express its condition
+  but removes CI's *only* RSS coverage; or **enlarge the CI input** so the store's residency
+  clears the window. **That is a scope decision and it is recorded, not made.**
+
+  **AND A PASSING RE-RUN IS NOT A CLEAN BILL.** It establishes that the failure is not
+  deterministic; it says nothing about how often it recurs, and the next occurrence is the
+  datum that would size that.
+
+- **CI RUNS `-m "not machine"`, SO A GREEN CI IS SILENT ABOUT EIGHT OF THE NINE RSS
+  ASSERTIONS — AND THE NINTH IS THE ONE THAT BROKE IT.** Standing, and not specific to any one
+  incident. ~~All nine are `machine`-marked, so none of them has ever run in CI.~~ **CORRECTED
+  2026-08-22, and CI itself is what corrected it**: `rg` over the marks says
+  **`test_the_floor_with_the_input_open_exceeds_the_floor_without_it` carries no mark at all**
+  and therefore runs in CI on every push, while the other eight are `machine`-marked and never
+  do. The first version of this entry was written from the survey's framing rather than from the
+  decorators, which is (d) — the vocabulary check — skipped on a claim about the suite's own
+  configuration. **It was falsified within two commits by that very test failing in CI**, at a
+  margin no local run could have shown. What CI checks is that the code
   imports, the logic tests pass and the packaging holds; **what it cannot see is every claim this
   sub-phase has been arguing about.** The only instrument for those is `pixi run test` on a box
   whose conditions are recorded, which is why every sweep in this file carries its available RAM
