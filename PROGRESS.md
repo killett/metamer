@@ -6202,12 +6202,40 @@ question; compute/bandwidth roofline pair for cross-machine prediction) are in d
   ASSUMED.** The probe computes its shortfall **after** both readings — `rungs["input_open"]` and
   `peak` are taken above it — so it cannot move either number.
 
+  **MEASURED ON THE RUNNER, 2026-08-22, AND IT DECIDES BETWEEN THE TWO REPAIRS.** The diagnostic
+  channel put that hardware's whole ladder in the CI summary on its first run, MB:
+
+  | rung | CI runner | this box |
+  |---|---|---|
+  | `interpreter_numpy` | 77.6 | 74.6 |
+  | `xarray_zarr` | **128.2** | **163.7** |
+  | `metamer_batch_run` | 136.4 | 172.5 |
+  | `numba_threading_layer` | 194.1 | 216.3 |
+  | `kalman_kernel_warm` | 198.9 | 218.7 |
+  | `input_open` | 199.9 | 229.9 |
+  | **input contribution** | **1.00 MB** | **11.20 MB** |
+
+  **Every rung is LOWER there and the input's contribution is genuinely smaller — it is not
+  absorbed into a higher floor.** So the honest repair is **enlarging the CI fixture**, and its
+  size is calculable from this table rather than guessed. The failing run read **995 328 B against
+  a 1 000 000 B bound**: the fixture sits within 0.5% of its own threshold on that hardware, which
+  is why it fails intermittently rather than always.
+
   **THE REPAIR IS THE FIXTURE OR THE MARK, NEVER THE BOUND.** The 1 MB is the **sign** of a real
   effect — an opened store's residency belongs to the floor and not to the tile term — and
   widening it to fit a runner deletes the claim. The two honest options, neither taken here:
   **mark it `machine`**, which stops it running where the fixture cannot express its condition
   but removes CI's *only* RSS coverage; or **enlarge the CI input** so the store's residency
   clears the window. **That is a scope decision and it is recorded, not made.**
+
+  **CI IS RED ON `main` AS THIS IS WRITTEN, AND IT WAITS ON PURPOSE.** The standing rule is that
+  red CI is the next task; the exception it allows is writing down why it waits and what unblocks
+  it. **It waits because the repair is a scope decision, not a fix** — enlarging a fixture changes
+  what the one CI-visible RSS assertion measures, and doing that to make a suite green is the move
+  this project has refused five times. **What unblocks it: a decision between enlarging the CI
+  input and marking the test `machine`**, which the table above is the data for. **The failure is
+  ambient-conditional and not a code defect** — the same commit has passed on re-run, and the
+  witness landed the same day computes its shortfall after both readings and cannot move either.
 
   **AND A PASSING RE-RUN IS NOT A CLEAN BILL.** It establishes that the failure is not
   deterministic; it says nothing about how often it recurs, and the next occurrence is the
