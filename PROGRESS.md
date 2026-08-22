@@ -6,7 +6,8 @@
 2. ## CI IS GREEN AS OF 2026-08-22, AND THE DELIBERATE RED IS CLOSED BY THE REPAIR ITS OWN CRITERION CHOSE. The bound was **not** widened, the test was **not** marked: the CI fixture was enlarged, and the one CI-visible RSS assertion now reads **58.29 / 57.30 / 58.96 MB** of input contribution on Python 3.14 / 3.13 / 3.12 against its **1 MB** bound, where it read **995 328 B** and failed. **THE SIZE WAS MEASURED, NOT PICKED, AND THE RECORD THAT SAID IT WAS CALCULABLE FROM THE RUNNER LADDER WAS WRONG** — both figures in that ladder, 11.20 MB here and 1.00 MB there, are for the **same 24×4×4 fixture whose data is 1536 bytes**, so they are two intercepts an order of magnitude apart on identical input and the table contains **no slope at all**. The slope was measured first, on the time axis: **197–235 B per time step**, against a committed prediction of 8–24 that is **REFUTED by a factor of ten**. `CI_FLOOR_N_TIME = 262_144`, in `tests/test_memory.py`, once. See [THE CI FIXTURE DECISION](#the-ci-fixture-decision--taken-measured-and-verified-2026-08-22).
 
 3. **DONE:** Phase 1 (0–18), Phase 2 preliminaries P0–P4, **Phase 2a (0–13)**, and **PHASE 2b IS COMPLETE — Tasks 0–10, with 9 narrowed plus 8a, 8i and 8b, closing 10 met / 4 met with reduced scope / 2 FAILED**, open questions 1, 4, 9, 11, 12, 15.
-4. **THE SCOPE DECISION IS TAKEN, 2026-08-22: THE MODELLING SUB-PHASE DOES NOT OPEN, AND IT IS ILL-POSED RATHER THAN PREMATURE** — its only two completion routes are fitting a coefficient to the remainder and publishing a number correct at one fixture, and both are forbidden. **The criterion for opening it is written down** so a later session cannot open it on enthusiasm: [THE SCOPE DECISION](#the-scope-decision-taken-2026-08-22-the-modelling-sub-phase-does-not-open-and-the-reason-is-well-posedness). **2c proceeds on the residency model**, with the limitation stated in what 2c inherits. **NEXT ACTION: the re-take waits on ONE cheap step** — the reconciliation is [advanced but NOT closed](#what-the-fourth-fixture-established-2026-08-22--read-before-quoting-8bs-peak-column-or-the-240): the per-candidate term is **388 B, 2.01× the charged 193, linear across four candidate counts**, but G5's in-process inventory at M = 7 was not run and it is what says whether the extra ~195 B/candidate sits in named arrays. **And the fourth fixture turned up something bigger than what it was sent for: 8b's PEAK column describes code superseded on 2026-08-21**, so criterion 6's 2410.0 is stale — re-measuring it is ~35 minutes and **no verdict has been moved.** The CI fixture decision is closed and verified. The OQ18 characterisation line is CLOSED: four tasks (A, A-prime, A-double-prime, A-triple-prime) took the production peak from a term of unknown shape to a composition whose parts are named, measured, and — where they refuse a shape — refused rather than fitted. **Read [THE PEAK, END TO END](#the-peak-end-to-end--the-state-at-the-close-of-the-oq18-characterisation-line-2026-08-21) FIRST; it is the assembled answer and the only place the four parts appear together.** In one line: **one allocation was bounded and that is a real reduction, two-thirds of what remained is named and deliberately NOT repaired, the last third refuses a shape across three fixtures, and criterion 7 is FAILED at +4.63 MB — understood now rather than merely recorded.** ~~The decision is whether a modelling sub-phase opens at all~~ — **taken 2026-08-22, and it does not.** What it would have owed is unchanged and is what the criterion for reopening is written against: a model of the PEAK rather than of residency, the 193-versus-240 reconciliation, and a remainder that no coefficient may be fitted to.
+4. **THE SCOPE DECISION IS TAKEN, 2026-08-22: THE MODELLING SUB-PHASE DOES NOT OPEN, AND IT IS ILL-POSED RATHER THAN PREMATURE** — its only two completion routes are fitting a coefficient to the remainder and publishing a number correct at one fixture, and both are forbidden. **The criterion for opening it is written down** so a later session cannot open it on enthusiasm: [THE SCOPE DECISION](#the-scope-decision-taken-2026-08-22-the-modelling-sub-phase-does-not-open-and-the-reason-is-well-posedness). **2c proceeds on the residency model**, with the limitation stated in what 2c inherits. **NEXT ACTION: RE-TAKE THE SCOPE DECISION — both blocking facts are now closed.** The
+[193-versus-240 reconciliation is CLOSED](#what-the-fourth-fixture-established-2026-08-22--read-before-quoting-8bs-peak-column-or-the-240): the per-candidate term is **388 B, 2.01× the charged 193, linear across four counts**, the named arrays read **exactly `193·M`** at M = 2 / 6 / 7 with zero deviation, so **`output_slot_bytes` is not understated and the ~195 B/candidate of extra residency is NOT in the result arrays** — it has a shape and no location. The CI fixture decision is closed and verified. **AND ONE THING IS OWED THAT THIS SESSION DID NOT DECIDE: `src/metamer/batch/tiling.py` still publishes `measured_bytes_per_series=2410.0`**, which [the re-measurement shows describes superseded code](#the-peak-re-measured-after-the-bounding-2026-08-22--read-before-quoting-any-peak-figure-or-criterion-6s) — criterion 6 stays FAILED on a fresh **1468.8 ± 18.4**, and correcting the published figure moves `headroom_fraction_required` from **0.61577 to 0.36955**, which is a cascade and a decision. The OQ18 characterisation line is CLOSED: four tasks (A, A-prime, A-double-prime, A-triple-prime) took the production peak from a term of unknown shape to a composition whose parts are named, measured, and — where they refuse a shape — refused rather than fitted. **Read [THE PEAK, END TO END](#the-peak-end-to-end--the-state-at-the-close-of-the-oq18-characterisation-line-2026-08-21) FIRST; it is the assembled answer and the only place the four parts appear together.** In one line: **one allocation was bounded and that is a real reduction, two-thirds of what remained is named and deliberately NOT repaired, the last third refuses a shape across three fixtures, and criterion 7 is FAILED at +4.63 MB — understood now rather than merely recorded.** ~~The decision is whether a modelling sub-phase opens at all~~ — **taken 2026-08-22, and it does not.** What it would have owed is unchanged and is what the criterion for reopening is written against: a model of the PEAK rather than of residency, the 193-versus-240 reconciliation, and a remainder that no coefficient may be fitted to.
 5. **Tests: 1090 passed, 0 failed, 0 INDETERMINATE — 2026-08-21, 849.96 s on a box at 7.2 GB available.** ~~1089~~ — that count was written down one commit after the sweep that produced it, while the commit in between added a test, so it was stale by one from the moment it was recorded. **It was corrected by running the sweep, never by adding one to a collection count**: a collected count is not a passing count, and 1089 + 1 is an inference. The RSS summary is now **per assertion**: `criterion 7's peak`, `the floor with the input open` and `the recompute loop` report `gate=witness`; `the floor ladder's rungs` and `peak residency across the iteration cap` remain `gate=margin` **and are named there rather than counted**. **A HIGH stall reading skips nothing** — see open question 19. **CI IS NOT A SUBSTITUTE AND IS SHARPER THAN THAT:** it runs `-m "not machine"` and therefore executes **exactly one** of the nine RSS assertions, which is also the one whose fixture cannot express its condition on that hardware — 11.3 MB of input contribution here against **913 408 B** on the runner, failing once and passing on a re-run of the same commit.
 6. **`pixi run test` is the full sweep and every end-of-task verification must run it; `test-fast` and `test-ci` are not evidence.** It has caught **seven** things a fast run could not, two of them in Task 8. **Every run prints `RSS measurement validity`, including at zero** — a nonzero count is INDETERMINATE, neither pass nor fail.
 7. **Verify a fresh checkout with `pixi run test && pixi run typecheck && pixi run lint`**, plus `pixi run pre-commit run --all-files` before every commit.
@@ -2340,8 +2341,11 @@ applied.
 > | **measured residue** | **610.5 ± 25.4** | **1651.6 ± 34.6** | **518.8 ± 40.0** | fit-phase max above the start of `fit`, fitted against B |
 >
 > **The first part is exact and its arithmetic is a schema rather than a model**: twelve
-> preallocated arrays at `193·M` B/series — hand-derived 368 at M = 2 and 1158 at M = 6, and the
-> instrument read **368 and 1158**. The second is **≈ 26 B per (series × candidate)** at both
+> preallocated arrays at `193·M` B/series — hand-derived ~~368~~ **386** at M = 2 and 1158 at
+> M = 6, and the instrument read **386 and 1158**. (**Transposition corrected 2026-08-22 by G5**,
+> which re-read the inventory and got 386.000 / 1158.000 / 1351.000 at M = 2 / 6 / 7. `193·2` is
+> 386, and this section's own 418 and 1190 — the arrays plus `signal.py:509`'s 32 — were only ever
+> consistent with 386.) The second is **≈ 26 B per (series × candidate)** at both
 > candidate counts, which is a real accumulation and was predicted not to exist. **The third
 > holds no shape: 139.5 / 308.6 / 52.8 across the three fixtures — ×2.2 under a ×3 candidate
 > lever and ×0.38 under a ×4 `n_time` lever.**
@@ -2681,15 +2685,71 @@ to within 1% at every M, where in 8b's arm the peak stood 62% above the tile rea
 > verdicts. **What is recorded is that the number underneath the verdict is stale, and that
 > re-measuring it is now cheap** — this ladder is ~35 minutes.
 
-#### WHAT THE RECONCILIATION NOW IS, AND WHY IT IS NOT CLOSED
+#### G5, RUN 2026-08-22: THE INVENTORY IS EXACTLY `193·M` AT SEVEN CANDIDATES, SO THE EXCESS IS NOT IN THE NAMED ARRAYS
 
-**Advanced, not closed.** What is settled: the per-candidate residency term is real, linear in M,
-and **2.01× the charge** on both stable readings; 8b's ≈ 240 is neither the 24% of the summary nor
-quite 8b's own 2.24×, and the spread between those three figures is **which reading each was taken
-on**. What is open: **G5's inventory at M = 7** (is the extra ~195 B/candidate in named arrays or
-not), and the **693 B/series intercept**, of which 540 is the charged data term and **~153 is
-unexplained at a single `n_time`.** Until G5 runs, the honest statement is that **two provenances
-have been separated by reading rather than reconciled by measurement.**
+**THE RECONCILIATION CLOSES, AND IT CLOSES AS "BOTH PROVENANCES ARE RIGHT ABOUT DIFFERENT
+THINGS".** A-triple-prime's instrument, unchanged — every array the returned `FitResult` carries,
+summed by `nbytes`, **deduped by identity** — at `p_max = 3`, `k_β = 4`, B = 1024, read back from
+the payload:
+
+| M | `result_arrays_total` | B/series | `193·M` | deviation |
+|---|---|---|---|---|
+| 2 | 395 264 | **386.000** | 386 | **0** |
+| 6 | 1 185 792 | **1158.000** | 1158 | **0** |
+| 7 | 1 383 424 | **1351.000** | 1351 | **0** |
+
+**Zero deviation at three candidate counts, including the largest `p_max = 3` admits.** Data in
+[`g5-inventory-measured.jsonl`](docs/superpowers/notes/g5-inventory-measured.jsonl), predictions in
+[`g5-inventory-predictions.json`](docs/superpowers/notes/g5-inventory-predictions.json). The
+payload also confirms empirically what the candidate sets were built to hold: `p_max = 3` and
+`k_β = 4` at all three, so 193 is the same charge across the lever.
+
+> **SO `output_slot_bytes` IS NOT UNDERSTATED. IT IS EXACTLY RIGHT ABOUT WHAT IT CHARGES FOR, AND
+> THE ~195 B PER CANDIDATE OF EXTRA RESIDENCY IS SOMEWHERE ELSE.** Raising the charge to 388 would
+> attribute an allocation nobody has located to a term whose contents are named and exact — the
+> defect this whole line of work exists to avoid, and it would have been the "obvious" repair.
+
+**AND THE EXTRA TERM HAS A SHAPE WITHOUT A LOCATION, WHICH IS NOT THE SAME AS THE REMAINDER.** It
+is **linear in M at ~195 B/candidate**, reproducible across four counts on two readings — unlike
+the remainder, which refuses a shape across fixtures. **A term with a shape and no location can
+still be modelled, but only under its own name**: whoever opens the sub-phase inherits a
+determinate magnitude and an honest label — *per-candidate residency that is not in the result
+arrays* — not a bigger slot charge.
+
+**THE PREDICTIONS, AND TWO OF THEM FAILED ON MY BOOKKEEPING RATHER THAN ON THE CODE.**
+
+- **H1 is REFUTED AS WRITTEN and its substance HOLDS.** It predicted **1383** = `193·7 + 32`,
+  including `signal.py:509`'s `(B, k_β)` row. That row is **not part of `FitResult`**, so the
+  instrument never covered it: the total is `193·M` exactly and 1383 was the wrong target for this
+  reading. **The claim under it — the inventory is exact arithmetic over array shapes — holds to
+  the byte at three counts.** Recorded this way round because a prediction that misses by exactly
+  the site it wrongly included is a bookkeeping error, and calling it a confirmation would hide it.
+- **H2 HOLDS**, with the same correction: 386 + 32 = **418** and 1158 + 32 = **1190**, reproducing
+  A-triple-prime exactly.
+- **H3 HOLDS: the record's *"hand-derived 368 at M = 2"* was a transposition of 386.** The
+  instrument reads 386, and the same paragraph's 418 and 1190 were only ever consistent with 386.
+  **Corrected where it is written**, not here.
+- **H4, THE HORN I DOUBTED, IS REFUTED.** Nothing in the inventory scales differently at seven
+  candidates. The truncation worry was real but aimed at the wrong payload — see H5.
+- **H5 IS REFUTED, AND THE ERROR WAS MINE IN READING THE RECORD.** It predicted ~69 sites at
+  M = 7 from *"29 at M = 2 and 61 at M = 6"*. The instrument records **13 sites at every M**,
+  because those counts are **allocation sites seen during the fit**, a different payload from
+  `result_arrays`'s named `FitResult` fields. **Two counts of two different things, compared
+  because one record mentioned both** — the same defect as the 24%, one level down.
+
+#### WHAT THE RECONCILIATION NOW IS — CLOSED, 2026-08-22
+
+**CLOSED, and the answer is that neither provenance was wrong.** The per-candidate residency term
+is real, linear in M, and **2.01× the charge** on both stable readings; the named arrays are
+**exactly `193·M`** at three candidate counts; so the ~195 B/candidate difference is **residency
+that is not in the result arrays**. 8b's ≈ 240, the summary's 24% and this ladder's 388 differ by
+**which reading each was taken on**, and by **whether the charge is inside the figure or beside
+it** — not by disagreeing about anything.
+
+**WHAT REMAINS IS SMALLER AND IS NAMED:** the **693 B/series intercept**, of which 540 is the
+charged `n_time·9` data term, leaving **~153 unexplained at a single `n_time`**, so its shape is
+untested; and **G4 stands unresolved by construction**, since a candidate **is** an optimizer call
+in this driver and no reading here separates them.
 
 **AND NOTHING MOVES ON THIS.** `output_slot_bytes` is not raised to 388. Charging an unlocated
 allocation to a named term is the defect this line of work exists to avoid, and the cascade is
