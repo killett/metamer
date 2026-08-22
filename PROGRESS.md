@@ -4,7 +4,7 @@
 
 1. **Branch `main`, everything on it, every commit pushed by a hook** — https://github.com/killett/metamer.
 2. **DONE:** Phase 1 (0–18), Phase 2 preliminaries P0–P4, **Phase 2a (0–13)**, and **PHASE 2b IS COMPLETE — Tasks 0–10, with 9 narrowed plus 8a, 8i and 8b, closing 10 met / 4 met with reduced scope / 2 FAILED**, open questions 1, 4, 9, 11, 12, 15.
-3. **NEXT ACTION: 2b IS CLOSED, OQ18's FIRST HYPOTHESIS HAS BEEN TESTED, AND WHAT IS OPEN IS AGAIN A DECISION RATHER THAN A TASK. NOTHING SHOULD BE IMPLEMENTED UNTIL IT IS MADE.** Read [What OQ18 Task A established](#what-oq18-task-a-established-done-2026-08-19--read-before-proposing-any-pipeline-or-formula-repair) FIRST, **including its 2026-08-20 correction of its own first reading** — **the peak is `max(fit-phase transient, post-write plateau)` and which wins crosses over in B; freeing the block takes the peak down by nearly the whole block where the write's plateau is the peak (1.87 MB against 1.97 MB at M = 6) and moves it 0.30 MB against a 17.69 MB block where `fit`'s transient is the peak, which is every production-scale point; and criterion 7 fails in both arms at every fixture.** So the pipeline arm of OQ18's closer (a) is **narrowed, not spent**, and the elimination argument was **re-aimed at the fit transient** — which **Task A-prime then named on 2026-08-21: `signal.py:660`, the tier-3 batched design tensor, `B · N · k_beta · 8` bytes, one allocation, the fit maximum at 17 of 17 points, and larger than the entire per-series model it is missing from (1920 against 926 at N = 60; 1.49 GB at §9.4's worked example).** Read [What OQ18 Task A-prime established](#what-oq18-task-a-prime-established-done-2026-08-21--read-before-touching-design_info-tile_side_for-or-criterion-7) SECOND. **The crossed 2 × 2 is now well-posed and has a subject; an elimination is available and is NOT authorized.** **Then** read [What Task 8b established](#what-task-8b-established-done-2026-08-19--read-before-quoting-the-per-series-cost-criterion-6-or-criterion-7). In one line: **the 1.86× was one confound acting on both ladders, the clean per-series peak is 2410.0 ± 46.0 against an analytic 926, and the correction's SHAPE is undetermined because the ratio is 1.888 / 2.603 / 3.850 at three fixtures** — so `PUBLISHED_TILE_SIDE` stays **272, with a rewritten caveat and a 160–272 spread**, criterion 6 is **not met and never named its reading**, and criterion 7 is **recorded as FAILED with its regime named: above roughly B = 1500, at all three fixtures.** **`memory.resident_bytes_per_series` describes residency and not peak, while Q1 settled that `--memory-budget` bounds process PEAK RSS** — so the sizing quantity and the bounded quantity are different quantities, which is an inconsistency between two settled decisions rather than an open modelling choice, and its first hypothesis is a **pipeline** change (free the block before the store write) rather than a formula one. **Task 10 has landed and closed the sub-phase**; its closing table, the unclosed items with their closers and what 2c inherits are in the plan's *THE CLOSING TABLE*, once, and the verdicts are also data in `tests/exit_criteria_2b.py`.
+3. **NEXT ACTION: 2b IS CLOSED, OQ18's FIRST HYPOTHESIS HAS BEEN TESTED, AND WHAT IS OPEN IS AGAIN A DECISION RATHER THAN A TASK. NOTHING SHOULD BE IMPLEMENTED UNTIL IT IS MADE.** Read [What OQ18 Task A established](#what-oq18-task-a-established-done-2026-08-19--read-before-proposing-any-pipeline-or-formula-repair) FIRST, **including its 2026-08-20 correction of its own first reading** — **the peak is `max(fit-phase transient, post-write plateau)` and which wins crosses over in B; freeing the block takes the peak down by nearly the whole block where the write's plateau is the peak (1.87 MB against 1.97 MB at M = 6) and moves it 0.30 MB against a 17.69 MB block where `fit`'s transient is the peak, which is every production-scale point; and criterion 7 fails in both arms at every fixture.** So the pipeline arm of OQ18's closer (a) is **narrowed, not spent**, and the elimination argument was **re-aimed at the fit transient** — which **Task A-prime then named on 2026-08-21: `signal.py:660`, the tier-3 batched design tensor, `B · N · k_beta · 8` bytes, one allocation, the fit maximum at 17 of 17 points, and larger than the entire per-series model it is missing from (1920 against 926 at N = 60; 1.49 GB at §9.4's worked example).** Read [What OQ18 Task A-prime established](#what-oq18-task-a-prime-established-done-2026-08-21--read-before-touching-design_info-tile_side_for-or-criterion-7) SECOND. **The crossed 2 × 2 is well-posed; the elimination LANDED as the instrument of Task A-double-prime on 2026-08-21 and its claim is narrow — the peak does not collapse onto residency, a 618 B/series residue becomes dominant, and criterion 7 stays FAILED at +4.63 MB.** **Then** read [What Task 8b established](#what-task-8b-established-done-2026-08-19--read-before-quoting-the-per-series-cost-criterion-6-or-criterion-7). In one line: **the 1.86× was one confound acting on both ladders, the clean per-series peak is 2410.0 ± 46.0 against an analytic 926, and the correction's SHAPE is undetermined because the ratio is 1.888 / 2.603 / 3.850 at three fixtures** — so `PUBLISHED_TILE_SIDE` stays **272, with a rewritten caveat and a 160–272 spread**, criterion 6 is **not met and never named its reading**, and criterion 7 is **recorded as FAILED with its regime named: above roughly B = 1500, at all three fixtures.** **`memory.resident_bytes_per_series` describes residency and not peak, while Q1 settled that `--memory-budget` bounds process PEAK RSS** — so the sizing quantity and the bounded quantity are different quantities, which is an inconsistency between two settled decisions rather than an open modelling choice, and its first hypothesis is a **pipeline** change (free the block before the store write) rather than a formula one. **Task 10 has landed and closed the sub-phase**; its closing table, the unclosed items with their closers and what 2c inherits are in the plan's *THE CLOSING TABLE*, once, and the verdicts are also data in `tests/exit_criteria_2b.py`.
 4. **Tests: 1085 passed, 0 failed, 0 INDETERMINATE — 2026-08-21 after OQ18 Task A-prime and the open-question-19 gate rework, 941.1 s on a quiet box at 4.5–7.6 GB available.** The eleven new tests are the stall gate's window arithmetic and its repaired controls. **The sweep's worst PASSING window was 0.2 ms/s across five judged measurements**, which is the reading the limit is now derived from — see open question 19. The two sweeps before it each carried one INDETERMINATE, at **53 ms/s over 14.1 s** and **58 ms/s over 2.5 s**, both **whole-block averages under the old reading**; the same events under a windowed maximum read higher, and the gate is expected to fire more often on a loaded box than it used to. Neither pass nor fail: the gate refused to judge, said so in the summary, and cost one reading rather than asserting a corrupted one. **It is a THRASHING reading and not the known-bad the constant still lacks**, and one of criterion 4's two witnesses therefore did not report on this run, which does not move its verdict. Before Task 10, and before the box's available RAM fell through the day: 1067 passed, 0 failed, 0 indeterminate, 1273.9 s at 4214 MB, 20 s idle at 0.0096 ms/s. The count did NOT move at Task 8b and that is correct**: its deliverable is a measurement, which by Tasks 4, 7 and 8's precedent does not enter the suite, and the two tests it touched already existed to fail when the published record changed. And separately 1044 passed under `-m "not machine"` in a pip-installed venv (PyPI wheels, numpy 2.5.2), which is what CI runs and is NOT the same evidence** — see the 2026-08-19 entry under [Gotchas](#gotchas-discovered) for the seven failures and three errors that only that second environment could show. **GREEN, and the conditions are part of the claim**: the same suite was 1049/3-failed at 1906 MB available on 2026-08-17, on the same code. The three failures were **ambient-conditional, not code** — see [What Task 8i established](#what-task-8i-established-done-2026-08-17--read-before-writing-any-rss-assertion-or-trusting-the-validity-gate), which is also where the survey of every RSS assertion lives. **Every sweep prints `RSS measurement validity` and it now has TWO conditions**, the second being the one that can see quiet reclaim.
 5. **`pixi run test` is the full sweep and every end-of-task verification must run it; `test-fast` and `test-ci` are not evidence.** It has caught **seven** things a fast run could not, two of them in Task 8. **Every run prints `RSS measurement validity`, including at zero** — a nonzero count is INDETERMINATE, neither pass nor fail.
 6. **Verify a fresh checkout with `pixi run test && pixi run typecheck && pixi run lint`**, plus `pixi run pre-commit run --all-files` before every commit.
@@ -2234,6 +2234,95 @@ docstring.
 Task A's four — the budget is written at `%.9f` GB and one byte of rounding lands the run on a
 smaller multiple of the base at that fixture. **Excluded, and the fix belongs to whichever task
 next writes a harness**: pass the side through rather than round-tripping it through a budget.
+
+---
+
+### What OQ18 Task A-double-prime established (done 2026-08-21 — read before proposing the next repair)
+
+> ## THE PEAK DOES NOT COLLAPSE ONTO RESIDENCY. A SECOND ALLOCATION BECOMES DOMINANT, AND IT IS THE ONE THE TIER-2 ARM ALREADY SHOWED — 618.4 ± 24.2 B/series AGAINST TIER 2's 618.3 ± 30.5.
+>
+> Two independent routes to the same residue: **removing the tensor by chunking it** and
+> **removing it by making every mask identical.** They agree to **0.1 B/series**. The tensor was
+> real, it was the fit phase's maximum, and it was **not the whole of the fit phase's
+> B-dependence.**
+>
+> **THE REPAIR IS A REPAIR, AND ITS CLAIM IS NARROWER THAN THE CASCADE WOULD HAVE BEEN.** Bounded,
+> the whole-run peak falls from **2412.1 ± 111.2 to 1462.5 ± 123.5 B/series** — a ratio to the
+> analytic 926 of **2.605 → 1.579** — and criterion 7's overrun at side 96 falls from **+12.03 MB
+> to +4.63 MB. It does not close.** Criterion 7 stays FAILED, by measurement rather than by
+> inference.
+
+Eighteen points, one fixture (N = 60, M = 2), sides 48/64/96, three repeats, **both arms
+interleaved on one box within one hour** — harness in
+[`oq18-aprime2-harness.py`](docs/superpowers/notes/oq18-aprime2-harness.py), predictions in
+[`oq18-aprime2-predictions.json`](docs/superpowers/notes/oq18-aprime2-predictions.json)
+committed first, points in
+[`oq18-aprime2-measured.jsonl`](docs/superpowers/notes/oq18-aprime2-measured.jsonl).
+
+> **THE UNBOUNDED ARM WAS RE-MEASURED RATHER THAN QUOTED, AND (a9) IS WHY.** Task A-prime's arm
+> was taken three days earlier at **4.45–7.62 GB available**; this box sits at **2.08–2.16 GB**
+> and cannot be restored — 1.7 GB of Shmem and a full swap device, none of it this project's.
+> Comparing across that is two readings differing along an axis they also differ along, which is
+> the confound Tasks 8a, 8i and 8b were spent on. **One flag apart, one hour apart, costs ten
+> minutes.**
+>
+> **AND THE RE-MEASUREMENT IS ALSO A REPRODUCTION.** The unbounded arm's whole-run peak slope is
+> **2412.1 ± 111.2 B/series** against Task 8b's **2410.0 ± 46.0** at the same fixture — **0.1%
+> apart, three days and 5 GB of available RAM apart.** That is the strongest reproduction this
+> project has recorded, and it is what makes the bounded arm's difference attributable.
+
+#### THE FOUR NUMBERS THE DECISION RESTS ON
+
+| reading | unbounded | bounded | the tensor at that point |
+|---|---|---|---|
+| largest `svdvals` input, side 96 | **17 694 720 B** | **983 040 B**, and the same at every side | `B · N · k · 8` against `chunk · N · k · 8` |
+| fit-phase max above the start of `fit` | **1991.9 ± 4.5 B/series** | **618.4 ± 24.2 B/series** | — |
+| whole-run peak | **2412.1 ± 111.2** | **1462.5 ± 123.5** | — |
+| criterion 7 overrun at side 96 | **+12.03 MB** | **+4.63 MB** | — |
+
+**And the peak falls by less than the tensor**: paired, **+0.42 / +2.55 / +7.10 MB** at sides
+48/64/96 against tensors of 4.42 / 7.86 / 17.69 MB. **A maximum falls only to whatever is next**,
+and what is next is the 618 B/series residue.
+
+#### THE COST IS NEGATIVE, WHICH IS NOT WHAT A MEMORY REPAIR USUALLY LOOKS LIKE
+
+`design_info` runs **12.8 / 17.6 / 37.5 ms** bounded against **13.8 / 19.7 / 51.8 ms** unbounded —
+**28% faster at side 96.** Measured before the change at B = 9216 across chunk sizes 64 to 9216
+and flat there too; the constant is chosen for the bound and the clock came out in its favour.
+**And the results are bit-identical**: 0 mismatched store digests across all nine (side, tag)
+pairs, which is the suite's singular-value equality assertion carried through a whole run.
+
+#### FIVE HELD, ONE REFUTED, ONE UNDERSHOT ITS OWN BAND
+
+C1 (the tensor is bounded at the constant) **held exactly**. **C2 — the horn the repair's value
+depended on — is REFUTED**: the residual slope was predicted under 300 B/series and came in at
+618.4. **C3 held**, at 618.4 against a predicted 400–800 and against tier 2's 618.3. C5 held
+(criterion 7 not closed), C6 held and better than predicted, C7 held. **C4 undershot**: the peak
+was predicted to fall 10–17 MB at side 96 and fell 7.10 ± 0.66 — above its own refutation
+threshold of 5 MB, so it survives as written and its band was wrong, which is recorded rather
+than rounded.
+
+> **THE DOUBTED PREDICTION WAS THE ONE THAT MATTERED, AND DOUBTING IT IN WRITING IS WHY THIS
+> READS AS EVIDENCE.** C2's own text says *"the horn I would not bet on, because A-prime's tier-2
+> arm still showed 618.3 ± 30.5 B/series with no tensor at all"* — and the measurement returned
+> **618.4**. A prediction that names its own reason for doubt, and is then refuted by the number
+> it named, is worth more than four that hold.
+
+#### WHAT IS NOW OPEN, AND IT IS ONE THING
+
+**A residue of ≈ 618 B/series in the fit phase, B-dependent, present with the tensor structurally
+absent and with it bounded.** It is not the tensor, not the block (Task A), not the write plateau
+(Task A), and not the slot term (8b, which is residency and not a fit-phase maximum). **It is the
+next term, and it is unnamed.** Against the analytic 926 B/series the bounded peak still carries
+**536 B/series** of unmodelled cost, which is what criterion 7's remaining +4.63 MB is made of.
+
+#### VALIDITY
+
+**Six of eighteen points ended below their own floor**, on a box at 2.08–2.16 GB available; zero
+points exceeded the stall diagnostic. Every figure above is a **paired** comparison of two arms
+run back to back, and the effects — 0.4 to 7.1 MB — sit far above Task 8i's ~1 MB bound on
+watermark damage. **The at-end reading is not published from this run**, on the same rule Task A
+applied.
 
 ---
 
@@ -6518,6 +6607,16 @@ Still open. **A new session must not assume these were settled.**
     `design_info` returns, and the fit-phase maximum at **17 of 17** tier-3 points. Nothing
     accumulates across the series loop: **0.16–0.79 MB over the whole batch.** The record is in
     [What OQ18 Task A-prime established](#what-oq18-task-a-prime-established-done-2026-08-21--read-before-touching-design_info-tile_side_for-or-criterion-7).
+
+    **AND IT WAS BOUNDED AND MEASURED ON 2026-08-21 — TASK A-DOUBLE-PRIME.** `SVD_CHUNK_SERIES`
+    caps the temporary at `chunk · N · k_beta · 8`, bit-identically and 28% faster, and **the
+    peak did NOT collapse onto residency**: a second allocation becomes dominant at
+    **618.4 ± 24.2 B/series**, which is tier 2's **618.3 ± 30.5** — the same residue reached by
+    two independent routes. The whole-run peak falls **2412.1 → 1462.5 B/series**, ratio to the
+    analytic **2.605 → 1.579**, and criterion 7's overrun at side 96 falls **+12.03 → +4.63 MB
+    without closing.** So **closer (a) is now one named allocation short of the answer rather
+    than a modelling question**, and the record is in
+    [What OQ18 Task A-double-prime established](#what-oq18-task-a-double-prime-established-done-2026-08-21--read-before-proposing-the-next-repair).
 
     **THAT CHANGES THIS QUESTION'S SHAPE, BECAUSE THE UNMODELLED TERM IS NOW LARGER THAN THE
     MODEL.** `resident_bytes_per_series` charges 926 B/series at N = 60 and 2546 at N = 240; the
