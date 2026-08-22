@@ -1015,22 +1015,39 @@ def test_measured_peak_rss_is_at_least_the_arrays_that_provably_exist():
 # The floor -- what a process holds before a tile exists
 # --------------------------------------------------------------------------
 
+#: Time steps in the fixture the ONE CI-visible RSS assertion opens. Derived
+#: from a measured slope of 197-235 B/step, not chosen: it puts that assertion's
+#: size-dependent contribution at ~54 MB against a 1 MB bound here, and at ~5 MB
+#: even if CI's hardware reduces the per-step term as much as it reduced the
+#: machine-dependent one (1.00 MB there against 11.20 here). The derivation is
+#: in `test_the_floor_with_the_input_open_exceeds_the_floor_without_it`.
+CI_FLOOR_N_TIME = 262_144
 
-def _floor_input(tmp_path):
+
+def _floor_input(tmp_path, *, n_time=24, n_y=4, n_x=4, name="floor-in.zarr"):
     """A small real zarr input for the floor probe to open.
+
+    The defaults are the fixture this file has always used, 24x4x4. `n_time` is
+    a parameter because the input's contribution to the floor is dominated by
+    the time axis and one caller needs that contribution large enough to survive
+    hardware it cannot measure -- see
+    `test_the_floor_with_the_input_open_exceeds_the_floor_without_it`.
 
     Args:
         tmp_path: pytest's temporary directory.
+        n_time: Length of the time axis.
+        n_y: Rows in the spatial grid.
+        n_x: Columns in the spatial grid.
+        name: Store name, so two fixtures can coexist under one `tmp_path`.
 
     Returns:
         The store URI, as a string.
     """
     import xarray as xr
 
-    n_time, n_y, n_x = 24, 4, 4
     origin = np.datetime64("2000-01-01")
-    time = np.array([origin + np.timedelta64(31 * i, "D") for i in range(n_time)])
-    path = tmp_path / "floor-in.zarr"
+    time = origin + np.arange(n_time, dtype="int64") * np.timedelta64(31, "D")
+    path = tmp_path / name
     xr.Dataset(
         {"sla": (("time", "y", "x"), np.zeros((n_time, n_y, n_x), dtype="float32"))},
         coords={
@@ -1137,14 +1154,54 @@ def test_the_floor_with_the_input_open_exceeds_the_floor_without_it(tmp_path):
     """A zarr store's residency belongs to the floor, not to the tile term.
 
     Expected value determined independently: an opened zarr store holds its
-    handles, its consolidated metadata and a decompression buffer for the chunk
-    that was read, and none of those scale with the tile. Measured 2026-08-15 on
-    a 24x4x4 input: **11.3 MB**, from 216.9 to 228.2.
+    handles, its consolidated metadata, the index it materialises for the time
+    coordinate, and a decompression buffer for the chunk that was read, and none
+    of those scale with the tile. Measured 2026-08-15 on a 24x4x4 input:
+    **11.3 MB**, from 216.9 to 228.2.
+
+    **THIS FIXTURE IS DELIBERATELY LARGER THAN THE OTHER FLOOR TESTS' AND THE
+    SIZE IS MEASURED RATHER THAN PICKED.** This is the only RSS assertion CI
+    runs -- the other eight are `machine`-marked -- and on 2026-08-22 it FAILED
+    there at 995 328 B against this bound, 0.5% inside it, then passed on a
+    re-run of the same commit. The runner's whole ladder, printed by the
+    diagnostic below, showed every rung LOWER there and the input's contribution
+    genuinely smaller: **1.00 MB against 11.20 MB** on this project's box, for
+    the identical 24x4x4 fixture whose data is 1536 bytes. Two intercepts an
+    order of magnitude apart on the same input, so the contribution is dominated
+    by a machine-dependent term that is not a function of input size, and no
+    size could be derived by scaling either number.
+
+    So the size-dependent part was measured here first (ladder and predictions
+    in `docs/superpowers/notes/ci-floor-fixture-{harness.py,predictions.json}`,
+    15 readings, three repeats, interleaved, reclaim shortfall 0 throughout):
+    the contribution grows at **197-235 B per time step** -- 11.25 MB at 24
+    steps, 26.68 at 65 536, 65.37 at 262 144, 225.13 at 1 048 576 -- because
+    xarray materialises the time coordinate as an index and the opened dataset
+    retains it. **The predicted slope was 8-24 B/step and that prediction was
+    REFUTED by a factor of ten**; the lever is far stronger than the datetime64
+    arithmetic behind the prediction, and the size below is taken from the
+    measurement, not from the prediction.
+
+    At 262 144 steps the size-dependent part is **54 MB on this box, 54x this
+    bound**. The margin is deliberately an order of magnitude more than needed
+    here, because the one between-machine spread ever measured for this quantity
+    IS an order of magnitude: if the runner's per-step term is reduced in the
+    same proportion as its intercept was, the contribution there is still
+    ~5 MB, five times the bound, instead of the 0.5% margin that failed.
+
+    The data stays 1x1 in the grid so the fixture costs 1.05 MB on disk and
+    ~0.8 s more than the small one; the grid is not a lever (11.25 MB at 1x1
+    against 11.21 at 4x4, 24 steps). **The other three floor tests keep the
+    small fixture on purpose** -- the ladder's rungs are compared against
+    readings recorded on it in 2026-08-15, and moving that fixture would move
+    what those bands are about.
 
     The bound below is one-sided and loose (at least 1 MB) because the size is a
     property of the store rather than of this code, and a bigger input moves it.
     **What is being pinned is the sign**, and the sign is what decides which
-    term the bytes are charged to.
+    term the bytes are charged to. **The bound is NOT widened and this test is
+    NOT marked `machine`** -- widening deletes the claim, and marking costs CI
+    its only RSS coverage of nine assertions.
 
     Bug this catches: measuring the floor before the open. Those bytes are then
     inside neither the floor nor the per-series formula, so they are effectively
@@ -1156,12 +1213,21 @@ def test_the_floor_with_the_input_open_exceeds_the_floor_without_it(tmp_path):
     # one of the three margin-carried assertions where the margin does least
     # work -- which is why open question 19's survey named it as the first to
     # wire and the other two as able to wait.
+    # **BUILT OUTSIDE THE WINDOW ON PURPOSE.** Writing a 262 144-step store
+    # allocates hard, and the stall counter is per-cgroup: inside the block it
+    # reads 121 ms/s and prints the HIGH diagnostic on every run, which is this
+    # process allocating rather than this process being squeezed -- exactly the
+    # ambiguity open question 19 names. Built here, the window covers the probe
+    # child alone and a HIGH reading means what it is supposed to mean.
+    uri = _floor_input(
+        tmp_path, n_time=CI_FLOOR_N_TIME, n_y=1, n_x=1, name="ci-floor-in.zarr"
+    )
     witnessed: dict[str, float] = {}
     with rss_validity(
         "the floor with the input open",
         witness=lambda: witnessed.get("shortfall", 0.0),
     ):
-        report = measure_floor(data_uri=_floor_input(tmp_path), variable="sla")
+        report = measure_floor(data_uri=uri, variable="sla")
         witnessed["shortfall"] = float(report.reclaim_shortfall_bytes or 0.0)
 
         # **THE LADDER GOES TO THE SUMMARY WHATEVER THE VERDICT**, because this
