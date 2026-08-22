@@ -2405,6 +2405,83 @@ verdict stays FAILED until it is re-measured.
 
 ---
 
+### THE PEAK, END TO END — the state at the close of the OQ18 characterisation line (2026-08-21)
+
+**READ THIS BEFORE ANY MODELLING WORK.** Four tasks — A, A-prime, A-double-prime,
+A-triple-prime — took the production peak from *"a term of unknown shape"* to a composition whose
+parts are named, measured and, where they refuse a shape, **refused rather than fitted.** Each
+task's own section carries its method and its predictions; this is the assembled answer and the
+only place the four parts appear together.
+
+#### THE COMPOSITION, AT N = 60, M = 2, TIER 3 — THE PRODUCTION SHAPE
+
+| part | size | how it is known | status |
+|---|---|---|---|
+| **the design tensor**, `signal.py:660` | `B · N · k_beta · 8` — **1920 B/series**, 1.49 GB at §9.4's worked example | **read off `svdvals`'s argument**, ratio 1.000 across six cells | **BOUNDED** at `SVD_CHUNK_SERIES · N · k_beta · 8`, bit-identically and 28% faster |
+| **the preallocated slots**, `fit.py:200-212` + `signal.py:509` | **418 B/series** at M = 2, **1190** at M = 6 — `193·M + 32` | **read off the objects**, `nbytes` deduped by identity, matching its hand-derivation to the byte | resident, charged in spirit by `output_slot_bytes` |
+| **the loop accumulation** | **≈ 26 B per (series × candidate)** | the progress curve's own rise, 1.41 MB at M = 6 side 96 | **found by a refuted prediction** |
+| **the remainder** | 139.5 / 308.6 / 52.8 B/series across three fixtures | subtraction | **REFUSES A SHAPE** — ×2.2 under a ×3 candidate lever, ×0.38 under a ×4 `n_time` lever |
+| **the write plateau** | dominant at M = 6 and below the crossover at M = 2 | per-phase maxima | not the production regime |
+| **the tile block** | `n_time · 8` per series | Task A | **cannot reach the peak** — the peak precedes the free |
+
+**THE RESIDUE WAS MEASURED THREE TIMES BY TWO ROUTES AND AGREED EVERY TIME**: **618.3 ± 30.5**
+(tier 2, tensor never built), **618.4 ± 24.2** (tier 3, tensor bounded by chunking), **610.5 ±
+25.4** (tier 2 again, a different day and 6 GB of available RAM apart). **Two mechanisms of
+removal and one of absence.**
+
+#### WHY NOTHING WAS REPAIRED BEYOND THE TENSOR, STATED AS A DECISION
+
+**The nameable parts are RESIDENT and criterion 7 bounds the PEAK.** Correcting them adjusts the
+residency model, moves `PUBLISHED_TILE_SIDE` a fifth time, and leaves criterion 7 failing on a
+remainder that holds no shape. **That is 8b's second reason, verbatim: the term whose dependence
+is established is not the term the criterion needs.** A repair whose claim is a sum, one of whose
+summands refuses a shape, publishes a number correct at one fixture — which is the refusal 8b
+made and was right to make.
+
+#### AN OPEN RECONCILIATION: 193 CHARGED, 193 READ, 240 MEASURED
+
+`output_slot_bytes` charges **193 B per candidate per series**. A-triple-prime reads **exactly
+193·M** off `fit.py:200-212`. **Task 8b measured ≈ 240** at end of run — a three-point
+determination with ~2σ of leftover, called thin in its own record. **Two provenances for one
+term, 24% apart, and they are not reconciled.** The read figure is what the arrays *are*; the
+measured figure is what a run's residency *showed*. **Whoever corrects the model owns closing
+that gap**, and it does not belong bolted onto a characterisation.
+
+#### CRITERION 7: FAILED, AND NOW UNDERSTOOD RATHER THAN MERELY RECORDED
+
+**+4.63 MB over budget at side 96** with the tensor bounded, down from +12.03 MB. The bounded
+peak carries **536 B/series** of unmodelled cost against the analytic 926. **What would close
+it:** a model of the peak rather than of residency, which needs the remainder to hold a shape —
+and it does not. **What has been excluded, by measurement:** the block's lifetime (Task A), the
+store write as a dominant allocation at production B (Task A), the design tensor (bounded, and
+the peak did not collapse), page rounding (the gap **grows** with B where rounding could only
+shrink), and a multiplier of any kind (8b's three ratios, still more than 2× apart).
+
+#### WHAT THE SUITE CAN AND CANNOT SEE, AND IT IS NOT SYMMETRIC
+
+**CI has never run a single one of these assertions** — all nine are `machine`-marked and CI runs
+`-m "not machine"`. **`the floor with the input open` is now witnessed from inside the probe
+child** (2026-08-21), which was the assertion whose `> 1 MB` window sat at the same order as the
+drift it was exposed to. **The floor ladder's rungs and peak residency across the iteration cap
+remain carried by margin** — ±25% with two >30 MB steps, and 16 MB, against a ~1 MB drift — and
+that is recorded as a state rather than a gap to be discovered.
+
+**AND ONE INCIDENT IS OPEN.** `test_a_child_inherits_the_parents_own_high_water_mark_and_not_its_current_rss`
+failed once at ~2.1 GB available and has passed in every run since — isolation, constructed
+pressure, and four sweeps. **It is not closed**, its conditions are in *Gotchas*, and full-log
+retention is in place so the next occurrence yields the assertion rather than a count. **A
+cancelled CI run in that window is treated as evidence of nothing**, in either direction.
+
+#### THE PRACTICE, AND THE PART THAT MAKES IT CREDIBLE
+
+**Three predictions were refuted across these tasks and each one paid**: A-double-prime's C2 —
+the horn the repair's value depended on, doubted in its own committed text and duly refuted;
+A-triple-prime's D2, whose refutation *is* the loop-accumulation term; and D6, which killed page
+rounding by a signature rather than an argument. **D4 held by 0.8 B/series and that margin is
+recorded rather than smoothed** — which is the reason to believe the other two.
+
+---
+
 ## Things a cold session cannot re-derive
 
 **PRECEDENCE, AMENDED 2026-08-12.** The rule carried since Phase 1 was *"if PROGRESS.md and the

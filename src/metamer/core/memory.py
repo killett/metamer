@@ -1216,6 +1216,15 @@ class FloorReport:
     with_input_bytes: int
     peak_bytes: int
     components: Mapping[str, int]
+    #: What `machine.reclaim_shortfall_bytes` saw **in the probe child**, against
+    #: that child's last rung -- a figure a process which has just built the
+    #: ladder cannot honestly end below. **None means the reading was not taken**,
+    #: which is deliberately not the same value as 0.0: "no shortfall" and "no
+    #: witness" are different facts and a single number for both is the
+    #: fill-value rule at a gate. It is **not written to provenance** --
+    #: `store.provenance_attrs` names the floor's keys explicitly -- so this
+    #: costs no schema bump and no store comparison changes.
+    reclaim_shortfall_bytes: float | None = None
 
 
 _FLOOR_CHILD = """
@@ -1286,9 +1295,16 @@ rungs["input_open"] = current_rss_bytes()
 # than the process demonstrably held.
 peak = max([peak_rss_bytes()] + list(rungs.values()))
 
+# THE WITNESS, READ HERE BECAUSE HERE IS WHERE THE LADDER WAS MEASURED. The
+# reference is the last rung: this process took that reading moments ago and
+# cannot be under it unless pages were taken from it.
+from metamer.core.machine import reclaim_shortfall_bytes
+shortfall = reclaim_shortfall_bytes(rungs["input_open"])
+
 print(json.dumps({{"pre_warm": pre_warm, "post_warm": post_warm,
                    "with_input": rungs["input_open"],
                    "peak": peak,
+                   "reclaim_shortfall": shortfall,
                    "components": rungs}}))
 """
 
@@ -1356,6 +1372,13 @@ def measure_floor(*, data_uri: str, variable: str) -> FloorReport:
         with_input_bytes=int(payload["with_input"]),
         peak_bytes=int(payload["peak"]),
         components={name: int(value) for name, value in payload["components"].items()},
+        # `.get`, so a payload from an older probe reads as **not taken** rather
+        # than as clean.
+        reclaim_shortfall_bytes=(
+            None
+            if payload.get("reclaim_shortfall") is None
+            else float(payload["reclaim_shortfall"])
+        ),
     )
 
 

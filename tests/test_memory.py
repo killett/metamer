@@ -1105,6 +1105,34 @@ def test_the_floor_ladder_reproduces_the_recorded_rungs(tmp_path):
 
 @pytest.mark.slow
 @pytest.mark.machine
+def test_the_floor_probe_reports_a_reclaim_witness_from_inside_the_child(tmp_path):
+    """The floor's own witness, read where the floor is measured.
+
+    **`reference_bytes` COULD NEVER REACH THIS ASSERTION AND THAT IS THE POINT.**
+    It is checked in the test process while `measure_floor` measures a child, so
+    a reference taken here would witness the wrong process -- which is why open
+    question 19's survey found all five gated assertions measuring in children
+    and none of them able to use that parameter. The child computes its own
+    shortfall against its **last rung**, a figure a process that has just built
+    that ladder cannot honestly end below.
+
+    Expected values determined independently: on a box that reclaimed nothing
+    from the probe, a process cannot be below a reading it took moments earlier,
+    so the shortfall is exactly **0.0**. And it must not be **None**: "not
+    measured" and "measured clean" are the same observation otherwise, which is
+    the fill-value rule (a0) at a witness.
+
+    Bug this catches: a witness computed in the parent, or a field left
+    unpopulated. Either leaves `the floor with the input open` looking gated
+    while its gate reports on nothing -- the exact failure this line of work
+    exists to prevent, and the one a green suite cannot show.
+    """
+    report = measure_floor(data_uri=_floor_input(tmp_path), variable="sla")
+
+    assert report.reclaim_shortfall_bytes is not None
+    assert report.reclaim_shortfall_bytes == 0.0
+
+
 def test_the_floor_with_the_input_open_exceeds_the_floor_without_it(tmp_path):
     """A zarr store's residency belongs to the floor, not to the tile term.
 
@@ -1123,8 +1151,18 @@ def test_the_floor_with_the_input_open_exceeds_the_floor_without_it(tmp_path):
     charged to the tile -- and `tile_side` comes out too large, which is the
     unsafe direction against a budget the design doc calls hard.
     """
-    with rss_validity("the floor with the input open"):
+    # WITNESSED FROM INSIDE THE CHILD. This assertion's window is `> 1 MB`,
+    # the same order as the ~1 MB watermark drift Task 8i measured, so it is the
+    # one of the three margin-carried assertions where the margin does least
+    # work -- which is why open question 19's survey named it as the first to
+    # wire and the other two as able to wait.
+    witnessed: dict[str, float] = {}
+    with rss_validity(
+        "the floor with the input open",
+        witness=lambda: witnessed.get("shortfall", 0.0),
+    ):
         report = measure_floor(data_uri=_floor_input(tmp_path), variable="sla")
+        witnessed["shortfall"] = float(report.reclaim_shortfall_bytes or 0.0)
 
         assert report.with_input_bytes > report.post_warm_bytes
         assert report.with_input_bytes - report.post_warm_bytes > 1e6
