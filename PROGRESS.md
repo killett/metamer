@@ -2502,6 +2502,105 @@ reconciliation, not an open one.
 
 ---
 
+### THE PEAK, RE-MEASURED AFTER THE BOUNDING (2026-08-22 — read before quoting ANY peak figure, or criterion 6's)
+
+> ## 8b's PEAK COLUMN IS **SUPERSEDED, NOT STALE**: IT WAS CORRECT FOR THE CODE IT MEASURED, AND THAT CODE CHANGED ON 2026-08-21. THE OTHER TWO COLUMNS REPRODUCE AT ALL THREE FIXTURES. **CRITERION 6 STAYS FAILED, NOW ON A NUMBER THAT DESCRIBES SHIPPING CODE — 1468.8 ± 18.4, OUTSIDE ITS BAND BY 4.3σ WHERE IT WAS 22σ.**
+
+All three readings, at all three of 8b's fixtures, on 8b's own arm settings and **its own
+per-fixture duration targets** (30 s at N = 60/M = 2, 45 s at the other two) so nothing in the
+comparison is the harness. Five sides, two repeats, 30 points, interleaved, **wall clock constant
+within each ladder to 0.1–0.9 s**, stall ≤ 2.8 ms/s. Predictions committed first in
+[`peak-remeasure-predictions.json`](docs/superpowers/notes/peak-remeasure-predictions.json),
+points in [`peak-remeasure-measured.jsonl`](docs/superpowers/notes/peak-remeasure-measured.jsonl).
+
+| fixture | reading | 8b, 2026-08-19 | now | change |
+|---|---|---|---|---|
+| **N = 60, M = 2** | end of run | 962.1 | **931.7 ± 41.9** | −3.2% |
+| | end of tile | 1495.5 | **1470.9 ± 16.2** | −1.6% |
+| | **peak** | **2424.3** | **1468.8 ± 18.4** | **−39.4%** |
+| **N = 60, M = 6** | end of run | 2700.7 | **2443.5 ± 55.8** | −9.5% |
+| | end of tile | 3242.9 | **2983.7 ± 26.5** | −8.0% |
+| | **peak** | **3241.3** | **3045.5 ± 35.3** | **−6.0%** |
+| **N = 240, M = 2** | end of run | 860.4 | **803.9 ± 165.0** | −6.6% |
+| | end of tile | 2814.7 | **2761.9 ± 188.4** | −1.9% |
+| | **peak** | **9800.9** | **2738.4 ± 172.8** | **−72.1%** |
+
+**THE PATTERN IS THE ARGUMENT, AND IT IS WHY THIS IS SUPERSESSION RATHER THAN ERROR.** Where 8b's
+peak stood **above** its own end-of-tile reading — +62% at (60, 2) and **+248%** at (240, 2) — the
+peak has **collapsed onto the tile reading**. Where 8b's peak already **equalled** its tile reading
+— (60, 6), where Task A established the maximum was the write plateau and not the fit transient —
+**nothing structural moved.** One code change, `SVD_CHUNK_SERIES` in **0b53296, 2026-08-21**, whose
+subject is the fit phase's maximum, removes exactly the fit-phase excess and only that. **8b's
+numbers were right about the code in front of them.**
+
+**THE PEAK NOW HAS NO LOCATION AT 26 OF 30 POINTS, AND THAT IS REPORTED RATHER THAN GLOSSED.**
+`peak − end-of-tile` is **0.05–0.19 MB** at nearly every point: the trace is **flat** from the tile
+onward, so the argmax timestamp (45.0 s, in the pad) is not evidence of anything. **A maximum has a
+location only where the trace has a slope.** The exceptions are two points — (60, 6) tag d at
+B = 9216, gap 1.26 MB with its argmax at 14.4 s inside `fit`, and (240, 2) tag c at B = 9216,
+gap 8.18 MB — and the second is discussed below.
+
+**ONE POINT IS NOT THE SAME QUANTITY AS THE OTHERS AND IS REPORTED BOTH WAYS.** At (240, 2) tag c,
+B = 9216, the end-of-tile reading was taken at **45.7 s** against 12.3–13.7 s at every other point
+in that arm — a different position in the run, not a different value of the same thing. **With it,
+that arm's tile fit is 1916.3 ± 413.7 with an 8.37 MB residual; without it, 2761.9 ± 188.4 with
+2.17 MB**, and the end reading moves from +13.7% to −6.6% against 8b. **The table above uses the
+nine-point fit and says so**; the ten-point figures are here so the exclusion can be checked rather
+than trusted. **The exclusion is justified by the timestamp, not by the residual** — excluding a
+point because it spoils a fit is the move this file has refused elsewhere.
+
+#### THE PREDICTIONS, INCLUDING THE TWO THAT DID NOT HOLD CLEANLY
+
+- **P1 HELD.** Predicted 1467 ± 100 at 8b's 30 s target; measured **1468.8**, against **1466.9**
+  measured at a 45 s target the day before. **1.9 B/series apart.**
+- **P4, THE HORN I DOUBTED, IS REFUTED — and that is the point of writing it down.** The duration
+  target does **not** move the peak, so the 2026-08-22 comparison against 8b was not confounded by
+  its longer pad, and the supersession claim survives the check that could have killed it.
+- **P2 HELD IN SUBSTANCE AND VIOLATED ITS OWN CLAUSE.** It said the (60, 6) peak would move by less
+  than 5%; it moved **6.0%**. That is recorded rather than smoothed. **Its discriminating job is
+  done either way**: −6.0% against −39.4% and −72.1%, and at that fixture **all three** readings
+  moved together (−6.0 / −8.0 / −9.5%), which is a session-level shift of ~8% and not a structural
+  change. **The reproducibility floor of this instrument across sessions is therefore ~8%**, and
+  every percentage above is read against that.
+- **P3 HELD BY ITS REFUTATION CLAUSE AND MISSED ITS BAND.** Predicted 2800–5000 and "certainly
+  below 7000"; measured **2738.4**, which is **2% below the band's floor**. The refutation clause
+  was not triggered. Recorded as a near miss on the low side.
+- **P5 HELD AT ALL THREE FIXTURES**, which is what separates superseded from stale: end-of-run and
+  end-of-tile reproduce within **1.6–9.5%** everywhere, and only the peak column moves.
+
+#### CRITERION 6: THE VERDICT HOLDS, ON A NUMBER
+
+**FAILED, unchanged — and now it fails on a measurement of the code that ships.** At (60, 2)
+against the analytic **926** and `slope_band`'s **617.3–1389.0**:
+
+| reading | old figure | new figure | ratio | inside the band? |
+|---|---|---|---|---|
+| peak | 2410.0 ± 46.0, ratio 2.603, **outside by 22σ** | **1468.8 ± 18.4** | **1.586** | **no — outside by 79.8 B/series, 4.3σ** |
+| end of tile | 1504.1 ± 21.4, ratio 1.624 | **1470.9 ± 16.2** | 1.588 | no |
+| end of run | 970.6 ± 47.6, ratio 1.048 | **931.7 ± 41.9** | **1.006** | **yes — still MET on this reading** |
+
+**Nothing about the verdict's structure changes: failed on the peak, failed on the end-of-tile,
+met on the end-of-run. What changes is that the peak's margin over the band falls from 22σ to
+4.3σ.** No other criterion is re-judged here, and **criterion 7 is not on this ladder** — it is a
+different assertion at a different budget.
+
+#### THE CORRECTION HAS A DETERMINATE LANDING SITE, AND IT IS A CASCADE THAT WAS NOT TAKEN
+
+**`src/metamer/batch/tiling.py` still carries `measured_bytes_per_series=2410.0` inside
+`PUBLISHED_TILE_SIDE.dispute`**, with `headroom_fraction_required = 1 − 926/2410 = 0.61577`
+computed from it, and `tests/exit_criteria_2b.py` quotes the same figures in criterion 6's scope.
+`test_criterion_6_and_7_move_with_the_published_record` binds them, **by design**, so the number
+cannot be changed in one place.
+
+**Updating it would move a shipped derived quantity: the required headroom becomes
+`1 − 926/1468.8 = 0.36955`, against a shipped `HEADROOM_FRACTION` of 15%.** That is a cascade with
+a live consequence, `HEADROOM_FRACTION` is on the do-not-move list, and **this session re-measured
+a number rather than deciding a cascade — so nothing in `src/` was touched.** The gap between what
+the record now knows and what the code publishes is **deliberate, dated and stated here**, which is
+the only honest form for it until the cascade is decided.
+
+---
+
 ### WHAT THE FOURTH FIXTURE ESTABLISHED (2026-08-22 — read before quoting 8b's PEAK column, or the 240)
 
 > ## THE TERM IS PER-CANDIDATE AND LINEAR IN M, AND IT IS **388 B PER CANDIDATE PER SERIES — 2.01× THE CHARGED 193**, ON THE TWO READINGS THAT ARE STABLE. THE ≈ 240 CAME FROM THE ONE READING THAT IS NOT.
