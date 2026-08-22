@@ -5981,6 +5981,27 @@ question; compute/bandwidth roofline pair for cross-machine prediction) are in d
 
 ## Gotchas discovered
 
+- **AN UNGATED WATERMARK TEST FAILED ONCE IN A SWEEP AT 2.1 GB AVAILABLE, AND THE ASSERTION TEXT
+  WAS LOST — WHICH IS THE PART TO FIX.** 2026-08-21:
+  `test_a_child_inherits_the_parents_own_high_water_mark_and_not_its_current_rss` failed inside a
+  1088-test sweep while the box was down to ~2.1 GB. **It did not reproduce**: it passes in
+  isolation at 8.0 GB, it passes under **2.1 GB of constructed pressure** from Task 8i's
+  generator, and a repeat sweep on the recovered box came back **1088 passed, 0 failed, 991 s,
+  with every stall reading at 0.0 ms/s.**
+
+  **The diagnosis is blocked on an instrument gap rather than on the machine.** The failing run's
+  output was captured tail-only, so **which of its eight assertions failed is unknown**, and
+  without that there is no way to say whether a reclaim witness would have caught it — wiring one
+  on the strength of "it was under pressure" would be fitting an instrument to a story. The
+  repeat sweep was run with the full log retained, which is what the next occurrence needs.
+
+  **What is known about the test's exposure.** It is one of Task 8i's **ungated five**, carried by
+  a **400 MiB margin** against a ~1 MB watermark drift, and it **spawns children** — so it can
+  supply a witness by the same route the two wired assertions use. **It is the fourth
+  ambient-conditional `machine` failure recorded here** (two on 2026-08-16, three on 2026-08-17,
+  this one), and every one of them passed in isolation afterwards. **Nothing was widened,
+  deselected or re-thresholded.**
+
 - **TWO `machine`-MARKED RSS TESTS FAIL UNDER HOST CONTENTION AND PASS IN ISOLATION, AND
   THAT IS (i9) RATHER THAN FLAKINESS.** Observed 2026-08-16 in the Task 7 sweep, which took
   **3502 s against the 942 s the same suite took the day before**, at host load average
