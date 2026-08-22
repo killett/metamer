@@ -272,6 +272,15 @@ def _stub_the_floor_probe(request, monkeypatch):
 #: maximum read far higher. **If it starts firing on most runs the repair is the
 #: box or the fixture, never the number** -- widening it is how the tests stop
 #: running.
+#:
+#: **AND IF YOU ARE HERE TO MAKE IT A GATE AGAIN, READ THIS FIRST.** Two full
+#: sweeps of the same suite on the same box, hours apart, no code between them:
+#: `the floor ladder's rungs` read **0.4 ms/s** in one and **576.0 ms/s** in the
+#: other, **and its assertion passed both times.** A statistic that swings three
+#: orders of magnitude on an unchanged workload, while the thing it is supposed
+#: to be reporting on does not move, cannot decide whether a measurement is
+#: sound. **That is the datum the demotion rests on** -- not the argument about
+#: cgroup attribution, which only explains it.
 RSS_STALL_LIMIT_US_PER_S = 25_000
 
 #: Every indeterminate measurement this session, for the terminal summary.

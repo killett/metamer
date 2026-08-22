@@ -6136,6 +6136,12 @@ Still open. **A new session must not assume these were settled.**
     wire first** — its window is the same order as the drift and 8i already flagged it AT RISK.
     Wiring the three costs a field in the floor payload and one in `CalibrationPoint`.
 
+    **THE SINGLE DATUM THE DEMOTION RESTS ON IS IN THE CONSTANT'S OWN DOCSTRING**, where
+    someone proposing to re-promote it will meet it: two sweeps of one suite on one box, hours
+    apart with no code between them, where one assertion's stall reading moved by three orders
+    of magnitude while its verdict did not move at all. **The cgroup-attribution argument
+    explains that datum; it is not the evidence.**
+
     **AND THE VALUE'S SUBJECT IS SETTLED BY DEMOTION RATHER THAN BY RE-DERIVATION.** 25 000
     µs/s stays, now as the threshold at which the diagnostic prints HIGH. **It gates nothing**,
     so the question of what it should be to gate correctly no longer arises.
