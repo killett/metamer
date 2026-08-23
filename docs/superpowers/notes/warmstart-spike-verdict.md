@@ -4,21 +4,25 @@
 [`phase2c-preflight.md`](phase2c-preflight.md); the predictions were committed before any arm
 ran, in [`warmstart-spike-predictions.json`](warmstart-spike-predictions.json); the instrument is
 [`warmstart-spike-harness.py`](warmstart-spike-harness.py) and the points are
-[`warmstart-spike-measured.jsonl`](warmstart-spike-measured.jsonl) and
-[`warmstart-spike-n384-measured.jsonl`](warmstart-spike-n384-measured.jsonl).
+[`warmstart-spike-measured.jsonl`](warmstart-spike-measured.jsonl),
+[`warmstart-spike-n384-measured.jsonl`](warmstart-spike-n384-measured.jsonl) and
+[`warmstart-spike-n630-measured.jsonl`](warmstart-spike-n630-measured.jsonl).
 
-> ## THERE IS NO VERDICT YET, AND P9 IS WHY. THE SAVING IS **7.80% ± 0.77%** AT `N = 96` AND **31.73% ± 0.99%** AT `N = 384` — IT MOVED **23.93 POINTS** AND CROSSED §11.2's THRESHOLD. BY THE RULE WRITTEN DOWN BEFORE THE SECOND FIXTURE REPORTED, **THE PRIMARY FIXTURE DOES NOT DESCRIBE PRODUCTION AND THE VERDICT IS RE-TAKEN AT `N = 630`.**
+> ## THE VERDICT, TAKEN AT PRODUCTION LENGTH 2026-08-23: **WARM-STARTING PAYS AND IS NOT DROPPED.** At `N = 630` it saves **42.28% ± 0.94%** of iterations and **45.90%** of wall clock, against §11.2's **30%** threshold. The saving runs **7.80 / 31.73 / 42.28%** at `N = 96 / 384 / 630` — **it is a function of record length, and the primary fixture measured the wrong regime.**
 
-**THE PROVISIONAL "DROP IT" IS SUSPENDED, NOT CONFIRMED AND NOT REVERSED.** Everything below
-about the primary fixture stands as a measurement at `N = 96`; what does **not** stand is reading
-it as a statement about production. **The saving is strongly increasing in record length**, and
-production is longer than either fixture measured.
+> ## AND THE SCOPE QUESTION IS NOT THE ONE ANYONE EXPECTED. AT `N = 630` THE **RANDOM-DISTANT** ARM ALSO CLEARS THE THRESHOLD, AT **30.28% ± 1.02%**. **THE TWO-PASS GEOMETRY IS WORTH 12.00 POINTS ON TOP OF IT, NOT THE WHOLE 42.** Most of what warm-starting buys is *"any converged `θ̂` beats the moment ladder"*, which needs **no coarse grid, no stride in `fit_hash`, no spiral and no barrier.**
 
-> **AND THE CEILING STILL GOVERNS HOW ANY OF IT IS QUOTED.** Starting each point from **its own**
-> converged `θ̂` saves **93.97% ± 0.16%** of iterations at `N = 96` and **93.49% ± 0.18%** at
-> `N = 384` — flat in `N`. **The ceiling does not move and the neighbour's saving does**, so what
-> changes with record length is **how good a neighbour is**, not what the machinery can deliver.
-> That is a statement about the field, and it is the reason the ceiling arm was worth its cost.
+**THE PROVISIONAL "DROP IT" IS OVERTURNED, AND BY THE RULE THAT WAS WRITTEN BEFORE THE EVIDENCE
+ARRIVED.** Everything below about the primary fixture stands as a measurement at `N = 96`; what
+does **not** stand is reading it as a statement about production. **P9 existed to catch exactly
+this, and it did.**
+
+> **AND THE CEILING GOVERNS HOW ANY OF IT IS QUOTED.** Starting each point from **its own**
+> converged `θ̂` saves **93.97 / 93.49 / 94.53%** of iterations at the three lengths — **a spread
+> of 1.0 point while the mechanism moved 34.5.** The ceiling does not move and the neighbour's
+> saving does, so what changes with record length is **how good a neighbour is**, not what the
+> machinery can deliver. That is a statement about the field, and it is why the ceiling arm was
+> worth its cost.
 
 ## The decision rule for P9, stated before the N = 384 fixture reported — and what it now compels
 
@@ -73,6 +77,72 @@ the mechanism is **wrong and is struck there**.
 same-regime **+34.95% ± 0.82%** — still **32 points** below, so the boundary is still where the
 mechanism is worth least, but at `N = 384` it no longer actively harms. **(i2c) stands as a rule
 and its worked magnitude is now fixture-dependent**, which is recorded rather than smoothed.
+
+## The re-take at `N = 630` — the fixture the verdict rests on
+
+12 × 12 points, `N = 630` monthly (production's record length), stride 4, 135 measured points,
+**0 excluded**, one repeat. Coarse points **100% OK**; the OK filter **never** changed a source.
+Wall clock is a single reading and has no error bar; the iteration columns are deterministic.
+
+| arm | `N = 96` | `N = 384` | `N = 630` | wall clock at `N = 630` |
+|---|---|---|---|---|
+| `self` — the ceiling | +93.97% ± 0.16% | +93.49% ± 0.18% | **+94.53% ± 0.14%** | **+74.75%** |
+| `warm` — the mechanism | +7.80% ± 0.77% | +31.73% ± 0.99% | **+42.28% ± 0.94%** | **+45.90%** |
+| `random` — distant source | −2.25% ± 0.91% | +18.27% ± 1.03% | **+30.28% ± 1.02%** | **+31.03%** |
+
+Per candidate at `N = 630`: `white` **+34.78%**, `m12+white` **+40.95%**, `m32+white`
+**+46.56%** — P3's ordering holds at all three lengths and every rung has risen again.
+
+**THE CURVE HAS NOT SATURATED.** 96 → 384 is a ×4 lever and gained 23.93 points; 384 → 630 is a
+×1.64 lever and gained 10.55. **Three points, one instrument, one lever** — and the third point
+is what distinguishes a rising curve from a flattening one, which two points could not.
+**No value beyond `N = 630` is claimed**, and none is needed: 630 is production.
+
+**AND THE CEILING IS FLAT ACROSS ALL THREE** — 93.97 / 93.49 / 94.53, a spread of 1.0 point
+against the mechanism's 34.5. **What record length changes is how good a neighbour is, not what
+the machinery can deliver.** That is the (i2b) reading, and it survived a third fixture.
+
+### The decomposition, which is the finding that changes 2c's shape
+
+| step | iteration saving | what it costs to build |
+|---|---|---|
+| moment ladder → **any converged `θ̂`** | **+30.28%** | a start, from anywhere. No geometry |
+| → **a NEAR converged `θ̂`** | **+12.00 more** | the coarse grid, the stride inside `fit_hash`, the spiral, the tie-break, the barrier, `/warmstart/` |
+| → **the point's OWN converged `θ̂`** | **+52.25 more** | unreachable by construction |
+
+**THE EXPENSIVE HALF OF §11.1 BUYS THE SMALLER HALF OF THE BENEFIT.** The two-pass geometry is
+real — P4 is refuted at all three lengths and proximity pays 10.05 / 13.46 / 12.00 points — but
+**§11.2's threshold is already cleared without it.** A design that warm-starts from any prior
+converged fit clears the bar at 30.28% and skips the cascade, the `fit_hash` boundary and the
+barrier entirely. **That is a design question this spike has opened and has not answered**, and
+it belongs to the brainstorm rather than to this verdict.
+
+### The agreement margin, and it is the thing to watch
+
+| | `N = 96` | `N = 384` | `N = 630` |
+|---|---|---|---|
+| selection agreement, `warm` | 95.00% | 100.00% | **90.37% (122/135)** |
+| selection agreement, `random` | 97.08% | 100.00% | **92.59% (125/135)** |
+| `\|Δℓ\| < 0.01`, `warm` | 97.90% | 100.00% | **97.27%** |
+| max `\|Δℓ\|`, `warm` | 8.31 | 8.95e-07 | **204.0** |
+| max parameter distance, `warm` | 10.2 SE | 0.001 | **154 SE** |
+
+**PERMITTED OUTCOME 3 IS NOT TRIGGERED, AND THE MARGIN IS ONE GRID CELL.** The pre-agreed trigger
+was *"selection agreement below 90%, or `|Δℓ| > 0.01` at more than 10%"*. Measured: **90.37%** and
+**2.73%**. Neither fires. **But 90.37% is 122 of 135, and 121 of 135 is 89.63%** — one more
+disagreeing cell and the rule would have said *report and stop*. **That is recorded as a pass by
+0.37 of a point, not as a pass.**
+
+**AND THE DISAGREEMENT IS NOT MONOTONE IN `N`, WHICH MEANS IT IS NOT SIMPLY A LENGTH EFFECT.** It
+is worst at `N = 630`, absent at `N = 384`, and mild at `N = 96`. **No shape is claimed for it
+from three points** — that is this project's own standing refusal — but it is the quantity the
+hysteresis audit exists to measure, and it is at its worst at production length.
+
+**ONE READING POINTS THE WRONG WAY FOR THE MECHANISM AND IS REPORTED BECAUSE OF THAT.** At
+`N = 630` the **near** start disagrees with cold **more** than the **distant** start does — 122
+against 125 of 135. That is the direction §11.2 predicts for hysteresis: initializing from a
+neighbour biases toward the neighbour's answer. **Three cells is not evidence**, and it is
+written here as a hypothesis for the audit to test rather than as a finding.
 
 ## The primary fixture
 
@@ -136,20 +206,48 @@ dropped: **at longer records warm and cold land in the same place, to seven deci
 | P6 | warm and cold land at the same optimum | **HELD at both**, and the `N = 96` tail **does not survive**: `N = 384` agrees 100.00% with max `\|Δℓ\|` 8.95e-07 |
 | P7 | wall-clock saving 0.5–1.0× the iteration saving | **REFUTED at `N = 96`** (−1.19%, indistinguishable from zero) and **HELD at `N = 384`** (27.86% against 31.73% = 0.88×). The band was right about the mechanism and wrong about the fixture |
 | P8 | the spiral is defensive | **HELD at both** — the OK filter changed the source at 0.000 of cells, coarse points 100% OK. Its metric was **mis-specified before the run and corrected in the open**: "steps beyond radius 0" is true by construction |
-| P9 | the saving is within 10 points at `N = 384` | **REFUTED BY 23.93 POINTS, AND IT IS THE PREDICTION THAT MATTERED.** Every other number here is conditional on it |
+| P9 | the saving is within 10 points at `N = 384` | **REFUTED BY 23.93 POINTS, AND IT IS THE PREDICTION THAT MATTERED.** It compelled the `N = 630` re-take, which overturned the provisional verdict. Every number from the primary fixture is conditional on it |
 
-**FIVE OF THE NINE CHANGED THEIR VERDICT BETWEEN THE TWO FIXTURES.** P2, P3's threshold clause,
+**AND THE THIRD FIXTURE IS WHERE EVERY PREDICTION IS FINALLY READ.** At `N = 630`: P1 held
+(+94.53%), P2's 30% clause is **refuted** (42.28%), P3's ordering held and its `white < 5%` clause
+is refuted again (34.78%), P4 is refuted a third time (12.00 points), P5 held (34 points below),
+P6 held **by 0.37 of a point**, P7 held (45.90% against 42.28% = 1.09×, its first reading above
+1.0), P8 held.
+
+**FIVE OF THE NINE CHANGED THEIR VERDICT BETWEEN THE TWO SHORTER FIXTURES.** P2, P3's threshold clause,
 P6's tail and P7 all read one way at `N = 96` and the other way at `N = 384`. **A single-fixture
 spike would have produced a confident, documented, wrong recommendation** — and it would have
 been wrong in the expensive direction, because "drop it" is the outcome nobody re-opens.
 
-## What 2c becomes — and this section is now conditional
+## What 2c becomes — resolved 2026-08-23 by the re-take
 
-**NOTHING IS RETIRED YET.** The paragraphs below were written for the "drop it" outcome and are
-kept because they are what that outcome would mean; **they take effect only if the `N = 630`
-re-take lands under 30%.**
+**WARM-STARTING IS BUILT. PASS 1 KEEPS ALL FIVE JOBS.** The `N = 630` re-take clears §11.2's
+threshold on both readings — 42.28% of iterations, 45.90% of wall clock — and P6's pre-agreed
+thresholds hold, so permitted outcome 1 is met and the mechanism proceeds.
 
-**Under a "drop it" outcome, this retires one of pass 1's five jobs and not pass 1.** §11.1 lists
+**FOUR THINGS ARE OWED, AND THEY ARE WRITTEN HERE SO THEY ARE NOT REDISCOVERED IN THE PLAN.**
+
+1. **The scope question the decomposition opened.** `random` alone clears the threshold at
+   **30.28%**; the geometry adds **12.00**. **Whether §11.1's full two-pass machinery is the right
+   purchase for those 12 points is a design decision that has never been taken with numbers in
+   front of it**, and it must be taken before the plan is written — not settled by the fact that
+   §11.1 already describes the expensive version.
+2. **`fit`'s `x0` is call-level all-or-nothing** (`fit.py:227`), so §11.3's *"on exhaustion fall
+   back to the moment-init ladder with the rung recorded as such"* has no expressible
+   implementation. **A per-cell warm-start selector is a signature change nothing in the plan
+   owns.**
+3. **The regime boundary has no policy.** Cross-regime is the worst stratum at every length —
+   −16.27 / +2.92 / **+11.40%** against same-regime +9.75 / +34.95 / **+45.62%**, a gap that
+   **widens** with `N` to 34 points. §11.1's two-pass warm start has no notion of regime
+   boundaries at all.
+4. **The hysteresis audit is now mandatory in fact, not only in §11.2's wording**, and it has a
+   named first hypothesis: at `N = 630` the near start disagreed with cold more than the distant
+   one did.
+
+### What the "drop it" branch would have meant, kept because the reasoning is the transferable part
+
+**Under a "drop it" outcome, this would have retired one of pass 1's five jobs and not pass 1.**
+§11.1 lists
 the coarse subsample as serving the warm-start source, the calibration-tile RSS measurement, the
 early-abort evaluation, the **cold** reference for the hysteresis audit, and the default
 `/detail/` subsample. **Only the first would be decided.** Whether the remaining four justify pass
@@ -174,19 +272,24 @@ construction and production will not.
 Stated plainly rather than generalized:
 
 - **One machine.** The mini PC, `threadpool_limits(1)`, one BLAS.
-- **Two record lengths**, `N = 96` and `N = 384`, **both short of production's `N = 630`** — and
-  the saving **moves 23.93 points between them**, so this is not a caveat but the reason the
-  verdict is held. **No value at `N = 630` may be interpolated, extrapolated or assumed from
-  these two points.** Two points determine a line and this project has already recorded, twice,
-  what a two-point line is worth: the 240 B/candidate slope through two `M` values had zero
-  residual and had never tested linearity at all.
-- **Two grid sizes, and they differ between the fixtures** — 16 × 16 at `N = 96` and 12 × 12 at
-  `N = 384`. The stride and therefore the source-distance distribution are identical, and the
-  same-regime strata (+9.75% against +34.95%) move by the same 25 points as the pooled figures,
-  so the grid size does not explain the effect. **Recorded because it is a difference the
-  comparison did not control.**
-- **One repeat at `N = 384`**, so its wall-clock column is a single reading with no error bar.
-  The iteration columns are deterministic and need none.
+- **Three record lengths**, `N = 96`, `384` and `630`, the last of which is production's. **The
+  saving moves 34.48 points across them and has not saturated**, so the number is a function of
+  record length and not a constant. **No value beyond `N = 630` is claimed, and no value between
+  the measured points is interpolated.** Two points would have determined a line and this project
+  has already recorded, twice, what a two-point line is worth — the 240 B/candidate slope through
+  two `M` values had zero residual and had never tested linearity at all. **The third point is
+  why the verdict is a verdict.**
+- **Two grid sizes** — 16 × 16 at `N = 96`, 12 × 12 at both `N = 384` and `N = 630`. The stride
+  and therefore the source-distance distribution are identical everywhere, the two longer fixtures
+  share a grid, and the same-regime strata move with the pooled figures throughout, so grid size
+  does not explain the effect. **Recorded because it is a difference the comparison did not
+  control.**
+- **One repeat at `N = 384` and at `N = 630`**, so their wall-clock columns are single readings
+  with no error bars. The iteration columns are deterministic and need none; every arm of the
+  three-repeat primary returned bit-identical `n_iter` and `loglik`.
+- **The agreement margin is not a measured trend.** Selection agreement runs 95.00 / 100.00 /
+  90.37% across the three lengths, which is not monotone. **No shape is claimed from three
+  points**, and the hysteresis audit is what would establish one.
 - **One candidate set**, three candidates, deliberately lint-clean. A set with exchangeable
   same-kind terms was excluded by construction and is not covered.
 - **A simulated field.** The parameters vary smoothly by construction and the boundary is sharp
@@ -196,19 +299,16 @@ Stated plainly rather than generalized:
 - **Nothing about the barrier's cost at 10⁷ points**, about label switching, or about pass 1 as
   the calibration tile.
 
-## The re-take, and what it costs
+## The re-take: what it cost, and the instrument check it carried
 
-**`N = 630`, 12 × 12, stride 4, one repeat.** Same harness, same candidate set, same rule — only
-the record length moves, so the three-point series `96 / 384 / 630` is one instrument's reading
-of one lever. At `N = 384` the cold arm took **1488 s for 135 points**, so `N = 630` is roughly
-**18 s a point**, **~41 minutes an arm**, and **about 3.6 hours** for pass 1, the prep and the
-four arms.
+**`N = 630`, 12 × 12, stride 4, one repeat**, run 2026-08-23 in **3 h 25 min** — pass 1 198 s,
+prep 2984 s, cold 2792 s, warm 1511 s, self 705 s, random 1926 s. Same harness, same candidate
+set, same rule; only the record length moved.
 
-**THE THIRD POINT IS THE WHOLE VALUE.** With two points there is no shape and no way to tell a
-saturating curve from a rising one — and the difference decides the verdict, because production
-sits at 630 and the curve could plausibly have flattened by 384 or still be climbing.
-
-**AND THE DECISION RULE IS THE ONE ALREADY WRITTEN**: at or above 30% at `N = 630`, the mechanism
-pays at production length and 2c proceeds to build it with the three owed items above; below
-30%, warm-starting is dropped and the record-length dependence is stated as part of the finding.
-**No new rule is invented after the number arrives.**
+**AND THE HARNESS WAS CHECKED AGAINST THE RUN IT LAUNCHED.** `ruff-format` and `mypy` asked for
+changes after the primary fixture was already running, so the committed file differed from the
+launched one by formatting, a `TextIO` annotation, two `int()` narrowings and an `if`/`elif`
+rewrite of `matern_cov`. **The committed harness reproduces the launched run's pass 1
+bit-identically** — 471 iterations and a `loglik` sum of `-4866.477960533184`, exact — so the
+published numbers and the committed instrument are the same instrument. **Checked rather than
+argued**, which is what this project's own rule about post-hoc edits requires.
