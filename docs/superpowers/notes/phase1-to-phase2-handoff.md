@@ -1586,6 +1586,52 @@ because a wrong tile side still runs. **That is the third time (a6)'s shape has 
 new route** — after `Backend` outliving its architecture and the inverse that could have
 re-derived rather than round-tripped — and the routes keep differing while the shape does not.
 
+#### (i2b) A HIGH-CEILING CONTROL CONVERTS A NULL INTO A LOCATED NULL
+
+> **When measuring whether a mechanism helps, include an arm that supplies the mechanism's
+> BEST POSSIBLE input.** A null without a ceiling is ambiguous between a weak mechanism and a
+> weak source, and **only the second is a finding about the domain.**
+
+This is (i2) generalized one step: the positive control asks *"can the instrument see
+anything"*, and this asks *"how much is there to see"*. The first makes a null trustworthy; the
+second makes it **interpretable**.
+
+**The worked case is 2c Task 0, the warm-start spike.** Warm-starting a pass-2 point from its
+nearest valid coarse neighbour saved **7.80% ± 0.77%** of iterations against a threshold of 30%,
+and **nothing** in wall clock. Read alone that is *"warm-starting does not help here"* — a
+sentence that could equally mean `x0` was mishandled, the harness was wrong, or the optimizer
+does not respond to its start at all.
+
+**The ceiling arm removes all three readings at once.** Starting each point from **its own**
+converged `θ̂`, through the same call, saved **93.97% ± 0.16%** of iterations and **62.18%** of
+wall clock. So the machinery delivers when the start is right, and the finding is not about the
+plumbing:
+
+> **the optimum is far less spatially coherent than the data is.**
+
+That is a statement about the science, and it is the one a future session needs. **A reader
+proposing warm-starting again must see 94% next to 7.8%**, or they will read the 7.8% as a bug
+to be fixed rather than as a property of the field.
+
+**The ceiling arm is usually the cheapest arm in the design**, because the best possible input
+is normally already lying around — here it was the cold arm's own output.
+
+#### (i2c) A SIGN-UNSTABLE BENEFIT IS WORSE THAN A SMALL ONE, AND THE STRATUM THAT FLIPS IS THE FINDING
+
+> **Report the stratum where a mechanism's benefit changes SIGN, not just its pooled
+> magnitude.** A mechanism that helps on average and harms somewhere specific needs a policy
+> for that somewhere — and a pooled number cannot tell you the policy is missing.
+
+Same task. Same-regime warm starts saved **+9.75%**; warm starts whose source lay across the
+field's regime boundary cost **−16.27%** — a 26-point swing, and the wrong side of zero.
+
+**The mechanism harms exactly where spectral shape changes**, which is where the scientific
+interest is and where §11.2 says hysteresis concentrates. **This would have mattered even under
+a passing pooled number:** at a 30% pooled saving the design would still have needed a boundary
+policy, and §11.1's two-pass warm start **has no notion of regime boundaries at all.** The
+measurement did not merely size the benefit — it named a piece of the design that was never
+specified.
+
 ### (j) Does the oracle share a derivation path with the thing it checks?
 
 An independent oracle means a **different construction**, not different constants.
