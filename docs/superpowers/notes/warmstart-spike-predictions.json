@@ -1,0 +1,76 @@
+{
+  "task": "2c Task 0 -- the warm-start spike: is the iteration saving above the threshold the design's own verdict turns on?",
+  "written": "2026-08-23",
+  "written_before": "any arm of the harness ran. The harness existed and its smoke point had run at B = 16, N = 120, M = 3 (47.4 s, n_iter 4.8 / 12.7 / 11.8, every outcome OK); no arm of the measurement below had been executed.",
+
+  "the_question_it_closes": "Design doc section 11.2 makes warm-starting's own survival conditional on a number it calls unmeasured: 'If warm-starting saves less than ~30% of iterations, the mechanism is not paying for its complexity or its hysteresis risk, and warm-starting is dropped.' Measured after the mechanism exists, that verdict costs a schema bump and a sixth cascade, so it is not really available. Measured now it costs one harness. This is the same number the audit was going to measure, minus the mechanism.",
+
+  "instrument": "`fit(x0=...)`, which Phase 1 built for exactly this and which has never had a consumer. Four arms over the same pass-2 point set, each one `fit` call at B = 240 so the tile-is-the-batch shape is preserved: COLD (no x0), WARM (x0 = nearest-valid coarse point's theta_unconstrained under the section 11.3 rule at stride k = 4, ties lowest y then lowest x, bounded spiral), SELF (x0 = the point's own converged theta_unconstrained -- the positive control), RANDOM (x0 = a coarse point at index distance > 6 under a fixed seed -- the discriminating control). Arms interleaved, three repeats, threads pinned to 1.",
+
+  "fixture": "16 x 16 grid, N = 96 monthly samples, signal [Constant, Trend], M = 3 candidates: [white], [matern12 + white], [matern32 + white] -- lint-clean by construction, no two same-kind free-timescale terms. True parameters vary SMOOTHLY within a regime and the field carries a SHARP regime boundary at column 6, between the coarse columns 4 and 8, so cross-regime warm sources and the lowest-x tie-break both occur. Data drawn from textbook Matern covariance matrices written in the harness, never from the code under test. Second fixture: N = 384 over a 48-point subset, COLD and WARM arms only.",
+
+  "predictions": {
+    "P1": {
+      "claim": "THE POSITIVE CONTROL COLLAPSES. Self-warm cuts mean iterations by at least 70% against cold, on every candidate.",
+      "band": ">= 70% on each of the three candidates",
+      "refutation_clause": "If self-warm saves less than 40% on any candidate, `x0` is not reaching the optimizer as a start, the whole run is a claim about the instrument, and NOTHING ELSE IN THE MEASUREMENT MAY BE QUOTED.",
+      "why": "Starting at the optimum should terminate on the first or second gradient evaluation. This is also the only test that `fit(x0=...)` is honoured end to end."
+    },
+    "P2": {
+      "claim": "THE HEADLINE SAVING COMES IN BELOW THE THRESHOLD. Neighbour-warm's pooled iteration saving over cold is positive but under 30%.",
+      "band": "5% to 30%, point estimate ~18%",
+      "refutation_clause": "A pooled saving at or above 30% refutes this and the mechanism proceeds to be built on a measured premise. A saving at or below 0% refutes it in the other direction and is a stronger result than predicted.",
+      "why": "L-BFGS-B on a 1-3 parameter problem from a moment-init ladder that was DESIGNED to be a good start is already close. The ladder is not a naive start, and the honest comparison is against a good one."
+    },
+    "P3": {
+      "claim": "THE SAVING IS ORDERED BY PARAMETER COUNT. [matern32 + white] (3 free) saves more than [matern12 + white] (3 free, easier surface) saves more than [white] (1 free), and [white] saves under 5%.",
+      "band": "white < 5%; the two composites both above white",
+      "refutation_clause": "If [white] saves more than 15%, the saving is not about the parameter space and something else -- a fixed cost, a scaling, the ladder itself -- is producing it, and the interpretation of every other column changes.",
+      "why": "For a single sigma the moment ladder is essentially exact, so there is almost nothing for a warm start to improve."
+    },
+    "P4": {
+      "claim": "THE HORN I DOUBT: PROXIMITY BUYS LITTLE. Neighbour-warm and random-distant-warm differ by less than 5 percentage points of saving.",
+      "band": "|saving_neighbour - saving_random| < 5 points",
+      "refutation_clause": "A gap of 10 points or more refutes this and is the single most consequential outcome available: it would establish that the two-pass GEOMETRY -- and not merely warm starting -- is what pays, which is the premise the coarse stride, the spiral and the fit_hash boundary all rest on and which nothing has ever tested.",
+      "why": "I doubt this because the entire design rests on the opposite, and because I have never seen it measured. I write it as the prediction anyway: the likelihood surface for these families is dominated by the data at each point, and a converged theta from ANYWHERE is mostly buying 'a sensible scale' rather than 'this point's answer'. If that is right, 2c owes far less than section 11.1 describes."
+    },
+    "P5": {
+      "claim": "CROSS-REGIME SOURCES ARE WORSE, POSSIBLY NEGATIVE. Points whose nearest-valid coarse source lies across the regime boundary show a lower saving than same-regime points, and the boundary stratum's saving may be below zero.",
+      "band": "boundary stratum at least 10 points below the same-regime stratum",
+      "refutation_clause": "If the boundary stratum matches the interior, either the boundary is not sharp enough to matter -- checkable against the true parameters -- or the warm start is not actually influencing where the optimizer lands, which P1 and P6 together would then have to explain.",
+      "why": "A start drawn from the wrong family's optimum is worse than the ladder, and this is where section 11.2 says hysteresis concentrates."
+    },
+    "P6": {
+      "claim": "WARM AND COLD LAND AT THE SAME OPTIMUM ALMOST EVERYWHERE. Selection agreement >= 95% of points; |delta loglik| < 0.01 at >= 95% of (point, candidate); normalised parameter distance < 0.25 SE at >= 90%.",
+      "band": "as stated",
+      "refutation_clause": "Material disagreement -- selection agreement below 90%, or |delta loglik| > 0.01 at more than 10% -- is the third permitted outcome arriving early: the mechanism buys speed at the cost of correctness, which is a SCOPE decision and not an implementation one. Report and stop.",
+      "why": "These families are not strongly multimodal at this signal-to-noise. If they are, the finding arrives before the mechanism exists rather than after, which is the point of the ordering."
+    },
+    "P7": {
+      "claim": "THE WALL-CLOCK SAVING IS SMALLER THAN THE ITERATION SAVING, AND THE THRESHOLD SHOULD BE READ ON IT.",
+      "band": "wall-clock saving between 0.5x and 1.0x the iteration saving",
+      "refutation_clause": "A wall-clock saving LARGER than the iteration saving means warm-started iterations are individually cheaper, which no part of this design predicts and would need explaining before any of it is used.",
+      "why": "design_info, the ACF, n_eff and the Hessian at the optimum are per-fit fixed costs a warm start does not touch, so they dilute any per-iteration gain."
+    },
+    "P8": {
+      "claim": "THE SPIRAL IS DEFENSIVE, NOT LOAD-BEARING. Fewer than 5% of (coarse point, candidate) pairs are non-OK, so the spiral steps beyond radius 0 for fewer than 5% of pass-2 points.",
+      "band": "< 5%",
+      "refutation_clause": "Above 20% and the spiral is load-bearing rather than defensive: its radius cap, its tie-break and its exhaustion fallback stop being edge cases and become part of what determines theta at a fifth of the field, which changes what 2c owes and what its tests must cover.",
+      "why": "The fixture is drawn from the candidate families themselves at healthy signal-to-noise, so failures should be rare. This prediction is about the FIXTURE as much as the mechanism, and a high rate means the fixture is harder than intended."
+    },
+    "P9": {
+      "claim": "THE SECOND FIXTURE AGREES. The neighbour-warm saving at N = 384 is within 10 percentage points of the N = 96 saving.",
+      "band": "|saving(384) - saving(96)| < 10 points",
+      "refutation_clause": "A larger move means the iteration saving depends on N, the primary fixture does not describe production at N = 630, and the headline number must be re-taken at production length before any verdict rests on it.",
+      "why": "Iteration counts are a property of the parameter space, not of the record length. That is the claim, and it is worth sixteen minutes to check it rather than assume it."
+    }
+  },
+
+  "permitted_outcomes_agreed_in_advance": [
+    "Saving >= 30% AND warm/cold agree (P6 holds): proceed to build, on a measured premise.",
+    "Saving < 30%: warm-starting is DROPPED. The two-pass barrier, the cache key, the spiral and /warmstart/ are never written. Record what 2c becomes instead -- pass 1 still has four other jobs (the calibration tile, the early-abort evaluation, the cold reference for the audit, the /detail/ subsample default), so its structure may survive its motivation.",
+    "Saving >= 30% but warm and cold reach different optima at a material rate: the mechanism buys speed at the cost of correctness. That is a scope decision, not an implementation one. Report and stop."
+  ],
+
+  "what_this_spike_does_not_establish": "Anything about hysteresis at production scale, about label switching (designed out of the candidate set rather than measured), about the barrier's cost at 10^7 points, or about whether pass 1 can double as the calibration tile -- which 2b flagged as questionable and which stays open either way."
+}
