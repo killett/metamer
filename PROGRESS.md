@@ -17,7 +17,7 @@
 5. **Tests: 1090 passed, 0 failed, 0 INDETERMINATE — 2026-08-21, 849.96 s on a box at 7.2 GB available.** ~~1089~~ — that count was written down one commit after the sweep that produced it, while the commit in between added a test, so it was stale by one from the moment it was recorded. **It was corrected by running the sweep, never by adding one to a collection count**: a collected count is not a passing count, and 1089 + 1 is an inference. The RSS summary is now **per assertion**: `criterion 7's peak`, `the floor with the input open` and `the recompute loop` report `gate=witness`; `the floor ladder's rungs` and `peak residency across the iteration cap` remain `gate=margin` **and are named there rather than counted**. **A HIGH stall reading skips nothing** — see open question 19. **CI IS NOT A SUBSTITUTE AND IS SHARPER THAN THAT:** it runs `-m "not machine"` and therefore executes **exactly one** of the nine RSS assertions, which is also the one whose fixture cannot express its condition on that hardware — 11.3 MB of input contribution here against **913 408 B** on the runner, failing once and passing on a re-run of the same commit.
 6. **`pixi run test` is the full sweep and every end-of-task verification must run it; `test-fast` and `test-ci` are not evidence.** It has caught **seven** things a fast run could not, two of them in Task 8. **Every run prints `RSS measurement validity`, including at zero** — a nonzero count is INDETERMINATE, neither pass nor fail.
 7. **Verify a fresh checkout with `pixi run test && pixi run typecheck && pixi run lint`**, plus `pixi run pre-commit run --all-files` before every commit.
-8. **THE METHOD IS THE PRE-FLIGHT AND IT LIVES IN EXACTLY ONE PLACE:** [`phase1-to-phase2-handoff.md`](docs/superpowers/notes/phase1-to-phase2-handoff.md) §1 — (a0)–(a8), (a)–(k), **three new at Tasks 8a/8i: decay as an INTERACTION, right-in-kind-wrong-in-scale, and a zero reading is not evidence of absence**, **two new at 2c Task 0: (i2b) a high-ceiling control converts a null into a LOCATED null, and (i2c) a sign-unstable benefit is worse than a small one**, the five causes of a surviving mutation, the standing rules, the fixture facts. **Run it against the task brief before code**, append to [`phase2b-preflight.md`](docs/superpowers/notes/phase2b-preflight.md) or, for 2c, [`phase2c-preflight.md`](docs/superpowers/notes/phase2c-preflight.md). **Do not restate it here** — the two copies drifted once already.
+8. **THE METHOD IS THE PRE-FLIGHT AND IT LIVES IN EXACTLY ONE PLACE:** [`phase1-to-phase2-handoff.md`](docs/superpowers/notes/phase1-to-phase2-handoff.md) §1 — (a0)–(a8), (a)–(k), **three new at Tasks 8a/8i: decay as an INTERACTION, right-in-kind-wrong-in-scale, and a zero reading is not evidence of absence**, **five new in 2c: (i2b) a high-ceiling control converts a null into a LOCATED null, (i2c) a sign-unstable benefit is worse than a small one, (j5) a second instrument is a cross-check only if it measures the same quantity under the same conditions, (j6) bound the unmeasured region before measuring it, and (i11) state refutation clauses in BOTH directions**, the five causes of a surviving mutation, the standing rules, the fixture facts. **Run it against the task brief before code**, append to [`phase2b-preflight.md`](docs/superpowers/notes/phase2b-preflight.md) or, for 2c, [`phase2c-preflight.md`](docs/superpowers/notes/phase2c-preflight.md). **Do not restate it here** — the two copies drifted once already.
 9. **The plan is [`2026-08-14-metamer-phase2b.md`](docs/superpowers/plans/2026-08-14-metamer-phase2b.md)** — 14 tasks as executed, 16 exit criteria, approved 2026-08-14 and **COMPLETE 2026-08-19; its closing table is at the end**, **amended in place by every task so far, because every one contradicted its brief — including Tasks 8a and 8i, which corrected briefs I had written myself.** Tasks **8a**, **8i** and **8b** were added after approval; the execution order is at the task index.
 10. **Read, in order:** [What Task 8b established](#what-task-8b-established-done-2026-08-19--read-before-quoting-the-per-series-cost-criterion-6-or-criterion-7) — the resolution, the three readings and the two corrected rules — then [What Task 8i established](#what-task-8i-established-done-2026-08-17--read-before-writing-any-rss-assertion-or-trusting-the-validity-gate) — the instrument, the 2×2 and the survey of every RSS assertion — [What Task 8a established](#what-task-8a-established-done-2026-08-17--read-before-quoting-any-long-running-rss-reading), [What Task 9 (narrowed) established](#what-task-9-narrowed-established-done-2026-08-17--read-before-quoting-the-tile-side-the-floor-or-the-blocker) — **the tile side is `batch.tiling.PUBLISHED_TILE_SIDE`, in code, not in any document** — then [What Task 8 established](#what-task-8-established-done-2026-08-16--read-before-quoting-the-per-series-cost-criterion-6-or-criterion-7), which **opens by stating its ladder cannot be reproduced**.
 11. **Precedence: the design doc is authoritative on INTENT; a measured, dated number supersedes an unmeasured one wherever it lives, including in the design doc. Any measurement stated twice has one copy DELETED, never reconciled.**
@@ -5190,8 +5190,70 @@ audit reference, `/detail/` default. **Only the calibration job goes, and the co
 the design doc** so a later reader sees four and knows why.
 
 **THE STRUCTURAL CONSEQUENCE, WHICH IS WHY THIS QUESTION CAME BEFORE THE STRIDE:** with
-calibration gone, **pass 1's stride is constrained only by the warm-start requirement.** It is now
-answerable on warm-start grounds alone rather than as a compromise between two masters.
+calibration gone, ~~**pass 1's stride is constrained only by the warm-start requirement**~~ — **AMENDED
+2026-08-24 BY D6: THAT IS INCOMPLETE.** Pass 1's **four surviving jobs all draw from the coarse
+set**, and the stride sets its size: `k = 8` makes it **sixteen times thinner than `k = 4`.** The
+stride is constrained by the warm-start requirement **and by pass 1's adequacy as a sample for its
+four remaining jobs.** Scale alone does not settle it, and the three jobs differ:
+
+| job | does `k` bind it? |
+|---|---|
+| early-abort evaluation | **no.** It needs a stratified global sample; `1/64` of 10⁷ is ~156 000 points, and the stratification property comes from **dataset coordinates**, which `k` does not affect |
+| **cold audit reference** | **THIS IS THE BINDING CHECK, AND IT IS A COUNT-PER-CELL QUESTION RATHER THAN A TOTAL.** The audit stratifies by difficulty proxy **and candidate** (D4), so the cells multiply — **a rare stratum at `1/64` sampling may have too few members to say anything.** Recorded as **owed and unverified** |
+| `/detail/` default | **not a constraint — a decision.** Sixteen times fewer points getting full covariances may be the right number or too few, and it is chosen rather than forced |
+
+**`k = 8` STANDS UNLESS THE AUDIT-STRATUM COUNT FAILS**, and the reason is recorded as **owed
+verification rather than as an assumption.**
+
+### D6 — THE COARSE STRIDE IS `k = 8`, CHOSEN ON A WRITTEN OBJECTIVE AND CLOSED BY A BOUND
+
+**MEASURED RATHER THAN ASSERTED BECAUSE THE STRIDE IS INSIDE `fit_hash`** — the one warm-start
+parameter that cannot be revised later without fragmenting every store built before the revision.
+§11.2 gave a **floor** (`k ≥ 4`), never a choice. Task 1's points are in
+[`warmstart-stride-measured.jsonl`](docs/superpowers/notes/warmstart-stride-measured.jsonl);
+predictions and the objective were committed first in
+[`warmstart-stride-predictions.json`](docs/superpowers/notes/warmstart-stride-predictions.json).
+
+`N = 630`, 12 × 12, **108 common fine points measured under all three strides against one cold
+reference** — (j5) — with coarse health **100% OK** and mean source radius **1.000 / 1.704 /
+2.556**.
+
+| `k` | `s(k)` iterations | `T_warm/T_cold` | `1/k²` | **net saving** | selection agreement |
+|---|---|---|---|---|---|
+| 2 | 45.23% ± 0.84% | 0.5606 | 0.2500 | **32.95%** | 102/108 = 94.4% |
+| 4 | 42.76% ± 0.97% | 0.5980 | 0.0625 | **37.69%** | 99/108 = 91.7% |
+| **8** | **42.42% ± 0.78%** | 0.6068 | 0.0156 | **38.71%** | **107/108 = 99.1%** |
+
+**BOTH COLUMNS POINT THE SAME WAY, AND SO DOES THE TERM THE OBJECTIVE EXCLUDES.** `k = 8` wins on
+cost by **1.02 points**, has the **best agreement**, and serializes **1.6%** of the field at the
+barrier against `k = 4`'s 6.25%.
+
+> **AND THE QUESTION IS CLOSED BY ARITHMETIC, NOT BY ANOTHER FIXTURE.** The curve is still rising
+> at the largest stride measured, which normally demands another point. **It does not here:** at
+> `k = 8` the pass-1 fraction is already 1.6%, so the **entire** remaining prize from `k → ∞` is
+> `(1/64)·(1 − r) ≈ **0.61 points**`, and any degradation in `s(k)` subtracts from it directly.
+> **`k = 8` is within 0.61 points of the best achievable stride, whatever it is.** Promoted as
+> **(j6)** — and the bound exists **only because the objective was written down first.**
+
+**THE PREDICTIONS: THREE HELD, ONE HELD HARDER THAN PREDICTED, TWO REFUTED.** S0 held (`s(4)` =
+42.76% on the 108 against Task 0's 42.28% on the 135 — the common-set restriction is innocuous).
+S1 held. **S2's band is refuted on the high side** — predicted 35–40%, measured 42.42%, only
+**0.34 points** below `s(4)` — **and its clause was written for degradation only, so it could not
+fire.** Promoted as **(i11)**: state refutation clauses in both directions. S3 held. S5 held at
+all three strides.
+
+**S4 IS REFUTED AND IT CORROBORATES D3a BY A SECOND ROUTE.** Agreement is **non-monotone** —
+94.4 / 91.7 / **99.1%** — and the **most distant** stride agrees **best**. **The monotone
+distance-drives-disagreement hypothesis is dead.** Counts are small (3–8 cells) so **no ordering
+is claimed**, but two independent measurements now say disagreement is **not** geographic.
+**Consequence: this further weakens any geography-based policy and further strengthens candidate
+as the primary audit stratum**, which D4 already promoted.
+
+**AND THE COLD ARM WAS RE-RUN RATHER THAN REUSED, WHICH IS THE QUIET WIN.** Cold measured
+**17.67 s/series** here against **20.68** on the same fixture and machine the night before — a
+**15%** difference from point subset plus box drift. **Reusing the earlier rate would have put a
+spurious 15% into every `T_warm/T_cold` ratio.** Third time this project has been saved by
+interleaving arms inside one session rather than comparing across sessions.
 
 ### D2 — TASK 0's METHOD IS THE TEMPLATE FOR EVERY REMAINING 2c PREMISE THAT IS UNMEASURED
 

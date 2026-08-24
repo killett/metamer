@@ -1184,8 +1184,23 @@ of:
 > **FOUR OF THE FIVE SURVIVE, AND THE COUNT IS STATED SO A LATER READER DOES NOT WONDER WHETHER
 > ONE WAS DROPPED BY ACCIDENT.** Job 2 is retired; jobs 1, 3, 4 and 5 are unchanged.
 > **Consequence for pass 1's geometry, which is why this question was structural:** with
-> calibration gone, **the coarse stride is constrained only by the warm-start requirement** and is
-> answerable on warm-start grounds alone, rather than being a compromise between two masters.
+> calibration gone, the coarse stride is answerable on warm-start grounds rather than as a
+> compromise between two masters.
+>
+> **AMENDED 2026-08-24 (Phase 2c decision D6). THE STRIDE IS `k = 8`, AND "WARM-START GROUNDS
+> ALONE" WAS INCOMPLETE.** Pass 1's **four surviving jobs all draw from the coarse set**, and the
+> stride sets its size — `k = 8` makes it **sixteen times thinner than `k = 4`**. The early-abort
+> evaluation is unaffected (its stratification comes from **dataset** coordinates, which `k` does
+> not touch) and the `/detail/` default is a **decision** rather than a constraint, but **the cold
+> audit reference is a count-PER-CELL question**: the audit stratifies by difficulty proxy **and**
+> candidate, the cells multiply, and a rare stratum at `1/64` sampling may have too few members to
+> say anything. **That check is owed and unverified; `k = 8` stands unless it fails.**
+>
+> **`k = 8` was chosen on a written objective, `1/k² + (1 − 1/k²)·(T_warm/T_cold)` in TIME**, and
+> measured at `N = 630` on 108 points common to all three strides: net saving **32.95 / 37.69 /
+> 38.71%** at `k = 2 / 4 / 8`, selection agreement **94.4 / 91.7 / 99.1%**. **The curve is still
+> rising and the question is still closed**, because at `k = 8` the pass-1 fraction is 1.6% and the
+> whole remaining prize from `k → ∞` is **≈ 0.61 points**.
 
 (The Whittle screening pass would be a sixth; it is deferred with its regime declared.)
 

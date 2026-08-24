@@ -1679,6 +1679,42 @@ seen during a fit** against **counts of named `FitResult` fields** because one r
 both. **Both were two counts of two different things, compared because they sat near each
 other.** The rule above is what would have stopped all three.
 
+#### (j6) BOUND THE UNMEASURED REGION BEFORE MEASURING IT — SOMETIMES THE BOUND CLOSES THE QUESTION
+
+> **Before measuring another point on a curve, compute the maximum the unmeasured region
+> COULD be worth. Where that bound is smaller than the decision's margin, the question is
+> closed by arithmetic and the measurement is not worth taking.**
+
+**This is (j4) applied FORWARD** — to measurements not yet taken, rather than to tables already
+published.
+
+**The worked case is 2c Task 1, the stride curve.** Net saving came in at **32.95 / 37.69 /
+38.71%** for `k = 2 / 4 / 8`, still rising at the largest stride measured — which normally
+argues for a `k = 16` fixture, and this project had already been punished once for stopping a
+lever at two points. **The bound says otherwise.** The objective is
+`1/k² + (1 − 1/k²)·r`, and at `k = 8` the pass-1 fraction is already **1.6%**, so the **entire**
+remaining prize from `k → ∞` is `(1/64)·(1 − r) ≈ **0.61 points**` — **and any degradation in
+`s(k)` beyond 8 subtracts from it directly.** `k = 8` is therefore within 0.61 points of the best
+achievable stride, whatever it is. **A `k = 16` fixture could not change the answer**, and the
+~2 h it would have cost was not spent.
+
+**THE BOUND IS ONLY AVAILABLE BECAUSE THE OBJECTIVE WAS WRITTEN DOWN FIRST.** Without a formula
+there is nothing to take a limit of, and the honest move would have been another fixture.
+
+#### (i11) STATE REFUTATION CLAUSES IN BOTH DIRECTIONS — THE SURPRISE LIVES WHERE YOU WERE NOT LOOKING
+
+> **A refutation clause that can only fire one way halves the value of the prediction.**
+
+**2c Task 1's S2 is the worked case, and it is a near miss rather than a failure.** It predicted
+`s(8)` at 35–40% and wrote its clause for **degradation** — *"below 32% refutes this"*. The
+measurement came in at **42.42%**, **above** the band, so the band was missed and **the clause
+could not fire.** The claim held harder than predicted, which is a good outcome **reached by a
+prediction that could not have caught the opposite.**
+
+**This project's prediction record is strong precisely because refutations have been
+informative** — A-double-prime's C2, A-triple-prime's D2 and D6, P4, P9. **A one-sided clause
+forfeits half of that**, and the direction you did not fear is the one worth insuring.
+
 ### (j2) A MEASUREMENT VALIDATES THE CODE PATH THE INSTRUMENT EXERCISES, NOT THE ONE THE FORMULA CLAIMS TO DESCRIBE
 
 > **Before trusting a validating measurement, verify the instrument drives the production
