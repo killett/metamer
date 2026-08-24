@@ -5043,6 +5043,83 @@ only have stopped using pass 1 **as the source**.
    the distant one did, 122 against 125 of 135 — three cells, which is not evidence, but which
    would mean **the geometry buys speed and costs agreement.**
 
+### D3 — PER-CELL WARM STARTS ARE `x0` PLUS AN EXPLICIT `(B, M)` VALIDITY ARRAY, NEVER A NaN SENTINEL
+
+**THE SENTINEL WAS THE CHEAP OPTION AND IT ERASES THE EVIDENCE OF THE BUG IT MATTERS MOST TO
+CATCH.** An all-NaN row in `x0[b, c, :p]` meaning *"ladder this one"* needs no signature change and
+reuses the padding convention `theta_unconstrained` already returns in. **But a failed fit
+legitimately produces an all-NaN `theta_unconstrained` row**, so *"the spiral found no valid
+source"* and *"the spiral handed you a failed source"* become **the same bytes** — and the spiral
+exists precisely to never do the second. **(a0) in a new place: a fill value a successful run can
+produce.**
+
+**AND THE SOURCE INDEX STAYS OUT OF CORE.** A `WarmStarts` object carrying θ, validity and the
+coarse source index would discharge §11.3's *"record the source coarse index per point"* in the
+same change — and would **leak a coarse-grid concept into `metamer.core`.** `fit` takes arrays and
+returns results; that seam has held since Phase 1 and does not break for a convenience. **The
+batch layer owns the source map and its recording, which is where the coarse grid exists.**
+
+**FOUR CONSTRAINTS ON THE SHAPE.**
+
+1. **VALIDITY IS `(B, M)`, NOT `(B,)`.** The spiral runs **per candidate**, because the key is
+   `(fit_hash, candidate spec_hash)` — a coarse point can be `OK` for one candidate and failed for
+   another. A `(B,)` array would force all-or-nothing per point and **quietly discard usable
+   sources.**
+2. **AN ALL-NaN ROW INSIDE A CELL MARKED VALID IS A REFUSABLE ERROR, AND THE REFUSAL NAMES THE
+   CELL AND THE CANDIDATE.** That check **is** the reason (b) beats (a): it converts a spiral bug
+   from silent to loud. **Tested with a constructed source map that marks a failed fit valid** —
+   the fault class does not otherwise occur, and per (i8) a guard against a condition no fixture
+   constructs is untested however many tests run.
+3. **NON-FINITE IS BROADER THAN NaN.** A valid cell carrying `inf`, or a value outside its
+   `ParamSpec`'s diagnostic limits, refuses on the same path. Phase 1's rule is that failed
+   results carry NaN and never `-inf` at the boundary — but **a warm start arriving from a store
+   is data, not a return value**, and is validated as such.
+4. **`x0` WITHOUT `x0_valid` IS A HARD ERROR, NOT A DEFAULT-TO-ALL-VALID.** Defaulting hands the
+   caller (a)'s behaviour back, sentinel trap intact and no diagnostic. **Both or neither** — and
+   *neither* is the existing cold path, which is already correct.
+
+**AND THE ALIGNMENT IS NOW LOAD-BEARING IN TWO ARRAYS.** `fit` slices `x0[b:b+1, c, :p]`, so the
+parameter truncation is positional; a per-candidate validity array puts the `M`-axis-to-candidate
+correspondence in **two** places. **Shape agreement between `x0`, `x0_valid` and the candidate set
+is asserted once at entry, not per cell.**
+
+**TWO THINGS THIS ENABLES, NOTED AND NOT BUILT NOW.** §11.3's `InitRung` reporting already
+distinguishes `WARM_START` from the moment ladder, and D3 makes the **fallback rung reachable for
+the first time** — a cell with no valid source reports the ladder, which is a per-cell fact the
+batch layer aggregates into *"how often did the spiral find nothing"*, free. And **Q9's spiral
+bound and exhaustion behaviour now has an expressible contract**: on exhaustion, **mark the cell
+invalid rather than passing a degraded source.** The policy lives in the batch layer; core only
+honours validity.
+
+### D3a — WHERE THE DISAGREEMENT ACTUALLY IS, MEASURED 2026-08-23, AND IT IS **NOT** AT THE REGIME BOUNDARY
+
+> **THIS CORRECTS AN ASSUMPTION D1 CARRIED.** The boundary is where the **benefit** is lowest. It
+> is **not** where the **risk** is. Those are two different strata and the design was about to
+> conflate them.
+
+Re-read of [`warmstart-spike-n630-measured.jsonl`](docs/superpowers/notes/warmstart-spike-n630-measured.jsonl),
+no new run:
+
+| | value |
+|---|---|
+| cross-regime points, base rate | **13 of 135 — 9.6%** |
+| `warm` selection disagreements | **13**, of which **cross-regime: 0** |
+| their columns | **0, 0, 0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2** — every one in the region-A interior |
+| cells with `\|Δℓ\| > 0.01` | **11**, of which cross-regime **0** |
+| their candidate | **all 11 are candidate 2**, `matern32 + white` — the 3-parameter, stiffest member |
+| `random` disagreements, for contrast | **10**, cross-regime **0**, columns **1, 2, 2, 2, 2, 2, 7, 7, 8, 9** — more spread |
+
+**THE DISAGREEMENT CONCENTRATES IN ONE CORNER OF PARAMETER SPACE ON ONE CANDIDATE, AND THE
+GEOGRAPHY IS NOT THE AXIS.** That is §11.2's own prediction — hysteresis concentrates where the
+likelihood is flat or multimodal — arriving on the proxy §11.2 actually names (**a post-fit
+difficulty proxy**: Hessian condition, ΔIC to next-best, failure-taxonomy status) rather than on
+the regime label. **A boundary-stratified audit would have looked in the wrong place.**
+
+**NOT CLAIMED:** any mechanism for *why* those columns. `ΔIC` was not recorded by the spike, so
+the *"ambiguous selection"* reading is untested here; and 13 and 11 are small counts on one
+fixture. **The located fact is that the disagreements are not at the boundary and are all on one
+candidate** — enough to aim the audit, not enough to explain it.
+
 ### D2 — TASK 0's METHOD IS THE TEMPLATE FOR EVERY REMAINING 2c PREMISE THAT IS UNMEASURED
 
 **Three elements, and each one changed the answer at least once.** A **lever across three
