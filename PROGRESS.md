@@ -5233,8 +5233,7 @@ four remaining jobs.** Scale alone does not settle it, and the three jobs differ
 | **cold audit reference** | **THIS IS THE BINDING CHECK, AND IT IS A COUNT-PER-CELL QUESTION RATHER THAN A TOTAL.** The audit stratifies by difficulty proxy **and candidate** (D4), so the cells multiply — **a rare stratum at `1/64` sampling may have too few members to say anything.** Recorded as **owed and unverified** |
 | `/detail/` default | **not a constraint — a decision.** Sixteen times fewer points getting full covariances may be the right number or too few, and it is chosen rather than forced |
 
-**`k = 8` STANDS UNLESS THE AUDIT-STRATUM COUNT FAILS**, and the reason is recorded as **owed
-verification rather than as an assumption.**
+~~**`k = 8` STANDS UNLESS THE AUDIT-STRATUM COUNT FAILS**~~ — **CHECK RUN AND DISCHARGED 2026-08-24, see D10: it passes at production scale with ~3 orders of magnitude of margin, and the binding constraint turned out to be FIELD SIZE rather than the stride.**
 
 ### D6 — THE COARSE STRIDE IS `k = 8`, CHOSEN ON A WRITTEN OBJECTIVE AND CLOSED BY A BOUND
 
@@ -5429,6 +5428,52 @@ are sitting right there.** **The bin is assigned from the COLD arm's `κ`** — 
 so **the stratification is independent of the thing being measured.** Binning by the warm arm's
 `κ` would let **the mechanism under test move cells between strata**, which is conditioning on a
 post-treatment variable. Promoted as **(j7)**.
+
+### D10 — THE COUNT-PER-CELL CHECK PASSES AND `k = 8` STANDS. THE BINDING CONSTRAINT IS FIELD SIZE, NOT THE STRIDE
+
+**RUN 2026-08-24 OVER D9's STRATA, AS ARITHMETIC RATHER THAN AS A JUDGEMENT.** This is the check
+D6 recorded as **owed and unverified** and which gates the stride. **Settled after D9 and not
+before**, because a check run under provisional bins can only produce two traps: comfort measured
+against bins invented to run it, or a temptation to choose the real bins with one eye on whether
+`k = 8` survives — **fitting the stratification to the answer**, which is the Task 8 warm-up-split
+trap one level up.
+
+**THE MINIMUM IS STATED WITH ITS REASON: 30 MEMBERS.** A binomial rate over `n = 30` has a
+standard error of ~9% at `p = 0.5` — **enough to tell a rare stratum from a common one, not enough
+to quote a rate.** Below it, no rate is quoted.
+
+**A stratum is adequately populated unless its occupancy falls below:**
+
+| field | stride | per-**point** metric (3 × M strata) | per-**cell** metric (M × 4 strata, `M = 3`) |
+|---|---|---|---|
+| **10⁷** (closure boundary 3) | `k = 4` | 1 in 20 833 | 1 in 62 500 |
+| | **`k = 8`** | **1 in 5 208** | **1 in 15 625** |
+| **46.6 M** (§9.4's worked example) | **`k = 8`** | 1 in 24 276 | 1 in 72 828 |
+| 10⁵ (a small run) | `k = 4` | 1 in 208 | 1 in 625 |
+| | **`k = 8`** | **1 in 52** | **1 in 156** |
+
+> **`k = 8` PASSES AT PRODUCTION SCALE WITH ROUGHLY THREE ORDERS OF MAGNITUDE OF MARGIN**, and
+> **D6's owed check is discharged.** A stratum would have to hold fewer than **1 in 5 208** points
+> to be underpopulated — and a stratum that rare is **uninformative at `k = 4` too**, which buys
+> exactly **4×**.
+
+**AND THE REAL FINDING IS THAT THE STRIDE WAS NEVER THE LEVER HERE.** The ratio between `k = 4`
+and `k = 8` is **exactly 4× in occupancy threshold, at every field size** — so **a stratum
+adequately populated at `k = 8` is adequately populated at `k = 4`, and one that fails at `k = 4`
+fails at `k = 8`.** The band where the stride decides the answer is **one factor of four wide**.
+**Stratum adequacy is a property of FIELD SIZE.** At 10⁵ points the audit's rare strata are thin
+at **either** stride; at Task 0's own 9 216-point fixture they are hopeless at both.
+
+#### SO THE AUDIT NEEDS A MINIMUM-MEMBERS RULE, AND IT IS (a2b) FOR THE THIRD TIME
+
+**A stratum below 30 members yields a rate that is invalid under a condition the code can
+detect.** By **(a2b)**, that rate is **not emitted with a caveat — it is unavailable**, and the
+**member count is reported in its place** so the absence is visible rather than silent. **This
+makes the audit correct at every field size instead of only at production scale**, and it means
+the stride never has to carry a constraint that belongs to the run.
+
+**NOTHING MOVES.** `k = 8` stands, `PUBLISHED_TILE_SIDE` is untouched, and the one new obligation
+is a member-count column the audit was going to need anyway.
 
 ### D2 — TASK 0's METHOD IS THE TEMPLATE FOR EVERY REMAINING 2c PREMISE THAT IS UNMEASURED
 
