@@ -1,0 +1,61 @@
+{
+  "task": "2c Task 1 -- the stride curve: s(k) at k in {2, 4, 8}, and the shipped stride chosen on a written objective",
+  "written": "2026-08-24",
+  "written_before": "any arm of the stride sweep ran. The N = 630 fixture and its pass 1 at k = 4 already existed from Task 0; nothing in the sweep below had been executed.",
+
+  "the_question_it_closes": "The coarse stride sits inside fit_hash (Q9), so it is the one warm-start parameter that cannot be revised later without fragmenting every store built before the revision. Section 11.2 only ever gave a FLOOR -- 'favourable for k >= 4' -- and Task 0 measured s(4) = 42.28% and nothing else, so the curve is one point and the shipped value would otherwise be an asserted fit-identity field.",
+
+  "instrument": "Task 0's harness fixture, unchanged: 12 x 12, N = 630, stride-nested coarse sets, same candidate set, threads pinned. The strides NEST -- k = 8's coarse set is a subset of k = 4's, which is a subset of k = 2's -- so Task 0's pass 1 already holds every source k = 4 and k = 8 need, and only k = 2's extra 27 coarse points are newly fit. s(k) is measured on the COMMON fine set of 108 points that are pass-2 under all three strides, against one cold reference over those same 108, so the three savings are one population and (j5) is satisfied.",
+
+  "the_objective_written_before_the_numbers": {
+    "formula": "relative_cost(k) = (1/k^2) + (1 - 1/k^2) * (T_warm(k) / T_cold);  net_saving(k) = 1 - relative_cost(k)",
+    "units": "TIME, not series. Task 0 measured cold at 45.90% slower in wall clock than warm at N = 630, so a series-unit objective undervalues large k by treating pass 1's expensive work as fungible with pass 2's cheap work.",
+    "measured_versus_computed": "T_cold and T_warm(k) are measured per-series wall clock on the same 108 points. The 1/k^2 fraction is arithmetic over the grid, not a measurement. The two are not mixed.",
+    "stated_assumptions": [
+      "It treats pass 1's work as fungible with pass 2's, which the BARRIER makes false: pass 1 must complete before pass 2 starts, so it serializes 25% of all points at k = 2 and 1.6% at k = 8. If k = 2 ever wins on this arithmetic, the barrier is the reason to look again.",
+      "It ignores assembly cost, which is identical across strides.",
+      "It is a WHOLE-RUN cost and says nothing about peak."
+    ]
+  },
+
+  "predictions": {
+    "S0": {
+      "claim": "CONSISTENCY: s(4) recomputed on the 108-point common set is within 3 points of Task 0's 42.28% measured on 135 points.",
+      "band": "39.3% to 45.3%",
+      "refutation_clause": "A larger move means the common-set restriction is not innocuous and the three strides' comparability rests on a population effect I have not characterised. Every other reading here would then be suspect.",
+      "why": "The 108 are a subset of the 135 differing only by which points happen to be coarse at k = 2, which is a geometric property and not a difficulty property."
+    },
+    "S1": {
+      "claim": "s(2) IS ABOVE s(4), AND ONLY MODESTLY. Predicted 43-47%, point estimate 44.5%.",
+      "band": "43% to 47%",
+      "refutation_clause": "s(2) below s(4) would mean a nearer source is a WORSE start, which nothing in Task 0 predicts and which would need explaining before any stride is chosen. s(2) above 50% would mean the distance response is far steeper at short range than the near/distant contrast implied.",
+      "why": "Task 0's near-versus-distant contrast cost 12 points across a distance change of roughly 4.5 cells, so about 2.7 points per cell. k = 2 moves the mean source distance about half a cell closer than k = 4."
+    },
+    "S2": {
+      "claim": "THE HORN I DOUBT: s(8) STAYS HIGH. Predicted 35-40%, point estimate 38%, i.e. within 7 points of s(4).",
+      "band": "35% to 40%",
+      "refutation_clause": "s(8) below 32% refutes this and is the more interesting result: it would mean proximity matters MORE at coarse strides than Task 0's near/distant contrast suggested, that the distance response is convex rather than linear, and that the 12-point near/distant figure was averaging over a curve. That would move the optimum toward smaller k and would also mean Task 0's random arm was not a clean upper bound on distance cost.",
+      "why": "I doubt it because the whole distance-insensitivity reading rests on one contrast between two distance regimes, with nothing measured in between. Linear interpolation across an unmeasured interval is exactly the inference this project keeps finding wrong."
+    },
+    "S3": {
+      "claim": "THE NET-COST OPTIMUM IS k = 4 OR k = 8, AND k = 2 IS CLEARLY WORST.",
+      "band": "net_saving: k = 2 around 36%, k = 4 around 43%, k = 8 around 41%. k = 2 at least 4 points below the winner.",
+      "refutation_clause": "If k = 2 wins, the barrier's serialization cost -- deliberately outside the objective -- becomes decisive and the choice must be re-taken with it priced. If k = 8 wins by more than 3 points, section 11.2's k >= 4 floor is not merely a floor but is BELOW the optimum, and the floor was doing work nobody checked.",
+      "why": "1/k^2 punishes k = 2 hard: 25% of the field fit at the expensive cold rate. Between 4 and 8 the fractions are 6.25% and 1.6%, so the difference is small and s(k)'s decline decides it."
+    },
+    "S4": {
+      "claim": "SELECTION AGREEMENT DEGRADES MONOTONICALLY WITH k, AND STAYS ABOVE 88% EVERYWHERE.",
+      "band": "roughly 92% at k = 2, 90.4% at k = 4 reproducing Task 0, 88-90% at k = 8",
+      "refutation_clause": "Agreement below 88% at any k means the net-cost optimum and the correctness optimum may diverge, and the stride becomes a SCOPE decision rather than an arithmetic one -- report and decide, do not pick the cheapest. Non-monotone agreement would mean distance is not what drives disagreement, which D3a already half-suggests since the disagreements clustered by candidate rather than by geography.",
+      "why": "A more distant source should land in a different basin more often. But D3a found the disagreements clustered in one candidate and one corner of parameter space rather than by distance, so this prediction and D3a are in mild tension and the result discriminates between them."
+    },
+    "S5": {
+      "claim": "THE CANDIDATE ORDERING FROM TASK 0 SURVIVES AT EVERY STRIDE: matern32+white saves most, then matern12+white, then white.",
+      "band": "ordering holds at all three k",
+      "refutation_clause": "A crossing would mean the stride interacts with the family, so no single stride is right for a mixed candidate set -- which would be a genuine complication for a design whose key is per candidate.",
+      "why": "It held at all three record lengths in Task 0, which is three independent chances to break."
+    }
+  },
+
+  "what_this_cannot_establish": "One fixture, one lever, three points, at N = 630 on one simulated field with one candidate set. Task 0's own history is the caution: five of nine predictions changed verdict between fixtures, and a single-fixture reading would have shipped a confident wrong recommendation. The stride chosen here is chosen for THIS field's spatial coherence, which has never been measured on real altimetry. The barrier's serialization cost is outside the objective by construction and is not measured here at all."
+}

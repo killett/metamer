@@ -139,3 +139,85 @@ are a property of the parameter space rather than of `N`, but that is a claim, s
 fixture at `N = 384` over a 48-point subset** runs the cold and neighbour-warm arms alone. **If the
 saving moves with `N`, the primary fixture's number does not describe production**, and that is
 worth knowing for the price of sixteen minutes.
+
+---
+
+## 2c Task 1 — the stride curve, audited before any code
+
+**THE BRIEF.** Measure `s(k)`, the warm-start saving as a function of the coarse stride, at
+`k ∈ {2, 4, 8}`, and choose the shipped stride on a written net-cost objective rather than on
+§11.2's `k ≥ 4` floor.
+
+**WHY IT IS MEASURED RATHER THAN ASSERTED, AND THIS IS THE DECIDING ARGUMENT.** The stride is
+**inside `fit_hash`** (Q9): it determines what every pass-2 point starts from. **It is therefore
+the one warm-start parameter that cannot be revised later without fragmenting every store built
+before the revision.** An hour now against a cascade plus every existing store later is not a
+close trade — and leaving a **fit-identity field asserted** is the class of value this project has
+been most consistently wrong about.
+
+### (j4) THE MEASUREMENT IS CHEAP BECAUSE THE STRIDES NEST, AND THAT IS AN EXISTING MEASUREMENT USED AS EVIDENCE
+
+**`k = 8`'s coarse set is a subset of `k = 4`'s, which is a subset of `k = 2`'s.** So the `N = 630`
+run's pass 1 **already contains every source `k = 8` needs and every source `k = 4` needs**; only
+`k = 2`'s extra 27 coarse points must be fit. **(j4) applied to a fixture rather than to a table.**
+
+### (j5) THE THREE STRIDES MUST BE READ ON ONE POINT SET, OR THEY ARE NOT COMPARABLE
+
+Each stride has its **own** pass-2 set — 108, 135 and 140 of 144 — so a saving computed on each
+stride's own set is three savings over three different populations. **That is exactly the
+comparability failure promoted as (j5) two decisions ago.**
+
+**The measured quantity is therefore `s(k)` on the COMMON fine set** — the **108** points that are
+pass-2 under all three strides — with the **same cold reference**. **The arithmetic that turns
+`s(k)` into a run cost uses each stride's own `1/k²` fraction**, which is a calculation and not a
+measurement. Measured lever, computed objective, and the two are not mixed.
+
+### (a5) THE OBVIOUS OBJECTIVE IS IN SERIES AND THE DECISION IS IN TIME
+
+`1/k² + (1 − 1/k²)·(1 − s(k))` **assumes pass 1 and pass 2 cost the same per series, and Task 0
+measured that they do not** — cold is **45.90% slower in wall clock** at `N = 630`. In series-units
+a larger `k` is **undervalued**, because it shifts work from the expensive arm to the cheap one.
+
+> **THE OBJECTIVE, IN TIME, WRITTEN BEFORE THE NUMBERS EXIST:**
+>
+> `relative_cost(k) = (1/k²) + (1 − 1/k²) · (T_warm(k) / T_cold)`
+> `net_saving(k)   = 1 − relative_cost(k)`
+>
+> where `T_cold` and `T_warm(k)` are **per-series wall clock on the common 108-point set**, both
+> measured, not modelled. **Both arms run over the same 108 points so the ratio has no
+> population difference in it.**
+
+**AND ITS ASSUMPTIONS ARE STATED WITH IT.** It treats pass 1's work as **fungible with pass 2's**,
+which the barrier makes false — see below. It ignores the assembly cost, which is identical
+across strides. And it is a **whole-run** cost, so it says nothing about peak.
+
+### THE BARRIER'S COST IS NOT IN THE OBJECTIVE, AND THAT IS STATED RATHER THAN BURIED
+
+Pass 1 must **complete** before pass 2 starts, so it **serializes** a fraction of the run that
+cannot overlap. **At `k = 2` that fraction is 25% of all points; at `k = 8` it is 1.6%.** Whether
+that matters depends on the parallelism story, which is within-tile by §11.1 — but the objective
+as written treats the two arms' work as interchangeable and it is not. **A stride chosen on the
+objective alone is chosen ignoring the barrier**, and if `k = 2` ever wins on the arithmetic the
+barrier is the reason to look again.
+
+### (i10) AGREEMENT IS A SECOND COLUMN, NOT A FOOTNOTE
+
+The mechanism was authorized at **90.37% selection agreement against a pre-agreed 90% stop — a
+margin of one grid cell.** If agreement **degrades with `k`** — a more distant source landing in a
+different basin more often — then **the net-cost optimum and the correctness optimum diverge**,
+and that is a **scope decision rather than an arithmetic one**. **Both columns are reported at
+every `k`, and the choice is not made on cost alone.**
+
+### WHAT THIS CANNOT ESTABLISH, NAMED IN ADVANCE
+
+**One fixture, one lever, three points**, at `N = 630` on one simulated field with one candidate
+set. **Task 0's own history is the caution: five of nine predictions changed verdict between
+fixtures**, and a single-fixture reading would have shipped a confident wrong recommendation.
+**The stride chosen here is chosen for THIS field's spatial coherence**, which has never been
+measured on real altimetry.
+
+### AND THE OBJECTIVE OUTLIVES THE NUMBER
+
+Whichever `k` wins, **the net-cost formula now exists in writing**, so a future change to either
+rate — a faster optimizer, a cheaper cold path, a differentiated filter — **has a formula to
+re-evaluate the stride against rather than an inherited constant.**
