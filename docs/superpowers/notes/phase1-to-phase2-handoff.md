@@ -465,6 +465,43 @@ quantities — threadpoolctl caps the OpenMP runtime's pool, numba's mask is how
 multithreaded is not a precondition that holds*) now has an **intra-layer instance**: two
 instruments of the same OpenMP layer disagreeing inside one process.
 
+### (a2b) WHEN A VALUE IS INVALID UNDER A DETECTABLE CONDITION, MAKE IT UNAVAILABLE — DO NOT EMIT IT WITH A CAVEAT
+
+> **A caveat travels less well than the number it qualifies, and the number is what gets
+> copied.** If a computed value is invalid under a condition the code can detect, **do not
+> produce it.** Labelling it does not stop it being quoted.
+
+**THIRD REGISTER OF ONE FAMILY, AND THE FIX WAS THE SAME SHAPE ALL THREE TIMES: MAKE THE WRONG
+READING IMPOSSIBLE RATHER THAN DOCUMENTED.**
+
+| register | the wrong reading | the fix |
+|---|---|---|
+| **(a0)** a fill value a successful run can produce | an empty store reads as a complete one | a sentinel no success can emit |
+| **(a2)** a name is not a gate | a setting recorded reads as a setting enforced | observe the limit instead of requesting it |
+| **(a2b)** *this one* | a caveated number reads as a number | **do not emit it** |
+
+**The worked case is Phase 2c decision D8.** §11.2's audit reports four disagreement metrics, and
+a **pooled** figure over a candidate set the identifiability lint has flagged is **invalid** —
+label switching inflates parameter disagreement while selection and `|Δℓ|` stay near zero, so the
+pooled number describes non-identifiability wearing hysteresis' clothes. The obvious designs were
+**refuse to audit** (which denies an audit to the users most at risk) and **report both with a
+label** (which leaves the misquotable artifact in existence). **The audit emits no pooled figure
+at all.**
+
+**TWO THINGS THAT MAKE THE RULE SAFE TO APPLY.**
+
+- **CHECK THAT NOTHING CONSUMES THE VALUE FIRST.** D8 was free only because **no criterion reads a
+  pooled disagreement figure** — §11.2 attaches its one threshold to the iteration saving. **Where
+  a consumer does exist, withholding is a breaking change and the rule does not automatically
+  win.**
+- **THE UNAVAILABILITY MUST BE VISIBLE.** A missing number reads as an omission unless the output
+  **says it was withheld and why.** Same argument as `RSS measurement validity` printing **at
+  zero**: silence and absence are the same bytes.
+
+**AND A CONDITIONAL VERSION OF THIS RULE IS ITSELF A HAZARD.** *"Withhold only when flagged"* means
+one run emits the figure and another does not, so **two runs report different quantities under one
+name.** D8 withholds **always**, which is why it is a default rather than a branch.
+
 ### (a3) DEFER THE FEATURE, DECLARE THE REGIME
 
 > **When deferring a feature, ask separately whether its REGIME must be declared.** If any

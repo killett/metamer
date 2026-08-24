@@ -17,7 +17,7 @@
 5. **Tests: 1090 passed, 0 failed, 0 INDETERMINATE — 2026-08-21, 849.96 s on a box at 7.2 GB available.** ~~1089~~ — that count was written down one commit after the sweep that produced it, while the commit in between added a test, so it was stale by one from the moment it was recorded. **It was corrected by running the sweep, never by adding one to a collection count**: a collected count is not a passing count, and 1089 + 1 is an inference. The RSS summary is now **per assertion**: `criterion 7's peak`, `the floor with the input open` and `the recompute loop` report `gate=witness`; `the floor ladder's rungs` and `peak residency across the iteration cap` remain `gate=margin` **and are named there rather than counted**. **A HIGH stall reading skips nothing** — see open question 19. **CI IS NOT A SUBSTITUTE AND IS SHARPER THAN THAT:** it runs `-m "not machine"` and therefore executes **exactly one** of the nine RSS assertions, which is also the one whose fixture cannot express its condition on that hardware — 11.3 MB of input contribution here against **913 408 B** on the runner, failing once and passing on a re-run of the same commit.
 6. **`pixi run test` is the full sweep and every end-of-task verification must run it; `test-fast` and `test-ci` are not evidence.** It has caught **seven** things a fast run could not, two of them in Task 8. **Every run prints `RSS measurement validity`, including at zero** — a nonzero count is INDETERMINATE, neither pass nor fail.
 7. **Verify a fresh checkout with `pixi run test && pixi run typecheck && pixi run lint`**, plus `pixi run pre-commit run --all-files` before every commit.
-8. **THE METHOD IS THE PRE-FLIGHT AND IT LIVES IN EXACTLY ONE PLACE:** [`phase1-to-phase2-handoff.md`](docs/superpowers/notes/phase1-to-phase2-handoff.md) §1 — (a0)–(a8), (a)–(k), **three new at Tasks 8a/8i: decay as an INTERACTION, right-in-kind-wrong-in-scale, and a zero reading is not evidence of absence**, **five new in 2c: (i2b) a high-ceiling control converts a null into a LOCATED null, (i2c) a sign-unstable benefit is worse than a small one, (j5) a second instrument is a cross-check only if it measures the same quantity under the same conditions, (j6) bound the unmeasured region before measuring it, and (i11) state refutation clauses in BOTH directions**, the five causes of a surviving mutation, the standing rules, the fixture facts. **Run it against the task brief before code**, append to [`phase2b-preflight.md`](docs/superpowers/notes/phase2b-preflight.md) or, for 2c, [`phase2c-preflight.md`](docs/superpowers/notes/phase2c-preflight.md). **Do not restate it here** — the two copies drifted once already.
+8. **THE METHOD IS THE PRE-FLIGHT AND IT LIVES IN EXACTLY ONE PLACE:** [`phase1-to-phase2-handoff.md`](docs/superpowers/notes/phase1-to-phase2-handoff.md) §1 — (a0)–(a8), (a)–(k), **three new at Tasks 8a/8i: decay as an INTERACTION, right-in-kind-wrong-in-scale, and a zero reading is not evidence of absence**, **six new in 2c: (i2b) a high-ceiling control converts a null into a LOCATED null, (i2c) a sign-unstable benefit is worse than a small one, (j5) a second instrument is a cross-check only if it measures the same quantity under the same conditions, (j6) bound the unmeasured region before measuring it, (i11) state refutation clauses in BOTH directions, and (a2b) make an invalid value UNAVAILABLE rather than caveated**, the five causes of a surviving mutation, the standing rules, the fixture facts. **Run it against the task brief before code**, append to [`phase2b-preflight.md`](docs/superpowers/notes/phase2b-preflight.md) or, for 2c, [`phase2c-preflight.md`](docs/superpowers/notes/phase2c-preflight.md). **Do not restate it here** — the two copies drifted once already.
 9. **The plan is [`2026-08-14-metamer-phase2b.md`](docs/superpowers/plans/2026-08-14-metamer-phase2b.md)** — 14 tasks as executed, 16 exit criteria, approved 2026-08-14 and **COMPLETE 2026-08-19; its closing table is at the end**, **amended in place by every task so far, because every one contradicted its brief — including Tasks 8a and 8i, which corrected briefs I had written myself.** Tasks **8a**, **8i** and **8b** were added after approval; the execution order is at the task index.
 10. **Read, in order:** [What Task 8b established](#what-task-8b-established-done-2026-08-19--read-before-quoting-the-per-series-cost-criterion-6-or-criterion-7) — the resolution, the three readings and the two corrected rules — then [What Task 8i established](#what-task-8i-established-done-2026-08-17--read-before-writing-any-rss-assertion-or-trusting-the-validity-gate) — the instrument, the 2×2 and the survey of every RSS assertion — [What Task 8a established](#what-task-8a-established-done-2026-08-17--read-before-quoting-any-long-running-rss-reading), [What Task 9 (narrowed) established](#what-task-9-narrowed-established-done-2026-08-17--read-before-quoting-the-tile-side-the-floor-or-the-blocker) — **the tile side is `batch.tiling.PUBLISHED_TILE_SIDE`, in code, not in any document** — then [What Task 8 established](#what-task-8-established-done-2026-08-16--read-before-quoting-the-per-series-cost-criterion-6-or-criterion-7), which **opens by stating its ladder cannot be reproduced**.
 11. **Precedence: the design doc is authoritative on INTENT; a measured, dated number supersedes an unmeasured one wherever it lives, including in the design doc. Any measurement stated twice has one copy DELETED, never reconciled.**
@@ -5285,6 +5285,81 @@ as the primary audit stratum**, which D4 already promoted.
 **15%** difference from point subset plus box drift. **Reusing the earlier rate would have put a
 spurious 15% into every `T_warm/T_cold` ratio.** Third time this project has been saved by
 interleaving arms inside one session rather than comparing across sessions.
+
+### D7 — THE AUDIT'S FIRST ARM IS N2, AN EQUAL-DISTANCE RANDOM-DIRECTION START. THE FLOOR IS DESIGNED BEFORE THE SUBJECT IS MEASURED
+
+**HYSTERESIS IS *DIRECTIONAL* BIAS TOWARD THE NEIGHBOUR'S ANSWER**, so the control must move the
+start **by the same distance in a direction carrying no information.** If N2 disagrees as much as
+`warm` does, the 90.37% is *"the start moved"* and **not** *"the start moved toward the
+neighbour"* — and the audit is then a statement about **optimizer sensitivity**, not about
+**spatial contamination.** Those are different findings with different consequences, and no arm
+already run separates them.
+
+> **TASK 0's `random` ARM IS NOT THIS CONTROL, AND "WE ALREADY HAVE A RANDOM ARM" IS THE OBVIOUS
+> WRONG SHORTCUT.** It starts from **another point's converged optimum** — a real attractor in the
+> same likelihood surface — so it **shares the property under test rather than controlling for
+> it.** That is **(j) at the level of an experimental arm**: an oracle sharing a derivation path
+> with its subject.
+
+**THREE ARMS, FOUR DISTINGUISHABLE READINGS — STATED BEFORE RUNNING, BECAUSE IT IS WHAT MAKES
+EACH ARM'S RESULT INTERPRETABLE.** N1 is cold from the moment-ladder start perturbed by a tiny ε;
+N2 is cold from a perturbation matched in magnitude to that cell's own warm/cold start distance.
+
+| N1 | N2 | `warm` | the reading |
+|---|---|---|---|
+| **non-zero** | — | — | **the surface itself is deciding** at those cells. No start is reliable and the disagreement is a property of the **problem**, not of warm-starting |
+| zero | **non-zero** | non-zero | the sensitivity is to **start distance**, not direction. `warm`'s disagreement is *"the start moved"* — **benign, not hysteresis** |
+| zero | zero | **non-zero** | **THE FINDING THE AUDIT EXISTS TO CATCH**: directional bias toward the neighbour's answer |
+| zero | zero | zero | no hysteresis at this fixture |
+
+**TWO CONSTRAINTS ON N2.**
+
+1. **MATCH THE DISTANCE PER CELL, NOT ON AVERAGE.** The warm/cold start distance **varies by
+   cell** — mean source radius is 2.556 at `k = 8`, and the distance **in unconstrained
+   coordinates** varies more than the geometric radius does. **N2's perturbation magnitude equals
+   that cell's own warm/cold distance**, or the control is matched in aggregate and **mismatched
+   everywhere.**
+2. **THE RANDOM DIRECTION NEEDS ITS SEED IN THE RECORD.** `fit` has no stochastic component —
+   which is *why* the null is unbuildable without perturbation — so **N2 introduces the only
+   randomness in the system.** That seed is **fit-relevant for the audit arm** and is recorded, or
+   the audit stops being reproducible **in the one place it now can be.**
+
+### D8 — THE AUDIT REPORTS PER STRATUM ONLY. THERE IS NO POOLED MEAN, EVER, AND THE HEADLINE IS THE WORST STRATUM
+
+**§11.2's WORK ITEM — REFUSE LINT-FLAGGED CANDIDATE SETS, OR REPORT THE STRATA APART — IS ANSWERED
+BY A THIRD OPTION THAT MAKES THE MISREADING IMPOSSIBLE RATHER THAN DOCUMENTED.** Refusing denies
+an audit to exactly the users most at risk. Reporting both leaves the pooled number in existence,
+and **labelling a number does not stop it being quoted.**
+
+> **AND THE DECIDING FACT IS THAT NOTHING CONSUMES IT.** §11.2 attaches a threshold to **one**
+> quantity — the ~30% iteration saving — and **no criterion anywhere reads a pooled disagreement
+> figure.** So withholding it **costs no decision rule anything**, which turns a trade-off into a
+> free choice. **Checked before deciding, not assumed.**
+
+**THE HEADLINE SCALAR IS THE MAXIMUM OVER STRATA, NOT THE MEAN.** Convenience is real — someone
+will want one number — but **a mean dilutes and a maximum cannot understate.** §11.2's own
+sentence is *"the overall number is the one that gets quoted and the per-stratum numbers are the
+ones that are true"*; **reporting the worst stratum as the headline makes the quoted number a true
+one.**
+
+**THIS SUBSUMES THE LINT CASE.** A lint-flagged set simply has its flagged candidates in their own
+stratum, and since there is no pooled figure at all there is **nothing for label switching to
+contaminate.** (c) becomes a special case of a better default rather than a conditional behaviour
+— and **a conditional behaviour was itself a comparability hazard**: a run that pools and a run
+that does not are **different quantities**, and a user comparing them would not know.
+
+**TWO CONSTRAINTS.**
+
+1. **THE WITHHOLDING IS VISIBLE, NOT SILENT.** A missing pooled figure reads as an omission unless
+   the report **says it was withheld and why** — and, for a lint-flagged set, **names the flagged
+   pair.** Same argument as `RSS measurement validity` printing **at zero**.
+2. **THE STRATA DEFINITIONS MUST BE STABLE ACROSS RUNS**, or per-stratum figures are no more
+   comparable than the pooled one was. **Candidate identity is stable by `spec_hash`; the
+   difficulty-proxy bins are not, and need fixed boundaries recorded with the report.** Owed.
+
+**AND THE EVIDENCE FOR PER-STRATUM-AS-PRIMARY IS NOW TWO INDEPENDENT FINDINGS DEEP** — D3a (all 11
+large-`|Δℓ|` cells in one candidate) and S4 (agreement non-monotone in distance, so not
+geographic). **The pooled number was already the less informative one.**
 
 ### D2 — TASK 0's METHOD IS THE TEMPLATE FOR EVERY REMAINING 2c PREMISE THAT IS UNMEASURED
 
