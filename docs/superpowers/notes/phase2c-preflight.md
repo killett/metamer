@@ -391,3 +391,140 @@ choice that moves the `self` arm and must be recorded as one.**
 optimizer, which is the workaround D3 replaces. Under the `:p`-only validator the padding never
 needs flattening at all, so the call becomes the honest one — `x0=cold.theta_unconstrained` with
 an all-true `x0_valid` — and the fixture stops hiding the distinction between padding and failure.
+
+---
+
+## Plan Task 1 — the fit-relevant fields and the hash cascade, audited before any code
+
+**THE BRIEF** is the plan's Task 1: `FIT_RELEVANT_FIELDS` **gains** the five warm-start settings;
+the audit's settings stay out; the interpolation rule is fixed at nearest-valid, still exists and
+is still hashed, with no config flag selecting it; `ALGORITHM_VERSION` is hand-bumped; and the
+three `GOLDEN_*` constants **move** and are re-derived by hand and verified by reversal.
+
+### (j4) THE FIRST FINDING IS THAT THE TASK IS ALREADY IMPLEMENTED, AND IT WAS FOUND BY GREP RATHER THAN BY `git log`
+
+**`_WARM_START_FIT_FIELDS` has existed since 2026-08-11 — Phase 2a Task 1 — and is already unioned
+into `FIT_RELEVANT_FIELDS`.** So has the audit exclusion, and so have the tests. Measured, not
+read:
+
+| change to the config payload | `fit_hash` moves? |
+|---|---|
+| `warm_start_coarse_stride` 8 → 16 | **yes**, `1eb1fd73…` → `30fc9d13…` |
+| `warm_start_enabled` true → false | **yes**, → `df42f1bd…` |
+| `warm_start_spiral_bound` 4 → 7 | **yes**, → `aefb203e…` |
+| `warm_start_interpolation_rule` → a second rule | **yes**, → `a3ae05ef…` |
+| `audit_subsample` 0 → 500 | **no** |
+| `audit_stratify` false → true | **no** |
+
+**The baseline reproduces `GOLDEN_FIT_HASH = 1eb1fd731b4ae8d6` exactly**, from a payload built by
+hand in this pre-flight and not from the test fixture — so the golden and the live code agree
+through a path that shares nothing with `tests/test_hashing.py`.
+
+**And the tests the brief specifies already exist, in stronger form than it asks for:**
+`test_the_warm_start_coarse_stride_moves_fit_hash` is the (a2) movement check;
+`test_every_warm_start_setting_reaches_fit_identity` is **parametrized**, because one field is not
+evidence about a set; `test_the_audit_settings_move_no_gate` is the paired negative and **names its
+positive control by test name**; and `_HISTORY` in `tests/test_hashing.py` already carries the
+2026-08-11 hop with the three pre-warm-start digests `faf2d107bab48b06 / bb28cb8d4bffa049 /
+af313190251af95f`, reversed one hop at a time.
+
+**This is CLAUDE.md's "verify implementation status" rule paying for itself.** A shallow
+`git log` over 2c shows no warm-start-field commit, because the commit is in 2a.
+
+### SO THE GOLDENS DO NOT MOVE, AND THE REVERSAL CHAIN GAINS NO HOP
+
+The plan states as an invariant that *"the three `GOLDEN_*` constants move, and are re-derived by
+hand and verified by reversal"*. **They move only if the hashed field set moves, and it does
+not** — the field set moved on 2026-08-11, and the hop for that move is already in `_HISTORY`.
+**Re-deriving them now would be regeneration with nothing to reverse against**, which is the
+precise failure the reversal discipline exists to prevent. **Reported, not absorbed.**
+
+**The one thing that WOULD move all three is an `ALGORITHM_VERSION` bump**, and
+`tests/test_hashing.py` says so at the constants. Which is the next finding.
+
+### (a5) THE BUMP BELONGS TO TASK 5, NOT TASK 1, AND THE PLAN'S OWN JUSTIFICATION IS FALSE OF TASK 1
+
+The plan writes: *"`ALGORITHM_VERSION` is hand-bumped, per its docstring's rule — **this change
+moves `θ̂` for an input that previously fit**."* Checked against the docstring's actual rule —
+*"bump when and only when a change alters the value of `theta_hat` or `log_lik` for some input
+that previously fit"* — **Task 1 alters no `θ̂`.** It has no code to write; adding a field to an
+allowlist moves a **hash**, not an optimum, and the field is already there in any case.
+
+**The change that moves `θ̂` is Task 5**, where `run` grows the two-pass mode and a default run
+starts warm-starting. **Bumping at Task 1 would put the version boundary in a different place
+from the behaviour boundary**, which is the same defect one task earlier: stores written between
+Task 1 and Task 5 would carry the new version and cold fits, and stores after Task 5 the new
+version and warm fits. **The plan's Task 5 does not currently mention the bump. That is the
+correction.**
+
+### AND THE DEFECT THIS EXPOSES IS ALREADY IN THE TREE, WITH `enabled` DEFAULTING TO TRUE
+
+`WarmStart.enabled` defaults to **`True`**, is in `fit_hash`, and **nothing consumes it**:
+`grep warm_start src/metamer/batch/run.py` returns nothing, and `run` calls `fit` with no `x0`.
+So **every store written since 2026-08-11 records a fit payload asserting `warm_start_enabled:
+true` over fits that are entirely cold.** After Task 5 the identical config produces warm-started
+fits **under the same `fit_hash`** — converged-looking fits at a different optimum, resumed into
+the same store, which is §11.1's worst failure mode arriving through the config rather than
+through a stale cache.
+
+**THE OBVIOUS REPAIR IS THE WRONG ONE, WHICH IS WHY IT IS WRITTEN DOWN.** `Screening` is *"present,
+and refused at layer 3 until Phase 4"*, and mirroring that for `WarmStart` is the first thing a
+reader reaches for. **It would refuse every run**, because unlike `screening.enabled` (default
+`False`) this one defaults to `True`. **The closer is the `ALGORITHM_VERSION` bump at Task 5**: a
+pre-bump store then mismatches on `fit_hash` and refits, which is exactly what the constant is
+for. **Nothing else separates the two populations, and no store can be repaired after the fact.**
+
+### THE REQUEST/IDENTITY CLASSIFICATION WAS NEVER MADE FOR THESE FIVE, BECAUSE THE VOCABULARY ARRIVED A DAY LATE
+
+The five entered on **2026-08-11**. `data_uri` was named *"the last self-reported identity in
+either allowlist"* on **2026-08-12**. **So the five are the only members of `FIT_RELEVANT_FIELDS`
+that were never classified**, and the classification is what the audit of the existing fields
+closed with.
+
+**All five are REQUESTS**, and the distinction is about **who is authoritative**:
+
+| class | who is authoritative | members | hazard |
+|---|---|---|---|
+| **REQUEST** | the config — the user is asking for something | `variable`, `signal_terms`, `objective`, `engine`, `seed`, and the five `warm_start_*` | none; the config cannot be wrong about what it asked for |
+| **IDENTITY, STAMPED** | the installed code; `normalize` writes it and a config supplying it is **refused** | `algorithm_version`, `registry_version` | forgetting to bump — answered at the constant |
+| **IDENTITY, MEASURED** | the input; read at stage 4a and unsupplied by any config | `geometry_hash` | none; the data cannot misreport itself |
+| **IDENTITY, SELF-REPORTED** | **the config, about something outside it** | **must be empty** | `data_uri` and `metamer_version` both were this, and both were **wrong in both directions at once** |
+
+**A CLASSIFICATION IN PROSE IS A CONVENTION AND THIS PROJECT HAS BEEN BURNED BY CONVENTIONS.**
+(a2): the classification is made **executable** — the three classes are declared as constants and
+a test asserts they **partition** `FIT_RELEVANT_FIELDS` exactly and are pairwise disjoint, so a
+sixth field added without a classification **fails** rather than defaulting into the set. The
+forbidden fourth class needs no constant: it is **whatever the partition does not cover**, and the
+partition covering everything is what proves it empty.
+
+### (a2) "NO CONFIG FLAG SELECTS IT" IS ALREADY TRUE, AND FOR A REASON WORTH NOT UNDOING
+
+`interpolation_rule: Literal["nearest_valid"]` and `tie_break: Literal["lowest_yx"]`. The **field
+exists and is hashed** — so a second rule can never silently share a store — while **no value
+other than the shipped one is expressible**, which is §11.3's requirement. **Widening either
+`Literal` is the change that breaks it**, and it will look like adding a feature.
+
+**One asymmetry found, and it is small.** `test_every_warm_start_setting_reaches_fit_identity`
+parametrizes four cases — `enabled`, `spiral_bound`, `coarse_stride`, `tie_break` — and **omits
+`interpolation_rule`**, while its own docstring warns that *"a flattening that emitted four of the
+five correctly and dropped one would sail through a single-field test"*. The field is covered by
+the golden payload, where it appears by name, so nothing is unguarded — but the parametrization is
+the place a reader checks for completeness, and **four of five in a test whose argument is
+five-of-five is the shape that invites the wrong conclusion.** It gains the fifth case.
+
+### THE STRIDE NOW LIVES IN TWO PLACES, AND TASK 1 OWNS ONLY ONE OF THEM
+
+`warm_start_coarse_stride` is a **request** consumed twice: pass 2's `fit_hash` (Task 1's half,
+already in place) and **pass 1's input decimation** (Task 2's). **Task 1 must not assume the two
+agree because one was derived from the other** — D11 makes pass 1 a separate store with its own
+identity, and the plan's **Task 4** owns the cross-store gate, which *"checks the stride explicitly
+and positionally, never by assuming one was derived from the other"*. **Confirmed: Task 4's brief
+already states it, so no ownership gap exists** — recorded because the hash moving on the stride
+reads like the check, and it is not. A hash proves two **configs** agree; it says nothing about
+what a **store on disk** was actually decimated at.
+
+### (d) AND THE VOCABULARY CHECK, WHICH IS HOW THE FIRST FINDING WAS FOUND
+
+`rg 'warm_start' src/metamer/config/` and `rg 'FIT_RELEVANT_FIELDS' src/metamer/core/hashing.py`,
+run **before** reading the brief's behaviour clauses. Both returned the mechanism the brief
+proposes to add. **Running the vocabulary grep first is what turned a task into an audit.**
