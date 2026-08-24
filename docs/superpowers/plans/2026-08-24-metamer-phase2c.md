@@ -1,7 +1,9 @@
 # Phase 2c — the two-pass warm start, its barrier, and the hysteresis audit
 
-**Status: APPROVED 2026-08-24. NO CODE YET; Task 0 is the next action.** The single source for this plan's
-status is this line.
+**Status: APPROVED 2026-08-24. TASK 0 IS DONE (2026-08-24); Tasks 1–8 have no code. Task 1 is the
+next action.** The single source for this plan's status is this line. **What Task 0 found beyond
+its brief — four findings that changed the implementation, and three checks that changed nothing —
+is in [`PROGRESS.md`](../../../PROGRESS.md)'s *What plan Task 0 established*, not here.**
 
 **The design decisions this plan implements are D1–D12** in
 [`PROGRESS.md`](../../../PROGRESS.md)'s *Phase 2c brainstorm — settled decisions*. **Nothing below

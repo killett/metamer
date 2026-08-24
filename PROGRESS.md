@@ -2,11 +2,11 @@
 
 ## Start here (cold-start summary)
 
-1. **Branch `main`, everything on it, every commit pushed by a hook** — https://github.com/killett/metamer. Head at the time of writing: **`746c048`**, 2026-08-24.
+1. **Branch `main`, everything on it, every commit pushed by a hook** — https://github.com/killett/metamer. Head at the time of writing: **the plan Task 0 implementation commit**, 2026-08-24. **A SHA here is stale the moment the next commit lands, so it is named by content rather than by hash** — `git log --oneline -5` is the authority.
 2. **DONE:** Phase 1 (0–18), Phase 2 preliminaries P0–P4, **Phase 2a (0–13)**, **Phase 2b (COMPLETE 2026-08-19 — 10 met / 4 reduced scope / 2 FAILED)**, and **Phase 2c's brainstorm (D1–D12) plus its Task 0 and Task 1 measurements**. The scope decision on a modelling sub-phase was taken 2026-08-22 and **re-taken on closed facts 2026-08-23: it does not open.** Sections below carry each; **none is restated here.**
-3. **NEXT ACTION: PHASE 2c TASK 0 — `fit`'s per-cell warm-start selector.** The plan is [`2026-08-24-metamer-phase2c.md`](docs/superpowers/plans/2026-08-24-metamer-phase2c.md) — **9 tasks, 12 exit criteria each naming its reading, approved 2026-08-24, NO CODE YET.** **The task's FIRST step is the pre-flight**, run against the task brief **before code** and appended to [`phase2c-preflight.md`](docs/superpowers/notes/phase2c-preflight.md).
+3. **NEXT ACTION: PHASE 2c TASK 1 — the fit-relevant fields, and the hash cascade.** The plan is [`2026-08-24-metamer-phase2c.md`](docs/superpowers/plans/2026-08-24-metamer-phase2c.md) — **9 tasks, 12 exit criteria each naming its reading, approved 2026-08-24. TASK 0 IS DONE (2026-08-24); Tasks 1–8 have no code.** **Every task's FIRST step is the pre-flight**, run against the task brief **before code** and appended to [`phase2c-preflight.md`](docs/superpowers/notes/phase2c-preflight.md). **What Task 0 found is in [What plan Task 0 established](#what-plan-task-0-established-done-2026-08-24--read-before-touching-fits-signature-or-any-warm-start-validator), including the three checks that changed nothing** — one of which is that Task 1's config fields **already exist** and are not Task 1's to invent.
 4. ## THE STANDING LIMITATION ON EVERYTHING 2c DECIDED: **NO 2c NUMBER COMES FROM REAL DATA.** Warm-starting was authorized — and every decision after D1 inherits this — on a **simulated field whose spatial coherence is a construction parameter**. **The spatial coherence of real altimetry optima has never been measured.** A field with **weaker** coherence gives a **smaller** saving, and **§11.2's 30% threshold could fail on real data.** **THE NAMED CLOSER, not an open worry: a spike on a real gridded product — same three arms (cold, warm, self-ceiling), same record-length lever.** Until it runs, D1 is authorized on simulation. See [what 2c's tasks inherit](#what-2cs-tasks-inherit-2026-08-24).
-5. **Tests: 1090 passed, 0 failed, 0 INDETERMINATE — 2026-08-21, 849.96 s on a box at 7.2 GB available.** **`pixi run test` is the full sweep and every end-of-task verification must run it; `test-fast` and `test-ci` are NOT evidence** — the full sweep has caught **seven** things a fast run could not. **Every run prints `RSS measurement validity`, including at zero**; a nonzero count is INDETERMINATE, neither pass nor fail.
+5. **Tests: 1100 passed, 0 failed, 0 INDETERMINATE — 2026-08-24, 870.98 s on a box at 4.3 GB available (read after the run, not during it).** **`pixi run test` is the full sweep and every end-of-task verification must run it; `test-fast` and `test-ci` are NOT evidence** — the full sweep has caught **seven** things a fast run could not. **Every run prints `RSS measurement validity`, including at zero**; a nonzero count is INDETERMINATE, neither pass nor fail.
 6. **Verify a fresh checkout with `pixi run test && pixi run typecheck && pixi run lint`**, plus `pixi run pre-commit run --all-files` before every commit.
 7. **THE METHOD IS THE PRE-FLIGHT AND IT LIVES IN EXACTLY ONE PLACE:** [`phase1-to-phase2-handoff.md`](docs/superpowers/notes/phase1-to-phase2-handoff.md) §1 — (a0)–(a9), (a)–(k), the standing rules, the fixture facts, **and the eight 2c added: (i2b) a high-ceiling control converts a null into a LOCATED null, (i2c) a sign-unstable benefit is worse than a small one, (j5) a second instrument is a cross-check only if it measures the same quantity under the same conditions, (j6) bound the unmeasured region before measuring it, (i11) state refutation clauses in BOTH directions, (a2b) make an invalid value UNAVAILABLE rather than caveated, (h2) a metric may only be stratified by axes at its OWN granularity, and (j7) never stratify by a quantity the treatment can move.** **Do not restate it here** — the two copies drifted once already.
 8. **CI IS GREEN and the deliberate red is CLOSED** (2026-08-22, by the repair its own criterion chose: the CI fixture was **enlarged**, the bound was **not** widened and the test was **not** marked). **CI runs `-m "not machine"` and therefore executes exactly ONE of the nine RSS assertions**, so it is not a substitute for the local sweep. See [THE CI FIXTURE DECISION](#the-ci-fixture-decision--taken-measured-and-verified-2026-08-22).
@@ -4968,6 +4968,105 @@ the third executable. The pre-flight now reads **(a)–(k) with (a2), (a3) and (
   `packages = ["src/metamer/core"]` fails the ships-everything test; `psutil` removed from
   `[project.dependencies]` fails the declaration test; restoring the `PYTHONPATH` leak fails
   the isolation control.
+
+---
+
+## Phase 2c execution
+
+### What plan Task 0 established (done 2026-08-24 — read before touching `fit`'s signature or any warm-start validator)
+
+**`fit` gained `x0_valid`, and `fit.py:227`'s call-level all-or-nothing is gone.** The mechanism is
+D3 as written; the plan's Task 0 states it and is not restated here. **What follows is only what
+the task found that the brief did not say**, plus the two things a later task will otherwise
+rediscover the expensive way.
+
+> **NAMING, BECAUSE IT HAS ALREADY COST ONE READING.** *Task 0* denotes two different pieces of
+> work in 2c: the **brainstorm's** Task 0 is the warm-start spike, and the **plan's** Task 0 is
+> this. `phase2c-preflight.md`'s headings now say which; nothing else disambiguated them.
+
+#### FOUR PRE-FLIGHT FINDINGS CHANGED THE CODE RATHER THAN DESCRIBING IT
+
+1. **`ParamSpec.at_diagnostic_limit` returns False for NaN**, because `nan <= lo` and `nan >= hi`
+   are both False. So a limits-only validator passes an **all-NaN row** — the single fault class
+   D3 exists to make loud — **in silence**. The finiteness check is separate and runs first.
+   **Confirmed by mutation:** deleting it leaves the `inf` test green (because `exp(inf)` is caught
+   by the limits check) and only the constructed failed-fit test fails. **Neither check subsumes
+   the other and each is load-bearing for a different fault.**
+2. **`diagnostic_limits` are natural-unit; `x0` is unconstrained.** The wrong comparison and the
+   right one **agree over the entire healthy region** — `exp(0) = 1` is inside every limit — so no
+   fixture near the optimum can separate them. **(i7): the discriminating value is one that falls
+   on opposite sides**, `u = log(1e7) = 16.118` for `rho`, which is finite, reads as inside
+   `(1e-6, 1e6)` when misread as natural, and is **10x beyond** the upper limit when mapped.
+3. **`x0` is `(B, M, p_max)` and the padding is a LEGITIMATE NaN.** `p_max` is the widest
+   candidate's free count, so a narrower candidate's row is NaN by design — **two thirds of
+   `white`'s row at `p = 1` against `p_max = 3`** in this project's own fixture. **A validator
+   reading the full width refuses every well-formed warm start but the widest candidate's**, and it
+   fails in the direction that gets "fixed" by relaxing the check rather than by narrowing the
+   window. It reads `:p` per candidate. **(a0) inverted: here the fill is legitimate and the error
+   is treating it as data.**
+4. **`x0_valid` is required to be boolean dtype, which the brief does not ask for.** Task 3's
+   interface puts `SourceMap.index` (int64, **-1 where exhausted**) beside `SourceMap.valid`
+   (bool), and Task 5 passes them adjacently. **`bool(-1)` is True and `bool(0)` is False**, so
+   under a permissive cast the swap marks **every exhausted cell valid** and **every cell sourced
+   from coarse index 0 invalid** — right shapes, finite values, no exception, and the damage lands
+   on exactly the cells the spiral could not serve. **The gate costs one comparison and closes a
+   silent-wrong-answer path between two tasks that do not exist yet.**
+
+#### AND ONE DUPLICATION WAS CREATED DELIBERATELY, WITH ITS CROSS-CHECK
+
+`at_diagnostic_limit` is scalar, and calling it per (series, candidate, parameter) is a Python loop
+over the whole tile. `fit._out_of_limits` is the array spelling. **Two spellings of one rule is the
+(j) hazard**, so `test_the_vectorised_limit_rule_agrees_with_at_diagnostic_limit` pins them by
+**hitting both limits EXACTLY** — the rule is at-or-beyond, `<` differs from `<=` at precisely two
+values in the continuum, and no random or merely near-boundary sample finds them.
+
+#### THE MUTATION SWEEP, AND THE ONE THAT WAS A NO-OP RATHER THAN A SURVIVOR
+
+Seven mutations were run against the finished tests. **Six were caught. The seventh caught the
+TESTER, not the code**, and that is the transferable part:
+
+> **A MUTATION THAT DOES NOT CHANGE BEHAVIOUR IS NOT A SURVIVING MUTATION, AND IT READS EXACTLY
+> LIKE ONE.** The intended mutation was "validate the full `p_max` width instead of `:p`", written
+> as `rows = x0[:, c, : len(free)]` → `rows = x0[:, c, :]`. **It changed nothing**: the loop below
+> it iterates `enumerate(free)`, so it never indexes past `p` whatever the slice's width. The
+> suite stayed green and the honest reading was *"finding 3 is untested"*. **Rewritten as the
+> defect a real implementation would carry** — a wholesale `np.isfinite(x0[:, c, :]).all(axis=1)`
+> guard before the per-parameter loop — **six tests fail.** **Before recording a surviving
+> mutation, prove the mutant differs from the original on SOME input.**
+
+#### WHAT THIS TASK LEAVES BROKEN OUTSIDE `src/`, ON PURPOSE
+
+**Two instruments under `docs/superpowers/notes/` call `fit(x0=…)` and now raise.** Neither is
+collected by pytest and neither is imported by `src/`, **so the suite cannot see them** — which is
+why they are recorded here rather than left to be found.
+
+- **`warmstart-stride-harness.py`** aborts a stride before calling `fit` if any cell is exhausted,
+  so every cell it warm-starts has a source. **An all-true `x0_valid` reproduces its numbers
+  exactly** — editing it is a no-op dressed as maintenance.
+- **`warmstart-spike-harness.py`** is not in that position. Its **`self` arm passes
+  `prep.theta_unconstrained` unfiltered**, and that array is all-NaN for any cell whose prep fit
+  was not `OK`. The behaviour-preserving `x0_valid` there is *"finite over `:p`"*, under which
+  **those cells take the moment ladder instead of starting from NaN — a different fit from the one
+  D1's verdict measured.**
+
+**THE CONDITION, not a worry: whoever re-runs either harness supplies `x0_valid`, and for the spike
+harness the treatment of non-`OK` prep cells is a design choice that MOVES the `self` arm and is
+recorded as one.** Editing it now would silently change an arm of the measurement D1 rests on.
+
+#### AND THREE THINGS CHECKED THAT DID *NOT* CHANGE ANYTHING
+
+- **`ALGORITHM_VERSION` is not bumped.** Its rule is *"when and only when a change alters
+  `theta_hat` or `log_lik` for some input that previously fit"*. `x0=None` is bit-identical;
+  `x0` + all-true `x0_valid` is bit-identical to the old `x0` path; the only changed input — `x0`
+  alone — now **raises** rather than fitting differently. **No optimum moves.** The bump belongs to
+  Task 1, where the stride does move `θ̂`.
+- **There are exactly two `fit(` call sites in `src/`** — `batch/run.py:934` and
+  `bench/spike.py:349` — and **neither passes `x0`**. The hard error breaks no production path,
+  which is what made D3's "never a default" cheap.
+- **The warm-start config fields already exist**: `warm_start_enabled`, `warm_start_coarse_stride`,
+  `warm_start_interpolation_rule`, `warm_start_spiral_bound`, `warm_start_tie_break`, with tests,
+  landed in 2a. **Task 1 adds them to `FIT_RELEVANT_FIELDS`; it does not invent them**, and
+  assuming otherwise would be discovered as a duplicate field rather than as a failure.
 
 ---
 
