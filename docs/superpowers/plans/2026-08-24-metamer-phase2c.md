@@ -1,6 +1,6 @@
 # Phase 2c — the two-pass warm start, its barrier, and the hysteresis audit
 
-**Status: WRITTEN 2026-08-24, AWAITING REVIEW. No code yet.** The single source for this plan's
+**Status: APPROVED 2026-08-24. NO CODE YET; Task 0 is the next action.** The single source for this plan's
 status is this line.
 
 **The design decisions this plan implements are D1–D12** in
@@ -9,6 +9,25 @@ re-argues one.** Where a task rests on a decision it names it and points there; 
 a measurement it points at
 [`warmstart-spike-verdict.md`](../notes/warmstart-spike-verdict.md) or at the stride sweep's
 points. **A measurement stated twice has one copy deleted, never reconciled.**
+
+> ## THE STANDING LIMITATION, AND IT IS FIRST BECAUSE EVERY TASK BELOW INHERITS IT
+>
+> **NO 2c NUMBER COMES FROM REAL DATA.** Warm-starting was authorized on a **simulated field whose
+> spatial coherence is a construction parameter** — smoothly varying by construction, sharp
+> boundary by construction. **The spatial coherence of real altimetry optima has never been
+> measured.** A field with **weaker** coherence gives a **smaller** saving, and **§11.2's 30%
+> threshold could fail on real data.**
+>
+> **THE CLOSER IS NAMED, so this is a condition rather than a worry: a spike on a real gridded
+> product — same three arms (cold, warm, self-ceiling), same record-length lever.** Until it runs,
+> **D1 is authorized on simulation.**
+>
+> **AND IF IT EVER MOVES D1, FOUR DECISIONS FALL, NOT TWELVE.** D1 → D6 (the stride) → D9 (the
+> strata) and D10 (the count check). **D3, D4, D5, D7, D8, D11 and D12 stand**: they rest on the
+> completion bitmap's semantics, on `fit.py:227`, on the two-axis pass-1/pass-2 difference, on the
+> absence of a stochastic component, on per-family disagreement, and on the self-arm measurement —
+> **none of which is a function of how large the saving is.** The full statement is in
+> [what 2c's tasks inherit](../../../PROGRESS.md).
 
 ## Why this plan has no code fences
 
@@ -25,13 +44,19 @@ mechanism existed** — a verdict whose "no" is expensive is a formality. The st
 measured for the same reason: it sits in `fit_hash` and cannot be revised without fragmenting
 every store built before the revision.
 
-| finding | magnitude | what it changed |
-|---|---|---|
-| **warm-starting pays, at production length only** | **42.28% ± 0.94%** of iterations and **45.90%** of wall clock at `N = 630`, against 7.80% at `N = 96` | the mechanism is built. **No figure from a short record describes production** |
-| **the geometry is not what pays** | any converged `θ̂` is worth **30.28%**; a *near* one adds **12.00** | D1 chose §11.1's mechanism anyway, on a **guarantee** rather than on the 12 points |
-| **the stride optimum is `k = 8`** | net saving **32.95 / 37.69 / 38.71%** at `k = 2 / 4 / 8`; the whole remaining prize beyond `k = 8` is **≈ 0.61 points** | D6. The curve is still rising and the question is closed **by a bound**, not by another fixture |
-| **disagreement is per-family, not geographic** | all 11 large-`\|Δℓ\|` cells in `matern32 + white`; agreement **non-monotone** in stride, 94.4 / 91.7 / 99.1% | D4 and D9. **Candidate is a primary audit axis; geography is reported and never gated** |
-| **the mechanism was authorized with a margin of one grid cell** | selection agreement **90.37%**, 122 of 135, against a pre-agreed 90% stop | **the audit is mandatory in fact**, and it has a named first hypothesis |
+> **THE MAGNITUDES ARE NOT HERE.** Every figure 2c rests on lives once, in
+> [what 2c's tasks inherit](../../../PROGRESS.md) — the saving curve and its ceiling, the stride
+> curve and the bound that closed it, the self-arm result and the lattice, the agreement margin,
+> and the two findings that put candidate ahead of geography. **This section states only what each
+> finding CHANGED**; a magnitude repeated here would be the copy that drifts.
+
+| finding | what it changed |
+|---|---|
+| warm-starting pays, **at production length only** | the mechanism is built. **No figure from a short record describes production** — the first fixture said *drop it* |
+| **the geometry is not what pays** | D1 chose §11.1's mechanism anyway, on a **guarantee** rather than on the points the geometry adds: the cheap variant puts tile geometry, and therefore `--memory-budget`, inside `θ̂` |
+| the stride optimum is **`k = 8`** | D6. The curve is still rising and the question is closed **by a bound**, not by another fixture — (j6) |
+| **disagreement is per-family, not geographic** | D4 and D9. **Candidate is a primary audit axis; geography is reported and never gated** |
+| the mechanism was **authorized with a margin of one grid cell** | **the audit is mandatory in fact**, and D7 gives it a named first hypothesis |
 
 **And one Phase 1 interface constraint surfaced at its first real consumer.** `fit.py:227` reads
 `warm = None if x0 is None else x0[b : b + 1, c, :p]`, so `x0` is **call-level all-or-nothing**
@@ -496,7 +521,6 @@ having done so.**
 - **Nested-model chaining within a point.** Deferred with its condition: it has the same
   hysteresis pathology in a different axis and needs its own audit.
 - **A multi-level V-cycle.** §11.1 allows it if one level proves insufficient; one level has not.
-- **Anything on real altimetry.** **The spatial coherence of real optima has never been
-  measured**, and every 2c number is from a simulated field whose smoothness and whose sharp
-  boundary are both by construction. **That is the measurement that would properly overturn D1**,
-  and it needs real data.
+- **Anything on real altimetry.** Stated once, at the head of this plan, as the standing
+  limitation rather than as an omission — **it is the condition D1 is authorized under**, not a
+  task 2c declined.

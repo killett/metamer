@@ -2,25 +2,16 @@
 
 ## Start here (cold-start summary)
 
-1. **Branch `main`, everything on it, every commit pushed by a hook** — https://github.com/killett/metamer.
-2. ## CI IS GREEN AS OF 2026-08-22, AND THE DELIBERATE RED IS CLOSED BY THE REPAIR ITS OWN CRITERION CHOSE. The bound was **not** widened, the test was **not** marked: the CI fixture was enlarged, and the one CI-visible RSS assertion now reads **58.29 / 57.30 / 58.96 MB** of input contribution on Python 3.14 / 3.13 / 3.12 against its **1 MB** bound, where it read **995 328 B** and failed. **THE SIZE WAS MEASURED, NOT PICKED, AND THE RECORD THAT SAID IT WAS CALCULABLE FROM THE RUNNER LADDER WAS WRONG** — both figures in that ladder, 11.20 MB here and 1.00 MB there, are for the **same 24×4×4 fixture whose data is 1536 bytes**, so they are two intercepts an order of magnitude apart on identical input and the table contains **no slope at all**. The slope was measured first, on the time axis: **197–235 B per time step**, against a committed prediction of 8–24 that is **REFUTED by a factor of ten**. `CI_FLOOR_N_TIME = 262_144`, in `tests/test_memory.py`, once. See [THE CI FIXTURE DECISION](#the-ci-fixture-decision--taken-measured-and-verified-2026-08-22).
-
-3. **DONE:** Phase 1 (0–18), Phase 2 preliminaries P0–P4, **Phase 2a (0–13)**, and **PHASE 2b IS COMPLETE — Tasks 0–10, with 9 narrowed plus 8a, 8i and 8b, closing 10 met / 4 met with reduced scope / 2 FAILED**, open questions 1, 4, 9, 11, 12, 15.
-4. **THE SCOPE DECISION IS TAKEN, 2026-08-22, AND RE-TAKEN ON THE CLOSED FACTS 2026-08-23: THE MODELLING SUB-PHASE DOES NOT OPEN, AND IT IS ILL-POSED RATHER THAN PREMATURE** — its only two completion routes are fitting a coefficient to the remainder and publishing a number correct at one fixture, and both are forbidden. **The criterion for opening it is written down** so a later session cannot open it on enthusiasm: [THE SCOPE DECISION](#the-scope-decision-taken-2026-08-22-the-modelling-sub-phase-does-not-open-and-the-reason-is-well-posedness). **2c proceeds on the residency model**, with the limitation stated in what 2c inherits. **RE-TAKEN 2026-08-23 ON THE CLOSED FACTS, AND THE VERDICT DID NOT MOVE — [the re-take is here](#the-scope-decision-re-taken-2026-08-23-on-the-closed-facts-still-does-not-open-and-the-criterion-was-applied-rather-than-recalled), and it applied the criterion rather than recalling the answer.** The 2026-08-22 peak re-measurement **reproduces the shape refusal on a second quantity** — the whole excess over the model is 542.8 / 1347.5 / 192.4 B/series, ×2.48 on the candidate lever and ×0.354 on the `n_time` lever, matching the residue's own ×2.2 and ×0.38 — and at (240, 2) that excess is **1.1σ from zero**, so the newest evidence does not fix even the sign of the `n_time` dependence. Three further routes were considered and rejected in writing: sizing from the published 1468.8 (a number correct at one fixture, and it under-provisions at (240, 2) by 1.86×), declaring peak and residency converged (they converged onto **end-of-tile**, not onto the model — that relocates 536 B/series, it does not shrink it), and opening it as a cascade task (nothing to move the constant **to**). **PHASE 2c IS OPEN AND ITS FIRST TASK IS DONE — see item 4a below for the warm-start spike's verdict, which is where the next action now lives.** The
-[193-versus-240 reconciliation is CLOSED](#what-the-fourth-fixture-established-2026-08-22--read-before-quoting-8bs-peak-column-or-the-240): the per-candidate term is **388 B, 2.01× the charged 193, linear across four counts**, the named arrays read **exactly `193·M`** at M = 2 / 6 / 7 with zero deviation, so **`output_slot_bytes` is not understated and the ~195 B/candidate of extra residency is NOT in the result arrays** — it has a shape and no location. The CI fixture decision is closed and verified. **AND THE 2410.0 CASCADE IS TAKEN, 2026-08-22:** `tiling.py` now publishes **1468.8 ± 18.4** with its date and preconditions, `headroom_fraction_required` fell out at **0.36955** against a shipped `HEADROOM_FRACTION` that **stayed at 15%**, `PUBLISHED_TILE_SIDE` **did not move** (checked: `rg 'dispute\.' src/` is empty), and criterion 6 still reads FAILED — now on the shipping number, outside its band by **4.3σ where it was 22σ**. The OQ18 characterisation line is CLOSED: four tasks (A, A-prime, A-double-prime, A-triple-prime) took the production peak from a term of unknown shape to a composition whose parts are named, measured, and — where they refuse a shape — refused rather than fitted. **Read [THE PEAK, END TO END](#the-peak-end-to-end--the-state-at-the-close-of-the-oq18-characterisation-line-2026-08-21) FIRST; it is the assembled answer and the only place the four parts appear together.** In one line: **one allocation was bounded and that is a real reduction, two-thirds of what remained is named and deliberately NOT repaired, the last third refuses a shape across three fixtures, and criterion 7 is FAILED at +4.63 MB — understood now rather than merely recorded.** ~~The decision is whether a modelling sub-phase opens at all~~ — **taken 2026-08-22, and it does not.** What it would have owed is unchanged and is what the criterion for reopening is written against: a model of the PEAK rather than of residency, the 193-versus-240 reconciliation, and a remainder that no coefficient may be fitted to.
-4a. **PHASE 2c IS OPEN. ITS TASK 0 — THE WARM-START SPIKE — IS DONE, 2026-08-23, AND IT MEASURED THE NUMBER §11.2 MAKES ITS OWN MECHANISM'S SURVIVAL CONDITIONAL ON, BEFORE THE MECHANISM EXISTED.** The verdict is [`warmstart-spike-verdict.md`](docs/superpowers/notes/warmstart-spike-verdict.md) and **must be read before any 2c design work.** In one line: **warm-starting PAYS at production length — 42.28% ± 0.94% of iterations and 45.90% of wall clock at `N = 630` against a 30% threshold — and the two-pass GEOMETRY is not what pays.** Four things a cold session must not get wrong about it:
-    - **THE SAVING IS A FUNCTION OF RECORD LENGTH: 7.80 / 31.73 / 42.28% at `N = 96 / 384 / 630`, not saturated.** The first fixture said *drop it*, and only the pre-committed P9 check caught that it measured the wrong regime. **No figure from `N = 96` describes production.**
-    - **THE RANDOM-DISTANT ARM ALSO CLEARS THE THRESHOLD, AT 30.28%.** So *any* converged `θ̂` is worth 30.28 points and a *near* one adds **12.00 more** — and it is those 12 that cost the coarse grid, the stride inside `fit_hash`, the spiral, the barrier and `/warmstart/`. **Whether that is the right purchase has never been decided with numbers in front of it, and it is the first question the 2c brainstorm owes.**
-    - **THE CEILING ARM IS FLAT: 93.97 / 93.49 / 94.53%.** A future reader proposing or dropping warm-starting **must see the ceiling beside the headline** — what record length changes is how good a neighbour is, not what the machinery delivers. Promoted as **(i2b)** in the handoff's §1, with **(i2c)** beside it.
-    - **SELECTION AGREEMENT AT `N = 630` IS 90.37% AGAINST A PRE-AGREED 90% STOP THRESHOLD — 122 of 135, where 121 would have stopped the work.** Recorded as a pass by 0.37 of a point, not as a pass. **NEXT ACTION: the 2c brainstorm, opening on the scope question the decomposition raised.**
-
-5. **Tests: 1090 passed, 0 failed, 0 INDETERMINATE — 2026-08-21, 849.96 s on a box at 7.2 GB available.** ~~1089~~ — that count was written down one commit after the sweep that produced it, while the commit in between added a test, so it was stale by one from the moment it was recorded. **It was corrected by running the sweep, never by adding one to a collection count**: a collected count is not a passing count, and 1089 + 1 is an inference. The RSS summary is now **per assertion**: `criterion 7's peak`, `the floor with the input open` and `the recompute loop` report `gate=witness`; `the floor ladder's rungs` and `peak residency across the iteration cap` remain `gate=margin` **and are named there rather than counted**. **A HIGH stall reading skips nothing** — see open question 19. **CI IS NOT A SUBSTITUTE AND IS SHARPER THAN THAT:** it runs `-m "not machine"` and therefore executes **exactly one** of the nine RSS assertions, which is also the one whose fixture cannot express its condition on that hardware — 11.3 MB of input contribution here against **913 408 B** on the runner, failing once and passing on a re-run of the same commit.
-6. **`pixi run test` is the full sweep and every end-of-task verification must run it; `test-fast` and `test-ci` are not evidence.** It has caught **seven** things a fast run could not, two of them in Task 8. **Every run prints `RSS measurement validity`, including at zero** — a nonzero count is INDETERMINATE, neither pass nor fail.
-7. **Verify a fresh checkout with `pixi run test && pixi run typecheck && pixi run lint`**, plus `pixi run pre-commit run --all-files` before every commit.
-8. **THE METHOD IS THE PRE-FLIGHT AND IT LIVES IN EXACTLY ONE PLACE:** [`phase1-to-phase2-handoff.md`](docs/superpowers/notes/phase1-to-phase2-handoff.md) §1 — (a0)–(a8), (a)–(k), **three new at Tasks 8a/8i: decay as an INTERACTION, right-in-kind-wrong-in-scale, and a zero reading is not evidence of absence**, **eight new in 2c: (i2b) a high-ceiling control converts a null into a LOCATED null, (i2c) a sign-unstable benefit is worse than a small one, (j5) a second instrument is a cross-check only if it measures the same quantity under the same conditions, (j6) bound the unmeasured region before measuring it, (i11) state refutation clauses in BOTH directions, (a2b) make an invalid value UNAVAILABLE rather than caveated, (h2) a metric may only be stratified by axes at its OWN granularity, and (j7) never stratify by a quantity the treatment can move**, the five causes of a surviving mutation, the standing rules, the fixture facts. **Run it against the task brief before code**, append to [`phase2b-preflight.md`](docs/superpowers/notes/phase2b-preflight.md) or, for 2c, [`phase2c-preflight.md`](docs/superpowers/notes/phase2c-preflight.md). **Do not restate it here** — the two copies drifted once already.
-9. **The plan is [`2026-08-14-metamer-phase2b.md`](docs/superpowers/plans/2026-08-14-metamer-phase2b.md)** — 14 tasks as executed, 16 exit criteria, approved 2026-08-14 and **COMPLETE 2026-08-19; its closing table is at the end**, **amended in place by every task so far, because every one contradicted its brief — including Tasks 8a and 8i, which corrected briefs I had written myself.** Tasks **8a**, **8i** and **8b** were added after approval; the execution order is at the task index.
-10. **Read, in order:** [What Task 8b established](#what-task-8b-established-done-2026-08-19--read-before-quoting-the-per-series-cost-criterion-6-or-criterion-7) — the resolution, the three readings and the two corrected rules — then [What Task 8i established](#what-task-8i-established-done-2026-08-17--read-before-writing-any-rss-assertion-or-trusting-the-validity-gate) — the instrument, the 2×2 and the survey of every RSS assertion — [What Task 8a established](#what-task-8a-established-done-2026-08-17--read-before-quoting-any-long-running-rss-reading), [What Task 9 (narrowed) established](#what-task-9-narrowed-established-done-2026-08-17--read-before-quoting-the-tile-side-the-floor-or-the-blocker) — **the tile side is `batch.tiling.PUBLISHED_TILE_SIDE`, in code, not in any document** — then [What Task 8 established](#what-task-8-established-done-2026-08-16--read-before-quoting-the-per-series-cost-criterion-6-or-criterion-7), which **opens by stating its ladder cannot be reproduced**.
-11. **Precedence: the design doc is authoritative on INTENT; a measured, dated number supersedes an unmeasured one wherever it lives, including in the design doc. Any measurement stated twice has one copy DELETED, never reconciled.**
+1. **Branch `main`, everything on it, every commit pushed by a hook** — https://github.com/killett/metamer. Head at the time of writing: **`746c048`**, 2026-08-24.
+2. **DONE:** Phase 1 (0–18), Phase 2 preliminaries P0–P4, **Phase 2a (0–13)**, **Phase 2b (COMPLETE 2026-08-19 — 10 met / 4 reduced scope / 2 FAILED)**, and **Phase 2c's brainstorm (D1–D12) plus its Task 0 and Task 1 measurements**. The scope decision on a modelling sub-phase was taken 2026-08-22 and **re-taken on closed facts 2026-08-23: it does not open.** Sections below carry each; **none is restated here.**
+3. **NEXT ACTION: PHASE 2c TASK 0 — `fit`'s per-cell warm-start selector.** The plan is [`2026-08-24-metamer-phase2c.md`](docs/superpowers/plans/2026-08-24-metamer-phase2c.md) — **9 tasks, 12 exit criteria each naming its reading, approved 2026-08-24, NO CODE YET.** **The task's FIRST step is the pre-flight**, run against the task brief **before code** and appended to [`phase2c-preflight.md`](docs/superpowers/notes/phase2c-preflight.md).
+4. ## THE STANDING LIMITATION ON EVERYTHING 2c DECIDED: **NO 2c NUMBER COMES FROM REAL DATA.** Warm-starting was authorized — and every decision after D1 inherits this — on a **simulated field whose spatial coherence is a construction parameter**. **The spatial coherence of real altimetry optima has never been measured.** A field with **weaker** coherence gives a **smaller** saving, and **§11.2's 30% threshold could fail on real data.** **THE NAMED CLOSER, not an open worry: a spike on a real gridded product — same three arms (cold, warm, self-ceiling), same record-length lever.** Until it runs, D1 is authorized on simulation. See [what 2c's tasks inherit](#what-2cs-tasks-inherit-2026-08-24).
+5. **Tests: 1090 passed, 0 failed, 0 INDETERMINATE — 2026-08-21, 849.96 s on a box at 7.2 GB available.** **`pixi run test` is the full sweep and every end-of-task verification must run it; `test-fast` and `test-ci` are NOT evidence** — the full sweep has caught **seven** things a fast run could not. **Every run prints `RSS measurement validity`, including at zero**; a nonzero count is INDETERMINATE, neither pass nor fail.
+6. **Verify a fresh checkout with `pixi run test && pixi run typecheck && pixi run lint`**, plus `pixi run pre-commit run --all-files` before every commit.
+7. **THE METHOD IS THE PRE-FLIGHT AND IT LIVES IN EXACTLY ONE PLACE:** [`phase1-to-phase2-handoff.md`](docs/superpowers/notes/phase1-to-phase2-handoff.md) §1 — (a0)–(a9), (a)–(k), the standing rules, the fixture facts, **and the eight 2c added: (i2b) a high-ceiling control converts a null into a LOCATED null, (i2c) a sign-unstable benefit is worse than a small one, (j5) a second instrument is a cross-check only if it measures the same quantity under the same conditions, (j6) bound the unmeasured region before measuring it, (i11) state refutation clauses in BOTH directions, (a2b) make an invalid value UNAVAILABLE rather than caveated, (h2) a metric may only be stratified by axes at its OWN granularity, and (j7) never stratify by a quantity the treatment can move.** **Do not restate it here** — the two copies drifted once already.
+8. **CI IS GREEN and the deliberate red is CLOSED** (2026-08-22, by the repair its own criterion chose: the CI fixture was **enlarged**, the bound was **not** widened and the test was **not** marked). **CI runs `-m "not machine"` and therefore executes exactly ONE of the nine RSS assertions**, so it is not a substitute for the local sweep. See [THE CI FIXTURE DECISION](#the-ci-fixture-decision--taken-measured-and-verified-2026-08-22).
+9. **Read before touching 2c:** [what 2c's tasks inherit](#what-2cs-tasks-inherit-2026-08-24) — the numbers a cold session cannot re-derive — then the decisions [D1–D12](#phase-2c-brainstorm--settled-decisions-2026-08-23) and the verdict [`warmstart-spike-verdict.md`](docs/superpowers/notes/warmstart-spike-verdict.md). **For 2b, read [THE PEAK, END TO END](#the-peak-end-to-end--the-state-at-the-close-of-the-oq18-characterisation-line-2026-08-21) first**; it is the assembled answer and the only place its four parts appear together.
+10. **Precedence: the design doc is authoritative on INTENT; a measured, dated number supersedes an unmeasured one wherever it lives, including in the design doc. Any measurement stated twice has one copy DELETED, never reconciled.**
 
 ---
 
@@ -3500,7 +3491,7 @@ was the actual defect the leak exposed.
 | **Phase 2b pre-flight, per task** | [`docs/superpowers/notes/phase2b-preflight.md`](docs/superpowers/notes/phase2b-preflight.md) — carries the pre-plan audit and Task 0's; per-task entries are appended **before** each task |
 | **Phase 2c pre-flight, per task** | [`docs/superpowers/notes/phase2c-preflight.md`](docs/superpowers/notes/phase2c-preflight.md) — Task 0's entry changed the measurement three times before any code was written |
 | **Phase 2c Task 0 — the warm-start spike** | verdict [`warmstart-spike-verdict.md`](docs/superpowers/notes/warmstart-spike-verdict.md); predictions committed first in [`warmstart-spike-predictions.json`](docs/superpowers/notes/warmstart-spike-predictions.json); instrument [`warmstart-spike-harness.py`](docs/superpowers/notes/warmstart-spike-harness.py) and [`warmstart-spike-analyse.py`](docs/superpowers/notes/warmstart-spike-analyse.py); points at three record lengths in `warmstart-spike{,-n384,-n630}-measured.jsonl`. **DONE 2026-08-23 — read the verdict before any 2c design work** |
-| **Phase 2c implementation plan** | [`docs/superpowers/plans/2026-08-24-metamer-phase2c.md`](docs/superpowers/plans/2026-08-24-metamer-phase2c.md) — 9 tasks, 12 exit criteria **each naming its reading**, **WRITTEN 2026-08-24 AND AWAITING REVIEW; no code yet.** Implements D1–D12; it re-argues none of them and points at the record instead. Its head carries what 2c found before it started, including the two measurements that were taken **ahead** of the brainstorm because §11.2 makes the mechanism's survival conditional on one of them |
+| **Phase 2c implementation plan** | [`docs/superpowers/plans/2026-08-24-metamer-phase2c.md`](docs/superpowers/plans/2026-08-24-metamer-phase2c.md) — 9 tasks, 12 exit criteria **each naming its reading**, **APPROVED 2026-08-24; NO CODE YET.** Implements D1–D12; it re-argues none of them and points at the record instead. Its head carries what 2c found before it started, including the two measurements that were taken **ahead** of the brainstorm because §11.2 makes the mechanism's survival conditional on one of them |
 
 ### What Task 9 inherited, and what was decided (2026-08-16, resolved 2026-08-17)
 
@@ -4977,6 +4968,101 @@ the third executable. The pre-flight now reads **(a)–(k) with (a2), (a3) and (
   `packages = ["src/metamer/core"]` fails the ships-everything test; `psutil` removed from
   `[project.dependencies]` fails the declaration test; restoring the `PYTHONPATH` leak fails
   the isolation control.
+
+---
+
+## What 2c's tasks inherit (2026-08-24)
+
+**THE ONE HOME FOR EVERY NUMBER 2c's IMPLEMENTATION RESTS ON.** The plan states the tasks and
+**points here for the figures**; nothing below is restated there, and nothing here is restated in
+the plan. **Every number is dated and is a claim to RE-MEASURE, not a result to transcribe.**
+
+> ## AND THE LIMITATION COMES FIRST, BECAUSE EVERYTHING ELSE IS CONDITIONAL ON IT
+>
+> **Every figure below is from a SIMULATED field whose spatial coherence is a construction
+> parameter.** The parameters vary smoothly by construction and the regime boundary is sharp by
+> construction. **The spatial coherence of real altimetry optima has never been measured.** A
+> field with weaker coherence gives a **smaller** saving, and **§11.2's 30% threshold could fail
+> on real data.** **Closer: a spike on a real gridded product, same three arms, same
+> record-length lever.**
+
+### The saving, and the ceiling beside it — never quote one without the other
+
+| reading | `N = 96` | `N = 384` | `N = 630` (production) |
+|---|---|---|---|
+| **`warm`** — nearest valid coarse source | 7.80% ± 0.77% | 31.73% ± 0.99% | **42.28% ± 0.94%** |
+| **`self`** — the ceiling, each point from its own `θ̂` | 93.97% ± 0.16% | 93.49% ± 0.18% | **94.53% ± 0.14%** |
+| **`random`** — a distant converged `θ̂` | −2.25% ± 0.91% | +18.27% ± 1.03% | **+30.28% ± 1.02%** |
+
+**THE CEILING IS FLAT AND THE MECHANISM IS NOT** — 1.0 point of spread against 34.5. **What record
+length changes is how good a neighbour is, not what the machinery can deliver.** Wall clock at
+`N = 630`: **+45.90%** warm, **+74.75%** self. **A reader proposing or dropping warm-starting must
+see 94% next to 42%.**
+
+**AND THE GEOMETRY IS WORTH 12.00 POINTS OF THE 42.28, NOT ALL OF IT.** `random` alone clears
+§11.2's threshold. **D1 chose §11.1's mechanism on a GUARANTEE, not on the 12 points** — the cheap
+variant puts tile geometry, and therefore `--memory-budget`, inside `θ̂`.
+
+### The stride, and the bound that closed it
+
+Net saving at `N = 630` on **108 points common to all three strides**, one cold reference:
+**32.95 / 37.69 / 38.71%** at `k = 2 / 4 / 8`. **`k = 8` ships** (D6).
+
+> **THE CURVE IS STILL RISING AND THE QUESTION IS STILL CLOSED.** At `k = 8` the pass-1 fraction
+> is **1.6%**, so the **entire** remaining prize from `k → ∞` is **≈ 0.61 points**, and any
+> degradation in `s(k)` subtracts from it. **No `k = 16` fixture can change the answer.** (j6).
+
+**The objective is in TIME and lives in writing**: `relative_cost(k) = 1/k² + (1 − 1/k²)·(T_warm(k)/T_cold)`.
+A future change to either rate has a formula to re-evaluate against rather than an inherited
+constant.
+
+### The self arm, and the lattice it makes intrinsic
+
+**`self` against `cold`: 239/240 = 99.58% selection, `|Δℓ|` exactly zero at 43% of cells, max
+1.24e-07.** A self-warm fit **returns the cold optimum**.
+
+**So one point in every `k²` is measurably more cold-like than its neighbours** — the contrast is
+**99.58% against 95.00%, ≈ 4.6 percentage points at 1/64 spacing.** **NOT REMOVED, DELIBERATELY:**
+sourcing coarse points from the nearest *other* coarse point puts their source **8 cells away**
+against a fine-point mean radius of **2.556**, making them the **worst-sourced in the field** — a
+repair that **relocates**. **The source coarse index is stored per point so the lattice is
+testable rather than discoverable.** See *Gotchas* and D12.
+
+### The agreement margin, and where the disagreement actually is
+
+**The mechanism was authorized at 90.37% selection agreement — 122 of 135 — against a pre-agreed
+90% stop. 121 would have said report and stop.** Max `|Δℓ|` **204.0**, max parameter distance
+**154 SE**.
+
+**IT IS NOT LABEL SWITCHING.** The candidate set is lint-clean and the lint's findings are in the
+payload, so **no exchangeable pair exists.** It is **real optimizer hysteresis on a well-posed
+problem** — the worse branch, and the number the audit is built to see.
+
+**AND IT IS NOT GEOGRAPHIC. Two independent findings:** **D3a** — 0 of 13 warm disagreements are
+cross-regime against a 9.6% base rate, and all 11 large-`|Δℓ|` cells are **one candidate**,
+`matern32 + white`. **S4** — agreement is **non-monotone** in stride, 94.4 / 91.7 / 99.1%, and the
+**most distant** stride agrees **best**. **The monotone distance-drives-disagreement hypothesis is
+dead.** Hence **candidate is a primary audit axis and geography is reported, never gated** (D4).
+
+**A cold-versus-cold null is identically zero:** `fit` has **no stochastic component** — every arm
+returned one `(n_iter, loglik)` fingerprint across three repeats — so the audit's floor must be
+built by **perturbing the start** (D7's N2).
+
+### The dependency structure of D1–D12 — which decisions fall if the real-data spike moves D1
+
+**Read this before re-deciding anything.** **D1** (build §11.1's mechanism) rests on the saving
+clearing 30% at production length. **D6** (stride `k = 8`) rests on D1 holding, since a stride is
+only worth choosing if there is a warm start; **D9** (strata) and **D10** (the count-per-cell
+check) rest on **D6**, because the cell counts are computed from the coarse-point count. **So a
+real-data spike that moved D1 would put D1, D6, D9 and D10 back in play — four, not twelve.**
+
+**Everything else stands independently of the saving's magnitude.** **D11** (pass 1 as a run over
+a decimated input) is a **store-layout** decision resting on the completion bitmap's semantics
+alone. **D3** (`x0` + `(B, M)` validity) is an **interface** decision resting on `fit.py:227` and
+on (a0). **D12** (uniform source rule) rests on the **self-arm measurement**, which is about the
+optimizer and not about coherence. **D4, D5, D7, D8** rest on findings — per-family disagreement,
+the two-axis pass-1/pass-2 difference, the absence of a stochastic component, and the absence of a
+consumer for a pooled figure — **none of which is a function of how large the saving is.**
 
 ---
 
