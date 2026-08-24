@@ -6,7 +6,7 @@ in exactly one place — [`phase1-to-phase2-handoff.md`](phase1-to-phase2-handof
 
 ---
 
-## 2c Task 0 — the warm-start spike, audited before any code
+## 2c brainstorm Task 0 — the warm-start spike, audited before any code
 
 **THE BRIEF.** Measure the quantity §11.2 names as unmeasured and makes its own verdict turn on:
 does starting a fit from a spatial neighbour's converged `θ̂` reduce iterations by the ~30% below
@@ -142,7 +142,7 @@ worth knowing for the price of sixteen minutes.
 
 ---
 
-## 2c Task 1 — the stride curve, audited before any code
+## 2c brainstorm Task 1 — the stride curve, audited before any code
 
 **THE BRIEF.** Measure `s(k)`, the warm-start saving as a function of the coarse stride, at
 `k ∈ {2, 4, 8}`, and choose the shipped stride on a written net-cost objective rather than on
@@ -221,3 +221,173 @@ measured on real altimetry.
 Whichever `k` wins, **the net-cost formula now exists in writing**, so a future change to either
 rate — a faster optimizer, a cheaper cold path, a differentiated filter — **has a formula to
 re-evaluate the stride against rather than an inherited constant.**
+
+---
+
+## Plan Task 0 — `fit`'s per-cell warm-start selector, audited before any code
+
+**THE BRIEF** is the plan's Task 0: `x0` gains a companion `x0_valid` of shape `(B, M)`; a false
+cell takes the moment ladder and is bit-identical to the same cell fit with `x0=None`; a NaN
+sentinel is refused as a design; a non-finite value, or a value outside its `ParamSpec`'s
+diagnostic limits, **inside a cell marked valid** is a refusable error naming the cell and the
+candidate; `x0` without `x0_valid` is a hard error.
+
+**NOTE ON NAMING.** *Task 0* now denotes two different pieces of work in this file. The entry
+above is **brainstorm Task 0**, the warm-start spike. This entry is **plan Task 0**, the first
+task of [`2026-08-24-metamer-phase2c.md`](../plans/2026-08-24-metamer-phase2c.md). The plan's
+head calls the spike *"Task 0 of the brainstorm"*; nothing else disambiguates them, and a reader
+arriving at either heading cold cannot tell which is which. **Both headings now say which.**
+
+### (d) THE VOCABULARY EXISTS ALREADY IN THE CONFIG, AND NOT AT ALL IN `core`
+
+`x0_valid` appears nowhere in `src/` or `tests/`. But `warm_start_enabled`,
+`warm_start_coarse_stride`, `warm_start_interpolation_rule`, `warm_start_spiral_bound` and
+`warm_start_tie_break` are **already config fields with tests** (`tests/test_config.py`), landed
+in 2a. **Plan Task 1 adds them to `FIT_RELEVANT_FIELDS`; it does not invent them.** Recorded here
+because "the config does not carry warm-start settings yet" is the obvious wrong assumption for
+Task 1 and it would be discovered by a duplicate field rather than by a failure.
+
+### (g) THERE IS EXACTLY ONE PRODUCTION CALLER OF `fit` AND IT PASSES NO `x0`
+
+`batch/run.py:934` and `bench/spike.py:349` are the only `fit(` call sites in `src/`. Neither
+passes `x0`. **So the signature change breaks no production path**, and the whole blast radius of
+the hard error is test and harness code. Checked rather than assumed, because a second caller
+would have made "hard error, never a default" a much more expensive decision than D3 priced it at.
+
+### (a6) THE DOCSTRING THAT SURVIVES THE CHANGE SAYS THE SIGNATURE IS FIXED
+
+`fit`'s own `x0` docstring reads *"Phase 2 supplies these; **the signature is fixed now** because
+it constrains everything downstream."* That sentence is written under Phase 1's belief and plan
+Task 0 falsifies it. **A description whose subject no longer exists reads as specification**, and
+this one reads as a prohibition on the exact change the task exists to make. It is rewritten in
+the same commit as the code, not swept later.
+
+### (c3) `at_diagnostic_limit` IS THE RIGHT VALIDATOR AND IT DOES NOT REFUSE NaN
+
+The brief asks for two refusals, and it is tempting to implement them as one call. Enumerating
+what `params.ParamSpec.at_diagnostic_limit` rejects:
+
+| input | verdict | is that what this caller wants? |
+|---|---|---|
+| `value <= lo` or `value >= hi` | True | yes — **at or beyond**, and an `OK` fit is strictly inside both limits by construction (`optimize_series` reports `DIAGNOSTIC_LIMIT` otherwise), so no legitimate warm-start source can sit on a limit |
+| `inf` | True | yes, but reached only after the transform maps it there |
+| **`nan`** | **False** | **no.** `nan <= lo` and `nan >= hi` are both False, so an all-NaN row — the single fault class D3 exists to make loud — **passes this validator silently** |
+
+**So the finite check is a separate check and it runs first.** Folding the two into
+`at_diagnostic_limit` alone would leave the sentinel defect exactly where D3 found it, behind a
+validator that looks like it covers it.
+
+### AND THE LIMITS ARE IN NATURAL UNITS WHILE `x0` IS UNCONSTRAINED
+
+`diagnostic_limits` are natural-unit (`sigma` at `(1e-8, 1e8)`, `rho` at `(1e-6, 1e6)`); `x0` is
+documented as *"warm starts in UNCONSTRAINED coordinates"*. **Comparing `x0` against
+`diagnostic_limits` directly is a units error that would pass every test whose fixture sits near
+`u = 0`** — `exp(0) = 1`, comfortably inside every limit, so the wrong comparison and the right one
+agree over the whole healthy region. **(i7): the discriminating value is one whose unconstrained
+and natural readings fall on opposite sides of a limit**, e.g. `u = log(1e7) = 16.118` for `rho`,
+which is finite, inside the limits read as unconstrained, and **beyond** them read correctly.
+
+The transform is `ParamSpec.to_natural`, applied column by column in `free_param_index` order —
+which is what `ConcentratedObjective._map` does, so the validator uses the **same** per-parameter
+bijector the optimizer does rather than a second path through the objective.
+
+### (a0) THE PADDING IS A LEGITIMATE NaN AND THE VALIDATOR MUST NOT SEE IT
+
+`x0` is `(B, M, p_max)` and `fit` slices `x0[b:b+1, c, :p]`. `p_max` is the **widest** candidate's
+free-parameter count, so for any narrower candidate the columns `p:p_max` are **NaN by design** —
+`FitResult.theta_unconstrained` is documented as NaN-padded and is the array that feeds back.
+With this project's own `_candidates()` fixture, candidate 0 is `white` at `p = 1` against
+`p_max = 3`: **two thirds of its row is legitimately NaN.**
+
+**A validator that checks the full `p_max` width therefore raises on every well-formed warm start
+for every candidate but the widest** — and it fails in the *safe-looking* direction, so it would
+be "fixed" by relaxing the check rather than by narrowing it. The validator sees `:p` only, per
+candidate. **This is (a0) inverted: here the fill value is legitimate and the error would be
+treating it as data.**
+
+### (a2) THE VALIDITY ARRAY MUST BE THE VALIDITY ARRAY, NOT SOMETHING THAT CASTS TO ONE
+
+Task 3's interface is stated in the plan as three parallel `(B, M)` arrays:
+
+    SourceMap.index    # (B, M) int64, -1 where exhausted
+    SourceMap.valid    # (B, M) bool
+
+**`bool(-1)` is `True` and `bool(0)` is `False`.** So passing `SourceMap.index` where
+`SourceMap.valid` was meant, under a permissive `np.asarray(..., dtype=bool)`, marks **every
+exhausted cell valid** and **every cell sourced from coarse index 0 invalid** — arrays the right
+shape, values all finite, no exception, and a wrong warm start on exactly the cells the spiral
+failed for. That is the Task 11 wrong-candidate-at-index-1 shape one field over, and the two
+arrays will sit adjacent in Task 5's call.
+
+**So `x0_valid` is required to be of boolean dtype and a non-boolean array is refused.** This is
+an **addition to the brief**, recorded as such: the brief specifies the shape gate and not the
+dtype gate. It costs one comparison and closes a silent-wrong-answer path between two tasks that
+have not been written yet.
+
+### "BOTH OR NEITHER" IS READ IN BOTH DIRECTIONS
+
+The brief states the hard error one way — `x0` without `x0_valid` — and then states the rule as
+**"Both or neither"**. `x0_valid` **without** `x0` is refused as well. It is not a harmless
+no-op: it is a caller who believes they are warm-starting and is not, which is the (i2) shape —
+"the mechanism did not run" and "the mechanism ran and found nothing" leaving the same output.
+
+### (i8) THE FAULT CLASS MUST BE CONSTRUCTED, AND THIS PROJECT ALREADY OWNS THE CONSTRUCTION
+
+*"An all-NaN row in a cell marked valid"* cannot occur through any correct code path, so a fixture
+must build it. **`tests/test_fit.py::_mixed_batch` already produces it as a by-product**: rows
+1–4 fail, so their `theta_unconstrained` is all-NaN across `:p`. Marking those cells valid is
+literally *"a source map that marks a failed fit valid"* — the constructed defect the brief names,
+built from a real failed fit rather than from hand-written NaNs.
+
+### (i2) EVERY REFUSAL IN THIS TASK IS A PURE NEGATIVE AND GETS ITS POSITIVE CONTROL
+
+Four of the six tests assert that something raises. **A raise is trivially producible by a
+validator that raises on everything**, and this validator sits in front of the only path Tasks 3
+and 5 use. Each refusal is paired with the same array minus the injected fault proceeding to a
+normal fit — not merely "not raising", but returning `InitRung.WARM_START` on the cell in question.
+
+### (a5) THE TASK DOES NOT BUMP `ALGORITHM_VERSION`, AND THE RULE WAS READ RATHER THAN RECALLED
+
+`hashing.ALGORITHM_VERSION`'s rule is *"bump when and only when a change alters the value of
+`theta_hat` or `log_lik` **for some input that previously fit**"*. Plan Task 0 leaves `x0=None`
+bit-identical and leaves `x0` + all-true `x0_valid` bit-identical to today's `x0`; the only
+changed input — `x0` alone — now **raises** rather than fitting differently. **No optimum moves.**
+The plan assigns the bump to Task 1, where the stride does move `θ̂`. Checked because "the fit
+signature changed" reads like a bump trigger and is not one.
+
+### (k) NOTHING HERE DEPENDS ON PROCESS-LOCAL STATE
+
+No randomness, no timing, no RSS. Every assertion in this task is exact equality or an exception.
+**Plan Task 0 needs no measurement**, so none of the measurement protocol — host quiet check,
+committed predictions, interleaved arms, fresh subprocess per RSS reading — applies. Stated
+because the sub-phase's other tasks all do, and running it here would be ceremony.
+
+### WHAT THIS TASK BREAKS OUTSIDE `src/`, NAMED RATHER THAN REPAIRED
+
+Two instruments in `docs/superpowers/notes/` call `fit(x0=…)` and will raise after this change.
+Neither is collected by pytest and neither is imported by `src/`, so **the suite does not see
+them** — which is exactly why they are written down here instead of being discovered later.
+
+- **`warmstart-stride-harness.py`** aborts the stride before calling `fit` if any cell is
+  exhausted (`n_invalid` → `abort`), so **every cell it ever warm-starts has a source**. An
+  all-true `x0_valid` reproduces its recorded numbers exactly.
+- **`warmstart-spike-harness.py`** is **not** in that position. Its `self` arm passes
+  `prep.theta_unconstrained` **unfiltered**, and that array is all-NaN for any cell whose prep fit
+  was not `OK`. So the behaviour-preserving `x0_valid` there is *"finite over `:p`"* — and under
+  D3 those cells would take the **moment ladder** instead of starting from NaN, which is a
+  **different fit** from the one the recorded verdict measured.
+
+**So neither harness is edited by this task.** Editing the stride harness is a no-op dressed as
+maintenance; editing the spike harness silently changes an arm of a measurement whose verdict D1
+rests on. The condition for closing this is stated instead: **whoever re-runs either harness
+supplies `x0_valid`, and for the spike harness the treatment of non-`OK` prep cells is a design
+choice that moves the `self` arm and must be recorded as one.**
+
+### AND ONE EXISTING TEST ASSERTS THE OLD CONTRACT
+
+`tests/test_fit.py::test_a_warm_start_is_recorded_and_actually_used` passes
+`x0=np.nan_to_num(cold.theta_unconstrained, nan=0.0)` with no `x0_valid`. It must gain one, and
+**the `nan_to_num` is the interesting part**: it exists to stop the padding NaNs reaching the
+optimizer, which is the workaround D3 replaces. Under the `:p`-only validator the padding never
+needs flattening at all, so the call becomes the honest one — `x0=cold.theta_unconstrained` with
+an all-true `x0_valid` — and the fixture stops hiding the distinction between padding and failure.
