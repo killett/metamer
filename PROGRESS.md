@@ -5120,6 +5120,44 @@ the *"ambiguous selection"* reading is untested here; and 13 and 11 are small co
 fixture. **The located fact is that the disagreements are not at the boundary and are all on one
 candidate** — enough to aim the audit, not enough to explain it.
 
+### D4 — NO BOUNDARY POLICY. THE GEOGRAPHY IS A REPORTED AUDIT STRATUM, AND THE PRIMARY AXES ARE DIFFICULTY AND CANDIDATE
+
+**REFUSING TO WARM-START ACROSS A DETECTED REGIME CHANGE IS REJECTED, AND THE REASON IS
+MEASURED.** Cross-regime at `N = 630` is **+11.40% ± 4.08%** — weak, positive, harmless — so a
+refusal forgoes real benefit to avoid a risk D3a says is not there, **and pays for a detector
+whose own errors then enter `θ̂`.** **A detector production cannot construct is worse than no
+policy**, and in the spike the regimes were known by fiat.
+
+**BUT THE AXIS IS KEPT, AND THE ASYMMETRY IS WHAT DECIDES IT.** D3a is strong and **narrow**: 13
+cells and 11 cells, one simulated fixture, one boundary sharp by construction. **The cost of
+carrying the stratum is one grouping in a report; the cost of dropping it and being wrong is a
+class of disagreement nobody is measuring.** This is the shape (i2b) just paid out on — **a
+stratum you expect to be empty is cheap to carry and is the only thing that can tell you it is
+empty.**
+
+**THREE CONSTRAINTS.**
+
+1. **REPORTED, NEVER GATED.** No refusal, no threshold, **no effect on `θ̂`**. It is a column in
+   the audit. If it ever shows something, that is a finding that prompts a decision — **not a
+   decision taken in advance.**
+2. **DIFFICULTY AND CANDIDATE ARE PRIMARY; GEOGRAPHY IS SECONDARY.** D3a is the argument: the
+   disagreements clustered **by candidate** — all 11 large-`|Δℓ|` cells in `matern32 + white`,
+   the stiffest member — and by position **within one region**, not by boundary. **Stratify first
+   by §11.2's post-fit difficulty proxies** (Hessian condition, ΔIC to next-best,
+   failure-taxonomy status) **and by candidate**, then add regime as an additional grouping.
+   **Getting that order wrong reproduces the conflation D3a just corrected.**
+3. **PRODUCTION CANNOT CONSTRUCT THIS STRATUM, AND THAT IS STATED WHERE IT IS DEFINED.** Real data
+   carries no regime label, so the geographic axis exists **on simulated fields and not on real
+   ones** — or someone looks for the column on an altimetry run and finds it missing.
+   **Consequence worth having:** §11.2's simulated benchmark, smoothly varying with a sharp
+   boundary, is **the only place this stratum can ever be read**, which raises its value rather
+   than lowering it.
+
+**AND CANDIDATE STRATIFICATION IS THE MORE ACTIONABLE HALF OF D3a.** All 11 large-`|Δℓ|`
+disagreements landing in the stiffest candidate says the risk is a property of **the likelihood
+surface per family**, not of the field. **Candidate goes in on the same footing as the difficulty
+proxy — it is available on real data, unlike regime, and D3a says it is where the signal was.**
+
 ### D2 — TASK 0's METHOD IS THE TEMPLATE FOR EVERY REMAINING 2c PREMISE THAT IS UNMEASURED
 
 **Three elements, and each one changed the answer at least once.** A **lever across three
