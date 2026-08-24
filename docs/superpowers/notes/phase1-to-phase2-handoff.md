@@ -1189,6 +1189,43 @@ it bites. **Same discipline as cross-commenting a doubled guard, applied to a ga
 to a duplicate**: the redundancy and the omission are both decisions, and both are invisible
 unless something fails when they are undone.
 
+### (c4) A VALIDATOR MUST BE SPECIFIED IN THE COORDINATES AND THE EXTENT THE VALIDATED OBJECT ACTUALLY HAS
+
+> **A check written in the READER'S natural units agrees with the correct one across the whole
+> healthy region, so no ordinary fixture separates them.** State a gate in the coordinate system,
+> the units and the extent of the thing being validated — not the ones the brief describes it in.
+
+**(c3) asks whether an existing validator's refusals suit a new caller. This asks whether a NEW
+validator is even looking at the right numbers**, and it is the harder of the two to see, because
+the wrong version is not wrong anywhere you would think to test.
+
+**Phase 2c plan Task 0, 2026-08-24: FOUR gates, all four specified in the reader's units rather
+than the operative ones, and every one of them passes on healthy data.** The brief said each in a
+sentence that reads correctly in English:
+
+| the brief's phrasing | the operative reading | why the wrong one is invisible |
+|---|---|---|
+| *"outside its `ParamSpec`'s diagnostic limits"* | **plus a separate finiteness check, first** | `at_diagnostic_limit` returns **False for NaN** — `nan <= lo` and `nan >= hi` are both False — so a limits-only gate passes the all-NaN row, which is the one fault the gate exists for |
+| *"outside its diagnostic limits"* | **map through the parameter's bijector first** — limits are natural-unit, `x0` is unconstrained | the two readings agree over the entire healthy region, because `exp(0) = 1` is inside every limit |
+| *"a non-finite value inside a cell marked valid"* | **over `:p` per candidate**, not the full `p_max` width | the padding beyond `p` is a legitimate NaN, and a fixture whose candidates all have `p = p_max` cannot tell |
+| *"a companion `x0_valid` of shape `(B, M)`"* | **and of boolean dtype**, refused rather than cast | an int64 array of the right shape casts silently, and every value in it is "valid-looking" |
+
+**THE THIRD IS THE ONE THAT FAILS IN THE FLATTERING DIRECTION, WHICH IS (i5) ARRIVING INSIDE A
+VALIDATOR.** A full-width validator refuses **every well-formed warm start except the widest
+candidate's**, so the suite goes red on the healthy path — and **the repair that makes it green is
+relaxing the check**, not narrowing the window. The tempting fix and the damaging one are again
+the same edit.
+
+**THE FOURTH IS THE ONE WORTH COPYING, BECAUSE IT IS FORWARD-LOOKING RATHER THAN DIAGNOSTIC.**
+The defect it guards does not exist yet: Phase 2c's `SourceMap` exposes `index` (int64, **-1 where
+the spiral was exhausted**) adjacent to `valid` (bool), and a later task passes them together.
+**`bool(-1)` is True and `bool(0)` is False**, so swapping the two arguments marks **every
+exhausted cell valid** and **every cell sourced from index 0 invalid** — correct shapes, finite
+values, no exception, and the damage lands precisely on the cells the mechanism could not serve.
+**Requiring the dtype now costs one comparison and closes a defect two tasks away.** Generalized:
+**when two arrays of the same shape and different meaning will be passed adjacently, make the
+type system or a gate distinguish them before the caller exists.**
+
 ### (d) Grep for the vocabulary the task requires
 
 "mask", "n_used", "realized" appearing **zero** times in a 234-line brief was detectable in
@@ -1199,8 +1236,8 @@ one command. Task 15's brief never mentioned `fixed`, `state_dim` or `white + wh
 Delete the guard each one protects and confirm it fails. Two of Task 9's tests replaced
 assertions that could not fail at all.
 
-**A surviving mutation has five causes and they call for different responses.** Diagnose
-which before acting; four of the five are not defects, and treating them as coverage gaps
+**A surviving mutation has six causes and they call for different responses.** Diagnose
+which before acting; five of the six are not defects, and treating them as coverage gaps
 leads to deleting a real guard.
 
 | cause | tell | response |
@@ -1210,6 +1247,7 @@ leads to deleting a real guard.
 | **TWO INDEPENDENT GUARDS, EITHER SUFFICIENT** | mutating **either alone** does not bite; mutating **both at once** does | the code is doubly protected and the test is fine |
 | **GUARDED ONE LAYER UP** | the mutation is semantically real and the test is sound, but an **earlier layer already normalized the input**, so the mutated code cannot see the difference | **rewrite the assertion** — see below |
 | **THE MUTATION IS NOT A DEFECT** | the mutated code is **semantically identical** to the original on every reachable input | **correct the mutation, not the test** — see below |
+| **NEUTRALIZED FROM BELOW** | the mutated value really is different, and **a consumer downstream never reads the part that changed** | **correct the mutation, not the test** — see below |
 
 **THE FIFTH SAYS NOTHING ABOUT THE TEST AT ALL, AND THAT IS WHY IT IS LISTED.** A survivor is
 evidence about a test only once the mutation is known to be a real behaviour change, and that
@@ -1222,10 +1260,10 @@ has no offenders, so the two are the same function. The reachable defect is dele
 outright, so `observed.items()` runs against `None`; that mutation bites. A test written to
 catch the first version would have been a test of an equivalence.
 
-**THE FOURTH IS THE ONLY ONE OF THE FOUR WHERE THE CORRECT RESPONSE IS TO CHANGE THE TEST.**
-The other three end in "leave it" or "write a compound mutation". This one means the test was
-pointed at a defect that is **not reachable**, so the question is not whether to accept the
-survivor — it is **what the mutation should have been**.
+**THE FOURTH IS THE ONLY ONE OF THE FIVE WHERE THE CORRECT RESPONSE IS TO CHANGE THE TEST.**
+The other four end in "leave it", "write a compound mutation" or "correct the mutation". This one
+means the test was pointed at a defect that is **not reachable**, so the question is not whether
+to accept the survivor — it is **what the mutation should have been**.
 
 Worked instance (Phase 2a Task 3): mutating `geometry_hash`'s time component from decimal
 years to `str()` of the decoded values left every test green, *including the two-calendar test
@@ -1248,6 +1286,42 @@ requires mutating both halves at once.**
 > later simplification removes one on the grounds that it is dead — and it is dead only
 > because the other is there. **Comment both, each naming the other**, so the redundancy is
 > visible as a decision rather than as an accident waiting to be tidied away.
+
+### (e2) BEFORE RECORDING A SURVIVING MUTATION, PROVE THE MUTANT DIFFERS FROM THE ORIGINAL ON SOME INPUT
+
+> **A mutation neutralized by code below it produces a green suite and a FALSE COVERAGE GAP,
+> and the false gap points at the TEST rather than at the MUTATION.**
+
+**THE DIRECTION IS WHAT MAKES THIS ONE HARD TO CATCH.** Every other entry in (e)'s table ends
+with you **over-trusting** a test or a guard. This one makes you **distrust a test that is fine**,
+and the work it invites — *"the fixture cannot express this, write a stronger one"* — is spent
+against a defect that was never there. **A green suite is evidence about the mutation until the
+mutation is known to be a behaviour change.**
+
+**IT IS THE SIXTH CAUSE AND NOT THE FIFTH, AND THE DIFFERENCE IS WHERE THE NEUTRALIZER SITS.**
+The fifth is semantically identical **by construction** — visible in the mutated statement alone
+(`return` versus `observed = {}` on an empty table). This one is semantically identical **because
+of a consumer the mutator did not look at**, and the mutated statement reads as a real change in
+isolation. **The fifth is caught by re-reading the line. This one is caught only by tracing the
+value to its reader**, which is why it survives a careful mutator.
+
+Worked instance, Phase 2c plan Task 0, 2026-08-24. The pre-flight's third finding was that
+`fit`'s warm-start validator must read `:p` per candidate rather than the full `p_max` width,
+because the padding beyond `p` is a **legitimate** NaN. The mutation written to confirm the tests
+covered it widened the slice:
+
+    rows = x0[:, c, : len(free)]        ->        rows = x0[:, c, :]
+
+**The whole suite stayed green**, and the honest-looking conclusion was *"finding 3 is untested"*.
+It is not. The loop beneath iterates `enumerate(free)` and therefore **never indexes `rows` past
+`p`**, so the extra columns are never read. `rows` genuinely changed shape — **this is not the
+fifth cause, the mutated statement really is a different statement** — and the function did not
+change behaviour on any input. **Rewritten as the defect a real implementation would carry** — a
+wholesale `np.isfinite(x0[:, c, :]).all(axis=1)` guard placed *before* the per-parameter loop,
+which is how someone would actually write it — **six tests fail.**
+
+**The discriminator is one line: construct an input on which the two versions disagree, and print
+both. If you cannot, the mutation is not a mutation.**
 
 ### (f) Does the brief contradict a docstring already in the tree?
 
