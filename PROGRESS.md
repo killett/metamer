@@ -7405,6 +7405,21 @@ question; compute/bandwidth roofline pair for cross-machine prediction) are in d
 
 ## Gotchas discovered
 
+- **A PERIODIC PATTERN IN AN OUTPUT MAP AT THE COARSE STRIDE IS A KNOWN METHOD ARTIFACT, NOT A
+  SPATIAL SIGNAL — read this before interpreting one.** Phase 2c warm-starts every pass-2 point
+  from its nearest valid coarse point, and a coarse point's nearest valid coarse point is
+  **itself**. A self-sourced fit returns the cold optimum — **99.58% selection agreement,
+  `|Δℓ|` exactly zero at 43% of cells, max 1.24e-07** — while a neighbour-sourced fit agrees with
+  cold at **95.00%**. So **one point in every `k²` is measurably more "cold-like" than its
+  neighbours, by about 4.6 percentage points**, on a regular lattice at the coarse stride.
+  **THE ARTIFACT IS INTRINSIC AND WAS NOT REMOVED, DELIBERATELY.** Sourcing coarse points from
+  the nearest *other* coarse point puts their source `k` cells away against a fine-point mean
+  radius of 2.556 — **the "fix" inverts the artifact and makes the coarse points the
+  worst-sourced in the field.** *A repair that relocates rather than removes.* **The source
+  coarse index is stored per point** precisely so this is **testable** — filter to self-sourced
+  points and the lattice is identifiable directly. See
+  [D12](#d12--every-pass-2-point-warm-starts-from-its-nearest-valid-coarse-source-coarse-points-included-the-lattice-artifact-is-intrinsic-bounded-and-recorded).
+
 - **FULL-LOG RETENTION PAID ONE TASK AFTER IT WAS WIRED, AND CI IS WHERE IT PAID.** There are now
   **five** ambient-conditional `machine`-adjacent failures on this record, and 2026-08-22's is
   **the first whose assertion text exists** — `assert (200466432 - 199553024) > 1000000.0`. It
