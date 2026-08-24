@@ -17,7 +17,7 @@
 5. **Tests: 1090 passed, 0 failed, 0 INDETERMINATE — 2026-08-21, 849.96 s on a box at 7.2 GB available.** ~~1089~~ — that count was written down one commit after the sweep that produced it, while the commit in between added a test, so it was stale by one from the moment it was recorded. **It was corrected by running the sweep, never by adding one to a collection count**: a collected count is not a passing count, and 1089 + 1 is an inference. The RSS summary is now **per assertion**: `criterion 7's peak`, `the floor with the input open` and `the recompute loop` report `gate=witness`; `the floor ladder's rungs` and `peak residency across the iteration cap` remain `gate=margin` **and are named there rather than counted**. **A HIGH stall reading skips nothing** — see open question 19. **CI IS NOT A SUBSTITUTE AND IS SHARPER THAN THAT:** it runs `-m "not machine"` and therefore executes **exactly one** of the nine RSS assertions, which is also the one whose fixture cannot express its condition on that hardware — 11.3 MB of input contribution here against **913 408 B** on the runner, failing once and passing on a re-run of the same commit.
 6. **`pixi run test` is the full sweep and every end-of-task verification must run it; `test-fast` and `test-ci` are not evidence.** It has caught **seven** things a fast run could not, two of them in Task 8. **Every run prints `RSS measurement validity`, including at zero** — a nonzero count is INDETERMINATE, neither pass nor fail.
 7. **Verify a fresh checkout with `pixi run test && pixi run typecheck && pixi run lint`**, plus `pixi run pre-commit run --all-files` before every commit.
-8. **THE METHOD IS THE PRE-FLIGHT AND IT LIVES IN EXACTLY ONE PLACE:** [`phase1-to-phase2-handoff.md`](docs/superpowers/notes/phase1-to-phase2-handoff.md) §1 — (a0)–(a8), (a)–(k), **three new at Tasks 8a/8i: decay as an INTERACTION, right-in-kind-wrong-in-scale, and a zero reading is not evidence of absence**, **six new in 2c: (i2b) a high-ceiling control converts a null into a LOCATED null, (i2c) a sign-unstable benefit is worse than a small one, (j5) a second instrument is a cross-check only if it measures the same quantity under the same conditions, (j6) bound the unmeasured region before measuring it, (i11) state refutation clauses in BOTH directions, and (a2b) make an invalid value UNAVAILABLE rather than caveated**, the five causes of a surviving mutation, the standing rules, the fixture facts. **Run it against the task brief before code**, append to [`phase2b-preflight.md`](docs/superpowers/notes/phase2b-preflight.md) or, for 2c, [`phase2c-preflight.md`](docs/superpowers/notes/phase2c-preflight.md). **Do not restate it here** — the two copies drifted once already.
+8. **THE METHOD IS THE PRE-FLIGHT AND IT LIVES IN EXACTLY ONE PLACE:** [`phase1-to-phase2-handoff.md`](docs/superpowers/notes/phase1-to-phase2-handoff.md) §1 — (a0)–(a8), (a)–(k), **three new at Tasks 8a/8i: decay as an INTERACTION, right-in-kind-wrong-in-scale, and a zero reading is not evidence of absence**, **eight new in 2c: (i2b) a high-ceiling control converts a null into a LOCATED null, (i2c) a sign-unstable benefit is worse than a small one, (j5) a second instrument is a cross-check only if it measures the same quantity under the same conditions, (j6) bound the unmeasured region before measuring it, (i11) state refutation clauses in BOTH directions, (a2b) make an invalid value UNAVAILABLE rather than caveated, (h2) a metric may only be stratified by axes at its OWN granularity, and (j7) never stratify by a quantity the treatment can move**, the five causes of a surviving mutation, the standing rules, the fixture facts. **Run it against the task brief before code**, append to [`phase2b-preflight.md`](docs/superpowers/notes/phase2b-preflight.md) or, for 2c, [`phase2c-preflight.md`](docs/superpowers/notes/phase2c-preflight.md). **Do not restate it here** — the two copies drifted once already.
 9. **The plan is [`2026-08-14-metamer-phase2b.md`](docs/superpowers/plans/2026-08-14-metamer-phase2b.md)** — 14 tasks as executed, 16 exit criteria, approved 2026-08-14 and **COMPLETE 2026-08-19; its closing table is at the end**, **amended in place by every task so far, because every one contradicted its brief — including Tasks 8a and 8i, which corrected briefs I had written myself.** Tasks **8a**, **8i** and **8b** were added after approval; the execution order is at the task index.
 10. **Read, in order:** [What Task 8b established](#what-task-8b-established-done-2026-08-19--read-before-quoting-the-per-series-cost-criterion-6-or-criterion-7) — the resolution, the three readings and the two corrected rules — then [What Task 8i established](#what-task-8i-established-done-2026-08-17--read-before-writing-any-rss-assertion-or-trusting-the-validity-gate) — the instrument, the 2×2 and the survey of every RSS assertion — [What Task 8a established](#what-task-8a-established-done-2026-08-17--read-before-quoting-any-long-running-rss-reading), [What Task 9 (narrowed) established](#what-task-9-narrowed-established-done-2026-08-17--read-before-quoting-the-tile-side-the-floor-or-the-blocker) — **the tile side is `batch.tiling.PUBLISHED_TILE_SIDE`, in code, not in any document** — then [What Task 8 established](#what-task-8-established-done-2026-08-16--read-before-quoting-the-per-series-cost-criterion-6-or-criterion-7), which **opens by stating its ladder cannot be reproduced**.
 11. **Precedence: the design doc is authoritative on INTENT; a measured, dated number supersedes an unmeasured one wherever it lives, including in the design doc. Any measurement stated twice has one copy DELETED, never reconciled.**
@@ -5360,6 +5360,75 @@ that does not are **different quantities**, and a user comparing them would not 
 **AND THE EVIDENCE FOR PER-STRATUM-AS-PRIMARY IS NOW TWO INDEPENDENT FINDINGS DEEP** — D3a (all 11
 large-`|Δℓ|` cells in one candidate) and S4 (agreement non-monotone in distance, so not
 geographic). **The pooled number was already the less informative one.**
+
+### D9 — THE AUDIT'S STRATA: FIXED BOUNDARIES, AND EACH METRIC CROSSES ONLY AXES AT ITS OWN GRANULARITY
+
+**THE 81-CELL PROBLEM DISSOLVES RATHER THAN BEING TRADED AWAY.** §11.2 names three difficulty
+proxies and D4 promoted candidate to a primary axis; crossing four axes at three bins each is 81
+cells before any data lands. **They are not all defined at the same granularity, and neither are
+the audit's metrics.**
+
+| axis | granularity | type |
+|---|---|---|
+| candidate | per **cell** `(point, candidate)` | categorical, stable by `spec_hash` |
+| Hessian condition `κ` | per **cell** | continuous |
+| ΔIC to next-best (selection margin) | per **point** | continuous |
+| failure-taxonomy status | — | **not a stratum. See below** |
+
+**So each metric crosses exactly the two axes defined at its own granularity — by definition, not
+by choice:**
+
+| metric | granularity | strata | cells at `M = 12` |
+|---|---|---|---|
+| selection disagreement | per **point** | selection margin (3) × winning candidate (`M`) | **36** |
+| `\|Δℓ\|`, parameter distance, signed-trend | per **cell** | candidate (`M`) × `κ` (4) | **48** |
+
+**Nothing is crossed that does not share a granularity.** Promoted as **(h2)**.
+
+#### FAILURE STATUS IS A PARTITION, NOT A STRATUM — AND THE EXCLUDED PART IS ITS OWN FINDING
+
+The audit compares warm against cold on the **both-OK** intersection, so **within the audit every
+cell is OK/OK and the axis is degenerate.** What actually varies is the **outcome flip** — a fit
+**appearing or vanishing** rather than **moving**, which is a different quantity. **The audit now
+measures two things where it was going to measure one and a half.**
+
+**AND EACH FLIP RATE CARRIES ITS OWN DENOMINATOR, NAMED AT THE DEFINITION**, because a single
+"flip rate" has no obvious base and the choice moves the number:
+
+| quantity | numerator | **denominator** |
+|---|---|---|
+| **rescue rate** | cells `warm`-OK and `cold`-failed | **cold-failed cells** |
+| **loss rate** | cells `warm`-failed and `cold`-OK | **cold-OK cells** |
+
+Both **per candidate**, both outside the disagreement metrics.
+
+#### THE BOTH-OK INTERSECTION IS ITSELF A SELECTION EFFECT AND IS REPORTED AS ONE
+
+**If warm and cold disagree most on hard cells, and hard cells fail more often, then restricting
+to both-OK removes exactly the population where disagreement lives.** **The intersection's size is
+reported as a fraction of all attempted cells, per candidate.** Near 1.0 and the effect is
+negligible; below that and **every disagreement figure is conditioned on survival and must say
+so.**
+
+#### THE CONTINUOUS BOUNDARIES ARE FIXED CONSTANTS FROM OUTSIDE THIS PROJECT, NEVER QUANTILES
+
+**A quantile bin means something different in every run — the pooled-number problem one level in.**
+
+| axis | boundaries | what they are facts about |
+|---|---|---|
+| **`κ`** | **`2²⁶`** and **`2⁵²`** | float64. `2²⁶ = 67 108 864 = 1/√eps` is where a finite-difference gradient has lost **half its significant digits**; `2⁵² ≈ 4.50 × 10¹⁵ = 1/eps` is where the Hessian is **numerically singular**. Follows §1's standing eps-derived-constant idiom |
+| **selection margin** | **2** and **10** | Burnham & Anderson's standard reading — below 2 both models have substantial support, above 10 the loser has essentially none. **Boundaries from the literature, so they cannot have been chosen with the audit's answer in view** — the Task 8 warm-up-split trap |
+
+**AND `κ` HAS A FOURTH BIN, `undefined`**, for a non-positive-definite Hessian. Letting it fall
+silently into the worst bin is **a category error reading as a severity.**
+
+#### `κ` IS BINNED BY THE **COLD** ARM, AND THIS IS THE ONE MOST LIKELY TO BE GOT WRONG LATER
+
+**A cell can be well-conditioned cold and ill-conditioned warm, or the reverse, and both values
+are sitting right there.** **The bin is assigned from the COLD arm's `κ`** — the reference arm —
+so **the stratification is independent of the thing being measured.** Binning by the warm arm's
+`κ` would let **the mechanism under test move cells between strata**, which is conditioning on a
+post-treatment variable. Promoted as **(j7)**.
 
 ### D2 — TASK 0's METHOD IS THE TEMPLATE FOR EVERY REMAINING 2c PREMISE THAT IS UNMEASURED
 

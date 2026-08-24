@@ -1291,6 +1291,47 @@ Thread every parameter the behaviour depends on through as a real caller would. 
 three-N step-rule test passed against a deliberately broken step rule because it left
 `scale` at its default, making the numerator 1 and the denominator irrelevant.
 
+### (h2) A METRIC MAY ONLY BE STRATIFIED BY AXES DEFINED AT ITS OWN GRANULARITY
+
+> **Crossing a per-point metric with a per-cell axis either aggregates the axis away or
+> duplicates the metric, and both produce a number whose subject is ambiguous. The crossing
+> question answers itself once granularity is checked.**
+
+**This is stronger than "decide which axes cross", because it removes the judgement.** The
+worked case is Phase 2c decision D9. §11.2 names three difficulty proxies and D4 added
+candidate, which at three bins each is **81 cells before any data lands** — a number that
+invites an arbitrary trim.
+
+**The axes are not all at one granularity, and neither are the metrics.** Candidate and Hessian
+condition are per **cell** `(point, candidate)`; ΔIC-to-next-best is per **point**. Selection
+disagreement is per **point**; `|Δℓ|`, parameter distance and signed-trend disagreement are per
+**cell**. So each metric crosses **exactly the two axes at its own granularity** — `3 × M` and
+`M × 4`, **36 and 48 cells at `M = 12`, and neither was chosen.**
+
+**AND THE SAME CHECK RETIRED A FOURTH AXIS OUTRIGHT.** Failure-taxonomy status looked like a
+stratum until granularity was checked: the audit runs on the **both-OK intersection**, so inside
+it the axis is **degenerate**. What varies is the **outcome flip** — a fit appearing or
+vanishing rather than moving — **a different quantity, with its own denominators, reported
+separately.** A stratum that is constant within the population is not a stratum, and the tell is
+that it has no granularity **there**.
+
+### (j7) NEVER STRATIFY BY A QUANTITY THE TREATMENT CAN MOVE — BIN BY THE REFERENCE ARM
+
+> **If the mechanism under test can change which stratum a unit falls into, the strata are not
+> fixed and the comparison is conditioned on the outcome.** Assign the bin from the **reference**
+> arm.
+
+**The worked case is D9's `κ` axis, and the tell is that both values are sitting right there.**
+Hessian condition is measured **per arm**: a cell can be well-conditioned cold and
+ill-conditioned warm, or the reverse. **Binning by the warm arm's `κ` would let warm-starting —
+the thing being measured — move cells between strata**, so a stratum's membership would depend on
+the treatment's effect on it. **The bin is assigned from the COLD arm**, which is the reference
+and is by construction independent of the mechanism.
+
+**The general form is conditioning on a post-treatment variable**, and it is easy to walk into
+because the treated arm's value is usually the more convenient one to hand. **The question to ask
+is not "which value is better" but "can the treatment move it".**
+
 ### (i) Can the fixture fail at all?
 
 Ask what property of the fixture makes the defect visible; if the answer is "none", the
