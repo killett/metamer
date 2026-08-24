@@ -5158,6 +5158,41 @@ disagreements landing in the stiffest candidate says the risk is a property of *
 surface per family**, not of the field. **Candidate goes in on the same footing as the difficulty
 proxy — it is available on real data, unlike regime, and D3a says it is where the signal was.**
 
+### D5 — PASS 1 DOES **NOT** DOUBLE AS THE CALIBRATION TILE. §11.4's CLAIM IS RETIRED, IN THE DESIGN DOC
+
+**AMENDED WHERE IT IS WRITTEN, NOT ONLY RECORDED HERE.** §11.4 and §11.1's five-jobs table both
+carry the amendment; a design doc holding a retired claim is **(a6) at the level this project
+keeps finding it.**
+
+**TWO INDEPENDENT AXES, EITHER OF WHICH ALONE DISQUALIFIES IT.** 2b's flag was the first — pass 1
+fits a **coarse subsample**, so its batch is a fraction of a production tile even though it
+assembles a full one. **Task 0 added the second: pass 1 is COLD and pass 2 is WARM**, which at
+`N = 630` is **42.28% fewer iterations and 45.90% less wall clock per series.** **A measurement of
+the wrong batch doing the wrong work is not a calibration of pass 2 in any sense.**
+
+**THE "CORRECT FOR THE DIFFERENCE" OPTION IS REJECTED AS ILL-POSED, NOT DEFERRED.** A correction
+for the batch-size difference needs **a model of how peak scales with B** — the term the
+2026-08-22 scope decision established **refuses a shape**. A coefficient fitted to it is the one
+this project has now refused **six** times. **Recorded on those grounds so it does not return the
+next time §11.4 is read literally.**
+
+**AND THE CROSS-CHECK OPTION IS REJECTED ON COMPARABILITY, WHICH IS THE MORE TRANSFERABLE HALF.**
+A second instrument is a cross-check only if a disagreement would **mean** something. Pass 1's
+reading differs from the standalone calibration's **by construction, on two axes, by amounts
+nobody can predict** — so **agreement would be a coincidence and disagreement would be expected**,
+which is uninterpretable in both directions. **Promoted to the handoff's §1 as (j5)**, with this
+project's two genuine cross-checks (MVN against `celerite2`; the residue's 618.4 and 618.3 by two
+removals) shown passing the same test, and the 193-versus-240 misreading and G5's H5 shown
+failing it.
+
+**FOUR OF PASS 1's FIVE JOBS SURVIVE INTACT** — warm-start source, early-abort evaluation, cold
+audit reference, `/detail/` default. **Only the calibration job goes, and the count is stated in
+the design doc** so a later reader sees four and knows why.
+
+**THE STRUCTURAL CONSEQUENCE, WHICH IS WHY THIS QUESTION CAME BEFORE THE STRIDE:** with
+calibration gone, **pass 1's stride is constrained only by the warm-start requirement.** It is now
+answerable on warm-start grounds alone rather than as a compromise between two masters.
+
 ### D2 — TASK 0's METHOD IS THE TEMPLATE FOR EVERY REMAINING 2c PREMISE THAT IS UNMEASURED
 
 **Three elements, and each one changed the answer at least once.** A **lever across three

@@ -1644,6 +1644,41 @@ An independent oracle means a **different construction**, not different constant
 The tell: if the reference is not at least ~100× more accurate than the subject, it is
 probably the same algorithm. Nested Richardson qualifies; a wider step does not.
 
+#### (j5) A SECOND INSTRUMENT IS A CROSS-CHECK ONLY IF IT MEASURES THE SAME QUANTITY UNDER THE SAME CONDITIONS
+
+> **When two instruments differ BY CONSTRUCTION, their disagreement has no interpretation —
+> and reporting it invites someone to reconcile two numbers that were never comparable.**
+
+(j) asks whether a second instrument is *independent enough*. This asks the prior question:
+whether it is measuring **the same thing at all**. An instrument can be beautifully
+independent and still worthless as a check.
+
+**The test is symmetric and it is the whole rule:** if **agreement would be a coincidence**
+and **disagreement would be expected**, the comparison is uninterpretable in both directions
+and should not be built.
+
+**The two genuine cross-checks in this project both pass it, and they pass it the same way —
+same quantity, different route:**
+
+| cross-check | same quantity | different route |
+|---|---|---|
+| brute-force MVN against `celerite2` | one likelihood | a dense Σ against a semiseparable solver |
+| the residue's two eliminations, **618.4 ± 24.2** and **618.3 ± 30.5** | one residency term | the tensor **bounded by chunking** against the tensor **never built** (tier 2) |
+
+**The rejected one fails it on the first column.** Phase 2c decision D5 considered reporting
+pass 1's RSS reading beside 2b's standalone calibration. Pass 1 fits a **coarse subsample** —
+a fraction of a production tile's batch — and is **cold** where pass 2 is **warm-started**, a
+42% iteration and 46% wall-clock difference per series at `N = 630`. **Two axes of difference,
+neither modelled**, so the two readings are different quantities and the comparison was not
+built.
+
+**AND THIS PROJECT HAS ALREADY PAID FOR THE MISTAKE TWICE, WHICH IS WHY IT IS A RULE.** The
+193-versus-240 reconciliation compared a **charge** against a **slope of the excess over that
+charge** and called them *"two provenances 24% apart"*; G5's H5 compared **13 allocation sites
+seen during a fit** against **counts of named `FitResult` fields** because one record mentioned
+both. **Both were two counts of two different things, compared because they sat near each
+other.** The rule above is what would have stopped all three.
+
 ### (j2) A MEASUREMENT VALIDATES THE CODE PATH THE INSTRUMENT EXERCISES, NOT THE ONE THE FORMULA CLAIMS TO DESCRIBE
 
 > **Before trusting a validating measurement, verify the instrument drives the production

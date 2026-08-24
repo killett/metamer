@@ -1176,10 +1176,16 @@ of:
 | # | job | section |
 |---|---|---|
 | 1 | the coarse warm-start source | §11.1 |
-| 2 | the calibration-tile RSS measurement | §11.4 |
+| ~~2~~ | ~~the calibration-tile RSS measurement~~ — **RETIRED 2026-08-23 by Phase 2c decision D5.** Pass 1 differs from pass 2 on **two** axes — a fraction of a production tile's batch, and **cold** where pass 2 is **warm**, which at `N = 630` is 42% fewer iterations and 46% less wall clock. **A measurement of the wrong batch doing the wrong work is not a calibration of pass 2 in any sense.** 2b's standalone calibration is the sole source; pass 1 may **call** it, never substitute for it | ~~§11.4~~ |
 | 3 | the early-abort evaluation — stratified by construction, unlike a tile prefix | §14.1 |
 | 4 | the **cold** reference for the hysteresis audit | §11.2 |
 | 5 | the default `/detail/` subsample — the audit wants covariances at **cold-fitted** points, and pass-1 points are cold by construction, so the default costs nothing and serves both | §12.2 |
+
+> **FOUR OF THE FIVE SURVIVE, AND THE COUNT IS STATED SO A LATER READER DOES NOT WONDER WHETHER
+> ONE WAS DROPPED BY ACCIDENT.** Job 2 is retired; jobs 1, 3, 4 and 5 are unchanged.
+> **Consequence for pass 1's geometry, which is why this question was structural:** with
+> calibration gone, **the coarse stride is constrained only by the warm-start requirement** and is
+> answerable on warm-start grounds alone, rather than being a compromise between two masters.
 
 (The Whittle screening pass would be a sixth; it is deferred with its regime declared.)
 
@@ -1404,8 +1410,31 @@ of detected free RAM), with byte-level manual overrides retained.
 The memory multiplier is not 1: beyond the data tile (float64, so 2× synesthesia's
 float32) there is a validity mask, Kalman state means and covariances, residual and
 workspace copies, and gradient buffers scaled by parameter count. Rather than hardcode a
-constant, **measure**: pass 1 doubles as the calibration tile, deriving true
-bytes-per-series for this dataset and model set, validated against §9.4's analytic formula.
+constant, **measure**: ~~pass 1 doubles as the calibration tile, deriving true
+bytes-per-series for this dataset and model set, validated against §9.4's analytic formula.~~
+
+> **AMENDED 2026-08-23 (Phase 2c decision D5). THE MEASUREMENT STAYS; "PASS 1 DOUBLES AS IT" IS
+> RETIRED.** Phase 2b built a **standalone** calibration and `batch.tiling.PUBLISHED_TILE_SIDE` is
+> derived from it. **That remains the sole source. Pass 1 may CALL the calibration; it may never
+> substitute for it.**
+>
+> **PASS 1 DIFFERS FROM PASS 2 ON TWO INDEPENDENT AXES, EITHER OF WHICH ALONE DISQUALIFIES IT.**
+> 2b's flag was the first: pass 1 fits a **coarse subsample**, so its batch is a fraction of a
+> production tile even though it assembles a full one. **Phase 2c Task 0 added the second: pass 1
+> is COLD and pass 2 is WARM-STARTED**, which at `N = 630` is **42.28% fewer iterations and 45.90%
+> less wall clock per series.** A measurement of the wrong batch doing the wrong work is not a
+> calibration of pass 2 in any sense.
+>
+> **AND CORRECTING FOR THE DIFFERENCE IS ILL-POSED, NOT MERELY AWKWARD — RECORDED THIS WAY SO IT
+> DOES NOT RETURN THE NEXT TIME THIS SECTION IS READ LITERALLY.** A correction for the batch-size
+> difference requires **a model of how peak scales with B**, and that is precisely the term the
+> 2026-08-22 scope decision established **refuses a shape**. A coefficient fitted to it is the one
+> this project has now refused six times.
+>
+> **A CROSS-CHECK WAS ALSO CONSIDERED AND REJECTED.** Reporting pass 1's reading beside the
+> standalone calibration's would be **uninterpretable in both directions**: the two differ **by
+> construction, on two axes, by amounts nobody can predict**, so agreement would be a coincidence
+> and disagreement would be expected. See the comparability rule in the handoff's §1.
 
 **Cache key: `fit_hash` + backend + machine fingerprint** (§13.3 — the criterion set does
 not affect bytes-per-series).
