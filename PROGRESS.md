@@ -5475,6 +5475,95 @@ the stride never has to carry a constraint that belongs to the run.
 **NOTHING MOVES.** `k = 8` stands, `PUBLISHED_TILE_SIDE` is untouched, and the one new obligation
 is a member-count column the audit was going to need anyway.
 
+### D11 — PASS 1 WRITES ITS OWN STORE. THE COMPLETION BITMAP GAINS NO NOTION OF PASSES
+
+**THE BITMAP CANNOT EXPRESS TWO PASSES AND MUST NOT BE TAUGHT TO.** `/completion/tiles[ty,tx]`
+certifies *"every region write for the tile returned"*, is set at **exactly one site** after
+`write_tile` (which has **no decline path**), and lives at `chunks=(1,1)` so one bit is one
+object. Pass 1 at `k = 8` touches most tiles and **completes none of them**.
+
+**PASS 1 IS A RUN OVER A DECIMATED INPUT — `isel(y=slice(0,None,k), x=slice(0,None,k))`.** That is
+**not a new mechanism; it is the existing mechanism applied to a different input.** Tiling,
+resume, the geometry fingerprint, the hashes and the bitmap **all keep their meanings**, so
+nothing acquires a second definition under one name.
+
+| consequence | why it matters |
+|---|---|
+| the barrier is `completed_tiles(pass1_store).all()` | **an existing, tested predicate** rather than a new concept |
+| a kill in pass 1 and a kill in pass 2 are **distinguishable by construction** | different stores. **Exit criterion 1 holds for each by the existing mechanism and 2c does not touch it** |
+| **no schema bump, no second plane, no reinterpretation** | the bit's meaning is untouched |
+| §11.3's *"index arithmetic on dataset coordinates, independent of tiling"* | free — pass 1's own tile side is irrelevant to pass 2 |
+| the cross-store gate is **`--reuse-fits-from`'s shape** | built and tested at Task 12 |
+
+**THE TWO REJECTED SHAPES, AND THE SECOND REJECTION IS THE ONE TO KEEP.**
+
+- **A second bitmap plane `(2, ty, tx)`** — a schema bump, and worse, plane 0 would certify
+  *"every region write for this tile's **coarse points** returned"*: **a different claim wearing
+  the same identity**, which is the (a2) shape.
+- **A pass counter in root attrs with the bitmap reinterpreted per pass — REJECTED OUTRIGHT.**
+  It makes the bitmap's meaning a function of a **mutable second object**, so the pass transition
+  becomes a two-object non-atomic write: **a kill between "bitmap cleared for pass 2" and "counter
+  incremented" is unrecoverable.** That is **the data-then-bitmap race reintroduced one level up**
+  — it reads as an implementation detail and is a correctness property.
+
+**FOUR CONSTRAINTS.**
+
+1. **THE TWO STORES ARE TIED BY IDENTITY, NOT BY A PATH.** The decimation is **index arithmetic on
+   dataset coordinates**, and the decimated input's **geometry fingerprint must be derivable from
+   the parent's plus the stride** — recorded in pass 1's store and checked at pass 2's gate.
+   Otherwise the stores have unrelated identities and **only a filesystem path binds them**, which
+   is the copy-not-reference invariant's opposite failure.
+2. **THE STRIDE NOW APPEARS IN TWO PLACES AND IS CHECKED BETWEEN THEM, NEVER ASSUMED EQUAL.** It is
+   in pass 2's `fit_hash` (Q9) **and** it defines pass 1's input. **A pass-1 store built at
+   stride 4 and consumed by a pass-2 run configured for stride 8 is a silently wrong warm start** —
+   the wrong-candidate-at-index-1 shape Task 11 had to guard positionally.
+3. **PASS 1's STORE IS A PERMANENT SECOND ARTIFACT, NOT SCRATCH, AND THE RECORD SAYS SO.** It is
+   the **cold audit reference** (§11.2) and the `/detail/` default source, so **it cannot be
+   deleted after pass 2 completes.** *"Temporary"* is how it will be read otherwise. Its path,
+   and whether it is derived from the output path or supplied explicitly, is a **plan-level**
+   decision.
+4. **`resume_tile_side` GUARDS EACH STORE INDEPENDENTLY, AND THE CONSEQUENCE IS COUNTER-INTUITIVE.**
+   A memory-budget change **between** passes is now **legal** and produces **different tile sides
+   in the two stores** — correct, and it will look wrong to someone reading both. **One line where
+   the guard is documented.**
+
+### D12 — EVERY PASS-2 POINT WARM-STARTS FROM ITS NEAREST VALID COARSE SOURCE, COARSE POINTS INCLUDED. THE LATTICE ARTIFACT IS INTRINSIC, BOUNDED AND RECORDED
+
+**THE HOMOGENEITY QUESTION WAS CHECKED BEFORE IT WAS DECIDED, AND IT IS NOT MOOT.** The
+hypothesis was that if coarse points warm-start from themselves the two options produce identical
+stores. **Measured on Task 0's `N = 630` data:** `self` against `cold` is **239/240 = 99.58%** on
+selection with `|Δℓ|` **exactly zero at 43%** of cells and a **maximum of 1.24e-07**. **Close, but
+not identical** — about **0.4% of coarse selections would move**, ~650 points at 10⁷.
+
+> **AND HOMOGENEITY OF OUTCOME IS UNACHIEVABLE, WHICH THE OBVIOUS ALTERNATIVE HIDES.** Sourcing
+> coarse points from the nearest **other** coarse point does not equalise anything: their source
+> would sit **`k` cells away** — **8** — while fine points' mean source radius is **2.556**. That
+> makes coarse points **the worst-sourced points in the field**, an inverted artifact rather than
+> no artifact. **The lattice is intrinsic to a lattice.**
+
+**SO THE RULE IS LEFT UNIFORM AND THE ARTIFACT IS MADE DETECTABLE.** Every pass-2 point
+warm-starts from **its nearest valid coarse source**; for a coarse point that is **itself**, at
+radius 0, **as a property of the geometry rather than as an exception in the rule.**
+
+**THE DECIDING ARGUMENT IS THAT THE ALTERNATIVE NEEDS A BRANCH.** *"If the point is coarse, copy
+pass 1's fit; else warm-start"* is **a special case at 1/64 of points** — the kind that goes wrong
+and is hard to test — and it would put fits into pass 2's store that **pass 2 never produced**,
+with `init_rung` and `n_iter` copied rather than measured. **The uniform rule has no branch at
+all**, and it costs **1.6% of points at ~5.5% of the iterations = 0.09% of total fitting.**
+
+**THE ARTIFACT'S MAGNITUDE IS NOW A MEASURED CONTRAST RATHER THAN A WORRY, AND IT IS SMALLER THAN
+IT LOOKED.** It is **not** the warm-versus-cold disagreement of 5.00%. It is the **difference
+between how self-sourced and neighbour-sourced points behave**: coarse points agree with cold at
+**99.58%** and fine points at **95.00%**, so **the lattice signal is ≈ 4.6 percentage points of
+excess cold-likeness at 1/64 spacing.**
+
+**AND IT IS RECORDED PER POINT, WHICH §11.3 ALREADY ASKED FOR.** The **source coarse index** is
+stored, so a downstream reader can identify self-sourced points and test for the lattice directly
+rather than discovering it as a spatial signal. **A known artifact that is detectable in the
+output is a diagnostic; an unknown one is a scientific error** — and at 1/64 sampling this gives
+the audit a **free, global, permanent** cold-like reference everywhere in the field rather than
+only in a subsample.
+
 ### D2 — TASK 0's METHOD IS THE TEMPLATE FOR EVERY REMAINING 2c PREMISE THAT IS UNMEASURED
 
 **Three elements, and each one changed the answer at least once.** A **lever across three
