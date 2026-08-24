@@ -5120,6 +5120,37 @@ the *"ambiguous selection"* reading is untested here; and 13 and 11 are small co
 fixture. **The located fact is that the disagreements are not at the boundary and are all on one
 candidate** — enough to aim the audit, not enough to explain it.
 
+> ### AND IT IS NOT LABEL SWITCHING, WHICH IS WORSE NEWS THAN IF IT WERE — established 2026-08-24
+>
+> §11.2 warns that two same-kind free-timescale terms are **exchangeable across the searched
+> space**, so neighbouring points can converge to **different mirror images of one optimum** —
+> producing large per-term parameter disagreement with near-zero selection, `|Δℓ|` and
+> signed-trend disagreement, **a signature that reads as benign hysteresis to an audit which does
+> not separate them.**
+>
+> **THE CONFOUND IS ABSENT BY CONSTRUCTION AND THE ABSENCE IS RECORDED, NOT ASSUMED.** The
+> candidate set is `[white]`, `[matern12 + white]`, `[matern32 + white]` — **no two terms of the
+> same kind with a free timescale** — and the lint was **run over it and its findings written into
+> the payload**: `{"cand0": [], "cand1": [], "cand2": []}`, in
+> [`warmstart-spike-n630-measured.jsonl`](docs/superpowers/notes/warmstart-spike-n630-measured.jsonl).
+> **No exchangeable pair exists, so nothing can switch.**
+>
+> **THEREFORE THE 90.37% IS REAL OPTIMIZER HYSTERESIS ON A WELL-POSED PROBLEM.** Label switching
+> would have been the *comfortable* explanation — a reporting artifact of non-identifiability, not
+> a property of warm-starting. **It is excluded, and what is left is the thing §11.2 exists to
+> catch.** That is the number the audit has to be built to see.
+
+> ### AND A COLD-VERSUS-COLD NULL IS IDENTICALLY ZERO, SO THE AUDIT'S FLOOR CANNOT BE BUILT THAT WAY
+>
+> **`fit` has no stochastic component.** Every arm of Task 0's primary fixture returned **one
+> distinct `(n_iter, loglik)` fingerprint across three repeats** — cold, warm, self and random
+> alike. Re-running a cold fit **cannot** disagree with itself, so *"two cold fits with different
+> seeds"* has no content here and measures zero by construction rather than by evidence.
+>
+> **THE ONLY INPUT THAT DIFFERS BETWEEN WARM AND COLD IS THE START**, so the audit's floor must be
+> built by **perturbing the start** — which makes it a designed arm rather than a repeat, and puts
+> it in the same class as the ceiling arm that made Task 0's null readable ((i2b)).
+
 ### D4 — NO BOUNDARY POLICY. THE GEOGRAPHY IS A REPORTED AUDIT STRATUM, AND THE PRIMARY AXES ARE DIFFICULTY AND CANDIDATE
 
 **REFUSING TO WARM-START ACROSS A DETECTED REGIME CHANGE IS REJECTED, AND THE REASON IS
