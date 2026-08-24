@@ -15,7 +15,7 @@ import pytest
 from metamer.core.capability import EngineId, GradientMode, Objective
 from metamer.core.criteria import Criterion, Ranking
 from metamer.core.engines.kalman import KalmanEngine
-from metamer.core.fit import fit
+from metamer.core.fit import _out_of_limits, fit
 from metamer.core.objective import ConcentratedObjective
 from metamer.core.optimize import (
     HESSIAN_COND_LIMIT,
@@ -24,9 +24,11 @@ from metamer.core.optimize import (
     optimize_series,
 )
 from metamer.core.outcomes import Outcome
+from metamer.core.params import ParamSpec
 from metamer.core.signal import Annual, Constant, SignalSpec, Trend
 from metamer.core.statespace import StateSpace
-from metamer.core.terms import ProcessSpec
+from metamer.core.terms import ProcessSpec, free_param_index
+from metamer.core.transforms import Identity
 from tests.test_kalman import _covariance
 from tests.test_objective import _GAP_N, _GAP_T, _gapped_signal, _window
 from tests.test_statespace import _term
@@ -529,6 +531,13 @@ def test_a_warm_start_is_recorded_and_actually_used():
     # the observable one: a warm start AT the optimum must take strictly fewer
     # iterations than a cold start from the moment estimate. Recording the rung
     # without using x0 leaves the iteration counts identical.
+    #
+    # `theta_unconstrained` goes back UNMODIFIED. It used to be laundered
+    # through `np.nan_to_num(..., nan=0.0)` to stop the (B, M, p_max) padding
+    # NaNs reaching the optimizer -- which also flattened the NaNs of a FAILED
+    # fit into a plausible start, the two-facts-one-observation defect D3
+    # exists to remove. The validator reads `:p` per candidate, so the padding
+    # is never seen and the laundering is not needed.
     warm = fit(
         y,
         t,
@@ -536,7 +545,8 @@ def test_a_warm_start_is_recorded_and_actually_used():
         cands,
         criterion=Criterion.AIC,
         mask=mask,
-        x0=np.nan_to_num(cold.theta_unconstrained, nan=0.0),
+        x0=cold.theta_unconstrained,
+        x0_valid=np.ones(cold.outcome.shape, dtype=bool),
     )
     assert np.all(warm.init_rung == InitRung.WARM_START)
     assert np.all(warm.outcome == Outcome.OK.code)
@@ -545,8 +555,381 @@ def test_a_warm_start_is_recorded_and_actually_used():
 
     with pytest.raises(ValueError, match="x0 must have shape"):
         fit(
-            y, t, signal, cands, criterion=Criterion.AIC, mask=mask, x0=np.zeros((2, 1))
+            y,
+            t,
+            signal,
+            cands,
+            criterion=Criterion.AIC,
+            mask=mask,
+            x0=np.zeros((2, 1)),
+            x0_valid=np.ones(cold.outcome.shape, dtype=bool),
         )
+
+
+def _warm_from_self(batch=3, n=120):
+    """A cold fit and the all-valid `x0` that feeds its own optimum back.
+
+    Returns `(y, t, signal, mask, candidates, cold, x0, x0_valid)`. Every cell
+    is `OK`, so `theta_unconstrained` is finite over `:p` for both candidates
+    and any NaN a test then injects is one the test put there.
+    """
+    y, t, signal, mask = _plain_batch(batch=batch, n=n)
+    cands = _candidates()
+    cold = fit(y, t, signal, cands, criterion=Criterion.AIC, mask=mask)
+    assert np.all(cold.outcome == Outcome.OK.code)
+    return (
+        y,
+        t,
+        signal,
+        mask,
+        cands,
+        cold,
+        cold.theta_unconstrained.copy(),
+        np.ones(cold.outcome.shape, dtype=bool),
+    )
+
+
+def test_x0_valid_selects_the_warm_started_cells_one_by_one():
+    """`InitRung.WARM_START` appears on exactly the cells `x0_valid` marks.
+
+    Behaviour under test: D3's per-cell selection. `fit` read
+    `warm = None if x0 is None else x0[b : b + 1, c, :p]`, so `x0` was
+    CALL-level all-or-nothing while section 11.3's spiral fallback is per cell.
+    Bug this catches: the all-or-nothing behaviour surviving the signature
+    change -- `x0_valid` accepted, stored, and never consulted, so every cell
+    warm-starts. That defect is invisible in any fixture whose validity is
+    uniform, which is why the pattern below is deliberately ragged in BOTH
+    axes: it is not a whole row, not a whole column, and not a single cell.
+    """
+    y, t, signal, mask, cands, _, x0, _ = _warm_from_self()
+    chosen = np.array([[True, False], [False, True], [True, True]])
+
+    out = fit(
+        y,
+        t,
+        signal,
+        cands,
+        criterion=Criterion.AIC,
+        mask=mask,
+        x0=x0,
+        x0_valid=chosen,
+    )
+
+    # Derived independently of the implementation: the expected rung table is
+    # written out cell by cell rather than computed from `chosen`, so a test
+    # that mirrors the production expression cannot pass by sharing its bug.
+    expected = np.array(
+        [
+            [InitRung.WARM_START, InitRung.MOMENT],
+            [InitRung.MOMENT, InitRung.WARM_START],
+            [InitRung.WARM_START, InitRung.WARM_START],
+        ],
+        dtype=object,
+    )
+    np.testing.assert_array_equal(out.init_rung, expected)
+    assert np.all(out.outcome == Outcome.OK.code)
+
+
+def test_an_invalid_cell_is_bit_identical_to_the_same_cell_fit_cold():
+    """A false cell reproduces `x0=None` exactly, not approximately.
+
+    Behaviour under test: the property that makes the moment ladder a FALLBACK
+    rather than a third code path.
+    Bug this catches: a fallback that ladders from a perturbed or partially
+    applied start -- for instance clipping the warm start into the moment
+    start, or passing `x0` and merely relabelling the rung. Either converges
+    to the same optimum on a well-conditioned fixture, so `outcome` alone is
+    blind to it. `theta`, `loglik` AND `n_iter` are compared: `n_iter` is the
+    one that moves first, because a different starting point costs a different
+    number of steps long before it reaches a different answer.
+
+    It also catches cross-cell leakage. The two runs differ in what the OTHER
+    cells were started from, so a per-candidate quantity accidentally computed
+    from the batch would show up here as an invalid cell that is not cold.
+    """
+    y, t, signal, mask, cands, cold, x0, _ = _warm_from_self()
+    chosen = np.array([[True, False], [False, True], [True, True]])
+
+    mixed = fit(
+        y,
+        t,
+        signal,
+        cands,
+        criterion=Criterion.AIC,
+        mask=mask,
+        x0=x0,
+        x0_valid=chosen,
+    )
+
+    off = ~chosen
+    assert off.sum() == 2, "the fixture must actually exercise the fallback"
+    # assert_array_equal, not assert_allclose: NaNs in matching positions
+    # compare equal and everything else must match to the bit.
+    np.testing.assert_array_equal(mixed.theta[off], cold.theta[off])
+    np.testing.assert_array_equal(mixed.loglik[off], cold.loglik[off])
+    np.testing.assert_array_equal(mixed.n_iter[off], cold.n_iter[off])
+    np.testing.assert_array_equal(mixed.outcome[off], cold.outcome[off])
+    np.testing.assert_array_equal(mixed.init_rung[off], cold.init_rung[off])
+    # And the treated cells are genuinely treated, or the equality above is
+    # the equality of two cold runs. (i2).
+    assert np.all(mixed.n_iter[chosen] < cold.n_iter[chosen])
+
+
+def test_a_failed_fit_marked_valid_is_refused_naming_the_cell_and_candidate():
+    """An all-NaN row inside a cell marked valid raises.
+
+    Behaviour under test: the check that makes the NaN sentinel unnecessary,
+    and the reason D3 rejected it. "No valid source" and "a failed source"
+    would be THE SAME BYTES under a sentinel, and the spiral exists precisely
+    to never do the second.
+    Bug this catches: a spiral that hands out a failed coarse point's
+    `theta_unconstrained` staying silent -- the fit then starts from NaN, and
+    L-BFGS-B returns something for it. The fault class does not otherwise
+    occur, so per (i8) it is CONSTRUCTED: `_mixed_batch` rows 1-4 really fail,
+    their `theta_unconstrained` really is all-NaN, and the source map here
+    really does mark them valid.
+    """
+    y, t, signal, masks = _mixed_batch()
+    cands = _candidates()
+    cold = fit(y, t, signal, cands, criterion=Criterion.AIC, mask=masks)
+    failed = cold.outcome != Outcome.OK.code
+    assert failed.any(), "the fixture must contain a failed fit to mark valid"
+    assert np.all(np.isnan(cold.theta_unconstrained[failed][:, :1]))
+
+    with pytest.raises(ValueError) as excinfo:
+        fit(
+            y,
+            t,
+            signal,
+            cands,
+            criterion=Criterion.AIC,
+            mask=masks,
+            x0=cold.theta_unconstrained,
+            x0_valid=np.ones(cold.outcome.shape, dtype=bool),
+        )
+    message = str(excinfo.value)
+    b, c = (int(i) for i in np.argwhere(failed)[0])
+    assert f"x0[{b}, {c}]" in message
+    assert cands[c].spec_hash()[:12] in message
+
+    # (i2): the positive control. The same array with the failed cells marked
+    # invalid proceeds, and the surviving OK cells really do warm-start -- so
+    # the refusal above is about the NaN and not about the call.
+    healthy = ~failed
+    out = fit(
+        y,
+        t,
+        signal,
+        cands,
+        criterion=Criterion.AIC,
+        mask=masks,
+        x0=cold.theta_unconstrained,
+        x0_valid=healthy,
+    )
+    assert np.all(out.init_rung[healthy] == InitRung.WARM_START)
+    assert np.all(out.init_rung[failed] != InitRung.WARM_START)
+
+
+def test_an_infinity_and_an_out_of_limit_value_are_refused_on_the_same_path():
+    """Both non-finite and out-of-range warm starts raise; a clean one does not.
+
+    Behaviour under test: "a warm start arriving from a store is data, not a
+    return value", validated as data.
+    Bug this catches two ways. A validator testing `isnan` alone passes `inf`
+    straight through to the optimizer. And a validator comparing `x0` against
+    `diagnostic_limits` DIRECTLY has a units error: `x0` is unconstrained and
+    the limits are natural. The two readings agree over the whole healthy
+    region -- `exp(0) = 1` is inside every limit -- so the fixture is placed
+    where they disagree (i7): `u = log(1e7)` is FINITE, sits inside
+    `rho`'s (1e-6, 1e6) when misread as natural, and is 10x beyond its upper
+    limit when mapped correctly.
+    """
+    y, t, signal, mask, cands, _, x0, valid = _warm_from_self()
+    # Candidate 1's free parameters are (matern12.sigma, matern12.rho,
+    # white.sigma) in `free_param_index` order, so column 1 is rho.
+    assert free_param_index(cands[1])[1] == ("matern12[0]", "rho")
+
+    for value in (np.inf, float(np.log(1e7))):
+        broken = x0.copy()
+        broken[0, 1, 1] = value
+        with pytest.raises(ValueError) as excinfo:
+            fit(
+                y,
+                t,
+                signal,
+                cands,
+                criterion=Criterion.AIC,
+                mask=mask,
+                x0=broken,
+                x0_valid=valid,
+            )
+        message = str(excinfo.value)
+        assert "x0[0, 1]" in message
+        assert "rho" in message
+
+    # (i2), and it is the load-bearing half here: the same cell holding its
+    # real converged value passes, so the refusals above are about the values
+    # and not about the cell, the candidate or the shape.
+    clean = fit(
+        y, t, signal, cands, criterion=Criterion.AIC, mask=mask, x0=x0, x0_valid=valid
+    )
+    assert np.all(clean.init_rung == InitRung.WARM_START)
+
+    # And the same injected value in a cell marked INVALID is not inspected:
+    # validity gates the check, so an exhausted cell's slot may hold anything.
+    ignored = x0.copy()
+    ignored[0, 1, 1] = np.inf
+    off = valid.copy()
+    off[0, 1] = False
+    spared = fit(
+        y,
+        t,
+        signal,
+        cands,
+        criterion=Criterion.AIC,
+        mask=mask,
+        x0=ignored,
+        x0_valid=off,
+    )
+    assert spared.init_rung[0, 1] == InitRung.MOMENT
+
+
+def test_x0_and_x0_valid_are_both_or_neither():
+    """Either one alone raises; neither is the existing cold path.
+
+    Behaviour under test: D3's fourth clause. Defaulting `x0_valid` to
+    all-valid hands the caller the sentinel behaviour back with no diagnostic.
+    Bug this catches: the convenience default being added later "for symmetry
+    with the old signature" -- and the mirror, an `x0_valid` that is accepted
+    and silently ignored when no `x0` accompanies it, which leaves a caller
+    who believes they are warm-starting doing nothing observable.
+    """
+    y, t, signal, mask, cands, _, x0, valid = _warm_from_self()
+
+    with pytest.raises(ValueError, match="must be supplied together") as missing_valid:
+        fit(y, t, signal, cands, criterion=Criterion.AIC, mask=mask, x0=x0)
+    assert "x0_valid was not" in str(missing_valid.value)
+
+    with pytest.raises(ValueError, match="must be supplied together") as missing_x0:
+        fit(y, t, signal, cands, criterion=Criterion.AIC, mask=mask, x0_valid=valid)
+    assert "x0 was not" in str(missing_x0.value)
+
+    # Neither is the cold path, which is already correct and stays reachable.
+    cold = fit(y, t, signal, cands, criterion=Criterion.AIC, mask=mask)
+    assert np.all(cold.init_rung != InitRung.WARM_START)
+
+
+def test_x0_valid_with_the_wrong_candidate_count_is_refused_at_entry():
+    """A `(B, M)` mismatch raises before any fit runs.
+
+    Behaviour under test: the `M`-axis-to-candidate correspondence, now
+    load-bearing in two arrays where it was load-bearing in one.
+    Bug this catches: a validity array whose candidate axis is off, which
+    warm-starts candidate `i` from candidate `j`'s optimum -- every array the
+    right shape at the point of use, every value finite, every status `ok`.
+    That is the Task 11 wrong-candidate-at-index-1 shape, and nothing
+    downstream of `fit` can see it.
+    """
+    y, t, signal, mask, cands, cold, x0, _ = _warm_from_self()
+    batch, n_cand = cold.outcome.shape
+    assert n_cand == 2
+
+    for shape in ((batch, n_cand + 1), (batch + 1, n_cand), (batch,)):
+        with pytest.raises(ValueError, match="x0_valid must have shape"):
+            fit(
+                y,
+                t,
+                signal,
+                cands,
+                criterion=Criterion.AIC,
+                mask=mask,
+                x0=x0,
+                x0_valid=np.ones(shape, dtype=bool),
+            )
+
+
+def test_x0_valid_must_be_boolean_and_is_not_cast():
+    """An integer array is refused rather than truth-tested.
+
+    Behaviour under test: a gate the brief does not ask for, added because
+    Task 3's `SourceMap` puts `index` -- int64, **-1 where exhausted** -- in
+    the same interface as `valid`, and Task 5 passes them adjacently.
+    Bug this catches: `x0_valid=source_map.index` under a permissive
+    `np.asarray(..., dtype=bool)`. `bool(-1)` is True and `bool(0)` is False,
+    so the swap marks every EXHAUSTED cell valid and every cell sourced from
+    coarse index 0 invalid. Shapes agree, no exception, and the failure lands
+    on exactly the cells the spiral could not serve.
+    """
+    y, t, signal, mask, cands, cold, x0, valid = _warm_from_self()
+    # The shape `SourceMap.index` really has, with the exhaustion sentinel in
+    # it: casting this to bool would mark cell (0, 0) invalid and (1, 1) -- the
+    # exhausted one -- valid, inverting the array's meaning in both directions.
+    as_index = np.array([[0, 3], [7, -1], [2, 5]], dtype=np.int64)
+    assert as_index.shape == valid.shape
+
+    with pytest.raises(ValueError, match="x0_valid must be a boolean array"):
+        fit(
+            y,
+            t,
+            signal,
+            cands,
+            criterion=Criterion.AIC,
+            mask=mask,
+            x0=x0,
+            # mypy flags this, which is the point: the annotation catches the
+            # swap in any TYPED caller, and the runtime gate catches it in the
+            # rest. The ignore is what lets the runtime gate be tested at all.
+            x0_valid=as_index,  # type: ignore[arg-type]
+        )
+
+    # (i2): the same values as a genuine boolean array are accepted, so the
+    # refusal is about the dtype and not about the contents.
+    ok = fit(
+        y,
+        t,
+        signal,
+        cands,
+        criterion=Criterion.AIC,
+        mask=mask,
+        x0=x0,
+        x0_valid=as_index.astype(bool),
+    )
+    assert ok.init_rung[1, 1] == InitRung.WARM_START
+
+
+@pytest.mark.parametrize("limits", [(1e-8, 1e8), (1e-6, 1e6), (-2.0, 5.0)])
+def test_the_vectorised_limit_rule_agrees_with_at_diagnostic_limit(limits):
+    """`_out_of_limits` is the array spelling of `ParamSpec.at_diagnostic_limit`.
+
+    Behaviour under test: the two spellings of one rule agreeing, which is the
+    (j) hazard the vectorization creates -- `at_diagnostic_limit` is scalar and
+    calling it per (series, candidate, parameter) is a Python loop over the
+    whole tile, so `fit` carries an array twin.
+    Bug this catches: the twin drifting to a STRICT comparison. The limits are
+    reporting limits and reaching one is an outcome, so the rule is at-or-
+    beyond; `<` and `>` differ from `<=` and `>=` at exactly two values out of
+    the continuum, and no random or near-boundary sample finds them. Both
+    limits are therefore hit EXACTLY here, alongside the ordinary interior,
+    exterior and NaN cases.
+    """
+    lo, hi = limits
+    spec = ParamSpec(
+        name="probe",
+        default=0.5 * (lo + hi),
+        transform=Identity(),
+        bounds=(-np.inf, np.inf),
+        diagnostic_limits=limits,
+    )
+    values = np.array(
+        [lo, hi, np.nextafter(lo, hi), np.nextafter(hi, lo), 0.5 * (lo + hi)]
+        + [lo - 1.0, hi + 1.0, np.nan, np.inf, -np.inf]
+    )
+    expected = np.array([spec.at_diagnostic_limit(float(v)) for v in values])
+    np.testing.assert_array_equal(_out_of_limits(values, limits), expected)
+    # The boundary is the point of the test, so assert it is really exercised
+    # rather than trusting that the array above contains it.
+    assert expected[0] and expected[1]
+    assert not expected[2] and not expected[3]
 
 
 def test_uncertainties_are_reported_in_natural_units():

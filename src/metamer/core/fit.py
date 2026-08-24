@@ -84,7 +84,10 @@ class FitResult:
         theta_err: Natural-unit standard errors, same shape. First-order; see
             the module docstring.
         theta_unconstrained: The optimum in unconstrained coordinates, same
-            shape. This is what Phase 2 feeds back as `x0`.
+            shape. This is what Phase 2 feeds back as `x0`, **paired with an
+            `x0_valid` that is false wherever `outcome` is not `OK`** -- those
+            rows are all-NaN here, and a source map that marks one valid is
+            refused rather than started from.
         beta: Profiled-out signal coefficients, shape (B, M, k_beta).
         beta_err: Their standard errors, same shape.
         loglik: Maximized log-likelihood, shape (B, M). NaN where not OK.
@@ -130,6 +133,96 @@ class FitResult:
     gradient_mode: tuple[GradientMode, ...]
 
 
+def _out_of_limits(
+    natural: NDArray[np.float64], limits: tuple[float, float]
+) -> NDArray[np.bool_]:
+    """Vectorized twin of `params.ParamSpec.at_diagnostic_limit`.
+
+    `at_diagnostic_limit` is scalar, and calling it once per (series,
+    candidate, parameter) is a Python loop over the whole tile. This is the
+    same rule over an array. **Two spellings of one rule is exactly the
+    duplication (j) warns about**, so the agreement is pinned by
+    `test_the_vectorised_limit_rule_agrees_with_at_diagnostic_limit`, which
+    sweeps both limits exactly rather than sampling near them.
+
+    Args:
+        natural: Values in natural units, any shape.
+        limits: The parameter's `diagnostic_limits`.
+
+    Returns:
+        True where the value is at or beyond either limit. **NaN is False**,
+        as it is in the scalar method: NaN is caught by the finiteness check,
+        which is separate and runs first.
+    """
+    lo, hi = limits
+    return np.asarray((natural <= lo) | (natural >= hi), dtype=np.bool_)
+
+
+def _check_warm_starts(
+    x0: NDArray[np.float64],
+    x0_valid: NDArray[np.bool_],
+    candidates: list[ProcessSpec],
+) -> None:
+    """Refuse a warm start that a store could not have produced legitimately.
+
+    **A warm start arriving from a store is data, not a return value.** The
+    two refusals are separate on purpose: `at_diagnostic_limit` returns False
+    for NaN, so an all-NaN row -- what a FAILED fit legitimately writes into
+    `theta_unconstrained`, and the single fault class the `(B, M)` validity
+    array exists to make loud -- would pass a limits-only validator in silence.
+
+    Only the first `p` columns of each candidate's row are inspected. The rest
+    of the `p_max` width is NaN by design for any candidate narrower than the
+    widest, so a validator reading the full width refuses every well-formed
+    warm start but the widest candidate's.
+
+    Args:
+        x0: Warm starts in unconstrained coordinates, shape (B, M, p_max).
+        x0_valid: Which cells carry a warm start, shape (B, M).
+        candidates: The candidate set, in model-axis order.
+
+    Raises:
+        ValueError: If any cell marked valid holds a non-finite value, or one
+            whose natural-unit image is at or beyond a diagnostic limit. The
+            message names the series, the candidate index and its `spec_hash`.
+    """
+    for c, spec in enumerate(candidates):
+        free = free_param_index(spec)
+        by_label = dict(zip(spec.labels(), spec.terms, strict=True))
+        rows = x0[:, c, : len(free)]
+        selected = np.asarray(x0_valid[:, c], dtype=np.bool_)
+        label = spec.spec_hash()[:12]
+        for index, (term_label, name) in enumerate(free):
+            param = by_label[term_label].params[name]
+            column = np.asarray(rows[:, index], dtype=np.float64)
+            offending = selected & ~np.isfinite(column)
+            if bool(np.any(offending)):
+                b = int(np.flatnonzero(offending)[0])
+                raise ValueError(
+                    f"x0[{b}, {c}] is marked valid in x0_valid but its warm "
+                    f"start for {term_label}.{name} is {column[b]!r}, which is "
+                    f"not finite. Candidate {c} is {label}. A failed fit writes "
+                    f"NaN into theta_unconstrained, so a source map that marks "
+                    f"it valid is a spiral bug: mark the cell invalid instead."
+                )
+            # exp() of a large unconstrained coordinate overflows to inf, which
+            # is the correct verdict here rather than a warning.
+            with np.errstate(over="ignore"):
+                natural = np.asarray(param.transform.forward(column), dtype=np.float64)
+            offending = selected & _out_of_limits(natural, param.diagnostic_limits)
+            if bool(np.any(offending)):
+                b = int(np.flatnonzero(offending)[0])
+                raise ValueError(
+                    f"x0[{b}, {c}] is marked valid in x0_valid but its warm "
+                    f"start for {term_label}.{name} is {column[b]!r} in "
+                    f"unconstrained coordinates, which is {natural[b]!r} in "
+                    f"natural units -- at or beyond its diagnostic limits "
+                    f"{param.diagnostic_limits}. Candidate {c} is {label}. An "
+                    f"OK fit is strictly inside both limits, so no legitimate "
+                    f"source produces this."
+                )
+
+
 def fit(
     y: NDArray[np.float64],
     t: NDArray[np.float64],
@@ -140,6 +233,7 @@ def fit(
     objective: Objective = Objective.ML,
     engine: Engine | None = None,
     x0: NDArray[np.float64] | None = None,
+    x0_valid: NDArray[np.bool_] | None = None,
     max_iter: int = DEFAULT_MAX_ITER,
 ) -> FitResult:
     """Fit a candidate set to a batch of series and rank the candidates.
@@ -156,9 +250,27 @@ def fit(
         engine: Likelihood engine. Defaults to the batched Kalman filter.
         x0: Optional warm starts in UNCONSTRAINED coordinates, shape
             (B, M, p_max) -- the same layout `theta_unconstrained` comes back
-            in, so a converged neighbour's solution feeds straight back. Phase
-            2 supplies these; the signature is fixed now because it constrains
-            everything downstream.
+            in, so a converged neighbour's solution feeds straight back. Rows
+            are read to `:p` per candidate, so the NaN padding a narrower
+            candidate carries is never inspected. **Requires `x0_valid`.**
+        x0_valid: Which cells `x0` actually carries a warm start for, shape
+            (B, M), dtype bool. A false cell receives NO warm start and takes
+            the moment ladder, recorded as such in `init_rung` -- and is
+            bit-identical to the same cell fit with `x0=None`, which is what
+            makes the ladder a fallback rather than a third path.
+
+            **Validity is per (series, CANDIDATE), never per series.** The
+            warm-start key is `(fit_hash, candidate spec_hash)`, so a coarse
+            source point can be `OK` for one candidate and failed for another;
+            a per-point array would force all-or-nothing per cell and quietly
+            discard usable sources.
+
+            **The dtype gate is deliberate.** Phase 2c's source map exposes
+            `index` (int64, -1 where the spiral was exhausted) beside `valid`
+            (bool), and `bool(-1)` is True while `bool(0)` is False -- so a
+            permissive cast would turn the swap of two adjacent arguments into
+            "every exhausted cell valid, every cell sourced from coarse index
+            0 invalid", with no exception and the right shapes throughout.
         max_iter: Iteration cap per series. Call-level, so it cannot vary
             within a batch. Defaults to `optimize.DEFAULT_MAX_ITER`, which is
             the one place the production cap is written down -- see there for
@@ -169,8 +281,10 @@ def fit(
         A `FitResult`.
 
     Raises:
-        ValueError: If `mask` does not match `y`, or `x0` does not match the
-            (B, M, p_max) layout.
+        ValueError: If `mask` does not match `y`; if exactly one of `x0` and
+            `x0_valid` is supplied; if `x0` does not match the (B, M, p_max)
+            layout or `x0_valid` the (B, M) one; if `x0_valid` is not boolean;
+            or if a cell marked valid holds a value no `OK` fit could produce.
     """
     y = np.asarray(y, dtype=np.float64)
     t = np.asarray(t, dtype=np.float64)
@@ -188,7 +302,21 @@ def fit(
     n_cand = len(candidates)
     p_max = max(len(free_param_index(spec)) for spec in candidates)
 
-    if x0 is not None:
+    # BOTH OR NEITHER, and *neither* is the existing cold path, which is
+    # already correct. Defaulting `x0_valid` to all-valid would hand the caller
+    # the NaN-sentinel behaviour back with no diagnostic -- "no valid source"
+    # and "a failed source" as the same bytes -- which is the whole reason the
+    # sentinel was rejected as a design.
+    if (x0 is None) != (x0_valid is None):
+        missing = "x0 was not" if x0 is None else "x0_valid was not"
+        raise ValueError(
+            f"x0 and x0_valid must be supplied together, but {missing} "
+            f"supplied. There is no default-to-all-valid: a warm start with "
+            f"no validity array cannot express section 11.3's per-cell "
+            f"fallback, and omitting both is the cold path."
+        )
+
+    if x0 is not None and x0_valid is not None:
         x0 = np.asarray(x0, dtype=np.float64)
         if x0.shape != (batch, n_cand, p_max):
             raise ValueError(
@@ -196,6 +324,24 @@ def fit(
                 f"batch, the candidate set and the widest free parameter "
                 f"vector, got shape {x0.shape}"
             )
+        x0_valid = np.asarray(x0_valid)
+        if x0_valid.dtype != np.bool_:
+            raise ValueError(
+                f"x0_valid must be a boolean array, got dtype "
+                f"{x0_valid.dtype}. It is not cast: an int64 source-index "
+                f"array passed here would read -1 (spiral exhausted) as valid "
+                f"and 0 (the first coarse point) as invalid."
+            )
+        if x0_valid.shape != (batch, n_cand):
+            raise ValueError(
+                f"x0_valid must have shape ({batch}, {n_cand}) to match the "
+                f"batch and the candidate set, got shape {x0_valid.shape}. The "
+                f"M-axis-to-candidate correspondence is load-bearing in both "
+                f"arrays and fit truncates positionally"
+            )
+        # Every value is checked before any fit starts, so a bad source map is
+        # a refusal rather than a partly-written run.
+        _check_warm_starts(x0, x0_valid, candidates)
 
     theta = np.full((batch, n_cand, p_max), np.nan)
     theta_u = np.full((batch, n_cand, p_max), np.nan)
@@ -224,7 +370,14 @@ def fit(
         var_white = np.full(batch, np.nan)
 
         for b in range(batch):
-            warm = None if x0 is None else x0[b : b + 1, c, :p]
+            # The per-cell selector. `fit` only HONOURS validity -- the policy
+            # that decides it (the spiral, its bound and its exhaustion rule)
+            # lives in the batch layer, where the coarse grid exists.
+            warm = (
+                x0[b : b + 1, c, :p]
+                if x0 is not None and x0_valid is not None and bool(x0_valid[b, c])
+                else None
+            )
             # The design is narrowed to this series: its rank, gram_logdet
             # and n_rows are all (B,) and describe X restricted to each
             # series' own rows, so handing the full-batch object to a
