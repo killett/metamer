@@ -4980,6 +4980,80 @@ the third executable. The pre-flight now reads **(a)–(k) with (a2), (a3) and (
 
 ---
 
+## Phase 2c brainstorm — settled decisions (2026-08-23)
+
+**IN PROGRESS.** Each decision is appended as it is validated. The numbers behind them live once,
+in [`warmstart-spike-verdict.md`](docs/superpowers/notes/warmstart-spike-verdict.md); nothing
+below restates a measurement.
+
+### D1 — 2c BUILDS §11.1's TWO-PASS WARM START AS WRITTEN, NOT THE CHEAPER ANY-PRIOR-FIT VARIANT
+
+**THE ALTERNATIVE WAS REAL AND WAS PRICED.** Task 0's decomposition at `N = 630` gives *any*
+converged `θ̂` **+30.28%** — already over §11.2's threshold — with the coarse grid, the barrier,
+the spiral and the `fit_hash` stride all unbuilt, and the two-pass geometry adding **+12.00** on
+top. **So the question was genuinely open, and it is not answered by the 12 points.**
+
+> **IT IS ANSWERED BY WHAT THE CHEAP VARIANT SPENDS, AND THE PRICE IS A GUARANTEE RATHER THAN A
+> PERCENTAGE.** Under any-prior-fit, the previous tile's fits seed the next, so **tile geometry
+> enters `θ̂` directly** — and the tile side is derived from `--memory-budget`, which is
+> deliberately **in neither hash** so that burst-and-resume works. §11.3 guarantees output is
+> bitwise identical *regardless of memory budget, tile size, thread count and traversal order*,
+> and this puts three of those four inside the answer.
+
+**RECORDED AS ANSWERED, WITH THE REASON, SO IT IS NOT RE-OPENED ON THE 12 POINTS ALONE:** the
+geometry buys 12 points **and preserves a guarantee whose loss is unpriced.**
+
+**THE CHAIN THE CHEAP VARIANT SETS OFF, AND IT IS A CHAIN RATHER THAN A CAVEAT.** Warm-start
+settings are already fit-relevant (Q9). Under any-prior-fit the **tile side** becomes
+fit-relevant too; a resume on a different machine with different available RAM then produces
+**different fits**; the resume gate must therefore refuse budget changes; and refusing budget
+changes **breaks §15.5's burst-to-cloud workflow, which is the entire reason the budget is
+excluded from the hashes.** **This is Task 10's tile-side finding arriving through a new door,
+and worse than there:** Task 10's budget moved *where data landed*; this one would move *what the
+data is*.
+
+**AND (a)'s COST IS BOUNDED, KNOWN, AND MOSTLY ALREADY BUILT.** One fit-identity field, a cache
+key, a resume-gate interaction, a schema version — this project has run five cascades and knows
+their price. Q9 already settled the warm-start fit-relevant field set; the cache key is already
+specified as `(fit_hash, candidate spec_hash)`; 2a's resume gate already has three arms and a
+positional candidate comparison. **2c adds to a mechanism rather than inventing one.** **A known
+cascade beats an unpriced guarantee.**
+
+**AND PASS 1 IS NOT WHAT WAS AT STAKE.** Pass 1 has five jobs and **four survive whatever 2c
+decides about warm-starting** — the calibration measurement, the early-abort evaluation, the cold
+audit reference, the `/detail/` default. The cheap variant would not have saved pass 1; it would
+only have stopped using pass 1 **as the source**.
+
+**THREE THINGS D1 CARRIES OUT OF TASK 0, AND THEY ARE OBLIGATIONS RATHER THAN NOTES.**
+
+1. **THE REGIME BOUNDARY NEEDS A POLICY AND §11.1 HAS NONE.** The boundary stratum sits at
+   **+2.92%** where pooled is **+31.73%**, and the gap **widens to 34 points at `N = 630`** — so
+   the mechanism does nothing at the points of most scientific interest. **That is not a reason to
+   drop it.** It is a reason the audit must **stratify by boundary**, and possibly a reason **not
+   to warm-start across a detected regime change at all.** A design decision, owed and unmade.
+2. **`fit`'s `x0` IS CALL-LEVEL ALL-OR-NOTHING** (`fit.py:227`), so §11.3's *"on exhaustion fall
+   back to the moment-init ladder with the rung recorded as such"* **has no expressible
+   implementation.** A Phase 1 interface constraint surfacing at its first real consumer.
+3. **THE MECHANISM WAS AUTHORIZED WITH A MARGIN OF ONE GRID CELL.** Selection agreement at
+   `N = 630` is **90.37%**, 122 of 135, against a pre-agreed stop at 90% — 121 would have said
+   *report and stop*. Non-monotone in `N` and **worst at production length**, with max `|Δℓ|`
+   **204.0** and max parameter distance **154 SE**. **Under D1 that is precisely what §11.2's
+   hysteresis audit exists to measure, and the audit is now mandatory in fact rather than in
+   principle.** Its **first hypothesis is named**: the near start disagreed with cold *more* than
+   the distant one did, 122 against 125 of 135 — three cells, which is not evidence, but which
+   would mean **the geometry buys speed and costs agreement.**
+
+### D2 — TASK 0's METHOD IS THE TEMPLATE FOR EVERY REMAINING 2c PREMISE THAT IS UNMEASURED
+
+**Three elements, and each one changed the answer at least once.** A **lever across three
+fixtures**, because two points determine a line and cannot distinguish a rising curve from a
+saturating one — the two-point reading said *drop it* and was wrong. A **ceiling arm** supplying
+the mechanism's best possible input, which is what turned a null into a located null ((i2b)). And
+**the decision rule committed before the numbers arrived**, which is the only thing that made the
+`N = 630` re-take compelled rather than chosen.
+
+---
+
 ## Phase 2b brainstorm — settled decisions (2026-08-14)
 
 **The decisions are in the plan as task behaviour;
