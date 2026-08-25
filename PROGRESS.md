@@ -4,9 +4,9 @@
 
 1. **Branch `main`, everything on it, every commit pushed by a hook** — https://github.com/killett/metamer. Head at the time of writing: **the plan Task 0 implementation commit**, 2026-08-24. **A SHA here is stale the moment the next commit lands, so it is named by content rather than by hash** — `git log --oneline -5` is the authority.
 2. **DONE:** Phase 1 (0–18), Phase 2 preliminaries P0–P4, **Phase 2a (0–13)**, **Phase 2b (COMPLETE 2026-08-19 — 10 met / 4 reduced scope / 2 FAILED)**, and **Phase 2c's brainstorm (D1–D12) plus its Task 0 and Task 1 measurements**. The scope decision on a modelling sub-phase was taken 2026-08-22 and **re-taken on closed facts 2026-08-23: it does not open.** Sections below carry each; **none is restated here.**
-3. **NEXT ACTION: PHASE 2c TASK 4 — the barrier and the cross-store gate.** The plan is [`2026-08-24-metamer-phase2c.md`](docs/superpowers/plans/2026-08-24-metamer-phase2c.md) — **9 tasks, 12 exit criteria each naming its reading, approved 2026-08-24. TASKS 0–3 ARE DONE (2026-08-24); Tasks 4–8 have no code.** **Every task's FIRST step is the pre-flight**, run against the task brief **before code** and appended to [`phase2c-preflight.md`](docs/superpowers/notes/phase2c-preflight.md). **Read the *What plan Task N established* sections first.** **AND ONE PRE-EXISTING DEFECT IS OPEN AND UNOWNED, FOUND AT TASK 2: `tiling.py` requires the spatial dims to be literally `y` and `x` in four places while stage 4a requires only that `time` is first, so a `latitude`/`longitude` input passes the contract and dies in assembly without exit code 4.** Two closers, both scope decisions; see Task 2's section. **WHICHEVER IS CHOSEN DECIDES WHETHER THE CONTRACT IS NAME-BASED OR POSITIONAL — and stage 4a's own message already calls it positional, so the message and the implementation disagree today. That message is the THIRD document in the set and it moves either way.** **TASK 5 NOW CARRIES A MANDATORY `ALGORITHM_VERSION` BUMP** that Task 1's brief wrongly claimed; it closes a defect present since 2026-08-11 and Task 5 cannot ship without it.
+3. **NEXT ACTION: PHASE 2c TASK 5 — the two-pass driver.** The plan is [`2026-08-24-metamer-phase2c.md`](docs/superpowers/plans/2026-08-24-metamer-phase2c.md) — **9 tasks, 12 exit criteria each naming its reading, approved 2026-08-24. TASKS 0–4 ARE DONE (2026-08-24); Tasks 5–8 have no code.** **Every task's FIRST step is the pre-flight**, run against the task brief **before code** and appended to [`phase2c-preflight.md`](docs/superpowers/notes/phase2c-preflight.md). **Read the *What plan Task N established* sections first.** **AND ONE PRE-EXISTING DEFECT IS OPEN AND UNOWNED, FOUND AT TASK 2: `tiling.py` requires the spatial dims to be literally `y` and `x` in four places while stage 4a requires only that `time` is first, so a `latitude`/`longitude` input passes the contract and dies in assembly without exit code 4.** Two closers, both scope decisions; see Task 2's section. **WHICHEVER IS CHOSEN DECIDES WHETHER THE CONTRACT IS NAME-BASED OR POSITIONAL — and stage 4a's own message already calls it positional, so the message and the implementation disagree today. That message is the THIRD document in the set and it moves either way.** **TASK 5 NOW CARRIES A MANDATORY `ALGORITHM_VERSION` BUMP** that Task 1's brief wrongly claimed; it closes a defect present since 2026-08-11 and Task 5 cannot ship without it.
 4. ## THE STANDING LIMITATION ON EVERYTHING 2c DECIDED: **NO 2c NUMBER COMES FROM REAL DATA.** Warm-starting was authorized — and every decision after D1 inherits this — on a **simulated field whose spatial coherence is a construction parameter**. **The spatial coherence of real altimetry optima has never been measured.** A field with **weaker** coherence gives a **smaller** saving, and **§11.2's 30% threshold could fail on real data.** **THE NAMED CLOSER, not an open worry: a spike on a real gridded product — same three arms (cold, warm, self-ceiling), same record-length lever.** Until it runs, D1 is authorized on simulation. See [what 2c's tasks inherit](#what-2cs-tasks-inherit-2026-08-24).
-5. **Tests: 1147 passed, 0 failed, 0 INDETERMINATE — 2026-08-24, 947.16 s on a box at 3.3 GB available (read after the run, not during it).** **`pixi run test` is the full sweep and every end-of-task verification must run it; `test-fast` and `test-ci` are NOT evidence** — the full sweep has caught **seven** things a fast run could not. **Every run prints `RSS measurement validity`, including at zero**; a nonzero count is INDETERMINATE, neither pass nor fail.
+5. **Tests: 1157 passed, 0 failed, 0 INDETERMINATE — 2026-08-24, 1143.52 s on a box at 3.3 GB available (read after the run, not during it).** **`pixi run test` is the full sweep and every end-of-task verification must run it; `test-fast` and `test-ci` are NOT evidence** — the full sweep has caught **seven** things a fast run could not. **Every run prints `RSS measurement validity`, including at zero**; a nonzero count is INDETERMINATE, neither pass nor fail.
 6. **Verify a fresh checkout with `pixi run test && pixi run typecheck && pixi run lint`**, plus `pixi run pre-commit run --all-files` before every commit.
 7. **THE METHOD IS THE PRE-FLIGHT AND IT LIVES IN EXACTLY ONE PLACE:** [`phase1-to-phase2-handoff.md`](docs/superpowers/notes/phase1-to-phase2-handoff.md) §1 — (a0)–(a9), (a)–(k), the standing rules, the fixture facts, **and the ten 2c added: (i2b) a high-ceiling control converts a null into a LOCATED null, (i2c) a sign-unstable benefit is worse than a small one, (j5) a second instrument is a cross-check only if it measures the same quantity under the same conditions, (j6) bound the unmeasured region before measuring it, (i11) state refutation clauses in BOTH directions, (a2b) make an invalid value UNAVAILABLE rather than caveated, (h2) a metric may only be stratified by axes at its OWN granularity, (j7) never stratify by a quantity the treatment can move, (c4) a validator must be specified in the coordinates and the EXTENT the validated object actually has, (e2) prove a mutant differs from the original before recording a surviving mutation — (e) now has SIX causes, and the sixth makes you distrust a test that is fine — (e3) its opposite colour, a RED suite hiding a dead assertion, read WHICH failure fired, (a2c) populated but nothing acts on it: for each hashed field name the code that ACTS on it, (a2e) encode a classification as a construction — a set defined as the union of its classes, with the forbidden class declared nowhere, (i12) a uniform fixture SET cannot test a degree of freedom the contract leaves open, (a2d) a hashed value's UNIT is part of its identity — two runs can agree on the number and disagree on the quantity, (j8) when a measurement's verdict is adopted as a decision the INSTRUMENT becomes part of the specification, and (a4)'s newest register: **"checked" in your own pre-flight is a claim, and a NEGATIVE one is what licenses the action.** **(e2) and (e3) are filed adjacently on purpose; so are (a2c) and (a2e), which are the same question asked about a field and about a rule.** **Do not restate it here** — the two copies drifted once already.
 8. **CI IS GREEN and the deliberate red is CLOSED** (2026-08-22, by the repair its own criterion chose: the CI fixture was **enlarged**, the bound was **not** widened and the test was **not** marked). **CI runs `-m "not machine"` and therefore executes exactly ONE of the nine RSS assertions**, so it is not a substitute for the local sweep. See [THE CI FIXTURE DECISION](#the-ci-fixture-decision--taken-measured-and-verified-2026-08-22).
@@ -3086,6 +3086,25 @@ recorded rather than smoothed** — which is the reason to believe the other two
 
 ## Things a cold session cannot re-derive
 
+### `pre-commit run --all-files` DOES NOT COVER UNTRACKED FILES (found 2026-08-24, at 2c Task 4)
+
+> **A NEW MODULE PASSES THE PRE-COMMIT SWEEP BY BEING INVISIBLE TO IT.** `--all-files` means every
+> file **git knows about**; a file that has never been `git add`-ed is not one. So the hooks report
+> **Passed** without having read it.
+
+**Measured, not reasoned:** `pre-commit run --all-files` reported every hook Passed with
+`src/metamer/batch/barrier.py` and `tests/test_barrier.py` present but **untracked**. The very next
+`git commit`, which stages them first, had `ruff-format` reformat both. Nothing about the files
+changed in between.
+
+**IT IS THE (a0) SHAPE AT A TOOL: "not checked" and "checked and clean" print the same word.** And
+it bites exactly when a task adds a module, which is when the check is worth most.
+
+**THE HABIT THAT AVOIDS IT: `git add` a new file BEFORE running the sweep**, not after. The commit
+hook will catch it either way — but it catches it *by aborting the commit after the full test sweep
+has already run*, which then has to run again, and this project's rule is that a formatter touching
+`src/` invalidates the sweep that preceded it. **Twice in this sub-phase.**
+
 ### HOW TO READ A STORE WRITTEN BEFORE 2c TASK 5 (recorded 2026-08-24, and it cannot be reconstructed later)
 
 > **ANY STORE WHOSE `algorithm_version` IS BELOW THE VALUE 2c TASK 5 SHIPS HOLDS COLD FITS,
@@ -5404,6 +5423,101 @@ per-candidate one.
 radius, a spiral starting at radius 1, the bound read as fine units, `valid` as `index > 0`, the
 coarse geometry taken from the region, a per-point search, exhaustion falling through to the
 nearest point regardless of its outcome, and column-major point ordering.
+
+### What plan Task 4 established (done 2026-08-24 — read before adding a check to the cross-store gate)
+
+**`batch/barrier.py` holds both:** `check_pass1_complete` and `check_pass1_store`.
+
+#### THE FINDING: THE BRIEF ENUMERATED THREE CHECKS AND THE FIT IDENTITY HAS TWELVE FIELDS
+
+The plan's gate compares the **stride**, the **parent geometry** and the **candidate set**. It
+says nothing about `objective`, `engine`, `seed`, `variable`, `signal_terms`, the two stamped
+versions, or the **four remaining warm-start settings.**
+
+**A warm start taken from a store fitted under a different `objective` is exactly as wrong as one
+taken at a different stride**, and wrong in the same silent way. **An enumerated gate is a denylist
+wearing an allowlist's clothes** — it protects the fields somebody thought of, and fields added
+later default to unprotected. **This sub-phase's own Task 3 is the proof**: `spiral_bound`'s unit
+was ambiguous until the day before, and a stride-only gate would pass that disagreement straight
+through.
+
+#### THE COMPLETE CHECK IS ONE EQUALITY, BECAUSE THE GEOMETRY DIFFERENCE CANCELS EXACTLY
+
+Comparing the two stores' own `fit_hash` **always fails** — pass 1's is over the **decimated**
+geometry and pass 2's over the **parent's**, and that difference is the point of pass 1 rather
+than a mismatch. **Both passes can compute `config.fit_hash(parent_rollup)`**, because pass 1
+opens the parent before decimating. So pass 1 records **`parent_fit_hash`**, and the gate is one
+comparison **covering every field in `FIT_RELEVANT_FIELDS`, including ones added after the gate
+was written.**
+
+**It is not a self-reported identity** (a2): it is a hash of the config pass 1 **actually ran
+under**, paired with the geometry of the input pass 1 **actually opened**.
+
+#### AND A DIGEST IS A WALL, SO THE PAYLOAD IS STORED BESIDE IT
+
+*"A refusal that says what would lift it is planning information."* `parent_fit_payload` — about a
+dozen small values — is diffed **key by key** to name the differing field. **The store already
+contains the precedent**: `geometry_components` sits beside `geometry_hash` because §13.3 requires
+a mismatch to be **diagnosable from the store alone**. A test pins `digest(payload) == hash`, so
+the two cannot drift.
+
+**Key SETS are compared before values.** A field in the allowlist and absent from the stored
+payload is a comparison that **silently does not happen** — (a0)'s excluded-versus-missing
+register, at a diff with a carve-out.
+
+#### THE STRIDE KEEPS ITS OWN NAMED REFUSAL, AND THE REDUNDANCY IS DELIBERATE
+
+The key-by-key diff would already name `warm_start_coarse_stride`. **The dedicated check stays**,
+because the two messages carry different information: the diff says *"this field differs"*, and
+the stride's own message says **what it does** — a valid-looking source map with every index in
+range and every warm start taken from the **wrong cell**. **Mutation-confirmed:** deleting the
+named check leaves the store refused, with the generic message, and the test fails on the
+message rather than on the refusal. **Both guards cross-comment each other.**
+
+#### `candidates` IS IN NEITHER ALLOWLIST, SO THE DIGEST CANNOT COVER IT
+
+§12.8 permits resuming with a **superset**, and a hash can only express equality — so `candidates`
+is deliberately outside both allowlists and the digest comparison **cannot be made to** cover it.
+The enforcement is the **resume gate's positional comparison, imported rather than restated**:
+same rule, same positional model axis, only the resolution wording differs, which is why that is
+already a parameter. **Two implementations of a positional comparison is how one of them comes to
+accept a permutation.**
+
+#### AND TASK 2's `coarse_stride` ATTR WAS REMOVED, ONE TASK AFTER IT LANDED
+
+Once `parent_fit_payload` carries `warm_start_coarse_stride`, the standalone attr is **a second
+copy of one value**, and two copies drift the moment either is written from a different place.
+**Removed; the payload is the single source**, and Task 2's test moved with it. No store exists,
+so nothing was invalidated. **Recorded because it edits a decision made one task earlier.**
+
+#### THE BARRIER IS THE EXISTING PREDICATE, AND THE REFUSAL LISTS TILES RATHER THAN A COUNT
+
+`completion.completed_tiles(...).all()` — **no new completion concept**, which is D11's whole
+argument. The bits are bound to the store's own `StoreShape`, so *"complete"* means what it means
+everywhere else, about the decimated grid.
+
+**A count is a wall and a list is planning information**, so the outstanding tile indices go in —
+truncated at `OUTSTANDING_SHOWN = 8` with the total always stated, because a wholly unfitted
+10⁷-point grid has 156 000 of them and an unreadable message is a wall of a different kind.
+
+> **THE PARTIAL STORE IS THE DANGEROUS CASE, NOT THE ABSENT ONE.** An absent store fails loudly at
+> open. A store missing one tile produces a source map that is **entirely well-formed** — every
+> index in range, every `valid` true — whose sources are **systematically further away in the
+> unfitted region.** Nothing downstream can see it, and the saving it costs **looks like the
+> mechanism underperforming.**
+
+#### FIXTURE DISCIPLINE, AND THE THREE VACUITY MODES CLOSED
+
+**Every pass-1 store in the suite comes from a real `run(decimate=True)`.** A hand-assembled store
+carries whatever attrs the test wrote, so the gate would be checked against a fixture rather than
+against what it will meet — and *"the writer stopped recording a field"* would be invisible. The
+candidate set is **two** candidates, because a permuted list of one is the same list. And the
+barrier's fixture is **multi-tile**, at the budget Task 2 already had to find, because a
+single-tile store is complete after one write and **cannot be made incomplete.**
+
+**Five mutations, all caught**: the barrier reading "the store exists", the fit-identity digest
+dropped while the enumerated checks stayed, the stride's own named refusal dropped, the parent
+fingerprint recording the decimated rollup, and the candidate comparison dropped.
 
 ---
 

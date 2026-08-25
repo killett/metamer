@@ -1,7 +1,7 @@
 # Phase 2c — the two-pass warm start, its barrier, and the hysteresis audit
 
-**Status: APPROVED 2026-08-24. TASKS 0–3 ARE DONE (2026-08-24); Tasks 4–8 have no code.
-Task 4 is the next action.** The single source for this plan's status is this line. **What each task
+**Status: APPROVED 2026-08-24. TASKS 0–4 ARE DONE (2026-08-24); Tasks 5–8 have no code.
+Task 5 is the next action.** The single source for this plan's status is this line. **What each task
 found beyond its brief is in [`PROGRESS.md`](../../../PROGRESS.md)'s *What plan Task N
 established*, not here.**
 
@@ -371,6 +371,15 @@ is not the one its configuration describes.
 
 - **The barrier is `completed_tiles(pass1_store).all()`** — an existing, tested predicate. **No
   new completion concept.**
+> ## AMENDED 2026-08-24 AT THE TASK'S PRE-FLIGHT: THE GATE IS NOT AN ENUMERATION
+>
+> The three checks below name **three of `FIT_RELEVANT_FIELDS`' twelve members**, and a warm start
+> from a store fitted under a different `objective` is exactly as wrong as one at a different
+> stride. **The gate is `parent_fit_hash == config.fit_hash(this run's rollup)`** — one equality
+> over the whole allowlist, with the decimated-versus-parent geometry difference **subtracted
+> rather than special-cased**. The checks below stay, because they **name** the common cases;
+> they no longer constitute the gate.
+
 - **The gate checks the stride explicitly and positionally, never by assuming one was derived from
   the other.** A pass-1 store built at stride 4 consumed by a pass-2 run configured for stride 8
   is a **silently wrong warm start**: every array the right shape, every value finite, every
