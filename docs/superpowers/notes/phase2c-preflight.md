@@ -545,3 +545,151 @@ what a **store on disk** was actually decimated at.
 `rg 'warm_start' src/metamer/config/` and `rg 'FIT_RELEVANT_FIELDS' src/metamer/core/hashing.py`,
 run **before** reading the brief's behaviour clauses. Both returned the mechanism the brief
 proposes to add. **Running the vocabulary grep first is what turned a task into an audit.**
+
+---
+
+## Plan Task 2 — pass 1 as a run over a decimated input, audited before any code
+
+**THE BRIEF** is the plan's Task 2 (D11): pass 1 is **the existing mechanism applied to a
+different input**, `isel(y=slice(0, None, k), x=slice(0, None, k))`, with its own store, its own
+bitmap and its own resume; the decimation is index arithmetic on dataset coordinates and therefore
+independent of tiling and of `--memory-budget`; pass 1's store records the parent's geometry
+fingerprint and the stride and **is a permanent second artifact, not scratch**; everything else is
+unchanged.
+
+### (i8) THE BRIEF'S OWN `isel(y=…, x=…)` IS A NAME-BASED DECIMATION AND THE INPUT CONTRACT DOES NOT REQUIRE THOSE NAMES
+
+**This is the finding of this pre-flight.** `input.check_input_contract` requires exactly three
+dimensions and that **`array.dims[0] == "time"`**. It says nothing at all about the names of dims
+1 and 2 — the contract is *"three, mapping to (time, y, x)"*, which is **positional**. A real
+altimetry product routinely names them `latitude`/`longitude`, `lat`/`lon` or `nj`/`ni`.
+
+**AND EVERY FIXTURE IN THIS REPOSITORY USES `("time", "y", "x")`.** Sixteen call sites across
+`test_tiling`, `test_write`, `test_runner`, `test_resume`, `test_store`, `test_reuse`,
+`test_memory`, `test_input`, `test_exit_criteria` and `test_exit_criteria_2b` — **no exceptions.**
+
+So a name-based decimation **passes the entire suite and fails on the first real input**, with an
+`xarray` `ValueError` naming a dimension the user never mentioned. That is (i8)'s first shape: the
+fault class is **not constructible with any fixture the project currently owns**. **The decimation
+reads `array.dims[1]` and `array.dims[2]`**, and the test that makes it bite is a fixture whose
+spatial dims are named something else — the first such fixture in the project.
+
+#### AND THE SAME SHORTCUT IS ALREADY TAKEN THROUGHOUT `tiling.py`, WHICH MAKES THIS A PRE-EXISTING DEFECT RATHER THAN ONE THIS TASK INTRODUCES
+
+**The first draft of this entry said "checked: `assemble_tile` and `geometry_components` index
+positionally, so the exposure is the decimation this task adds". That was wrong, and it was
+written before the code was read.** `tiling.py` uses the literal names in four places:
+
+    tiling.py:904-905   ("y", tile.y_start, tile.y_stop), ("x", tile.x_start, tile.x_stop)
+    tiling.py:932-933   _aligned_spans(..., by_dim["y"]) / by_dim["x"]
+    tiling.py:973-974   array.isel(y=slice(...), x=slice(...))
+
+**So the whole tiling and assembly path already requires the spatial dims to be literally `y` and
+`x`, while stage 4a accepts any names as long as `time` is first.** An input with
+`latitude`/`longitude` **passes the contract** and then dies deep inside `assemble_tile` with a
+raw `xarray` `ValueError` — **not an `InputContractError`, so not exit code 4**, which violates
+`input.py`'s own stated rule that *"EVERY STAGE-4a FAILURE MUST BE AN `InputContractError`"*.
+
+**THIS IS NOT TASK 2's TO FIX AND IT IS REPORTED RATHER THAN ABSORBED.** Two closers exist and
+choosing between them is a scope decision:
+
+| closer | cost | what it says the contract is |
+|---|---|---|
+| **stage 4a enforces the names** | one refusal, one message | the contract is `("time", "y", "x")` literally, and the docstring's *"mapping to"* is the thing that is wrong |
+| **the tiling path goes positional** | four sites plus fixtures | the contract is positional as written, and `tiling.py` is the thing that is wrong |
+
+**What Task 2 controls is not adding a fifth site**, so the decimation reads `array.dims[1]` and
+`array.dims[2]`. That is the correct arithmetic under either closer and changes nothing for a
+`y`/`x` input, so it neither pre-empts the decision nor widens the exposure. **It does not make
+`latitude`/`longitude` inputs work** — tiling still refuses them — and this entry says so, because
+a positional decimation sitting above a name-based assembler otherwise reads as support.
+
+**AND THE FIXTURE THAT WOULD CATCH ANY OF THIS DOES NOT EXIST**, which is why sixteen call sites
+could agree on an unrequired convention for the life of the project.
+
+### (a5) "ITS OWN FINGERPRINT IS DERIVABLE FROM THOSE TWO" IS FALSE AS WRITTEN, AND THE TRUE VERSION IS CHEAPER
+
+The brief says pass 1's store *"records the parent's geometry fingerprint and the stride, and its
+own fingerprint is **derivable from those two**"*. **A hash is not invertible**, so nothing is
+derivable from a fingerprint. What is true is one level down:
+
+- the decimated **components** are a pure function of the parent's **components** and `k` — shape
+  divides, `dims`/`variable`/`source_dtype`/`calendar`/`time_coordinate` are unchanged, and the
+  spatial coordinate arrays are the parent's every `k`-th value;
+- and the fingerprint is a function of the components.
+
+**The tempting implementation is the expensive one.** `geometry_components` is already a
+`REQUIRED_ATTR` and holds **full coordinate value arrays** — 10 800 numbers for a 3600 × 7200 grid
+— so "record the parent's geometry so the derivation can be checked" reads as *store the parent's
+components too*, doubling that for no gain. **The store records the parent's HASH (16 hex
+characters) and the stride (one integer)**, which is all Task 4's cross-store gate needs; and the
+**reproduction is done in a test**, which has the parent dataset and can decimate it directly.
+**Derivable-in-principle and stored-for-checking are different requirements** and only the second
+costs bytes.
+
+### THE BIT'S INVARIANT HOLDS UNCHANGED, AND IT IS CONFIRMED RATHER THAN ASSUMED
+
+*"Same mechanism, different input"* is the whole of D11's argument, which makes it exactly the
+claim that turns out to have an exception. Checked at the two places a parent grid could leak in:
+
+| mechanism | what it is bound to | verdict |
+|---|---|---|
+| `completion.completed_tiles` / the bitmap | the **store's** `StoreShape`, fixed at creation | a tile is a tile of whatever grid the store was created for |
+| `completion.resume_tile_side(grid=…)` | *"`(n_y, n_x)` **from the input contract**"*, and it refuses *"if its bitmap does not describe this grid"* | the contract is taken from the **decimated** handle, so each store is guarded against its own grid |
+
+**So the bit keeps its meaning — "every region write for this tile returned" — as a claim about
+the decimated grid.** Nothing carries a parent grid into either. **The confirmation is the
+kill-and-resume test**, not this table: a reading establishes that no parent grid is referenced,
+and only a run establishes that the resume refits exactly the outstanding tiles.
+
+### `resume_tile_side` GUARDING EACH STORE INDEPENDENTLY IS CORRECT AND READS AS WRONG
+
+A memory-budget change between passes is **legal**, and it produces **different tile sides in the
+two stores** — pass 1's grid is `1/k²` the size, so the same budget derives a different side
+anyway. **Someone will read two stores with different tile sides as a bug and "fix" it by forcing
+one side across both**, which would either exceed the budget in one pass or refuse a resume that
+is geometrically identical. **One line where the guard is documented**, at the point the second
+store's side is derived, saying that the divergence is the design.
+
+### PASS 1'S STORE IS PERMANENT, AND THE NAMING IS WHERE THAT GETS DECIDED
+
+It is the **cold audit reference** (§11.2) and the `/detail/` default source, so **it cannot be
+deleted after pass 2 completes**. A second directory beside an output is read as scratch unless
+something says otherwise, and the place a reader looks is **the name and the code that derives
+it** — not a design document. **The rule is stated at the derivation, in the docstring of the
+helper that performs it, and in the user-facing README.**
+
+### (a0)'s THIRD REGISTER: THE TWO NEW ATTRS ARE OPTIONAL, AND NO SCHEMA BUMP IS OWED
+
+`create_store` refuses on `attrs.get(key) is None` for `REQUIRED_ATTRS`, so a new **required**
+attr would refuse every store written before it. `parent_geometry_hash` and `coarse_stride` are
+present **only on a decimated store**, and their **absence means "not a pass-1 store"** — the
+`source_*` and `calibration` precedent.
+
+**A bump is for a question an older store CANNOT ANSWER, and every earlier store's silence here is
+unambiguous: nothing before this task could produce a decimated store at all.** Same reasoning,
+and same conclusion, as the calibration provenance block. **Stated because "new attr, therefore
+bump" is the reflex**, and `SCHEMA_VERSION` 5 exists because the opposite reflex was wrong once.
+
+### (a2c) APPLIED IMMEDIATELY: THE RECORDED STRIDE MUST BE THE ONE THE CODE ACTED ON
+
+The rule this sub-phase just promoted — *for each hashed or recorded field, name the code that
+acts on it* — applies to the field this task adds. **The stride is read from
+`config.warm_start.coarse_stride` and the same value performs the decimation and is written to the
+attrs**, so there is exactly one source and no within-run mismatch is expressible. Passing a
+stride as a separate parameter would create a second source that could disagree with the config
+the store's `fit_hash` was computed from, which is the defect one layer up.
+
+**The CROSS-store mismatch remains possible and is not this task's** — a pass-1 store built under
+one config consumed by a pass-2 run configured differently. **Task 4 owns it and already specifies
+the check as explicit and positional**, never inferred from one having been derived from the other.
+
+### AND PASS 1'S OWN `fit_hash` CARRIES WARM-START SETTINGS THAT DID NOT APPLY TO IT
+
+Pass 1 is a **cold** run whose `fit_hash` includes `warm_start_enabled: true`. **That is (a2c)
+again, one level down, and it is benign here for a reason worth stating rather than assuming:**
+the stride *did* act on pass 1 — it chose the decimation, hence the grid, hence which points were
+fit — and that effect is independently captured in pass 1's own `geometry_hash`. `enabled` is
+genuinely inert for pass 1, and what separates a pass-1 store from a pass-2 store is the presence
+of `parent_geometry_hash`, not a hash field. **After Task 5's unconditional bump,
+`algorithm_version` separates the eras regardless.**
