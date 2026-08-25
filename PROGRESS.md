@@ -4,9 +4,9 @@
 
 1. **Branch `main`, everything on it, every commit pushed by a hook** — https://github.com/killett/metamer. Head at the time of writing: **the plan Task 0 implementation commit**, 2026-08-24. **A SHA here is stale the moment the next commit lands, so it is named by content rather than by hash** — `git log --oneline -5` is the authority.
 2. **DONE:** Phase 1 (0–18), Phase 2 preliminaries P0–P4, **Phase 2a (0–13)**, **Phase 2b (COMPLETE 2026-08-19 — 10 met / 4 reduced scope / 2 FAILED)**, and **Phase 2c's brainstorm (D1–D12) plus its Task 0 and Task 1 measurements**. The scope decision on a modelling sub-phase was taken 2026-08-22 and **re-taken on closed facts 2026-08-23: it does not open.** Sections below carry each; **none is restated here.**
-3. **NEXT ACTION: PHASE 2c TASK 2 — pass 1 as a run over a decimated input.** The plan is [`2026-08-24-metamer-phase2c.md`](docs/superpowers/plans/2026-08-24-metamer-phase2c.md) — **9 tasks, 12 exit criteria each naming its reading, approved 2026-08-24. TASKS 0 AND 1 ARE DONE (2026-08-24); Tasks 2–8 have no code.** **Every task's FIRST step is the pre-flight**, run against the task brief **before code** and appended to [`phase2c-preflight.md`](docs/superpowers/notes/phase2c-preflight.md). **Read [What plan Task 0 established](#what-plan-task-0-established-done-2026-08-24--read-before-touching-fits-signature-or-any-warm-start-validator) and [What plan Task 1 established](#what-plan-task-1-established-done-2026-08-24--read-before-touching-fit_relevant_fields-the-goldens-or-algorithm_version) first.** **TASK 5 NOW CARRIES A MANDATORY `ALGORITHM_VERSION` BUMP** that Task 1's brief wrongly claimed; it closes a defect present since 2026-08-11 and Task 5 cannot ship without it.
+3. **NEXT ACTION: PHASE 2c TASK 3 — the source map: spiral, tie-break, bound, exhaustion.** The plan is [`2026-08-24-metamer-phase2c.md`](docs/superpowers/plans/2026-08-24-metamer-phase2c.md) — **9 tasks, 12 exit criteria each naming its reading, approved 2026-08-24. TASKS 0, 1 AND 2 ARE DONE (2026-08-24); Tasks 3–8 have no code.** **Every task's FIRST step is the pre-flight**, run against the task brief **before code** and appended to [`phase2c-preflight.md`](docs/superpowers/notes/phase2c-preflight.md). **Read the *What plan Task N established* sections first.** **AND ONE PRE-EXISTING DEFECT IS OPEN AND UNOWNED, FOUND AT TASK 2: `tiling.py` requires the spatial dims to be literally `y` and `x` in four places while stage 4a requires only that `time` is first, so a `latitude`/`longitude` input passes the contract and dies in assembly without exit code 4.** Two closers, both scope decisions; see Task 2's section. **TASK 5 NOW CARRIES A MANDATORY `ALGORITHM_VERSION` BUMP** that Task 1's brief wrongly claimed; it closes a defect present since 2026-08-11 and Task 5 cannot ship without it.
 4. ## THE STANDING LIMITATION ON EVERYTHING 2c DECIDED: **NO 2c NUMBER COMES FROM REAL DATA.** Warm-starting was authorized — and every decision after D1 inherits this — on a **simulated field whose spatial coherence is a construction parameter**. **The spatial coherence of real altimetry optima has never been measured.** A field with **weaker** coherence gives a **smaller** saving, and **§11.2's 30% threshold could fail on real data.** **THE NAMED CLOSER, not an open worry: a spike on a real gridded product — same three arms (cold, warm, self-ceiling), same record-length lever.** Until it runs, D1 is authorized on simulation. See [what 2c's tasks inherit](#what-2cs-tasks-inherit-2026-08-24).
-5. **Tests: 1104 passed, 0 failed, 0 INDETERMINATE — 2026-08-24, 886.72 s on a box at 4.0 GB available (read after the run, not during it).** **`pixi run test` is the full sweep and every end-of-task verification must run it; `test-fast` and `test-ci` are NOT evidence** — the full sweep has caught **seven** things a fast run could not. **Every run prints `RSS measurement validity`, including at zero**; a nonzero count is INDETERMINATE, neither pass nor fail.
+5. **Tests: 1126 passed, 0 failed, 0 INDETERMINATE — 2026-08-24, 886.88 s on a box at 3.5 GB available (read after the run, not during it).** **`pixi run test` is the full sweep and every end-of-task verification must run it; `test-fast` and `test-ci` are NOT evidence** — the full sweep has caught **seven** things a fast run could not. **Every run prints `RSS measurement validity`, including at zero**; a nonzero count is INDETERMINATE, neither pass nor fail.
 6. **Verify a fresh checkout with `pixi run test && pixi run typecheck && pixi run lint`**, plus `pixi run pre-commit run --all-files` before every commit.
 7. **THE METHOD IS THE PRE-FLIGHT AND IT LIVES IN EXACTLY ONE PLACE:** [`phase1-to-phase2-handoff.md`](docs/superpowers/notes/phase1-to-phase2-handoff.md) §1 — (a0)–(a9), (a)–(k), the standing rules, the fixture facts, **and the ten 2c added: (i2b) a high-ceiling control converts a null into a LOCATED null, (i2c) a sign-unstable benefit is worse than a small one, (j5) a second instrument is a cross-check only if it measures the same quantity under the same conditions, (j6) bound the unmeasured region before measuring it, (i11) state refutation clauses in BOTH directions, (a2b) make an invalid value UNAVAILABLE rather than caveated, (h2) a metric may only be stratified by axes at its OWN granularity, (j7) never stratify by a quantity the treatment can move, (c4) a validator must be specified in the coordinates and the EXTENT the validated object actually has, (e2) prove a mutant differs from the original before recording a surviving mutation — (e) now has SIX causes, and the sixth makes you distrust a test that is fine — (e3) its opposite colour, a RED suite hiding a dead assertion, read WHICH failure fired, (a2c) populated but nothing acts on it: for each hashed field name the code that ACTS on it, and (a2e) encode a classification as a construction — a set defined as the union of its classes, with the forbidden class declared nowhere.** **(e2) and (e3) are filed adjacently on purpose; so are (a2c) and (a2e), which are the same question asked about a field and about a rule.** **Do not restate it here** — the two copies drifted once already.
 8. **CI IS GREEN and the deliberate red is CLOSED** (2026-08-22, by the repair its own criterion chose: the CI fixture was **enlarged**, the bound was **not** widened and the test was **not** marked). **CI runs `-m "not machine"` and therefore executes exactly ONE of the nine RSS assertions**, so it is not a substitute for the local sweep. See [THE CI FIXTURE DECISION](#the-ci-fixture-decision--taken-measured-and-verified-2026-08-22).
@@ -5214,6 +5214,103 @@ instead puts the assertion on its own path, and it now fires with its own messag
 - **`STAGE_4A_FIELDS` is now an alias of `MEASURED_IDENTITY_FIELDS`, not a copy** — and the two
   concepts are different ones (**who** is authoritative versus **when** the value arrives) that
   coincide today. Aliasing means a future divergence is a deliberate edit rather than a drift.
+
+### What plan Task 2 established (done 2026-08-24 — read before touching the decimation, the two stores' identities, or any spatial dimension name)
+
+**`run(decimate=True)` is pass 1**, and D11's *"the existing mechanism applied to a different
+input"* held: tiling, the completion bitmap, `resume_tile_side`, the three hashes and
+`flush_on_sigterm` are untouched. The new surface is one module, `batch/decimate.py`, and two
+optional store attrs.
+
+#### THE FINDING: SIXTEEN FIXTURES AGREE ON A DIMENSION NAMING THE CONTRACT DOES NOT REQUIRE
+
+`input.check_input_contract` requires three dimensions with **`dims[0] == "time"`** and says
+**nothing about the other two names** — its own message calls the contract *"three, mapping to
+(time, y, x)"*, which is positional. **Every input fixture in this repository uses
+`("time", "y", "x")`: sixteen call sites across ten test modules, no exceptions.**
+
+So the plan's literal `isel(y=…, x=…)` **passes the entire suite and raises on the first real
+gridded product**, which routinely uses `latitude`/`longitude`. `decimated_handle` reads
+`array.dims[1]` and `array.dims[2]`, and `tests/test_decimate.py` carries **the first fixture in
+this project whose spatial dims are named otherwise.**
+
+> **AND THE SAME SHORTCUT IS ALREADY TAKEN IN `tiling.py`, SO THIS IS PRE-EXISTING AND LARGER
+> THAN 2c.** Four sites — the span tuples at 904–905, the `by_dim["y"]`/`["x"]` lookups at
+> 932–933, and `assemble_tile`'s own `isel` at 973. **An input named otherwise passes stage 4a
+> and then dies inside assembly with a raw `xarray` error rather than an `InputContractError`,
+> so it does not get exit code 4** — which contradicts `input.py`'s own stated rule that every
+> stage-4a failure must be one.
+>
+> **NOT FIXED HERE, AND THE TWO CLOSERS ARE A SCOPE DECISION:** either **stage 4a enforces the
+> names** (one refusal, and the docstring's *"mapping to"* is what was wrong) or **the tiling path
+> goes positional** (four sites plus fixtures, and `tiling.py` is what was wrong). What Task 2
+> controlled was **not becoming the fifth site**. **A positional decimation above a name-based
+> assembler does NOT make such inputs work**, and the module docstring says so, because it
+> otherwise reads as support.
+
+#### "DERIVABLE FROM THOSE TWO" IS FALSE OF A HASH, AND THE TEMPTING FIX IS THE EXPENSIVE ONE
+
+The plan says pass 1's fingerprint is *"derivable from"* the parent's fingerprint and the stride.
+**A hash is not invertible.** What is derivable is one level down: the decimated **components** are
+a pure function of the parent's components and `k`, and the fingerprint is a function of the
+components.
+
+**`geometry_components` is already a `REQUIRED_ATTR` holding full coordinate value arrays** —
+10 800 numbers for a 3600 × 7200 grid — so *"record the parent's geometry so the derivation can be
+checked"* reads as storing those twice. **The store records the parent's HASH (16 characters) and
+the stride (one integer)**; the reproduction is a test's job, and a test has the dataset.
+
+#### THE TWO NEW ATTRS ARE OPTIONAL AND NO SCHEMA BUMP IS OWED
+
+`parent_geometry_hash` and `coarse_stride` are present **only on a decimated store**, and their
+**absence means "not a pass-1 store"** — the `source_*` and `calibration` precedent. They are not
+in `REQUIRED_ATTRS`, which refuses on `None` and would refuse every store written before this task.
+**A bump is for a question an older store CANNOT answer, and every earlier store's silence is
+unambiguous: nothing before this task could produce a decimated store at all.** Writing the keys
+unconditionally with a `0` stride would make *"not decimated"* and *"decimated at an unrecorded
+stride"* the same bytes — asserted against, both directions.
+
+#### ONE SOURCE FOR THE STRIDE, AND THE CROSS-STORE CASE IS NOT THIS TASK'S
+
+The stride is read from `config.warm_start.coarse_stride`; **the same value performs the
+decimation and is written to the attrs**, so no within-run mismatch is expressible. A separate
+`stride=` parameter would be a second source able to disagree with the config the store's
+`fit_hash` was computed from — (a2c) at the point of use. **The CROSS-store mismatch is real and is
+Task 4's**, which already specifies the check as explicit and positional. **A hash proves two
+CONFIGS agree; it says nothing about what a STORE ON DISK was decimated at.**
+
+#### THE BITMAP'S INVARIANT HOLDS, CONFIRMED AT BOTH PLACES A PARENT GRID COULD LEAK IN
+
+The bits are bound to the store's own `StoreShape`, fixed at creation; `resume_tile_side` takes
+its `grid` from *the input contract*, which under decimation is the **decimated** contract. So each
+store is guarded against its own grid and **the bit keeps its meaning as a claim about the
+decimated grid.** Confirmed by the kill-and-resume test, not by the reading alone.
+
+#### AND THE TWO STORES HOLDING DIFFERENT TILE SIDES IS CORRECT AND READS AS WRONG
+
+Pass 1's grid is `1/k²` the size, so **the same budget derives a different side for the two
+passes**, and a budget change between them is legal and moves them independently. **Forcing one
+side across both stores** — the obvious "fix" — either exceeds the budget in one pass or refuses a
+resume that is geometrically identical. **One line at the guard says so.**
+
+#### TWO THINGS FOUND IN THIS TASK'S OWN TESTS BEFORE THEY WERE COMMITTED
+
+- **The `k = 1` test could not catch the branch it named.** An early `return handle` produces
+  identical values, so a test asserting only values goes green against it. The identity assertions
+  are what make it bite — and the mutation confirmed it.
+- **The kill-and-resume fixture was vacuous at the default budget.** The 6 × 6 coarse grid fits in
+  **one** tile at `tile_side = 1600`, so the kill left nothing outstanding and every resume
+  assertion below it was unreachable. The budget is now pinned at a measured value giving **four**
+  tiles, and `tiles_total > 1` is asserted as a precondition so a drift fails loudly.
+
+#### WHAT IS OWED AT TASK 5, NOT HERE
+
+**The README entry for pass 1's store.** The plan asks for the path rule in user-facing
+documentation, and the rule is at the derivation (`pass1_store_path`'s docstring) — but **there is
+no user-facing two-pass entry point until Task 5**, and documenting a feature a user cannot invoke
+is worse than documenting it late. **Separately, README's Status block is stale** — it says
+*"Phase 1 complete"*, *"588 tests"* and *"Not yet built: `metamer.batch`"* — which is an (a6) sweep
+this task did not widen its scope to run.
 
 ---
 
