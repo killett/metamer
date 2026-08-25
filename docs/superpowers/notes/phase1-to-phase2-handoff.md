@@ -398,6 +398,34 @@ second half is closed by the bump**; the first half is closed by writing down, b
 ships, what the pre-bump stores contain. Do that at the time, because after the bump the boundary
 cannot be re-derived from the stores.
 
+#### (a2d) A HASHED VALUE'S UNIT IS PART OF ITS IDENTITY — THE FIFTH REGISTER OF (a2)
+
+> **A hashed field asserts identity of a VALUE IN A UNIT.** Where the unit is not itself recorded
+> or forced by the type, **two runs can agree on the number and disagree on the quantity**, and
+> the hash certifies an equivalence that does not hold. **Check every fit-relevant scalar for an
+> implicit unit, and either name the unit in the field or make the type carry it.**
+
+**THE HASH RECORDS THE INTEGER AND NOTHING RECORDS THE UNIT.** That is the whole defect in one
+line: `4` and `4` are the same bytes, and a gate built entirely out of equality cannot see that
+one of them counts coarse steps and the other counts fine cells.
+
+**AND THE TELL IS WHY NO AUTOMATED CHECK COULD HAVE FOUND IT.** The disagreement was between a
+**shipped field's docstring** and **the instrument that produced the numbers its default was
+chosen against**. Both are prose, in different files, and neither is executable. **Only reading
+both did it.** A grep for the field name finds the config and the allowlist and reports agreement,
+because they agree — about the name.
+
+Worked instance, Phase 2c Task 3, 2026-08-24. `config.WarmStart.spiral_bound` is documented as
+*"maximum search radius, **in coarse index steps**"*, default 4. `warmstart-spike-harness.py`
+searched in **fine** index units. `warm_start_spiral_bound` is in `FIT_RELEVANT_FIELDS`, so a run
+at `4` coarse steps and a run at `4` fine cells share a `fit_hash`, resume into one another, and
+**produce different `θ̂`** — at `k = 8` the two searches differ by a factor of eight in reach.
+
+**THE REPAIR IS THE DOCSTRING PLUS THE CONVERSION AT ONE SITE**, not a second field: adding a
+`spiral_bound_unit` would put the unit inside the allowlist and make every existing store's
+silence ambiguous, which is (a0)'s third register. The unit is fixed by the specification and the
+conversion (`max_fine_radius = spiral_bound * stride`) happens once, where it is named.
+
 #### AND (a2) AT THE INSTRUMENT: A GATE CAN BE BLIND BY CONSTRUCTION AND PASS EVERY TEST
 
 > **A gate must be validated against a KNOWN-BAD reading, not merely against a known-good one
@@ -2094,6 +2122,42 @@ would drift silently, because a ladder at the wrong B still runs and still fits 
 > dropped the headroom from the closed form still returned the right answer — after ~10⁸
 > single-byte steps, turning a 2.4 s module into a 21.5 s one, with every assertion green. The
 > bound is what turns the round trip from a repair into a **check**.
+
+### (j8) WHEN A MEASUREMENT'S VERDICT IS ADOPTED AS A DECISION, THE INSTRUMENT BECOMES PART OF THE SPECIFICATION
+
+> **Anything the instrument does that the specification does not say is an UNDOCUMENTED DECISION
+> WITH A SHIPPED CONSEQUENCE.** Once a verdict is adopted, the production implementation is
+> obliged to reproduce not just the *result* but the *rule that produced it* — so before adopting,
+> diff the instrument against the specification and write down every choice the specification
+> leaves open.
+
+**(j2) SAYS A MEASUREMENT VALIDATES THE PATH THE INSTRUMENT EXERCISED. THIS IS ITS CONSEQUENCE ONE
+STEP LATER:** if you then *build* from that verdict, the instrument's incidental choices become
+requirements, because a production rule that differs makes the number describe a mechanism that
+was never built. **The instrument stops being scaffolding at the moment its answer is believed.**
+
+**The check is mechanical and has to happen BEFORE the code is written**, not at review: read the
+instrument, list every decision it makes, and strike the ones the specification also states. **The
+remainder is the specification's silence, and each item in it has already shipped.**
+
+Worked instance, Phase 2c Task 3, 2026-08-24. §11.3 and the plan both say *"nearest valid coarse
+point **in index space**"*. `spiral_source` — which produced D1's 42.28% saving and D6's stride
+curve — makes **two** choices that phrase does not:
+
+- **the distance is CHEBYSHEV**, not Euclidean or Manhattan;
+- **the radius is INCLUSIVE.**
+
+**THE CHEBYSHEV ONE IS THE SHARP CASE, AND IT IS SHARP FOR A REASON WORTH KEEPING IN FULL.**
+Chebyshev is the metric under which a **diagonal** neighbour and an **axis** neighbour are
+**equidistant** — so it is **the metric under which the tie-break fires at all.** And the
+tie-break is the entire mechanism by which `θ̂` stops depending on traversal order, hence on
+tiling, hence on `--memory-budget`. **A Euclidean implementation would have produced fewer ties, a
+different source map, and a determinism guarantee resting on a rule that rarely engages** — which
+is worse than a wrong answer, because it is a guarantee that mostly holds.
+
+**None of that is a bug in the instrument.** It was a correct instrument; the specification was
+silent, and silence in a document that a shipped rule is written from is a decision made by
+whoever writes the code next.
 
 ### (j3) AN EXISTING FEATURE CAN BE AN INSTRUMENT FOR A PROPERTY ITS OWN PURPOSE DOES NOT CONCERN
 

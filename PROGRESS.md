@@ -8,7 +8,7 @@
 4. ## THE STANDING LIMITATION ON EVERYTHING 2c DECIDED: **NO 2c NUMBER COMES FROM REAL DATA.** Warm-starting was authorized — and every decision after D1 inherits this — on a **simulated field whose spatial coherence is a construction parameter**. **The spatial coherence of real altimetry optima has never been measured.** A field with **weaker** coherence gives a **smaller** saving, and **§11.2's 30% threshold could fail on real data.** **THE NAMED CLOSER, not an open worry: a spike on a real gridded product — same three arms (cold, warm, self-ceiling), same record-length lever.** Until it runs, D1 is authorized on simulation. See [what 2c's tasks inherit](#what-2cs-tasks-inherit-2026-08-24).
 5. **Tests: 1147 passed, 0 failed, 0 INDETERMINATE — 2026-08-24, 947.16 s on a box at 3.3 GB available (read after the run, not during it).** **`pixi run test` is the full sweep and every end-of-task verification must run it; `test-fast` and `test-ci` are NOT evidence** — the full sweep has caught **seven** things a fast run could not. **Every run prints `RSS measurement validity`, including at zero**; a nonzero count is INDETERMINATE, neither pass nor fail.
 6. **Verify a fresh checkout with `pixi run test && pixi run typecheck && pixi run lint`**, plus `pixi run pre-commit run --all-files` before every commit.
-7. **THE METHOD IS THE PRE-FLIGHT AND IT LIVES IN EXACTLY ONE PLACE:** [`phase1-to-phase2-handoff.md`](docs/superpowers/notes/phase1-to-phase2-handoff.md) §1 — (a0)–(a9), (a)–(k), the standing rules, the fixture facts, **and the ten 2c added: (i2b) a high-ceiling control converts a null into a LOCATED null, (i2c) a sign-unstable benefit is worse than a small one, (j5) a second instrument is a cross-check only if it measures the same quantity under the same conditions, (j6) bound the unmeasured region before measuring it, (i11) state refutation clauses in BOTH directions, (a2b) make an invalid value UNAVAILABLE rather than caveated, (h2) a metric may only be stratified by axes at its OWN granularity, (j7) never stratify by a quantity the treatment can move, (c4) a validator must be specified in the coordinates and the EXTENT the validated object actually has, (e2) prove a mutant differs from the original before recording a surviving mutation — (e) now has SIX causes, and the sixth makes you distrust a test that is fine — (e3) its opposite colour, a RED suite hiding a dead assertion, read WHICH failure fired, (a2c) populated but nothing acts on it: for each hashed field name the code that ACTS on it, (a2e) encode a classification as a construction — a set defined as the union of its classes, with the forbidden class declared nowhere, (i12) a uniform fixture SET cannot test a degree of freedom the contract leaves open, and (a4)'s newest register: **"checked" in your own pre-flight is a claim, and a NEGATIVE one is what licenses the action.** **(e2) and (e3) are filed adjacently on purpose; so are (a2c) and (a2e), which are the same question asked about a field and about a rule.** **Do not restate it here** — the two copies drifted once already.
+7. **THE METHOD IS THE PRE-FLIGHT AND IT LIVES IN EXACTLY ONE PLACE:** [`phase1-to-phase2-handoff.md`](docs/superpowers/notes/phase1-to-phase2-handoff.md) §1 — (a0)–(a9), (a)–(k), the standing rules, the fixture facts, **and the ten 2c added: (i2b) a high-ceiling control converts a null into a LOCATED null, (i2c) a sign-unstable benefit is worse than a small one, (j5) a second instrument is a cross-check only if it measures the same quantity under the same conditions, (j6) bound the unmeasured region before measuring it, (i11) state refutation clauses in BOTH directions, (a2b) make an invalid value UNAVAILABLE rather than caveated, (h2) a metric may only be stratified by axes at its OWN granularity, (j7) never stratify by a quantity the treatment can move, (c4) a validator must be specified in the coordinates and the EXTENT the validated object actually has, (e2) prove a mutant differs from the original before recording a surviving mutation — (e) now has SIX causes, and the sixth makes you distrust a test that is fine — (e3) its opposite colour, a RED suite hiding a dead assertion, read WHICH failure fired, (a2c) populated but nothing acts on it: for each hashed field name the code that ACTS on it, (a2e) encode a classification as a construction — a set defined as the union of its classes, with the forbidden class declared nowhere, (i12) a uniform fixture SET cannot test a degree of freedom the contract leaves open, (a2d) a hashed value's UNIT is part of its identity — two runs can agree on the number and disagree on the quantity, (j8) when a measurement's verdict is adopted as a decision the INSTRUMENT becomes part of the specification, and (a4)'s newest register: **"checked" in your own pre-flight is a claim, and a NEGATIVE one is what licenses the action.** **(e2) and (e3) are filed adjacently on purpose; so are (a2c) and (a2e), which are the same question asked about a field and about a rule.** **Do not restate it here** — the two copies drifted once already.
 8. **CI IS GREEN and the deliberate red is CLOSED** (2026-08-22, by the repair its own criterion chose: the CI fixture was **enlarged**, the bound was **not** widened and the test was **not** marked). **CI runs `-m "not machine"` and therefore executes exactly ONE of the nine RSS assertions**, so it is not a substitute for the local sweep. See [THE CI FIXTURE DECISION](#the-ci-fixture-decision--taken-measured-and-verified-2026-08-22).
 9. **Read before touching 2c:** [what 2c's tasks inherit](#what-2cs-tasks-inherit-2026-08-24) — the numbers a cold session cannot re-derive — then the decisions [D1–D12](#phase-2c-brainstorm--settled-decisions-2026-08-23) and the verdict [`warmstart-spike-verdict.md`](docs/superpowers/notes/warmstart-spike-verdict.md). **For 2b, read [THE PEAK, END TO END](#the-peak-end-to-end--the-state-at-the-close-of-the-oq18-characterisation-line-2026-08-21) first**; it is the assembled answer and the only place its four parts appear together.
 10. **Precedence: the design doc is authoritative on INTENT; a measured, dated number supersedes an unmeasured one wherever it lives, including in the design doc. Any measurement stated twice has one copy DELETED, never reconciled.**
@@ -5430,6 +5430,26 @@ the plan. **Every number is dated and is a claim to RE-MEASURE, not a result to 
 | **`self`** — the ceiling, each point from its own `θ̂` | 93.97% ± 0.16% | 93.49% ± 0.18% | **94.53% ± 0.14%** |
 | **`random`** — a distant converged `θ̂` | −2.25% ± 0.91% | +18.27% ± 1.03% | **+30.28% ± 1.02%** |
 
+> ## AND EVERY FIGURE IN THIS TABLE CARRIES A PRECONDITION IT DID NOT HAVE UNTIL 2026-08-24
+>
+> **THEY WERE MEASURED WITH NO EFFECTIVE SPIRAL BOUND.** `spiral_source` was passed
+> `max_radius = n_side` — the whole field — at both fixtures, so **every point got its nearest
+> valid coarse source however far away that was.** The shipped mechanism searches
+> `spiral_bound * stride` fine cells and marks the cell **invalid** beyond that.
+>
+> **THIS DOES NOT INVALIDATE THEM. IT MAKES THEM AN UPPER BOUND.** The saving under the shipped
+> bound is **bounded above by** the measured saving, not equal to it: a cell the shipped mechanism
+> exhausts takes the moment ladder, which is exactly the cold cost the saving is measured against.
+> At `k = 8, bound = 4` the search reaches **32 fine cells**, so exhaustion needs a **9 × 9 coarse
+> neighbourhood — 81 points — entirely failed for that candidate**, and none occurred at either
+> fixture.
+>
+> **THE GAP APPEARS EXACTLY WHERE PRODUCTION DATA DIFFERS MOST FROM THE SIMULATED FIELD.** An 81
+> point all-failed coarse neighbourhood is a **large land or ice region**, which the simulated
+> field has none of by construction — so this is the **standing limitation in a second register**:
+> not "the coherence may be weaker" but "the failure geography is absent altogether". **A reader
+> quoting 42.28% for a run over real altimetry is quoting a ceiling.**
+
 **THE CEILING IS FLAT AND THE MECHANISM IS NOT** — 1.0 point of spread against 34.5. **What record
 length changes is how good a neighbour is, not what the machinery can deliver.** Wall clock at
 `N = 630`: **+45.90%** warm, **+74.75%** self. **A reader proposing or dropping warm-starting must
@@ -5442,7 +5462,10 @@ variant puts tile geometry, and therefore `--memory-budget`, inside `θ̂`.
 ### The stride, and the bound that closed it
 
 Net saving at `N = 630` on **108 points common to all three strides**, one cold reference:
-**32.95 / 37.69 / 38.71%** at `k = 2 / 4 / 8`. **`k = 8` ships** (D6).
+**32.95 / 37.69 / 38.71%** at `k = 2 / 4 / 8`. **`k = 8` ships** (D6). **Same unbounded-search
+precondition as the saving table above: these are ceilings, and the gap grows with `k`** — a
+larger stride means a coarser lattice, so a fixed bound in coarse steps reaches the same number
+of coarse points while an all-failed neighbourhood covers more ground.
 
 > **THE CURVE IS STILL RISING AND THE QUESTION IS STILL CLOSED.** At `k = 8` the pass-1 fraction
 > is **1.6%**, so the **entire** remaining prize from `k → ∞` is **≈ 0.61 points**, and any
