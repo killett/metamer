@@ -461,8 +461,16 @@ correction.**
 
 `WarmStart.enabled` defaults to **`True`**, is in `fit_hash`, and **nothing consumes it**:
 `grep warm_start src/metamer/batch/run.py` returns nothing, and `run` calls `fit` with no `x0`.
-So **every store written since 2026-08-11 records a fit payload asserting `warm_start_enabled:
-true` over fits that are entirely cold.** After Task 5 the identical config produces warm-started
+So **every store written since 2026-08-11 records a fit payload carrying a warm-start REQUEST that
+nothing honoured.**
+
+> **CORRECTED 2026-08-24: this first read "asserting `warm_start_enabled: true` over fits that are
+> entirely cold", which overstated it. The store is NOT silent.** `store.py` writes
+> `warm_start_used` as an explicit run fact defaulting to `False` -- 2a's own pre-flight caught
+> that reading it off `config.warm_start.enabled` would write `true` for a run that cannot
+> warm-start -- and a test asserts it. **A reader can tell. But `warm_start_used` is an ATTR and
+> not a GATE**: it is nowhere in `fit_hash`, so the resume gate cannot see it, and that is the
+> half the bump closes. **Readable-and-ungated is a different defect from invisible.** After Task 5 the identical config produces warm-started
 fits **under the same `fit_hash`** — converged-looking fits at a different optimum, resumed into
 the same store, which is §11.1's worst failure mode arriving through the config rather than
 through a stale cache.
@@ -474,12 +482,21 @@ reader reaches for. **It would refuse every run**, because unlike `screening.ena
 pre-bump store then mismatches on `fit_hash` and refits, which is exactly what the constant is
 for. **Nothing else separates the two populations, and no store can be repaired after the fact.**
 
-### THE REQUEST/IDENTITY CLASSIFICATION WAS NEVER MADE FOR THESE FIVE, BECAUSE THE VOCABULARY ARRIVED A DAY LATE
+### THE REQUEST/IDENTITY CLASSIFICATION WAS MADE, AND NOTHING ENFORCED IT
 
-The five entered on **2026-08-11**. `data_uri` was named *"the last self-reported identity in
-either allowlist"* on **2026-08-12**. **So the five are the only members of `FIT_RELEVANT_FIELDS`
-that were never classified**, and the classification is what the audit of the existing fields
-closed with.
+> **CORRECTED 2026-08-24, same day, before Task 2. This heading first read "WAS NEVER MADE FOR
+> THESE FIVE, BECAUSE THE VOCABULARY ARRIVED A DAY LATE", and that was false.** The sort was run
+> over **all fourteen fields on 2026-08-11** and the five appear in its table in
+> [`phase2a-preflight.md`](phase2a-preflight.md), classified `request`, source `user config`. The
+> REQUEST/IDENTITY vocabulary is in the handoff's (a2) and predates them.
+
+**What was missing was not the classification. It was any mechanism that made one compulsory.**
+The classification lived in a pre-flight document; **nothing in `src/` encoded it and nothing
+failed if a new field skipped it.** That is the gap this task closes, and it is (a2e).
+
+**Found by applying this task's own promotion to itself.** (a2c) says: for each hashed field, name
+the code that acts on it. Asked about a *rule* instead of a *field* — name the code that enforces
+it — the answer was none.
 
 **All five are REQUESTS**, and the distinction is about **who is authoritative**:
 

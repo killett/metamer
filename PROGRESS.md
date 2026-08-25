@@ -8,7 +8,7 @@
 4. ## THE STANDING LIMITATION ON EVERYTHING 2c DECIDED: **NO 2c NUMBER COMES FROM REAL DATA.** Warm-starting was authorized — and every decision after D1 inherits this — on a **simulated field whose spatial coherence is a construction parameter**. **The spatial coherence of real altimetry optima has never been measured.** A field with **weaker** coherence gives a **smaller** saving, and **§11.2's 30% threshold could fail on real data.** **THE NAMED CLOSER, not an open worry: a spike on a real gridded product — same three arms (cold, warm, self-ceiling), same record-length lever.** Until it runs, D1 is authorized on simulation. See [what 2c's tasks inherit](#what-2cs-tasks-inherit-2026-08-24).
 5. **Tests: 1104 passed, 0 failed, 0 INDETERMINATE — 2026-08-24, 886.72 s on a box at 4.0 GB available (read after the run, not during it).** **`pixi run test` is the full sweep and every end-of-task verification must run it; `test-fast` and `test-ci` are NOT evidence** — the full sweep has caught **seven** things a fast run could not. **Every run prints `RSS measurement validity`, including at zero**; a nonzero count is INDETERMINATE, neither pass nor fail.
 6. **Verify a fresh checkout with `pixi run test && pixi run typecheck && pixi run lint`**, plus `pixi run pre-commit run --all-files` before every commit.
-7. **THE METHOD IS THE PRE-FLIGHT AND IT LIVES IN EXACTLY ONE PLACE:** [`phase1-to-phase2-handoff.md`](docs/superpowers/notes/phase1-to-phase2-handoff.md) §1 — (a0)–(a9), (a)–(k), the standing rules, the fixture facts, **and the ten 2c added: (i2b) a high-ceiling control converts a null into a LOCATED null, (i2c) a sign-unstable benefit is worse than a small one, (j5) a second instrument is a cross-check only if it measures the same quantity under the same conditions, (j6) bound the unmeasured region before measuring it, (i11) state refutation clauses in BOTH directions, (a2b) make an invalid value UNAVAILABLE rather than caveated, (h2) a metric may only be stratified by axes at its OWN granularity, (j7) never stratify by a quantity the treatment can move, (c4) a validator must be specified in the coordinates and the EXTENT the validated object actually has, and (e2) prove a mutant differs from the original before recording a surviving mutation — (e) now has SIX causes, and the sixth makes you distrust a test that is fine.** **Do not restate it here** — the two copies drifted once already.
+7. **THE METHOD IS THE PRE-FLIGHT AND IT LIVES IN EXACTLY ONE PLACE:** [`phase1-to-phase2-handoff.md`](docs/superpowers/notes/phase1-to-phase2-handoff.md) §1 — (a0)–(a9), (a)–(k), the standing rules, the fixture facts, **and the ten 2c added: (i2b) a high-ceiling control converts a null into a LOCATED null, (i2c) a sign-unstable benefit is worse than a small one, (j5) a second instrument is a cross-check only if it measures the same quantity under the same conditions, (j6) bound the unmeasured region before measuring it, (i11) state refutation clauses in BOTH directions, (a2b) make an invalid value UNAVAILABLE rather than caveated, (h2) a metric may only be stratified by axes at its OWN granularity, (j7) never stratify by a quantity the treatment can move, (c4) a validator must be specified in the coordinates and the EXTENT the validated object actually has, (e2) prove a mutant differs from the original before recording a surviving mutation — (e) now has SIX causes, and the sixth makes you distrust a test that is fine — (e3) its opposite colour, a RED suite hiding a dead assertion, read WHICH failure fired, (a2c) populated but nothing acts on it: for each hashed field name the code that ACTS on it, and (a2e) encode a classification as a construction — a set defined as the union of its classes, with the forbidden class declared nowhere.** **(e2) and (e3) are filed adjacently on purpose; so are (a2c) and (a2e), which are the same question asked about a field and about a rule.** **Do not restate it here** — the two copies drifted once already.
 8. **CI IS GREEN and the deliberate red is CLOSED** (2026-08-22, by the repair its own criterion chose: the CI fixture was **enlarged**, the bound was **not** widened and the test was **not** marked). **CI runs `-m "not machine"` and therefore executes exactly ONE of the nine RSS assertions**, so it is not a substitute for the local sweep. See [THE CI FIXTURE DECISION](#the-ci-fixture-decision--taken-measured-and-verified-2026-08-22).
 9. **Read before touching 2c:** [what 2c's tasks inherit](#what-2cs-tasks-inherit-2026-08-24) — the numbers a cold session cannot re-derive — then the decisions [D1–D12](#phase-2c-brainstorm--settled-decisions-2026-08-23) and the verdict [`warmstart-spike-verdict.md`](docs/superpowers/notes/warmstart-spike-verdict.md). **For 2b, read [THE PEAK, END TO END](#the-peak-end-to-end--the-state-at-the-close-of-the-oq18-characterisation-line-2026-08-21) first**; it is the assembled answer and the only place its four parts appear together.
 10. **Precedence: the design doc is authoritative on INTENT; a measured, dated number supersedes an unmeasured one wherever it lives, including in the design doc. Any measurement stated twice has one copy DELETED, never reconciled.**
@@ -3086,6 +3086,27 @@ recorded rather than smoothed** — which is the reason to believe the other two
 
 ## Things a cold session cannot re-derive
 
+### HOW TO READ A STORE WRITTEN BEFORE 2c TASK 5 (recorded 2026-08-24, and it cannot be reconstructed later)
+
+> **ANY STORE WHOSE `algorithm_version` IS BELOW THE VALUE 2c TASK 5 SHIPS HOLDS COLD FITS,
+> REGARDLESS OF WHAT `warm_start_enabled` SAYS IN ITS FIT PAYLOAD.**
+
+`WarmStart.enabled` has defaulted to **`True`** and sat in `fit_hash` since **2026-08-11**, while
+**nothing consumed it** until Task 5. So a pre-bump store's fit payload records a warm-start
+**request that no code honoured**. `warm_start_used` in the store's attrs says `False` and is
+correct — but it is an **attr, not a gate**, and nothing in `fit_hash` reflects it.
+
+**This is written down because it is unrecoverable.** Once Task 5 ships, `warm_start_enabled:
+true` means one thing in a new store and the opposite in an old one, and **the two are
+distinguishable only by `algorithm_version`** — a boundary nobody can re-derive from the stores
+themselves. **The bump is what makes the eras separable at the resume gate; this note is what
+makes an old store readable at all.**
+
+**AND THE BUMP IS UNCONDITIONAL, NOT CONTINGENT ON `warm_start.enabled`.** A user who disables
+warm-starting after Task 5 gets cold fits — and their pre-Task-5 store also holds cold fits under a
+`fit_hash` computed from the same field values, so a conditional bump would let the two collide.
+**`ALGORITHM_VERSION` separates eras, not configurations.**
+
 **PRECEDENCE, AMENDED 2026-08-12.** The rule carried since Phase 1 was *"if PROGRESS.md and the
 plan disagree, the design doc is authoritative"*. Task 6 produced the first disagreement in the
 other direction: design doc **§11.1** carried the prompt's superseded
@@ -5104,13 +5125,25 @@ field to an allowlist moves a **hash**, not an optimum. **Task 5 is where a defa
 warm-starting**, so that is the commit the rule names. Bumping at Task 1 would put the version
 boundary in a different place from the behaviour boundary — the same defect one task earlier.
 
-> **AND THE DEFECT THIS EXPOSED HAS BEEN IN THE TREE SINCE 2026-08-11.** `WarmStart.enabled`
-> defaults to **`True`**, sits in `fit_hash`, and **nothing consumes it** — `run.py` never mentions
-> `warm_start` and calls `fit` with no `x0`. **So every store written since then asserts
-> `warm_start_enabled: true` over fits that are entirely cold.** After Task 5 the identical config
-> produces warm-started fits **under the same `fit_hash`**, and a resume mixes both populations in
-> one store: converged-looking fits at a different optimum, §11.1's worst failure mode arriving
-> through the config instead of through a stale cache.
+> **AND THE DEFECT THIS EXPOSED HAS BEEN IN THE TREE SINCE 2026-08-11 — NARROWER THAN FIRST
+> STATED, AND STILL REAL.** `WarmStart.enabled` defaults to **`True`**, sits in `fit_hash`, and
+> **nothing consumes it** — `run.py` never mentions `warm_start` and calls `fit` with no `x0`.
+>
+> **CORRECTED 2026-08-24: the store is NOT silent about this.** `store.py` writes
+> `warm_start_used` as an **explicit run fact defaulting to `False`**, precisely because 2a's own
+> pre-flight found that *"reading it off `config.warm_start.enabled` would write `true` for a 2a
+> run that cannot warm-start"* — and `test_warm_start_used_is_a_fact_about_the_run_not_the_config`
+> asserts a config that enables warm starts still records `false`. **So a reader can tell.** The
+> first version of this section said every such store *"asserts warm-started fits over cold ones"*;
+> it does not.
+>
+> **WHAT SURVIVES IS THE HALF THAT MATTERS, BECAUSE `warm_start_used` IS AN ATTR AND NOT A GATE.**
+> It is nowhere in `fit_hash`, so **the resume gate cannot see it.** After Task 5 the identical
+> config produces warm-started fits **under the same `fit_hash`**, a pre-Task-5 store resumes
+> clean, and the two populations mix in one store: converged-looking fits at a different optimum,
+> §11.1's worst failure mode arriving through the config instead of through a stale cache.
+> **Readable and ungated is a different defect from invisible, and only the second half is closed
+> by the bump.**
 >
 > **THE OBVIOUS REPAIR IS THE WRONG ONE.** `Screening` is *"refused at layer 3 until Phase 4"* and
 > mirroring it here **would refuse every run**, because `screening.enabled` defaults to `False`
@@ -5119,9 +5152,19 @@ boundary in a different place from the behaviour boundary — the same defect on
 
 #### THE CLASSIFICATION IS WHAT THE TASK ACTUALLY DELIVERED, AND IT IS EXECUTABLE RATHER THAN PROSE
 
-The five warm-start fields entered on **2026-08-11**; `data_uri` was named *"the last self-reported
-identity in either allowlist"* on **2026-08-12**. **So the vocabulary that would have classified
-them arrived a day late, and they were the only unclassified members of the allowlist.**
+> **CORRECTED 2026-08-24, SAME DAY, BEFORE TASK 2.** This section first said the five warm-start
+> fields *"were the only unclassified members of the allowlist"* and that *"the vocabulary arrived
+> a day late"*. **Both are false.** The sort was run over **all fourteen fields on 2026-08-11**
+> and the five appear in its table in
+> [`phase2a-preflight.md`](docs/superpowers/notes/phase2a-preflight.md), classified `request`,
+> source `user config`. The REQUEST/IDENTITY vocabulary is in the handoff's (a2) and predates
+> them. **What was missing was not the classification — it was any mechanism that made one
+> compulsory.** Found by applying the promotion this same task produced: *for each hashed field,
+> name the code that acts on it.* Applied to the classification itself, it says: name the code
+> that enforces it. There was none.
+
+The classification existed **in a document**. Nothing in `src/` encoded it, and **nothing failed
+if a new field skipped it** — which is the gap Task 1 closed.
 
 `FIT_RELEVANT_FIELDS` is now the **union of three declared classes and has no members of its
 own**, so a field cannot be added without choosing one:

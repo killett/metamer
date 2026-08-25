@@ -352,6 +352,52 @@ of a field whose classification changes with its consumer**: self-reported at it
 boundary, harmless while it reaches `run_hash` alone (provenance, never a gate), and an
 identity the moment the calibration cache key reads it.
 
+#### (a2c) POPULATED, BUT NOTHING ACTS ON IT — THE FOURTH REGISTER OF (a2)
+
+> **Labelled rather than numbered, deliberately. "The fourth register" already names two other
+> things in this document** — one under (a0) and one under (a2)'s instrument branch — **and a
+> heading that matches three sections is the naming defect 2c paid for at *Task 0*.**
+
+> **A hashed field asserts a property of the data. Verify that something in the production path
+> actually ESTABLISHES that property, not merely that the field is populated.** A field whose
+> value is a **request nobody honours** makes the hash a claim the store cannot support, and the
+> defect is **invisible until a later change starts honouring it**.
+
+**THE TELL IS SPECIFIC AND CHECKABLE: for each hashed field, name the code that acts on it.**
+Not the code that *writes* it — the code that *reads* it and behaves differently. If there is
+none, the field is describing an intention rather than the store.
+
+**And it is a distinct shape from the three registers above**, which is why it is listed rather
+than folded into them: not **unpopulated** (`metamer_version`, nothing in `src/` filled it), not
+**self-reported** (`registry_version`, filled from the config it claims to identify), and not
+**standing in for something else** (`data_uri` for the data). This one is **populated correctly,
+by the right party, meaning exactly what it says — and inert.**
+
+Worked instance, Phase 2c Task 1, 2026-08-24. `warm_start_enabled` entered `FIT_RELEVANT_FIELDS`
+on 2026-08-11 with a default of **`True`**, and **no consumer existed until Task 5** — `run.py`
+never mentions `warm_start` and calls `fit` with no `x0`. So for two weeks the fit identity of
+every store carried a warm-start request that **nothing honoured**. Nothing was wrong with the
+field: a request is self-reported correctly by definition, and the classification audit passed it
+as a request on the day it landed. **The question that catches it is not "is this field a request
+or an identity" but "what reads it".**
+
+**THE HARM IS DEFERRED AND ARRIVES AS A COLLISION.** Once a consumer appears, the *same*
+`fit_hash` covers two populations — the fits computed before anything honoured the field and the
+fits computed after — so a pre-consumer store resumes clean and the two mix. **The repair is an
+algorithm-version bump at the commit that introduces the consumer**, and it must be
+**unconditional**: bumping only when the feature is enabled leaves the disabled-after case
+colliding with the never-implemented case, because both are cold fits under identical field
+values. **A version constant separates ERAS, not configurations.**
+
+**AND CHECK WHETHER THE STORE CAN STILL BE READ, WHICH IS A SEPARATE QUESTION FROM WHETHER IT IS
+GATED.** Here `store.py` writes `warm_start_used` as an explicit run fact defaulting to `False` —
+2a's own pre-flight caught that reading it off `config.warm_start.enabled` would write `true` for
+a run that cannot warm-start — so the store **says** what happened. It simply does not **gate** on
+it. **"Readable and ungated" is a materially different defect from "invisible", and only the
+second half is closed by the bump**; the first half is closed by writing down, before the bump
+ships, what the pre-bump stores contain. Do that at the time, because after the bump the boundary
+cannot be re-derived from the stores.
+
 #### AND (a2) AT THE INSTRUMENT: A GATE CAN BE BLIND BY CONSTRUCTION AND PASS EVERY TEST
 
 > **A gate must be validated against a KNOWN-BAD reading, not merely against a known-good one
@@ -1322,6 +1368,70 @@ which is how someone would actually write it — **six tests fail.**
 
 **The discriminator is one line: construct an input on which the two versions disagree, and print
 both. If you cannot, the mutation is not a mutation.**
+
+#### (e3) AND ITS OPPOSITE COLOUR: A RED SUITE CAN HIDE A DEAD ASSERTION
+
+> **A mutation going red is not evidence that the test you wrote is what caught it.** Read WHICH
+> failure fired. An assertion sitting behind a guard that raises first can never execute, and the
+> mutation's red is that guard's, not yours.
+
+**FILED HERE BECAUSE IT IS (e2) WITH THE COLOURS REVERSED, AND THE PAIR IS WHAT MAKES EITHER
+MEMORABLE.** (e2) is a **green** suite hiding a **no-op mutation**; this is a **red** suite hiding
+a **dead assertion**. **Both are answered by reading the failure rather than its colour**, and
+both defeat the reflex the colour trains — green means "write a stronger fixture", red means "my
+test works", and each is wrong in its own case.
+
+**Mechanically it is (e)'s third cause — two independent guards, either sufficient — found inside
+a TEST rather than inside the product.** The consequence differs, though, and that is why it is
+not just a pointer: a doubled guard in the product is defence in depth and you leave it alone,
+while a doubled guard in front of your assertion means **the assertion you believe you have does
+not exist**, and the first genuine defect it was written for will pass.
+
+Worked instance, Phase 2c Task 1, 2026-08-24. `test_every_request_field_is_one_a_config_can_
+actually_supply` asserted `REQUEST_FIELDS - set(fit_payload(...))` was empty. Under the mutation
+that drops a `warm_start_*` key from the config flattening it went red — with
+`KeyError: config is missing required field(s) ['warm_start_interpolation_rule']`, raised by
+`hashing._subset`, **which refuses any missing allowlisted field**. And `FIT_RELEVANT_FIELDS` is
+**defined** as a union containing `REQUEST_FIELDS`, so the `KeyError` fires on **every** input the
+assertion was written to catch: it was unreachable in principle, not merely in this fixture.
+Taking the raw `Config.to_payload` puts the assertion on its own path, where it now fires with its
+own message. **Both guards are kept and cross-commented, each naming the other** — `_subset`
+protects the whole allowlist, the assertion protects the classification.
+
+#### (a2e) ENCODE A CLASSIFICATION AS A CONSTRUCTION, NOT AS A RULE TO REMEMBER
+
+> **A classification recorded in prose is a convention, and it is followed exactly as long as
+> whoever adds the next member happens to read it.** Where the classification is load-bearing,
+> make the structure refuse an unclassified member: define the set as the **union of its classes**,
+> with no members of its own, so a new field cannot be added without choosing one.
+
+**AND THE FORBIDDEN CLASS IS DECLARED NOWHERE — THAT IS THE POINT, NOT AN OMISSION.** If the
+taxonomy has a class that must stay empty, do not create a constant for it. **It is whatever the
+legal classes do not cover, and the legal classes covering everything is what proves it empty.** A
+declared "forbidden" set is a list someone has to maintain and can silently fall behind; an
+uncovered remainder cannot.
+
+Worked instance, Phase 2c Task 1, 2026-08-24. `FIT_RELEVANT_FIELDS` became
+`REQUEST_FIELDS | STAMPED_IDENTITY_FIELDS | MEASURED_IDENTITY_FIELDS`, with no members of its own;
+membership was unchanged and every `GOLDEN_*` constant still matched, which is what proved the
+restructure moved no hash. The fourth class — a **self-reported identity**, which `data_uri` and
+`metamer_version` both were — is declared nowhere.
+
+**THE DEMONSTRATION IS THE HISTORY, AND IT IS NOT THE ONE THAT WAS FIRST WRITTEN DOWN.** The five
+warm-start settings **were** classified, as requests, in the fourteen-field sort of 2026-08-11 —
+the first version of this entry claimed they were unclassified and that was **wrong**. What was
+missing was never the classification; it was **any mechanism that made one compulsory**. Under the
+old form the classification lived in a pre-flight document, and **nothing in `src/` failed if a
+field skipped it**. Under the union form nothing can. **The error is worth keeping because it is
+the rule applied to itself**: "name the code that enforces it" is the same question as (a2c)'s
+"name the code that acts on it", asked about a rule instead of a field.
+
+**Each class also carries the gate that makes its label real**, or the union is a tidier
+convention rather than a construction: a measured identity is asserted **unknown to the strict
+config model** (so the model is the gate and there is no deny-list to drift); a stamped identity
+is **refused when a config supplies one**, from the same constant that both the loader and the
+normalizer read; a request is asserted **reachable from a real config file**, over the whole class,
+so a new member fails even if nobody extends the per-field parametrization.
 
 ### (f) Does the brief contradict a docstring already in the tree?
 

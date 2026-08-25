@@ -402,13 +402,21 @@ new store schema, no warm-start cache** — pass 1's store **is** the cache (D11
   IT** (moved from Task 1, 2026-08-24). This is the commit at which `θ̂` moves for an input that
   previously fit, which is the constant's stated trigger.
 
+  **THE BUMP IS UNCONDITIONAL. It is not contingent on `warm_start.enabled`**, and reading it off
+  the config is the mistake to avoid. A user who **disables** warm-starting after this task gets
+  cold fits again — and their **pre-Task-5 store also holds cold fits, under a `fit_hash` computed
+  from the same field values**, so the two would collide. **`ALGORITHM_VERSION` separates ERAS,
+  not configurations**, which is the whole reason it is a code constant rather than a config
+  field.
+
   **It closes a defect that has been in the tree since 2026-08-11.** `WarmStart.enabled` defaults
-  to **`True`** and is in `fit_hash`, while nothing consumed it — so **every store written since
-  then asserts `warm_start_enabled: true` over fits that are entirely cold.** Without the bump,
-  the same config after this task produces **warm-started fits under the same `fit_hash`**, and a
-  resume mixes the two populations in one store: converged-looking fits at a different optimum,
-  which is §11.1's worst failure mode arriving through the config rather than through a stale
-  cache.
+  to **`True`** and is in `fit_hash`, while nothing consumed it. **The store is not silent about
+  it** — `store.py` writes `warm_start_used` as an explicit run fact defaulting to `False`, so a
+  reader can tell — **but `warm_start_used` is an attr and not a gate**: it is nowhere in
+  `fit_hash`, so the resume gate cannot see it. Without the bump, the same config after this task
+  produces **warm-started fits under the same `fit_hash`**, a pre-Task-5 store resumes clean, and
+  the two populations mix in one store: converged-looking fits at a different optimum, §11.1's
+  worst failure mode arriving through the config rather than through a stale cache.
 
   **The obvious alternative repair is wrong and is named so it is not tried.** `Screening` is
   *"refused at layer 3 until Phase 4"*, and mirroring that for `WarmStart` **would refuse every
