@@ -693,3 +693,138 @@ fit — and that effect is independently captured in pass 1's own `geometry_hash
 genuinely inert for pass 1, and what separates a pass-1 store from a pass-2 store is the presence
 of `parent_geometry_hash`, not a hash field. **After Task 5's unconditional bump,
 `algorithm_version` separates the eras regardless.**
+
+---
+
+## Plan Task 3 — the source map, audited before any code
+
+**THE BRIEF** is the plan's Task 3 (D3, D12): §11.3's rule implemented once, in the batch layer.
+Nearest valid coarse point in index space, ties **lowest `y` then lowest `x`**, searched outward in
+a **fixed spiral** until a coarse point with an `OK` fit **for that candidate** is found; a coarse
+point's own source is **itself at radius 0**, as a property of the geometry and not an exception;
+the spiral is **bounded** and exhaustion marks the cell **invalid**; and the **source coarse index
+is recorded per point.**
+
+### (j2) THE MEASURED INSTRUMENT IS THE SPECIFICATION HERE, AND IT SAYS TWO THINGS NO OTHER DOCUMENT DOES
+
+`warmstart-spike-harness.py::spiral_source` is what produced D1's verdict and D6's stride curve.
+**Whatever it did IS the mechanism those numbers describe**, so any production rule that differs
+from it makes the measurements describe something that was never built. Two of its choices appear
+in **no** other document — not the plan, not the design doc, not the config:
+
+1. **THE DISTANCE IS CHEBYSHEV.** `max(abs(r - tr), abs(c - tc))`. The plan says only *"nearest
+   valid coarse point in index space"*, which reads equally as Euclidean or Manhattan — and the
+   three disagree about which source a point gets. At a target diagonally between two coarse
+   points, Chebyshev calls a diagonal neighbour and an axis neighbour **equidistant** where
+   Euclidean does not, so the **tie-break fires in cases Euclidean never reaches.** Since the
+   tie-break exists to make `θ̂` independent of tiling, choosing the metric silently would change
+   which cells that guarantee is even exercised on.
+2. **THE RADIUS IS INCLUSIVE.** `range(max_radius + 1)`.
+
+**Both are now stated in the implementation's own docstring and pinned by a test**, because they
+were recoverable only by reading a file under `docs/`.
+
+### (a5) AND THE BOUND'S UNIT DISAGREES BETWEEN THE CONFIG AND THE INSTRUMENT
+
+`WarmStart.spiral_bound` is documented as *"Maximum search radius, **in coarse index steps**,
+before the search gives up"*, default **4**. The harness's `max_radius` is in **fine index units**
+and was passed **`n_side`** — the whole field — at both fixtures.
+
+| | unit | value used |
+|---|---|---|
+| shipped config field | coarse index steps | 4 |
+| the instrument that measured D1 and D6 | fine index units | `n_side`, i.e. **unbounded** |
+
+**THE UNIT IS FIT IDENTITY**, because `warm_start_spiral_bound` is in `FIT_RELEVANT_FIELDS`: two
+runs agreeing on the integer 4 and disagreeing on what it counts produce different `θ̂` under one
+`fit_hash`. **It has to be pinned, and the config's reading wins** — it is the shipped field and
+its docstring is the specification; the harness's argument was a convenience, not a decision. The
+conversion is `max_fine_radius = spiral_bound * stride`, which makes a bound of 4 mean **four
+coarse rings**, and is what the words "coarse index steps" mean.
+
+> **AND THE CONSEQUENCE FOR THE MEASURED NUMBERS IS STATED RATHER THAN LEFT IMPLICIT: D1 AND D6
+> WERE MEASURED WITH NO EFFECTIVE BOUND.** So they describe a run in which **the bound never
+> bit**, and they say nothing about behaviour where it does. At `k = 8`, `bound = 4` reaches 32
+> fine cells, so the bound bites only where a 9 x 9 coarse neighbourhood — 81 coarse points — is
+> **entirely failed for that candidate**. **That is a rare regime, not an impossible one**: a
+> large ice-covered or land region is exactly that shape. **The exhaustion count is therefore a
+> reported outcome and not a diagnostic afterthought**, which is what the plan already asks for,
+> and this is the reason.
+
+### (i7) THE SEARCH IS PER CANDIDATE, AND A UNIFORM `coarse_ok` CANNOT TEST IT
+
+`ok[i, cand]` in the harness; `x0_valid` is `(B, M)` for the same reason. **A coarse point can be
+`OK` for one candidate and failed for another**, and a per-point search would collapse to
+all-or-nothing and discard usable sources.
+
+**A fixture whose `coarse_ok` is uniform across the candidate axis cannot distinguish a per-cell
+search from a per-point one** — this is (i12) at the level of one array rather than a fixture set.
+**The fixture makes candidate 0 and candidate 1 fail at DIFFERENT coarse points**, so a
+per-point implementation returns the wrong source for at least one of them.
+
+### THE TWO ARRAYS ARE CONSTRUCTED TOGETHER, BECAUSE TASK 0 ALREADY PAID FOR THEM DISAGREEING
+
+`SourceMap.index` is `int64` with **-1 where exhausted**; `SourceMap.valid` is `bool`. Task 0
+required `x0_valid` to be of boolean dtype precisely because **`bool(-1)` is True and `bool(0)` is
+False**, so passing `index` where `valid` was meant inverts the array's meaning in both
+directions.
+
+**The dtype gate catches the SWAP. It cannot catch the two arrays disagreeing at source**, which
+is a different defect: an `index` of -1 beside a `valid` of True is a cell the fit will be handed
+a source for that does not exist. **So `valid` is DERIVED from `index` in one expression
+(`index >= 0`) rather than accumulated in parallel**, and a test asserts the identity holds
+element by element. Two arrays maintained by two loops is how they come to disagree.
+
+### THE INDEX'S REFERENT IS THE COARSE GRID, NOT THE FINE ONE, AND IT IS NOT STATED ANYWHERE
+
+The plan says *"the source coarse index is recorded per point"* without saying what it indexes.
+Two candidates: a flat row-major index into the **coarse** grid, or one into the **fine** grid.
+**It must be the coarse grid**: that is what indexes pass 1's store, which is the array Task 5
+reads the warm start out of. A fine-grid index would need dividing by the stride at every use, and
+the division is exactly where an off-by-one enters.
+
+**AND D12 MAKES THE CHOICE LOAD-BEARING**: the recorded index is what lets a downstream reader
+**filter to self-sourced points and test the lattice directly**, rather than discovering it as a
+spatial signal. A self-sourced fine point `(y, x)` with `y % k == x % k == 0` must record
+`(y // k) * n_coarse_x + (x // k)` at radius 0 — an equality a test can assert, and cannot if the
+referent is ambiguous.
+
+### (k) TILE-INDEPENDENCE IS MADE STRUCTURAL RATHER THAN TESTED INTO EXISTENCE
+
+The plan's invariant — *"the source map depends on dataset coordinates alone, asserted by
+constructing it at two tile sides and comparing element by element"* — is the guarantee §11.3
+rests on, and *"the single most likely way to lose the reproducibility guarantee"* is building the
+map from **tile-local** indices.
+
+**A test comparing two tile sides catches it; a construction that cannot express it is better.**
+So the coarse geometry is derived from the **full fine grid shape**, always, and the region being
+mapped is a separate argument that shifts **which** points are answered and never **what** the
+answer is. The search runs in absolute fine-grid coordinates. **The test stays**, because a
+structural argument is a claim until something fails when it is untrue.
+
+### (a7) THE OBVIOUS IMPLEMENTATION IS THE HARNESS'S AND IT IS UNUSABLE AT PRODUCTION SCALE
+
+The harness rebuilds the candidate ring by **scanning every coarse point** at every radius:
+`O(n_coarse)` per ring, per point, per candidate. At `n_side = 96` that is fine. At `10^7` fine
+points with `k = 8` there are `1.56 x 10^5` coarse points, and the same code is `~10^12`
+operations. **It was a correct instrument and it is not an implementation** — (a3)'s bargain
+running the other way, and worth stating because "the harness already does this" is the obvious
+shortcut.
+
+**The structure that makes it cheap is a property of the lattice: only `k²` distinct residue
+classes exist.** A fine point's offsets to the coarse lattice depend only on `(y % k, x % k)`, and
+within a ring, ordering by **absolute** `(y, x)` is the same as ordering by **offset**, because
+every candidate shares the target's base. So the ordered offset list is precomputed once per
+residue class — at `k = 8, bound = 4` that is 64 lists of at most 81 entries — and each point
+walks its class's list. **The ordering is identical to the harness's by construction, and a test
+compares the two implementations point by point on a fixture the harness can still afford.**
+
+### WHAT WOULD MAKE THIS TASK'S TESTS VACUOUS, NAMED IN ADVANCE
+
+- **A fixture where every coarse point is `OK`.** Exhaustion is then unreachable, the bound is
+  never tested, and radius is 0 or 1 everywhere. **The fixture has a failed region large enough to
+  force a multi-ring search, and a second one large enough to exhaust.**
+- **A stride that divides the grid exactly.** Then the last coarse point sits on the last fine
+  row and the edge case where a fine point has **no coarse point below or right of it** never
+  occurs. **The fixture's grid size is deliberately not a multiple of the stride.**
+- **A square grid.** `n_y == n_x` makes a transposed index and a correct one agree. **Not square.**
