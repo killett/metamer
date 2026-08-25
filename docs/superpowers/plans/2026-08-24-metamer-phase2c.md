@@ -1,7 +1,7 @@
 # Phase 2c — the two-pass warm start, its barrier, and the hysteresis audit
 
-**Status: APPROVED 2026-08-24. TASKS 0, 1 AND 2 ARE DONE (2026-08-24); Tasks 3–8 have no code.
-Task 3 is the next action.** The single source for this plan's status is this line. **What each task
+**Status: APPROVED 2026-08-24. TASKS 0–3 ARE DONE (2026-08-24); Tasks 4–8 have no code.
+Task 4 is the next action.** The single source for this plan's status is this line. **What each task
 found beyond its brief is in [`PROGRESS.md`](../../../PROGRESS.md)'s *What plan Task N
 established*, not here.**
 
@@ -307,6 +307,19 @@ cannot are **outside** it. §11.2 states the split; nothing implements it.
   searched outward in a **fixed spiral** until a coarse point with an `OK` fit **for that
   candidate** is found. The tie-break is what makes the choice independent of iteration order,
   hence of tiling, hence of `--memory-budget`.
+
+  > **SETTLED 2026-08-24 AT THE TASK'S PRE-FLIGHT, BECAUSE "IN INDEX SPACE" IS THREE DIFFERENT
+  > RULES.** The distance is **CHEBYSHEV**, `max(|dy|, |dx|)`, in **fine** index units, and the
+  > radius is **INCLUSIVE** — both taken from `spiral_source`, the instrument that measured D1 and
+  > D6, and stated in **no** other document. Euclidean and Manhattan pick different sources, and
+  > Chebyshev makes a diagonal neighbour **equidistant** with an axis one, so it is the metric
+  > under which the tie-break fires at all.
+  >
+  > **AND `spiral_bound` COUNTS COARSE INDEX STEPS, NOT FINE CELLS** — the config's docstring is
+  > the specification, and `max_fine_radius = spiral_bound * stride`. **The harness searched in
+  > FINE units, unbounded, so D1 and D6 describe a run in which the bound never bit.** The unit is
+  > fit identity: `warm_start_spiral_bound` is in `FIT_RELEVANT_FIELDS`, so two runs agreeing on
+  > the integer and disagreeing on what it counts move `θ̂` under one `fit_hash`.
 - **A coarse point's nearest valid coarse point is itself, at radius 0** — a property of the
   geometry, **not an exception in the rule**. Every pass-2 point is warm-started by the same rule
   and **there is no branch for coarse points** (D12).

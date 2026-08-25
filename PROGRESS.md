@@ -4,9 +4,9 @@
 
 1. **Branch `main`, everything on it, every commit pushed by a hook** — https://github.com/killett/metamer. Head at the time of writing: **the plan Task 0 implementation commit**, 2026-08-24. **A SHA here is stale the moment the next commit lands, so it is named by content rather than by hash** — `git log --oneline -5` is the authority.
 2. **DONE:** Phase 1 (0–18), Phase 2 preliminaries P0–P4, **Phase 2a (0–13)**, **Phase 2b (COMPLETE 2026-08-19 — 10 met / 4 reduced scope / 2 FAILED)**, and **Phase 2c's brainstorm (D1–D12) plus its Task 0 and Task 1 measurements**. The scope decision on a modelling sub-phase was taken 2026-08-22 and **re-taken on closed facts 2026-08-23: it does not open.** Sections below carry each; **none is restated here.**
-3. **NEXT ACTION: PHASE 2c TASK 3 — the source map: spiral, tie-break, bound, exhaustion.** The plan is [`2026-08-24-metamer-phase2c.md`](docs/superpowers/plans/2026-08-24-metamer-phase2c.md) — **9 tasks, 12 exit criteria each naming its reading, approved 2026-08-24. TASKS 0, 1 AND 2 ARE DONE (2026-08-24); Tasks 3–8 have no code.** **Every task's FIRST step is the pre-flight**, run against the task brief **before code** and appended to [`phase2c-preflight.md`](docs/superpowers/notes/phase2c-preflight.md). **Read the *What plan Task N established* sections first.** **AND ONE PRE-EXISTING DEFECT IS OPEN AND UNOWNED, FOUND AT TASK 2: `tiling.py` requires the spatial dims to be literally `y` and `x` in four places while stage 4a requires only that `time` is first, so a `latitude`/`longitude` input passes the contract and dies in assembly without exit code 4.** Two closers, both scope decisions; see Task 2's section. **WHICHEVER IS CHOSEN DECIDES WHETHER THE CONTRACT IS NAME-BASED OR POSITIONAL — and stage 4a's own message already calls it positional, so the message and the implementation disagree today. That message is the THIRD document in the set and it moves either way.** **TASK 5 NOW CARRIES A MANDATORY `ALGORITHM_VERSION` BUMP** that Task 1's brief wrongly claimed; it closes a defect present since 2026-08-11 and Task 5 cannot ship without it.
+3. **NEXT ACTION: PHASE 2c TASK 4 — the barrier and the cross-store gate.** The plan is [`2026-08-24-metamer-phase2c.md`](docs/superpowers/plans/2026-08-24-metamer-phase2c.md) — **9 tasks, 12 exit criteria each naming its reading, approved 2026-08-24. TASKS 0–3 ARE DONE (2026-08-24); Tasks 4–8 have no code.** **Every task's FIRST step is the pre-flight**, run against the task brief **before code** and appended to [`phase2c-preflight.md`](docs/superpowers/notes/phase2c-preflight.md). **Read the *What plan Task N established* sections first.** **AND ONE PRE-EXISTING DEFECT IS OPEN AND UNOWNED, FOUND AT TASK 2: `tiling.py` requires the spatial dims to be literally `y` and `x` in four places while stage 4a requires only that `time` is first, so a `latitude`/`longitude` input passes the contract and dies in assembly without exit code 4.** Two closers, both scope decisions; see Task 2's section. **WHICHEVER IS CHOSEN DECIDES WHETHER THE CONTRACT IS NAME-BASED OR POSITIONAL — and stage 4a's own message already calls it positional, so the message and the implementation disagree today. That message is the THIRD document in the set and it moves either way.** **TASK 5 NOW CARRIES A MANDATORY `ALGORITHM_VERSION` BUMP** that Task 1's brief wrongly claimed; it closes a defect present since 2026-08-11 and Task 5 cannot ship without it.
 4. ## THE STANDING LIMITATION ON EVERYTHING 2c DECIDED: **NO 2c NUMBER COMES FROM REAL DATA.** Warm-starting was authorized — and every decision after D1 inherits this — on a **simulated field whose spatial coherence is a construction parameter**. **The spatial coherence of real altimetry optima has never been measured.** A field with **weaker** coherence gives a **smaller** saving, and **§11.2's 30% threshold could fail on real data.** **THE NAMED CLOSER, not an open worry: a spike on a real gridded product — same three arms (cold, warm, self-ceiling), same record-length lever.** Until it runs, D1 is authorized on simulation. See [what 2c's tasks inherit](#what-2cs-tasks-inherit-2026-08-24).
-5. **Tests: 1126 passed, 0 failed, 0 INDETERMINATE — 2026-08-24, 886.88 s on a box at 3.5 GB available (read after the run, not during it).** **`pixi run test` is the full sweep and every end-of-task verification must run it; `test-fast` and `test-ci` are NOT evidence** — the full sweep has caught **seven** things a fast run could not. **Every run prints `RSS measurement validity`, including at zero**; a nonzero count is INDETERMINATE, neither pass nor fail.
+5. **Tests: 1147 passed, 0 failed, 0 INDETERMINATE — 2026-08-24, 947.16 s on a box at 3.3 GB available (read after the run, not during it).** **`pixi run test` is the full sweep and every end-of-task verification must run it; `test-fast` and `test-ci` are NOT evidence** — the full sweep has caught **seven** things a fast run could not. **Every run prints `RSS measurement validity`, including at zero**; a nonzero count is INDETERMINATE, neither pass nor fail.
 6. **Verify a fresh checkout with `pixi run test && pixi run typecheck && pixi run lint`**, plus `pixi run pre-commit run --all-files` before every commit.
 7. **THE METHOD IS THE PRE-FLIGHT AND IT LIVES IN EXACTLY ONE PLACE:** [`phase1-to-phase2-handoff.md`](docs/superpowers/notes/phase1-to-phase2-handoff.md) §1 — (a0)–(a9), (a)–(k), the standing rules, the fixture facts, **and the ten 2c added: (i2b) a high-ceiling control converts a null into a LOCATED null, (i2c) a sign-unstable benefit is worse than a small one, (j5) a second instrument is a cross-check only if it measures the same quantity under the same conditions, (j6) bound the unmeasured region before measuring it, (i11) state refutation clauses in BOTH directions, (a2b) make an invalid value UNAVAILABLE rather than caveated, (h2) a metric may only be stratified by axes at its OWN granularity, (j7) never stratify by a quantity the treatment can move, (c4) a validator must be specified in the coordinates and the EXTENT the validated object actually has, (e2) prove a mutant differs from the original before recording a surviving mutation — (e) now has SIX causes, and the sixth makes you distrust a test that is fine — (e3) its opposite colour, a RED suite hiding a dead assertion, read WHICH failure fired, (a2c) populated but nothing acts on it: for each hashed field name the code that ACTS on it, (a2e) encode a classification as a construction — a set defined as the union of its classes, with the forbidden class declared nowhere, (i12) a uniform fixture SET cannot test a degree of freedom the contract leaves open, and (a4)'s newest register: **"checked" in your own pre-flight is a claim, and a NEGATIVE one is what licenses the action.** **(e2) and (e3) are filed adjacently on purpose; so are (a2c) and (a2e), which are the same question asked about a field and about a rule.** **Do not restate it here** — the two copies drifted once already.
 8. **CI IS GREEN and the deliberate red is CLOSED** (2026-08-22, by the repair its own criterion chose: the CI fixture was **enlarged**, the bound was **not** widened and the test was **not** marked). **CI runs `-m "not machine"` and therefore executes exactly ONE of the nine RSS assertions**, so it is not a substitute for the local sweep. See [THE CI FIXTURE DECISION](#the-ci-fixture-decision--taken-measured-and-verified-2026-08-22).
@@ -5311,6 +5311,99 @@ no user-facing two-pass entry point until Task 5**, and documenting a feature a 
 is worse than documenting it late. **Separately, README's Status block is stale** — it says
 *"Phase 1 complete"*, *"588 tests"* and *"Not yet built: `metamer.batch`"* — which is an (a6) sweep
 this task did not widen its scope to run.
+
+### What plan Task 3 established (done 2026-08-24 — read before touching the spiral, the bound's unit, or the recorded source index)
+
+**`batch/warmstart.source_map` is §11.3's rule, implemented once.** `core.fit` only honours the
+validity array; the policy lives here, where the coarse grid exists.
+
+#### THE INSTRUMENT WAS THE SPECIFICATION, AND IT STATED TWO THINGS NO OTHER DOCUMENT DID
+
+`warmstart-spike-harness.py::spiral_source` produced D1's verdict and D6's stride curve, so
+**whatever it did is the mechanism those numbers describe.** Two of its choices appear in **no**
+plan, design-doc or config text:
+
+- **THE DISTANCE IS CHEBYSHEV**, `max(|dy|, |dx|)`, in **fine** index units. *"Nearest in index
+  space"* reads equally as Euclidean or Manhattan, and the three pick different sources. Chebyshev
+  calls a diagonal neighbour and an axis neighbour **equidistant** where Euclidean does not, **so
+  the tie-break fires in cases Euclidean never reaches** — and the tie-break is the entire
+  mechanism by which `θ̂` stops depending on traversal order.
+- **THE RADIUS IS INCLUSIVE** — `range(max_radius + 1)`.
+
+Both are now in the module docstring and pinned by a test that reproduces the harness **point by
+point** at three strides.
+
+#### THE BOUND'S UNIT DISAGREED BETWEEN THE CONFIG AND THE INSTRUMENT, AND THE UNIT IS FIT IDENTITY
+
+| | unit | value used |
+|---|---|---|
+| `WarmStart.spiral_bound`, the shipped field | *"coarse index steps"* | **4** |
+| the harness that measured D1 and D6 | **fine** index units | `n_side` — **unbounded** |
+
+`warm_start_spiral_bound` is in `FIT_RELEVANT_FIELDS`, so **two runs agreeing on the integer 4 and
+disagreeing on what it counts produce different `θ̂` under one `fit_hash`.** **The config's reading
+governs** — it is the shipped field and its docstring is the specification —
+so `max_fine_radius = spiral_bound * stride`.
+
+> **AND D1 AND D6 WERE THEREFORE MEASURED WITH NO EFFECTIVE BOUND.** They describe a run in which
+> **the bound never bit**, and say nothing about behaviour where it does. At `k = 8, bound = 4` the
+> search reaches 32 fine cells, so exhaustion needs a **9 × 9 coarse neighbourhood — 81 points —
+> entirely failed for that candidate.** Rare, and **exactly the shape of a large land or ice
+> region.** This is why the exhaustion count is a reported outcome rather than a diagnostic.
+
+#### THE RECORDED INDEX REFERS TO THE COARSE GRID, WHICH NO DOCUMENT SAID
+
+The plan asks for *"the source coarse index recorded per point"* without saying what it indexes.
+**It must be the coarse grid**: that is what indexes pass 1's store, which is where the warm start
+is read from, and a fine-grid index would need dividing by the stride at every use — the division
+is where an off-by-one enters. **D12 makes the choice load-bearing**: a self-sourced fine point
+records `(y // k) * n_coarse_x + (x // k)` at radius 0, so the lattice is testable **by equality**
+rather than discoverable as a 1-in-`k²` spatial periodicity.
+
+#### `valid` IS DERIVED FROM `index`, BECAUSE TASK 0's GATE CATCHES THE SWAP AND NOT THE DISAGREEMENT
+
+`index` is int64 with `-1` for exhausted; `valid` is `index >= 0`, **one expression**. Task 0
+required `x0_valid` to be boolean because `bool(-1)` is True — that catches the two arrays being
+**swapped**. Nothing catches them **disagreeing**, and `index = -1` beside `valid = True` hands
+`fit` a source that does not exist. **Two arrays maintained by two loops is how that happens.**
+
+#### TILE-INDEPENDENCE IS STRUCTURAL, AND THE TEST STAYS ANYWAY
+
+The coarse geometry is derived from the **full fine grid shape**, always; `region` chooses **which
+points are answered** and never **what the answer is**, and the search runs in absolute fine-grid
+coordinates. Building from tile-local indices — the plan's *"single most likely way to lose the
+guarantee"* — is not expressible. **The element-by-element test across three region sizes stays,
+because a structural argument is a claim until something fails when it is untrue.**
+
+#### THE HARNESS'S OWN IMPLEMENTATION IS UNUSABLE AT SCALE, AND THE REPLACEMENT IS MEASURED
+
+`spiral_source` rescans **every** coarse point at every radius: `O(n_coarse)` per ring per point
+per candidate, which at 10⁷ fine points and `k = 8` is **~10¹² operations.** **It was a correct
+instrument and it is not an implementation** — (a3)'s bargain running the other way.
+
+The lattice has only `k²` residue classes, and **within a ring, ordering by absolute `(y, x)`
+equals ordering by offset** because every candidate shares the target's base — so one precomputed
+order serves a whole class.
+
+> **MEASURED, NOT ASSERTED (2026-08-24):** one 338 × 338 tile at `k = 8`, `bound = 4`, `M = 2`,
+> 5% of coarse points failed — **0.163 s, 1.43 µs/point**, extrapolating to **~14 s over 10⁷
+> points**. **Indicative only:** one run, one fixture, no host quiet check, and **no claim about
+> scaling in `bound`**, whose search order grows as `(2·bound + 1)²`.
+
+#### THREE WAYS THESE TESTS COULD HAVE BEEN VACUOUS, CLOSED IN THE FIXTURE
+
+**Named before the tests were written**, and each is a property of the fixture rather than of an
+assertion: a grid where **every coarse point is `OK`** makes exhaustion unreachable and the bound
+untested; a **stride dividing the grid exactly** never produces a fine point with no coarse point
+below or right of it; and a **square grid** makes a transposed index agree with a correct one. The
+fixture is 11 × 8 at strides 2, 3 and 4 — **non-square, not a multiple of any of them**, with
+`coarse_ok` **non-uniform across the candidate axis** so a per-point search cannot masquerade as a
+per-candidate one.
+
+**Ten mutations, all caught**: Euclidean distance, an `x`-before-`y` tie-break, an exclusive
+radius, a spiral starting at radius 1, the bound read as fine units, `valid` as `index > 0`, the
+coarse geometry taken from the region, a per-point search, exhaustion falling through to the
+nearest point regardless of its outcome, and column-major point ordering.
 
 ---
 
