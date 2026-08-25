@@ -324,6 +324,7 @@ def test_the_warm_start_coarse_stride_moves_fit_hash(tmp_path):
         # Setting the only legal value is a no-op, and that is asserted as a
         # no-op rather than dressed up as coverage -- see the docstring.
         ("[warm_start]\ntie_break = 'lowest_yx'\n", (False, False, False)),
+        ("[warm_start]\ninterpolation_rule = 'nearest_valid'\n", (False, False, False)),
     ],
 )
 def test_every_warm_start_setting_reaches_fit_identity(tmp_path, block_body, expected):
@@ -340,12 +341,20 @@ def test_every_warm_start_setting_reaches_fit_identity(tmp_path, block_body, exp
     field entirely, which is the defect it was written to catch. A relation
     between two observations is not a substitute for the observations.
 
-    `tie_break` is a `Literal` with one member, so it cannot be varied at all;
-    its membership is pinned by the golden payload above, where it appears by
-    name. Asserting it "moves the hash" would require inventing a second
-    interpolation rule to prove a point, so the honest assertion is that setting
-    it explicitly changes nothing -- which is also the
-    explicit-equals-omitted property, checked here for one more field.
+    `tie_break` and `interpolation_rule` are `Literal`s with one member each, so
+    neither can be varied at all; their membership is pinned by the golden
+    payload above, where both appear by name. Asserting they "move the hash"
+    would require inventing a second rule to prove a point, so the honest
+    assertion is that setting either explicitly changes nothing -- which is also
+    the explicit-equals-omitted property, checked here for two more fields.
+
+    **ALL FIVE APPEAR HERE AS OF 2026-08-24, AND FOUR DID BEFORE.**
+    `interpolation_rule` was the omission, and it was covered by the golden
+    payload rather than unguarded -- but this parametrization is where a reader
+    checks for completeness, and a five-case argument backed by four cases is
+    the shape that earns the wrong conclusion. `REQUEST_FIELDS` in
+    `tests/test_hashing.py` now checks the same property over the whole class,
+    so a sixth setting fails there even if nobody extends this list.
     """
     assert _moved(tmp_path, "ws.toml", _WITH + "\n" + block_body) == expected
 
@@ -576,9 +585,7 @@ def test_an_unknown_term_kind_names_what_is_available():
 # --------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize(
-    "key", sorted({hashing.ALGORITHM_VERSION_KEY, hashing.REGISTRY_VERSION_KEY})
-)
+@pytest.mark.parametrize("key", sorted(hashing.STAMPED_IDENTITY_FIELDS))
 def test_a_config_supplying_a_stamped_key_is_refused_by_name(tmp_path, key):
     """Code identity comes from the code, and the message names the file.
 

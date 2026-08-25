@@ -187,20 +187,58 @@ not exist yet. `Config.fit_hash()` therefore returns None until stage 4a has
 run, which is the regime the optional return type was declared for at Task 1.
 """
 
-FIT_RELEVANT_FIELDS = (
+REQUEST_FIELDS = (
     frozenset(
         {
-            GEOMETRY_HASH_KEY,
             "variable",
             "signal_terms",
             "objective",
             "engine",
-            REGISTRY_VERSION_KEY,
-            ALGORITHM_VERSION_KEY,
             "seed",
         }
     )
     | _WARM_START_FIT_FIELDS
+)
+"""Fit-relevant fields THE CONFIG IS AUTHORITATIVE FOR. The user is asking.
+
+A request cannot be wrong: the config is the only thing that knows what was
+asked for, so a value here identifies nothing outside itself and there is no
+party it can disagree with. **This is the safe class, and it is the only one a
+config may supply.**
+
+**THE FIVE WARM-START SETTINGS ARE REQUESTS, AND THEY WERE THE ONLY UNCLASSIFIED
+MEMBERS OF THE ALLOWLIST.** They entered on 2026-08-11; `data_uri` was named
+*"the last self-reported identity in either allowlist"* on 2026-08-12 -- so the
+vocabulary that would have classified them arrived one day after they did, and
+the audit that closed with it never covered them. Classified 2026-08-24, at
+Phase 2c Task 1. `warm_start_coarse_stride` asks for a stride; it does not claim
+that a store on disk WAS decimated at one. **That claim is a different check, at
+a different layer** -- Phase 2c Task 4's cross-store gate, which compares the two
+stores' recorded strides positionally and never infers one from the other.
+"""
+
+STAMPED_IDENTITY_FIELDS = frozenset({ALGORITHM_VERSION_KEY, REGISTRY_VERSION_KEY})
+"""Fit-relevant fields THE INSTALLED CODE IS AUTHORITATIVE FOR.
+
+`normalize` stamps both from the running package and **a config supplying either
+is refused, not overridden** -- `metamer.config.model` reads this set for that
+refusal, so adding a member here makes it refusable without a second edit.
+
+The hazard in this class is forgetting to bump, and it is answered at
+`ALGORITHM_VERSION` rather than here.
+"""
+
+MEASURED_IDENTITY_FIELDS = frozenset({GEOMETRY_HASH_KEY})
+"""Fit-relevant fields THE INPUT IS AUTHORITATIVE FOR, read rather than declared.
+
+`metamer.batch.geometry` reads every component from the opened dataset, so the
+value cannot be asserted by anything that has not opened it. **`Config` declares
+no field for these**, and `Config` is a strict model, so the model itself is the
+gate -- there is no deny-list to drift.
+"""
+
+FIT_RELEVANT_FIELDS = (
+    REQUEST_FIELDS | STAMPED_IDENTITY_FIELDS | MEASURED_IDENTITY_FIELDS
 )
 """Fields determining theta-hat and log_lik. Extending this is a deliberate act.
 
@@ -210,6 +248,28 @@ assembled at Task 16, before the mechanisms that populate it existed, so it is
 evidence of what was known then and not of what belongs -- four separate omissions
 or errors were found in it during Phase 2 planning. Ask the question about a new
 field; do not reason from what is already here.
+
+**AND THE BOUNDARY THE QUESTION DRAWS, STATED HERE BECAUSE THIS IS WHERE IT GETS
+READ.** The audit's settings -- subsample size, stratification, whether an audit
+ran at all -- **MEASURE a run; they are not inputs to it**, so they are outside
+this set and re-running an audit at a different subsample size must leave the
+store it audits resumable. The argument that puts the warm-start settings IN
+(§11.1: a stale warm start produces converged-looking fits at the wrong optimum)
+sweeps the audit settings in too when read one clause too far. See
+`_WARM_START_FIT_FIELDS` for the boundary and `tests/test_config.py` for the
+executable form.
+
+**EXTENDING IT MEANS CLASSIFYING, BECAUSE THERE IS NOWHERE ELSE TO ADD A FIELD.**
+This set is the union of three classes and has no members of its own: a request
+(the config is authoritative), a stamped identity (the installed code is), or a
+measured identity (the input is). **A fourth class exists and must stay empty --
+a SELF-REPORTED identity, a value claiming to identify something outside the
+config and supplied by the config anyway.** `data_uri` and `metamer_version`
+were both that, and `data_uri` was **wrong in both directions at once**: moving a
+file invalidated a scientifically valid resume, and editing a file in place at a
+fixed URI permitted an invalid one. **Nothing declares the fourth class, and that
+is the point** -- it is whatever the other three do not cover, so the three
+covering everything is what proves it empty.
 
 Excludes the criterion set (AIC versus BIC does not move the optimum) and the
 candidate set (candidate-set extension is a legitimate incremental operation,
@@ -251,8 +311,16 @@ version"; this is the narrower reading of that entry, and it is the one that
 survives a version string derived from the git tag.
 """
 
-STAGE_4A_FIELDS = frozenset({GEOMETRY_HASH_KEY})
+STAGE_4A_FIELDS = MEASURED_IDENTITY_FIELDS
 """Fit-relevant fields a CONFIG cannot supply, stamped by stage 4a instead.
+
+**AN ALIAS, NOT A COPY, AND THE TWO CONCEPTS ARE NOT THE SAME ONE.**
+`MEASURED_IDENTITY_FIELDS` says **who is authoritative** -- the input. This says
+**when the value arrives** -- at stage 4a. They coincide today because the only
+way to read a value off the input is to open it, which is what stage 4a does.
+Written as an alias so the two cannot silently disagree; **if a measured identity
+ever arrives at a different stage, splitting them is a deliberate edit** rather
+than a divergence nobody notices.
 
 **`run_payload` VALIDATES THE FIT FIELDS MINUS THESE, AND THAT IS §13.4's
 DEGRADED MODE RATHER THAN A LOOSENING.** The validation exists to refuse a

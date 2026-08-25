@@ -19,6 +19,7 @@ resume reads as a mismatch. The cross-process test is the direct guard.
 from __future__ import annotations
 
 import hashlib
+import itertools
 import json
 import os
 import subprocess
@@ -28,6 +29,8 @@ import tomllib
 import numpy as np
 import pytest
 
+from metamer import config as config_module
+from metamer.config.model import Config
 from metamer.core import hashing
 from metamer.core.criteria import Criterion, rank_candidates
 from metamer.core.hashing import (
@@ -36,6 +39,9 @@ from metamer.core.hashing import (
     CONFIG_DEFAULTS,
     FIT_RELEVANT_FIELDS,
     MACHINE_KEY,
+    MEASURED_IDENTITY_FIELDS,
+    REQUEST_FIELDS,
+    STAMPED_IDENTITY_FIELDS,
     canonical_json,
     compat_hash,
     compat_payload,
@@ -762,6 +768,119 @@ def test_compat_relevance_is_an_allowlist_golden_set():
     # re-running an audit at a different subsample size must not invalidate the
     # store it is auditing.
     assert not COMPAT_RELEVANT_FIELDS & {"audit_subsample", "audit_stratify"}
+
+
+def test_the_three_fit_relevant_classes_are_pairwise_disjoint():
+    """No field carries two classifications.
+
+    Behaviour under test: the request/identity partition. `FIT_RELEVANT_FIELDS`
+    is DEFINED as the union of the three, so "every field is classified" is true
+    by construction and asserting it would assert nothing. What is not automatic
+    is that no field is in two of them, and a field in two is a classification
+    that classifies nothing while every other test in this file stays green.
+
+    Expected value determined independently: the classes answer "who is
+    authoritative for this value", and exactly one party can be. A request is
+    one the config is authoritative for; a stamped identity is one the installed
+    CODE is authoritative for and a config supplying it is refused; a measured
+    identity is one the INPUT is authoritative for and no config can supply it.
+
+    Bug this catches: `geometry_hash` being added to `REQUEST_FIELDS` on the
+    reasoning that "the config names the data anyway, via data_uri". That is the
+    `data_uri` defect restated as a taxonomy -- a location standing in for an
+    identity -- and it would leave the union unchanged, so no hash would move
+    and nothing else here would fail.
+    """
+    classes = {
+        "request": REQUEST_FIELDS,
+        "stamped identity": STAMPED_IDENTITY_FIELDS,
+        "measured identity": MEASURED_IDENTITY_FIELDS,
+    }
+    for left, right in itertools.combinations(sorted(classes), 2):
+        overlap = classes[left] & classes[right]
+        assert not overlap, f"{sorted(overlap)} is both a {left} and a {right}"
+    assert all(classes.values()), "an empty class is a classification nobody made"
+
+
+def test_a_measured_identity_is_one_no_config_can_supply():
+    """`geometry_hash` is not a `Config` field, and a TOML naming it is refused.
+
+    Behaviour under test: what makes a measured identity measured. The class is
+    a claim -- "the input is authoritative for this" -- and the claim is only
+    true while nothing lets a config assert it instead.
+
+    Expected value determined independently: `Config` is a strict pydantic
+    model, so a key it does not declare is refused by the model rather than by
+    any code written here. The assertion is therefore that the key is UNKNOWN to
+    `Config`, which is a property of the model's field list and not of a
+    hand-maintained deny-list that could drift from it.
+
+    Bug this catches: `geometry_hash` being added as a config field "so that
+    `--explain` can run before data is staged". §13.4's degraded mode is served
+    by `fit_hash` returning None, not by letting the config assert a fingerprint
+    for data it has never opened -- which is `data_uri` returning, a value
+    claiming to identify the data and supplied by the thing it should identify.
+    It was wrong in BOTH directions at once, and a self-reported one is worse:
+    moving a file invalidated a valid resume, editing a file in place permitted
+    an invalid one, and a hand-typed hash permits any resume at all.
+    """
+    for field in sorted(MEASURED_IDENTITY_FIELDS):
+        assert field not in Config.model_fields
+    # The paired positive: the same model DOES declare the request fields, so
+    # "not a Config field" is a fact about this field rather than about the
+    # check. Without it a typo in `model_fields` would pass silently.
+    assert "variable" in Config.model_fields
+    assert "warm_start" in Config.model_fields
+
+
+def test_every_request_field_is_one_a_config_can_actually_supply(tmp_path):
+    """Each request reaches the fit payload from a loaded config file.
+
+    Behaviour under test: the whole request class at once, rather than one field
+    at a time. A field classified "the user asks for this" that no config can
+    ask for is not a request -- it is a constant wearing a label, and changing
+    it would mean editing source.
+
+    Expected value determined independently: the payload comes from
+    `Config.to_payload`, the flattening a real run goes through; the field list
+    comes from `REQUEST_FIELDS`. Neither side is computed from the other.
+
+    Bug this catches: the `warm_start` block's flattening dropping a key. That
+    is the "four of five" hazard checked over the CLASS rather than per field,
+    so a sixth warm-start setting added to the model without wiring the
+    flattening fails here even if nobody remembers to extend the parametrized
+    test in `tests/test_config.py`. A dropped key silently demotes a
+    fit-identity setting to provenance, and the store it fails to invalidate is
+    the one it should have invalidated.
+
+    **THIS DELIBERATELY DOES NOT GO THROUGH `fit_payload`, AND THAT IS THE WHOLE
+    DIFFERENCE BETWEEN A REACHABLE ASSERTION AND A DEAD ONE.** `_subset` already
+    raises `KeyError` on any missing allowlisted field, and `FIT_RELEVANT_FIELDS`
+    is DEFINED as a union containing `REQUEST_FIELDS` -- so through `fit_payload`
+    the `KeyError` fires first and the assertion below can never execute. Written
+    that way first, and caught by reading WHICH error the mutation produced
+    rather than by seeing red. Taking the raw `to_payload` puts this assertion on
+    its own. **The two guards are deliberate and each names the other**: `_subset`
+    protects the whole allowlist, this protects the classification.
+    """
+    path = tmp_path / "requests.toml"
+    path.write_text(
+        'data_uri = "s3://bucket/ssh.zarr"\n'
+        'variable = "sla"\n'
+        'signal_terms = ["constant", "trend", "annual"]\n'
+        'candidates = ["white", "white + matern12"]\n'
+        'criteria = ["aic"]\n'
+        "memory_budget_gb = 1.0\n"
+    )
+    payload = config_module.load(path).to_payload("0123456789abcdef")
+    missing = sorted(REQUEST_FIELDS - set(payload))
+    assert not missing, (
+        f"classified as requests but unreachable from a config: {missing}"
+    )
+    # The paired positive: a stamped identity is NOT in this payload, because a
+    # config may not supply one. Without it, a `to_payload` that returned every
+    # key it could think of would satisfy the assertion above.
+    assert not STAMPED_IDENTITY_FIELDS & set(payload)
 
 
 def test_the_goldens_reverse_through_the_allowlist_history():

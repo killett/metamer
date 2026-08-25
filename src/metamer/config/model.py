@@ -39,7 +39,16 @@ from metamer.core import hashing
 from metamer.core.signal import SignalSpec
 from metamer.core.terms import ProcessSpec
 
-_STAMPED_KEYS = (hashing.ALGORITHM_VERSION_KEY, hashing.REGISTRY_VERSION_KEY)
+_STAMPED_KEYS = tuple(sorted(hashing.STAMPED_IDENTITY_FIELDS))
+"""The keys `load` refuses, READ FROM the classification rather than restated.
+
+It was `(ALGORITHM_VERSION_KEY, REGISTRY_VERSION_KEY)` until 2026-08-24, which
+is the same two names written twice. A third stamped identity would then have
+had to be added in both places, and the failure of adding it in one is silent:
+`normalize` would refuse it and `load` would not, so the refusal a user meets
+would depend on whether they came through a file. Sorted for a deterministic
+message order.
+"""
 
 
 class StampedKeyError(ValueError):
