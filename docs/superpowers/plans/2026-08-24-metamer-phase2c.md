@@ -1,9 +1,13 @@
 # Phase 2c — the two-pass warm start, its barrier, and the hysteresis audit
 
-**Status: APPROVED 2026-08-24. TASK 0 IS DONE (2026-08-24); Tasks 1–8 have no code. Task 1 is the
-next action.** The single source for this plan's status is this line. **What Task 0 found beyond
-its brief — four findings that changed the implementation, and three checks that changed nothing —
-is in [`PROGRESS.md`](../../../PROGRESS.md)'s *What plan Task 0 established*, not here.**
+**Status: APPROVED 2026-08-24. TASKS 0 AND 1 ARE DONE (2026-08-24); Tasks 2–8 have no code. Task 2
+is the next action.** The single source for this plan's status is this line. **What each task
+found beyond its brief is in [`PROGRESS.md`](../../../PROGRESS.md)'s *What plan Task N
+established*, not here.**
+
+> **TASK 1 WAS AN AUDIT, NOT A BUILD, AND IT MOVED A REQUIREMENT.** Its mechanism was already
+> implemented in Phase 2a; **the `ALGORITHM_VERSION` bump it claimed now belongs to Task 5**,
+> where `θ̂` actually moves, and **Task 5 cannot ship without it.**
 
 **The design decisions this plan implements are D1–D12** in
 [`PROGRESS.md`](../../../PROGRESS.md)'s *Phase 2c brainstorm — settled decisions*. **Nothing below
@@ -163,11 +167,30 @@ no expressible implementation. **This is the only `metamer.core` change 2c requi
 **Goal.** The warm-start settings that can move `θ̂` are **inside `fit_hash`**, and the ones that
 cannot are **outside** it. §11.2 states the split; nothing implements it.
 
+> ## CORRECTED 2026-08-24 AT THE TASK'S OWN PRE-FLIGHT. THE MECHANISM WAS ALREADY BUILT, IN 2a.
+>
+> **`_WARM_START_FIT_FIELDS` has been part of `FIT_RELEVANT_FIELDS` since 2026-08-11, Phase 2a
+> Task 1**, together with the audit exclusion and the tests below. Verified by measurement, not
+> by reading: the stride, `enabled`, the spiral bound and the interpolation rule each move
+> `fit_hash`; the audit settings move neither gate. **Three clauses of this task were therefore
+> already satisfied when it was written**, and two more are corrected here:
+>
+> - **The `GOLDEN_*` constants DO NOT move**, because the hashed field set does not. It moved on
+>   2026-08-11 and `_HISTORY` already carries that hop. **Re-deriving them now would be
+>   regeneration with nothing to reverse against** — the exact failure the reversal discipline
+>   exists to prevent.
+> - **`ALGORITHM_VERSION` is NOT bumped here. It is bumped at Task 5**, and the reason is below.
+>
+> **What this task actually delivered is the classification** — see *What plan Task 1
+> established* in [`PROGRESS.md`](../../../PROGRESS.md).
+
 **Behaviour.**
 
-- **`hashing.FIT_RELEVANT_FIELDS` gains: warm start enabled/disabled, the coarse stride, the
-  interpolation rule, and the spiral bound and tie-break order.** Each **selects the source point
-  or the start**, so each is fit identity by definition.
+- ~~**`hashing.FIT_RELEVANT_FIELDS` gains: warm start enabled/disabled, the coarse stride, the
+  interpolation rule, and the spiral bound and tie-break order.**~~ **ALREADY TRUE since
+  2026-08-11.** Each **selects the source point or the start**, so each is fit identity by
+  definition — and each is a **REQUEST**, a value the config is authoritative for, never an
+  identity it self-reports.
 - **The audit's own settings stay out.** Subsample size, stratification, and whether the audit ran
   at all **do not move `θ̂`** — and putting them in would make **re-running an audit invalidate
   the store it audits**, reintroducing exactly what the fit/compat split exists to prevent.
@@ -175,16 +198,29 @@ cannot are **outside** it. §11.2 states the split; nothing implements it.
   A second rule can then never silently share a store. **No config flag selects it** (§11.3): the
   rule moves `θ̂`, so a flag would fragment stores and every switch would invalidate a 10⁷-point
   run.
-- **`ALGORITHM_VERSION` is hand-bumped**, per its docstring's rule — this change moves `θ̂` for an
-  input that previously fit.
+- ~~**`ALGORITHM_VERSION` is hand-bumped**, per its docstring's rule — this change moves `θ̂` for
+  an input that previously fit.~~ **MOVED TO TASK 5, 2026-08-24.** The docstring's rule is *"bump
+  when and only when a change alters `theta_hat` or `log_lik` for some input that previously
+  fit"*, and **Task 1 alters no `θ̂`** — it writes no fitting code, and adding a field to an
+  allowlist moves a **hash**, not an optimum. **The change that moves `θ̂` is Task 5**, where a
+  default run begins warm-starting. Bumping here would put the version boundary in a different
+  place from the behaviour boundary, which is the same defect one task earlier.
+- **A NEW ENTRANT IS CLASSIFIED BEFORE IT IS ADDED**, and the classification is executable rather
+  than prose. `FIT_RELEVANT_FIELDS` is the union of `REQUEST_FIELDS`, `STAMPED_IDENTITY_FIELDS`
+  and `MEASURED_IDENTITY_FIELDS` and has **no members of its own**, so a field cannot be added
+  without choosing a class. **The forbidden fourth class — an identity the config self-reports,
+  which `data_uri` and `metamer_version` both were — is declared nowhere**: it is whatever the
+  three do not cover, and the three covering everything is what proves it empty.
 
 **Invariants.**
 
 - **Changing the coarse stride moves `fit_hash`**, asserted directly rather than inferred from
   the field being in the allowlist. **(a2): the allowlist is a name, and the hash is the gate.**
-- **The three `GOLDEN_*` constants move, and are re-derived by hand and verified by reversal** —
-  **never regenerated from the failure**. §11.2 names this explicitly and it is where a golden
-  test stops being a test.
+  **Already asserted since 2a** by `test_the_warm_start_coarse_stride_moves_fit_hash`.
+- ~~**The three `GOLDEN_*` constants move, and are re-derived by hand and verified by reversal** —
+  **never regenerated from the failure**.~~ **THEY DO NOT MOVE.** The rule stands and is why:
+  a golden is re-derived only when the field set moves, and reversing a hop that did not happen
+  proves nothing. `_HISTORY`'s 2026-08-11 hop is the one that covers these fields.
 
 **Tests, and the bug each catches.**
 
@@ -197,8 +233,23 @@ cannot are **outside** it. §11.2 states the split; nothing implements it.
 - *A stale warm-start source under a changed stride is **refused**, not used.* Needs a
   **positive control** beside it — the same source under an unchanged stride **is** used — or the
   refusal is indistinguishable from a source that never loaded. **(i2).**
+  **DEFERRED TO TASK 4, 2026-08-24: it needs a pass-1 store to be stale, and no store exists
+  until Task 2.** A hash proves two **configs** agree; it says nothing about what a **store on
+  disk** was decimated at, so this test was never Task 1's to write. Task 4's brief already owns
+  it and already says the check is **positional and explicit, never inferred**.
 - *Each `GOLDEN_*` constant round-trips its hand-derivation.* Catches the constants being
   regenerated from the new failure, which makes the golden test assert only self-consistency.
+  **Already present as `test_the_goldens_reverse_through_the_allowlist_history`**, walking
+  `_HISTORY` one hop at a time.
+- *No field can enter `FIT_RELEVANT_FIELDS` without a classification, and no field carries two.*
+  **The disjointness is the assertion**; the coverage is true by construction, because the
+  allowlist is the union and has no members of its own. Catches `geometry_hash` being added to
+  `REQUEST_FIELDS` on the reasoning that *"the config names the data anyway"* — the `data_uri`
+  defect restated as a taxonomy, which moves no hash and fails nothing else.
+- *Every request field is reachable from a config file, and no stamped identity is.* Catches the
+  `warm_start` flattening dropping a key, checked over the **class** so a sixth setting fails
+  even if the per-field parametrization is not extended. **It must not run through `fit_payload`**:
+  `_subset` raises on any missing allowlisted field, so through that path the assertion is dead.
 
 ---
 
@@ -347,6 +398,27 @@ new store schema, no warm-start cache** — pass 1's store **is** the cache (D11
   coarse points** (D12).
 - **Warm-starting is disableable by config**, and **whether it was used is recorded in
   provenance**, because it changes the meaning of the output (§11.2).
+- **`ALGORITHM_VERSION` IS HAND-BUMPED HERE, IN ITS OWN COMMIT, AND THIS TASK CANNOT SHIP WITHOUT
+  IT** (moved from Task 1, 2026-08-24). This is the commit at which `θ̂` moves for an input that
+  previously fit, which is the constant's stated trigger.
+
+  **It closes a defect that has been in the tree since 2026-08-11.** `WarmStart.enabled` defaults
+  to **`True`** and is in `fit_hash`, while nothing consumed it — so **every store written since
+  then asserts `warm_start_enabled: true` over fits that are entirely cold.** Without the bump,
+  the same config after this task produces **warm-started fits under the same `fit_hash`**, and a
+  resume mixes the two populations in one store: converged-looking fits at a different optimum,
+  which is §11.1's worst failure mode arriving through the config rather than through a stale
+  cache.
+
+  **The obvious alternative repair is wrong and is named so it is not tried.** `Screening` is
+  *"refused at layer 3 until Phase 4"*, and mirroring that for `WarmStart` **would refuse every
+  run** — `screening.enabled` defaults to `False` and this defaults to `True`. **Only the bump
+  separates the two populations**, and no store can be repaired after the fact.
+
+  **It moves all three `GOLDEN_*` constants**, which is what invalidating stored fits looks like.
+  They are **re-derived by hand and verified by reversal**, and `_HISTORY` gains a hop —
+  **never regenerated from the failure**. This is the golden movement Task 1 was written to
+  expect and did not owe.
 - **`--explain` reporting is Phase 5's.** 2c **computes and records** the source-index array, the
   exhaustion count, the ladder-rung distribution and the two passes' wall clocks; §13.4 prints
   them. **Measure in the phase that can, print in the phase that shows.**

@@ -4,9 +4,9 @@
 
 1. **Branch `main`, everything on it, every commit pushed by a hook** — https://github.com/killett/metamer. Head at the time of writing: **the plan Task 0 implementation commit**, 2026-08-24. **A SHA here is stale the moment the next commit lands, so it is named by content rather than by hash** — `git log --oneline -5` is the authority.
 2. **DONE:** Phase 1 (0–18), Phase 2 preliminaries P0–P4, **Phase 2a (0–13)**, **Phase 2b (COMPLETE 2026-08-19 — 10 met / 4 reduced scope / 2 FAILED)**, and **Phase 2c's brainstorm (D1–D12) plus its Task 0 and Task 1 measurements**. The scope decision on a modelling sub-phase was taken 2026-08-22 and **re-taken on closed facts 2026-08-23: it does not open.** Sections below carry each; **none is restated here.**
-3. **NEXT ACTION: PHASE 2c TASK 1 — the fit-relevant fields, and the hash cascade.** The plan is [`2026-08-24-metamer-phase2c.md`](docs/superpowers/plans/2026-08-24-metamer-phase2c.md) — **9 tasks, 12 exit criteria each naming its reading, approved 2026-08-24. TASK 0 IS DONE (2026-08-24); Tasks 1–8 have no code.** **Every task's FIRST step is the pre-flight**, run against the task brief **before code** and appended to [`phase2c-preflight.md`](docs/superpowers/notes/phase2c-preflight.md). **What Task 0 found is in [What plan Task 0 established](#what-plan-task-0-established-done-2026-08-24--read-before-touching-fits-signature-or-any-warm-start-validator), including the three checks that changed nothing** — one of which is that Task 1's config fields **already exist** and are not Task 1's to invent.
+3. **NEXT ACTION: PHASE 2c TASK 2 — pass 1 as a run over a decimated input.** The plan is [`2026-08-24-metamer-phase2c.md`](docs/superpowers/plans/2026-08-24-metamer-phase2c.md) — **9 tasks, 12 exit criteria each naming its reading, approved 2026-08-24. TASKS 0 AND 1 ARE DONE (2026-08-24); Tasks 2–8 have no code.** **Every task's FIRST step is the pre-flight**, run against the task brief **before code** and appended to [`phase2c-preflight.md`](docs/superpowers/notes/phase2c-preflight.md). **Read [What plan Task 0 established](#what-plan-task-0-established-done-2026-08-24--read-before-touching-fits-signature-or-any-warm-start-validator) and [What plan Task 1 established](#what-plan-task-1-established-done-2026-08-24--read-before-touching-fit_relevant_fields-the-goldens-or-algorithm_version) first.** **TASK 5 NOW CARRIES A MANDATORY `ALGORITHM_VERSION` BUMP** that Task 1's brief wrongly claimed; it closes a defect present since 2026-08-11 and Task 5 cannot ship without it.
 4. ## THE STANDING LIMITATION ON EVERYTHING 2c DECIDED: **NO 2c NUMBER COMES FROM REAL DATA.** Warm-starting was authorized — and every decision after D1 inherits this — on a **simulated field whose spatial coherence is a construction parameter**. **The spatial coherence of real altimetry optima has never been measured.** A field with **weaker** coherence gives a **smaller** saving, and **§11.2's 30% threshold could fail on real data.** **THE NAMED CLOSER, not an open worry: a spike on a real gridded product — same three arms (cold, warm, self-ceiling), same record-length lever.** Until it runs, D1 is authorized on simulation. See [what 2c's tasks inherit](#what-2cs-tasks-inherit-2026-08-24).
-5. **Tests: 1100 passed, 0 failed, 0 INDETERMINATE — 2026-08-24, 870.98 s on a box at 4.3 GB available (read after the run, not during it).** **`pixi run test` is the full sweep and every end-of-task verification must run it; `test-fast` and `test-ci` are NOT evidence** — the full sweep has caught **seven** things a fast run could not. **Every run prints `RSS measurement validity`, including at zero**; a nonzero count is INDETERMINATE, neither pass nor fail.
+5. **Tests: 1104 passed, 0 failed, 0 INDETERMINATE — 2026-08-24, 886.72 s on a box at 4.0 GB available (read after the run, not during it).** **`pixi run test` is the full sweep and every end-of-task verification must run it; `test-fast` and `test-ci` are NOT evidence** — the full sweep has caught **seven** things a fast run could not. **Every run prints `RSS measurement validity`, including at zero**; a nonzero count is INDETERMINATE, neither pass nor fail.
 6. **Verify a fresh checkout with `pixi run test && pixi run typecheck && pixi run lint`**, plus `pixi run pre-commit run --all-files` before every commit.
 7. **THE METHOD IS THE PRE-FLIGHT AND IT LIVES IN EXACTLY ONE PLACE:** [`phase1-to-phase2-handoff.md`](docs/superpowers/notes/phase1-to-phase2-handoff.md) §1 — (a0)–(a9), (a)–(k), the standing rules, the fixture facts, **and the ten 2c added: (i2b) a high-ceiling control converts a null into a LOCATED null, (i2c) a sign-unstable benefit is worse than a small one, (j5) a second instrument is a cross-check only if it measures the same quantity under the same conditions, (j6) bound the unmeasured region before measuring it, (i11) state refutation clauses in BOTH directions, (a2b) make an invalid value UNAVAILABLE rather than caveated, (h2) a metric may only be stratified by axes at its OWN granularity, (j7) never stratify by a quantity the treatment can move, (c4) a validator must be specified in the coordinates and the EXTENT the validated object actually has, and (e2) prove a mutant differs from the original before recording a surviving mutation — (e) now has SIX causes, and the sixth makes you distrust a test that is fine.** **Do not restate it here** — the two copies drifted once already.
 8. **CI IS GREEN and the deliberate red is CLOSED** (2026-08-22, by the repair its own criterion chose: the CI fixture was **enlarged**, the bound was **not** widened and the test was **not** marked). **CI runs `-m "not machine"` and therefore executes exactly ONE of the nine RSS assertions**, so it is not a substitute for the local sweep. See [THE CI FIXTURE DECISION](#the-ci-fixture-decision--taken-measured-and-verified-2026-08-22).
@@ -5067,6 +5067,110 @@ recorded as one.** Editing it now would silently change an arm of the measuremen
   `warm_start_interpolation_rule`, `warm_start_spiral_bound`, `warm_start_tie_break`, with tests,
   landed in 2a. **Task 1 adds them to `FIT_RELEVANT_FIELDS`; it does not invent them**, and
   assuming otherwise would be discovered as a duplicate field rather than as a failure.
+
+### What plan Task 1 established (done 2026-08-24 — read before touching `FIT_RELEVANT_FIELDS`, the goldens or `ALGORITHM_VERSION`)
+
+**THE TASK WAS ALREADY IMPLEMENTED, IN PHASE 2a TASK 1, ON 2026-08-11.** `_WARM_START_FIT_FIELDS`
+has been unioned into `FIT_RELEVANT_FIELDS` since then, with the audit exclusion, the (a2)
+movement test, a parametrized per-field test and the reversal hop. **Found by `rg`, not by
+`git log`** — a shallow log over 2c shows no warm-start-field commit because the commit is in 2a.
+
+**Measured 2026-08-24, from a payload built by hand in the pre-flight rather than from the test
+fixture** — so this shares no path with `tests/test_hashing.py`:
+
+| change | `fit_hash` |
+|---|---|
+| baseline | `1eb1fd731b4ae8d6` — **equals `GOLDEN_FIT_HASH`** |
+| `warm_start_coarse_stride` 8 → 16 | `30fc9d13a1528bae` |
+| `warm_start_enabled` true → false | `df42f1bd9be641a6` |
+| `warm_start_spiral_bound` 4 → 7 | `aefb203e7af373e8` |
+| `warm_start_interpolation_rule` → a second rule | `a3ae05ef174cd783` |
+| `audit_subsample`, `audit_stratify` | **unmoved** |
+
+#### THE GOLDENS DO NOT MOVE, AND THAT IS THE REVERSAL DISCIPLINE WORKING RATHER THAN BEING SKIPPED
+
+The plan states as an invariant that the three `GOLDEN_*` constants move and are verified by
+reversal. **They move only when the hashed field set moves.** It moved on 2026-08-11 and
+`_HISTORY` already carries that hop with the pre-warm-start digests
+`faf2d107bab48b06 / bb28cb8d4bffa049 / af313190251af95f`. **Re-deriving them now would be
+regeneration with nothing to reverse against** — which is precisely what the discipline exists to
+prevent, so the rule is upheld by *not* applying it here.
+
+#### THE `ALGORITHM_VERSION` BUMP MOVED FROM TASK 1 TO TASK 5, AND THE PLAN'S JUSTIFICATION FOR TASK 1 WAS FALSE
+
+The constant's rule is *"bump when and only when a change alters `theta_hat` or `log_lik` for some
+input that previously fit"*. **Task 1 alters no `θ̂`**: it writes no fitting code, and adding a
+field to an allowlist moves a **hash**, not an optimum. **Task 5 is where a default run begins
+warm-starting**, so that is the commit the rule names. Bumping at Task 1 would put the version
+boundary in a different place from the behaviour boundary — the same defect one task earlier.
+
+> **AND THE DEFECT THIS EXPOSED HAS BEEN IN THE TREE SINCE 2026-08-11.** `WarmStart.enabled`
+> defaults to **`True`**, sits in `fit_hash`, and **nothing consumes it** — `run.py` never mentions
+> `warm_start` and calls `fit` with no `x0`. **So every store written since then asserts
+> `warm_start_enabled: true` over fits that are entirely cold.** After Task 5 the identical config
+> produces warm-started fits **under the same `fit_hash`**, and a resume mixes both populations in
+> one store: converged-looking fits at a different optimum, §11.1's worst failure mode arriving
+> through the config instead of through a stale cache.
+>
+> **THE OBVIOUS REPAIR IS THE WRONG ONE.** `Screening` is *"refused at layer 3 until Phase 4"* and
+> mirroring it here **would refuse every run**, because `screening.enabled` defaults to `False`
+> and this defaults to `True`. **The bump at Task 5 is the only thing that separates the two
+> populations**, and no store can be repaired after the fact.
+
+#### THE CLASSIFICATION IS WHAT THE TASK ACTUALLY DELIVERED, AND IT IS EXECUTABLE RATHER THAN PROSE
+
+The five warm-start fields entered on **2026-08-11**; `data_uri` was named *"the last self-reported
+identity in either allowlist"* on **2026-08-12**. **So the vocabulary that would have classified
+them arrived a day late, and they were the only unclassified members of the allowlist.**
+
+`FIT_RELEVANT_FIELDS` is now the **union of three declared classes and has no members of its
+own**, so a field cannot be added without choosing one:
+
+| class | who is authoritative | the gate that makes the label real |
+|---|---|---|
+| **REQUEST** | the config — the user is asking | reachable from a config file, asserted over the whole class |
+| **IDENTITY, STAMPED** | the installed code | `normalize` **and** `load` refuse a config supplying one; `config.model._STAMPED_KEYS` now **reads** the constant instead of restating it |
+| **IDENTITY, MEASURED** | the input, read at stage 4a | `Config` declares no field for it, and `Config` is strict — the model is the gate, so there is no deny-list to drift |
+
+**All five warm-start settings are REQUESTS.** `warm_start_coarse_stride` asks for a stride; it
+does not claim a store on disk **was** decimated at one. **That claim is Task 4's cross-store gate,
+which compares the two stores' recorded strides positionally and never infers one from the other.**
+
+> **THE FORBIDDEN FOURTH CLASS IS DECLARED NOWHERE, AND THAT IS THE DESIGN.** A **self-reported
+> identity** — a value identifying something outside the config, supplied by the config anyway — is
+> whatever the three classes do not cover. **The three covering everything is what proves it
+> empty.** `data_uri` and `metamer_version` were both that, and `data_uri` was **wrong in both
+> directions at once**: moving a file invalidated a valid resume; editing a file in place at a
+> fixed URI permitted an invalid one.
+
+#### AND ONE OF THIS TASK'S OWN NEW TESTS HAD AN UNREACHABLE ASSERTION, CAUGHT BY READING *WHICH* ERROR FIRED
+
+`test_every_request_field_is_one_a_config_can_actually_supply` was written against
+`fit_payload(...)`. Under the mutation that drops a `warm_start_*` key it went red — **and for the
+wrong reason**: `_subset` raises `KeyError` on any missing allowlisted field, and
+`FIT_RELEVANT_FIELDS` is **defined** as a union containing `REQUEST_FIELDS`, so the `KeyError`
+fires first and **the assertion below it can never execute**. Taking the raw `Config.to_payload`
+instead puts the assertion on its own path, and it now fires with its own message.
+
+> **A MUTATION GOING RED IS NOT EVIDENCE THE TEST YOU WROTE IS THE THING THAT CAUGHT IT.** This is
+> (e)'s third cause — two independent guards, either sufficient — found inside a test rather than
+> inside the product, and it is the companion to (e2) from Task 0: **there, a green suite hid a
+> no-op mutation; here, a red suite hid a dead assertion.** Both are answered by reading the
+> failure rather than its colour. The two guards are cross-commented, each naming the other.
+
+#### THREE SMALLER THINGS
+
+- **`interpolation_rule` was the fifth of five and was missing from the parametrization**, whose
+  own docstring argues that *"a flattening that emitted four of the five correctly and dropped one
+  would sail through a single-field test"*. It was covered by the golden payload, so nothing was
+  unguarded — but **a five-case argument backed by four cases is the shape that earns the wrong
+  conclusion.** Added, alongside the class-level check that makes a sixth setting fail anyway.
+- **`config.model._STAMPED_KEYS` was the same two names written twice.** A third stamped identity
+  added in one place only would be refused by `normalize` and not by `load`, so the refusal a user
+  met would depend on whether they came through a file. It now reads `STAMPED_IDENTITY_FIELDS`.
+- **`STAGE_4A_FIELDS` is now an alias of `MEASURED_IDENTITY_FIELDS`, not a copy** — and the two
+  concepts are different ones (**who** is authoritative versus **when** the value arrives) that
+  coincide today. Aliasing means a future divergence is a deliberate edit rather than a drift.
 
 ---
 
