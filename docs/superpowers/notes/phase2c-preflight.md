@@ -828,3 +828,120 @@ compares the two implementations point by point on a fixture the harness can sti
   row and the edge case where a fine point has **no coarse point below or right of it** never
   occurs. **The fixture's grid size is deliberately not a multiple of the stride.**
 - **A square grid.** `n_y == n_x` makes a transposed index and a correct one agree. **Not square.**
+
+---
+
+## Plan Task 4 — the barrier and the cross-store gate, audited before any code
+
+**THE BRIEF** is the plan's Task 4: pass 2 may not start until pass 1 is complete, and may not
+consume a pass-1 store that is not the one its configuration describes. The barrier is
+`completed_tiles(pass1_store).all()` — **an existing, tested predicate, no new completion
+concept**. The gate checks the **stride explicitly and positionally**, the **parent geometry
+fingerprint**, and the **candidate set positionally**. Refusals **name what would lift them**.
+
+### (a5) THE BRIEF ENUMERATES THREE CHECKS AND THE FIT IDENTITY HAS TWELVE FIELDS
+
+The gate as specified compares the stride, the parent geometry and the candidate set. **It says
+nothing about the other nine members of `FIT_RELEVANT_FIELDS`** — `objective`, `engine`, `seed`,
+`variable`, `signal_terms`, `algorithm_version`, `registry_version`, and the **four remaining
+warm-start settings.**
+
+**A warm start taken from a store fitted under a different objective is exactly as wrong as one
+taken at a different stride**, and it is wrong in the same silent way: every array the right
+shape, every value finite, every status `ok`, and `θ̂` at an optimum of a different likelihood.
+**An enumerated gate is a denylist wearing an allowlist's clothes** — it protects the fields
+somebody thought of, and the ones added later default to unprotected. That is the shape (a2e) was
+promoted for.
+
+> **AND THIS TASK'S OWN FINDING FROM TASK 3 IS THE PROOF.** `spiral_bound`'s unit was ambiguous
+> until yesterday. **If pass 1 and pass 2 disagree about what `spiral_bound` counts, the warm
+> starts are wrong** — and a gate that checks only the stride would pass that through. Whatever
+> the gate checks about the stride it must check about **every** fit-relevant field, and the only
+> construction that survives a field being added is one derived from the allowlist rather than
+> from a list somebody maintains.
+
+### THE COMPLETE CHECK IS ONE EQUALITY, AND THE GEOMETRY DIFFERENCE CANCELS EXACTLY
+
+The obvious complete gate — *compare the two stores' `fit_hash`* — **always fails**, because
+pass 1's `fit_hash` is computed over the **decimated** `geometry_hash` and pass 2's over the
+**parent's**. That difference is the whole point of pass 1 and is not a mismatch.
+
+**The cancellation is available and it is exact.** Both passes can compute
+`config.fit_hash(parent_geometry_hash)`: pass 1 knows the parent rollup because it opened the
+parent before decimating, and pass 2 computes it directly. **So pass 1 records
+`parent_fit_hash = config.fit_hash(parent_rollup)`, and the gate is `parent_fit_hash ==
+config.fit_hash(this run's rollup)`.** One equality, covering **every** field in the allowlist —
+including ones nobody enumerated and ones not yet added — with the geometry difference subtracted
+rather than special-cased.
+
+**IT IS NOT A SELF-REPORTED IDENTITY** (a2). It is a hash of the config pass 1 **actually ran
+under**, paired with the geometry of the input pass 1 **actually opened**. Both are facts about
+pass 1, recorded by pass 1.
+
+### BUT A HASH CANNOT NAME WHAT DIFFERS, AND THE PLAN REQUIRES THAT IT DOES
+
+*"Refusals name what would lift them. A refusal that says what would lift it is planning
+information; one that does not is a wall."* **A digest mismatch is a wall.**
+
+So pass 1 records **`parent_fit_payload`** as well — the allowlist subset of its own payload with
+the parent rollup substituted, about a dozen small values — and the gate diffs it **key by key**
+to name the first difference. **This is a deliberate duplication and the store already contains
+its precedent**: `geometry_components` sits beside `geometry_hash` for exactly this reason, §13.3
+requiring that *"a mismatch has to be diagnosable from the store alone"*. **A test asserts
+`digest(parent_fit_payload) == parent_fit_hash`**, so the two cannot drift.
+
+**And the key SETS are compared before the values**, or a field present in the allowlist and
+absent from the stored payload is a comparison that silently does not happen — (a0)'s
+excluded-versus-missing register, at a diff with a carve-out.
+
+### THE STRIDE KEEPS ITS OWN NAMED REFUSAL, AND THE REDUNDANCY IS DELIBERATE
+
+The key-by-key diff would already name `warm_start_coarse_stride`. **The stride is checked
+separately anyway**, because the two refusals carry different information: a generic diff says
+*"this field differs"*, while the stride's own message can say **what it does** — a pass-1 store
+built at stride 4 consumed by a run configured for stride 8 produces **a valid-looking source map
+with every index in range and every warm start taken from the wrong cell**, which is the Task 11
+wrong-candidate-at-index-1 shape one field over.
+
+**Both guards are cross-commented, each naming the other**, per the standing rule: a later
+simplification will otherwise remove one on the grounds that it is dead, and it is dead only
+because the other is there.
+
+### (a0) AND TASK 2's `coarse_stride` ATTR BECOMES A SECOND COPY, SO IT GOES
+
+Task 2 recorded `coarse_stride` as a standalone attr. Once `parent_fit_payload` carries
+`warm_start_coarse_stride`, **the store holds the stride twice** — and two copies of one value
+drift the moment either is written from a different place. **The standalone attr is removed and
+the payload is the single source.** No store exists yet, so nothing is invalidated; Task 2's test
+moves with it.
+
+**Recorded rather than done quietly**, because it edits a decision made one task ago.
+
+### THE BARRIER IS THE EXISTING PREDICATE, CONFIRMED BY READING RATHER THAN ASSUMED
+
+D11's whole argument is that **nothing acquires a second meaning**, so the barrier must be
+`completion.completed_tiles(pass1_store).all()` and not a reimplementation. Checked: the function
+exists, is tested, and reads the store's own bitmap — and the bits are bound to the store's
+`StoreShape`, which for pass 1 is the decimated grid. **So "complete" means the same thing it
+means everywhere else, about a different grid.**
+
+**The refusal names the OUTSTANDING TILES, not the count.** A count is a wall; a list of tile
+indices tells the user which region to re-run and is what makes *"resume pass 1"* actionable.
+
+### (i2) EVERY REFUSAL HERE IS A PURE NEGATIVE AND NEEDS ITS POSITIVE CONTROL
+
+Five refusals, and each one is trivially producible by a gate that refuses everything. **Each is
+paired with the same fixture minus the injected difference proceeding** — not merely "not
+raising", but the gate returning and the consuming run reaching the warm-start path. The plan
+already demands this for the stride; it applies to all five.
+
+### WHAT WOULD MAKE THIS TASK'S TESTS VACUOUS, NAMED IN ADVANCE
+
+- **A pass-1 store built by hand rather than by `run(decimate=True)`.** Then the attrs are
+  whatever the test wrote, and the gate is checked against a fixture rather than against the
+  thing it will actually meet. **The fixtures come from real runs.**
+- **A single-tile pass-1 store.** `completed_tiles(...).all()` on a one-tile store is `True` after
+  one write, so an incomplete store cannot be constructed. **The barrier fixture is multi-tile**,
+  which Task 2 already had to solve — the coarse grid fits in one tile at the default budget.
+- **A candidate set of one.** A permuted candidate list is the same list when there is one
+  candidate, so the positional comparison cannot be distinguished from a set comparison.
