@@ -623,6 +623,34 @@ drift from them, and the test checks it against a **hand-computed literal** rath
 re-deriving it — re-deriving would be an oracle sharing its subject's derivation path (j).
 Derive the field, hand-compute the check.
 
+#### AND THE SAME RULE ON A NEGATIVE RESULT: "CHECKED" IN A PRE-FLIGHT IS A CLAIM
+
+> **A pre-flight's own findings are claims like any other, and a NEGATIVE one — "checked, this
+> is not affected" — is the least likely to be re-examined.** It arrives inside a document
+> written to be sceptical, so its authority is borrowed from the surrounding scepticism rather
+> than earned. **Write the command that produced it, or do not write "checked".**
+
+**A NEGATIVE RESULT IS WORSE THAN A WRONG NUMBER HERE, BECAUSE IT IS WHAT LICENSES AN ACTION.**
+A wrong figure invites a recomputation; *"checked, unaffected"* closes the question and permits
+the very thing it was supposed to gate.
+
+Worked instance, Phase 2c Task 2, 2026-08-24, **caught by the author before commit and not by
+any test**. The pre-flight for the decimation had found that the input contract leaves the
+spatial dimension names free, and asked whether other consumers had already assumed `y`/`x`. The
+entry said: *"Checked: `assemble_tile` and `geometry_components` index positionally, so the
+exposure is the decimation this task adds and not a pre-existing defect."*
+
+**That sentence was written before the code was read**, and it is false in the more important
+half: `tiling.py` uses the literal names in **four** places, including `assemble_tile`'s own
+`isel`. **The claim's consequence was the dangerous part** — it would have licensed writing a
+name-based decimation as *"consistent with the existing convention"*, becoming the fifth site,
+and it would have recorded a pre-existing defect as absent. What replaced it is four file-and-line
+references and a table of the two possible closers.
+
+**The tell is the word doing the work.** *"Checked"*, *"verified"*, *"confirmed"* and
+*"already handled"* in one's own document are exactly where to demand the grep, because they are
+the places a reader — including the author, later — will not look again.
+
 **AND THE FIRST RECOMPUTATION THAT CONFIRMED RATHER THAN CORRECTED IS ITSELF INFORMATION.**
 Phase 2b Task 5 re-fitted Task 4's published ladder from Task 4's own table and got slope
 **1050.75** against the recorded 1049, SE **223.6** against 222, excess **0.558 SE** against
@@ -1524,6 +1552,42 @@ derivative zero). A fixture at `n_eff = 12` **cannot test a floor at 2.0**. And 
 zeros cannot test a read**: zarr does not write a chunk equal to the fill value, so a
 zero-filled store serves every read from the fill value — measured, **0 bytes and 0 keys** for a
 read that returned the right number of correct-looking values (Phase 2a Task 6).
+
+### (i12) A UNIFORM FIXTURE SET CANNOT TEST A DEGREE OF FREEDOM THE CONTRACT LEAVES OPEN
+
+> **Where a contract leaves something FREE, check whether any fixture exercises the freedom.**
+> A suite uniform in an unconstrained dimension gives **no coverage of it**, and every
+> implementation that accidentally depends on the uniform value passes. **The tell is a property
+> shared by every fixture that nothing requires.**
+
+**THIS IS (i)'s FAMILY AT THE LEVEL OF THE FIXTURE SET RATHER THAN A SINGLE FIXTURE, AND THAT IS
+WHY IT IS HARDER TO SEE: NO INDIVIDUAL FIXTURE LOOKS WRONG.** (i) asks *"can this fixture express
+the defect?"* and gets a defensible "yes" from each one separately. The question here is
+*"does the SET vary the thing the contract does not pin?"*, and it can only be asked of all of
+them at once — which is why it survives ordinary review, where files are read one at a time.
+
+**The cheap form of the check is a grep, not a reading.** Enumerate what the contract fixes, then
+enumerate what every fixture happens to share; the difference is the untested freedom.
+
+Worked instance, Phase 2c Task 2, 2026-08-24. `input.check_input_contract` requires exactly three
+dimensions with `dims[0] == "time"` and **says nothing about the other two names** — its own
+message calls the contract *"three, mapping to (time, y, x)"*, which is positional. **Every input
+fixture in the project used `("time", "y", "x")`: sixteen call sites across ten test modules, no
+exceptions.** So a decimation written `isel(y=…, x=…)` — which is how the plan's brief spelled
+it — **passes the entire suite and raises on the first real gridded product**, which routinely
+uses `latitude`/`longitude`.
+
+**AND THE DURABLE FIX IS THE FIXTURE, NOT THE IMPLEMENTATION.** Correcting the one call site
+leaves the freedom untested for the next author. `tests/test_decimate.py` carries **the first
+fixture in the project whose spatial dims are named otherwise**, so the property is now pinned
+rather than merely currently-correct.
+
+> **THE SAME QUESTION IS OWED OF EVERY OTHER SHARED PROPERTY, AND IT HAS NOT BEEN ASKED.** What
+> else is uniform across all sixteen input fixtures and unconstrained by the contract? **dtype,
+> chunk layout, coordinate monotonic direction, time units** are each a candidate for exactly
+> this defect. A decreasing latitude axis is the ordinary case in real altimetry and appears in
+> no fixture here. **Recorded as an open question rather than swept, because the sweep is cheap
+> and the finding may not be.**
 
 ### (i10) A PASSING CRITERION CAN BE WEAKER THAN IT APPEARS, AND THE COMPARISON THAT REVEALS IT IS BAND-VERSUS-UNCERTAINTY
 
