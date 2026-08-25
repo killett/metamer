@@ -68,6 +68,7 @@ from metamer.batch.completion import (
     resume_tile_side,
     tile_index,
 )
+from metamer.batch.decimate import decimated_handle
 from metamer.batch.geometry import geometry_components, geometry_hash
 from metamer.batch.input import ContractReport, InputHandle, open_input
 from metamer.batch.input import check_contract as check_input_contract
@@ -476,6 +477,7 @@ def run(
     recalibrate: bool = False,
     calibration_cache_path: Path | str | None = None,
     calibration_ladder: tuple[int, ...] | None = None,
+    decimate: bool = False,
 ) -> RunReport:
     """Validate a configuration, fit every tile, and write the store.
 
@@ -560,6 +562,22 @@ def run(
             and a suite that could not choose its own could not exercise this
             path at all -- which would leave *"a default run does not
             calibrate"* as a pure negative with no positive control (i2).
+        decimate: Run over a DECIMATED view of the input -- Phase 2c's pass 1
+            (D11). The stride comes from `config.warm_start.coarse_stride`, so
+            it has exactly one source and no within-run mismatch is
+            expressible; the store records the parent's geometry fingerprint
+            and that stride, and everything else -- tiling, the completion
+            bitmap, `resume_tile_side`, the three hashes, `flush_on_sigterm` --
+            is unchanged, because **pass 1 is this function over a different
+            input rather than a second mechanism**.
+
+            **The store this produces is a PERMANENT artifact, not scratch.** It
+            is section 11.2's cold audit reference and the `/detail/` default
+            source, so it must survive pass 2's completion.
+            `decimate.pass1_store_path` derives where it goes and carries the
+            rule; this parameter does not choose the path, because a caller that
+            passed the same `store_path` for both passes would have pass 2
+            resume pass 1's coarse store.
 
     Returns:
         What the run established.
@@ -672,6 +690,32 @@ def run(
             # The fingerprint is taken AFTER the contract, never before: 13.7.
             components = geometry_components(handle)
             rollup = geometry_hash(components)
+
+            # PASS 1 IS THIS FUNCTION OVER A DIFFERENT INPUT (D11). Everything
+            # below is untouched: same tiling, same bitmap, same resume, same
+            # three-hash machinery. The parent's fingerprint is taken FIRST,
+            # from the undecimated handle, because it is what binds the two
+            # stores; then the handle is replaced and the contract and
+            # fingerprint are retaken on the decimated view, so every downstream
+            # consumer sees the coarse grid and nothing carries a parent grid.
+            decimation: dict[str, Any] | None = None
+            if decimate:
+                # ONE SOURCE FOR THE STRIDE. It is read from the config, the
+                # same value performs the decimation and is written to the
+                # attrs, so no within-run mismatch is expressible. A separate
+                # parameter would be a second source that could disagree with
+                # the config this store's `fit_hash` is computed from. The
+                # CROSS-store mismatch is real and is the barrier's gate, which
+                # compares the two stores' recorded strides positionally.
+                stride = int(config.warm_start.coarse_stride)
+                decimation = {
+                    "parent_geometry_hash": rollup,
+                    "coarse_stride": stride,
+                }
+                handle = decimated_handle(handle, stride)
+                contract = check_input_contract(handle)
+                components = geometry_components(handle)
+                rollup = geometry_hash(components)
 
         # The lint needs a sampling interval, so it cannot run in a data-free
         # layer. It is a warning and cannot move the exit code, which is what
@@ -874,6 +918,16 @@ def run(
             else TileSideBasis(source_attrs["tile_side_basis"])
         )
         if Path(store_path).exists():
+            # **EACH STORE IS GUARDED AGAINST ITS OWN GRID, AND UNDER A TWO-PASS
+            # RUN THAT MEANS THE TWO STORES HOLD DIFFERENT TILE SIDES. THAT IS
+            # CORRECT AND IT READS AS WRONG.** `grid` here is the contract's,
+            # which for pass 1 is the DECIMATED grid -- 1/k^2 the size -- so the
+            # same budget derives a different side for the two passes, and a
+            # budget change between them is legal and moves them independently.
+            # **Do not "fix" this by forcing one side across both stores**: that
+            # either exceeds the budget in one pass or refuses a resume that is
+            # geometrically identical, which is the failure this function's own
+            # docstring says the rule-over-the-side exists to prevent.
             side = resume_tile_side(
                 store_path,
                 derived_side=side,
@@ -894,6 +948,7 @@ def run(
             # `effective_basis` for why a recompute carries the SOURCE's.
             tile_side_basis=effective_basis,
             calibration=calibration_record,
+            decimation=decimation,
             memory_budget_requested_gb=requested_budget_gb,
             max_iter=iteration_cap,
             floor=measured_floor,

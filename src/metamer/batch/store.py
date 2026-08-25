@@ -341,6 +341,7 @@ def provenance_attrs(
     warm_start_used: bool = False,
     source: Mapping[str, Any] | None = None,
     calibration: Mapping[str, Any] | None = None,
+    decimation: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build the root attrs of a store.
 
@@ -356,6 +357,20 @@ def provenance_attrs(
         tile_sides: Tile side per regressor regime, both branches, because one
             config field moves it by 3.44x in area and a sizing figure without
             its regime is not a figure.
+        decimation: For a PASS-1 store only: `parent_geometry_hash`, the
+            fingerprint of the **undecimated** input, and `coarse_stride`, the
+            `k` the decimation actually used. **Omitted entirely for an ordinary
+            store, and the absence is what says "not a pass-1 store"** -- these
+            are not in `REQUIRED_ATTRS` and no schema bump is owed, because
+            nothing before Phase 2c Task 2 could produce a decimated store.
+
+            **The parent's HASH, not its components.** `geometry_components` is
+            already a required attr holding full coordinate value arrays --
+            10 800 numbers for a 3600 x 7200 grid -- and "record the parent's
+            geometry so the derivation can be checked" reads as storing those
+            twice. Sixteen hex characters and one integer are what the
+            cross-store gate needs; reproducing the decimated fingerprint from
+            the parent's is a test's job, and a test has the dataset.
         tile_side_basis: Which of 13.4's three states produced those sides.
             **Required, and required with no default**, because a default is a
             self-report: the one basis a caller would omit is the one it is least
@@ -500,6 +515,24 @@ def provenance_attrs(
     }
     if calibration is not None:
         attrs["calibration"] = json.loads(hashing.canonical_json(calibration))
+    if decimation is not None:
+        # **PRESENT ONLY ON A PASS-1 STORE, AND ITS ABSENCE IS THE ANSWER.**
+        # A store without these keys is not a decimated one, on the `source_*`
+        # and `calibration` precedent -- so they are NOT in `REQUIRED_ATTRS`,
+        # which would refuse every store written before this task.
+        #
+        # **AND NO SCHEMA BUMP IS OWED**, which is the reflex worth resisting.
+        # A bump is for a question an older store CANNOT answer, and every
+        # earlier store's silence here is unambiguous: nothing before Phase 2c
+        # Task 2 could produce a decimated store at all. Same reasoning as the
+        # `calibration` block, and the opposite of `memory_budget_requested_gb`,
+        # whose `None` is meaningful and therefore needed v5.
+        attrs.update(
+            {
+                "parent_geometry_hash": str(decimation["parent_geometry_hash"]),
+                "coarse_stride": int(decimation["coarse_stride"]),
+            }
+        )
     if source is not None:
         attrs.update(
             {
