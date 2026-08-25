@@ -341,7 +341,12 @@ def test_a_decimated_run_records_the_parents_fingerprint_and_the_stride(tmp_path
     handle = open_input(uri, "sla")
     parent_rollup = geometry_hash(geometry_components(handle))
     assert attrs["parent_geometry_hash"] == parent_rollup
-    assert attrs["coarse_stride"] == 3
+    # THE STRIDE LIVES IN `parent_fit_payload` AND NOWHERE ELSE. It was a
+    # standalone `coarse_stride` attr until Task 4 put the parent fit payload
+    # in, which carries `warm_start_coarse_stride` -- and two copies of one
+    # value drift the moment either is written from a different place.
+    payload: Any = attrs["parent_fit_payload"]
+    assert payload["warm_start_coarse_stride"] == 3
 
     decimated = geometry_hash(geometry_components(decimated_handle(handle, 3)))
     assert attrs["geometry_hash"] == decimated
@@ -357,10 +362,11 @@ def test_an_ordinary_run_carries_no_decimation_attrs(tmp_path):
     attrs and their absence is meaningful, rather than required attrs that would
     refuse every store written before this task.
 
-    Bug this catches: writing the keys unconditionally with a `None` or a `0`
-    stride. Then "not decimated" and "decimated at an unrecorded stride" become
-    the same bytes, and a cross-store gate reading `attrs.get("coarse_stride")`
-    cannot tell an ordinary store from a coarse one.
+    Bug this catches: writing the keys unconditionally with a `None` or an
+    empty payload. Then "not decimated" and "decimated but unrecorded" become
+    the same bytes, and the cross-store gate reading a missing key through
+    `attrs.get` compares `None` against `None` and accepts any ordinary store
+    as pass 1 for anything.
 
     The paired positive is the test above: the same `run`, one flag apart, does
     write them.
@@ -370,7 +376,8 @@ def test_an_ordinary_run_carries_no_decimation_attrs(tmp_path):
     run(_run_config(tmp_path, uri), out)
     attrs = dict(zarr.open_group(str(out), mode="r").attrs)
     assert "parent_geometry_hash" not in attrs
-    assert "coarse_stride" not in attrs
+    assert "parent_fit_hash" not in attrs
+    assert "parent_fit_payload" not in attrs
 
 
 def test_a_decimated_run_fits_exactly_the_points_isel_selects(tmp_path):

@@ -358,19 +358,29 @@ def provenance_attrs(
             config field moves it by 3.44x in area and a sizing figure without
             its regime is not a figure.
         decimation: For a PASS-1 store only: `parent_geometry_hash`, the
-            fingerprint of the **undecimated** input, and `coarse_stride`, the
-            `k` the decimation actually used. **Omitted entirely for an ordinary
-            store, and the absence is what says "not a pass-1 store"** -- these
-            are not in `REQUIRED_ATTRS` and no schema bump is owed, because
-            nothing before Phase 2c Task 2 could produce a decimated store.
+            fingerprint of the **undecimated** input; `parent_fit_hash`,
+            `config.fit_hash(parent_geometry_hash)`; and `parent_fit_payload`,
+            the allowlist subset that digest was taken over. **Omitted entirely
+            for an ordinary store, and the absence is what says "not a pass-1
+            store"** -- these are not in `REQUIRED_ATTRS` and no schema bump is
+            owed, because nothing before Phase 2c Task 2 could produce a
+            decimated store.
+
+            **`parent_fit_hash` IS THE CROSS-STORE GATE, AND THE GEOMETRY
+            DIFFERENCE CANCELS EXACTLY.** Comparing the two stores' own
+            `fit_hash` always fails -- pass 1's is over the DECIMATED geometry
+            and pass 2's over the parent's -- and that difference is the point
+            of pass 1 rather than a mismatch. Substituting the parent rollup on
+            both sides subtracts it, leaving **one equality that covers every
+            field in `FIT_RELEVANT_FIELDS`**, including the ones an enumerated
+            gate would not have listed.
 
             **The parent's HASH, not its components.** `geometry_components` is
             already a required attr holding full coordinate value arrays --
             10 800 numbers for a 3600 x 7200 grid -- and "record the parent's
             geometry so the derivation can be checked" reads as storing those
-            twice. Sixteen hex characters and one integer are what the
-            cross-store gate needs; reproducing the decimated fingerprint from
-            the parent's is a test's job, and a test has the dataset.
+            twice. Reproducing the decimated fingerprint from the parent's is a
+            test's job, and a test has the dataset.
         tile_side_basis: Which of 13.4's three states produced those sides.
             **Required, and required with no default**, because a default is a
             self-report: the one basis a caller would omit is the one it is least
@@ -527,10 +537,27 @@ def provenance_attrs(
         # Task 2 could produce a decimated store at all. Same reasoning as the
         # `calibration` block, and the opposite of `memory_budget_requested_gb`,
         # whose `None` is meaningful and therefore needed v5.
+        #
+        # **THE PAYLOAD AND ITS DIGEST BOTH GO IN, WHICH IS A DELIBERATE
+        # DUPLICATION WITH A PRECEDENT DIRECTLY ABOVE**: `geometry_components`
+        # sits beside `geometry_hash` because 13.3 requires a mismatch to be
+        # diagnosable from the store alone. The digest is the complete gate --
+        # it covers every allowlisted field, including ones added later -- and
+        # the payload is what lets the refusal NAME the field that differs. A
+        # digest mismatch on its own is a wall.
+        #
+        # **THE STRIDE IS NOT ALSO A TOP-LEVEL ATTR.** It was, until this task;
+        # it is in `parent_fit_payload` under `warm_start_coarse_stride`, and
+        # two copies of one value drift the moment either is written from a
+        # different place.
+        parent_payload = dict(decimation["parent_fit_payload"])
         attrs.update(
             {
                 "parent_geometry_hash": str(decimation["parent_geometry_hash"]),
-                "coarse_stride": int(decimation["coarse_stride"]),
+                "parent_fit_hash": str(decimation["parent_fit_hash"]),
+                "parent_fit_payload": json.loads(
+                    hashing.canonical_json(parent_payload)
+                ),
             }
         )
     if source is not None:

@@ -105,6 +105,7 @@ from metamer.core.criteria import Criterion
 from metamer.core.engines.kalman import KalmanEngine
 from metamer.core.engines.protocol import Engine
 from metamer.core.fit import fit
+from metamer.core.hashing import digest, fit_payload
 from metamer.core.lint import Finding
 from metamer.core.memory import (
     CALIBRATION_LADDER,
@@ -708,9 +709,18 @@ def run(
                 # CROSS-store mismatch is real and is the barrier's gate, which
                 # compares the two stores' recorded strides positionally.
                 stride = int(config.warm_start.coarse_stride)
+                # THE PARENT'S FIT IDENTITY, TAKEN BEFORE THE HANDLE MOVES.
+                # `fit_hash(parent rollup)` is what pass 2 will compute for
+                # itself, so recording it here makes the cross-store gate one
+                # equality over the WHOLE allowlist rather than an enumeration
+                # of the fields somebody thought of. The payload goes in beside
+                # it so a refusal can name the field that differs -- the same
+                # pairing as `geometry_components` beside `geometry_hash`.
+                parent_payload = fit_payload(config.to_payload(rollup))
                 decimation = {
                     "parent_geometry_hash": rollup,
-                    "coarse_stride": stride,
+                    "parent_fit_hash": digest(parent_payload),
+                    "parent_fit_payload": parent_payload,
                 }
                 handle = decimated_handle(handle, stride)
                 contract = check_input_contract(handle)
