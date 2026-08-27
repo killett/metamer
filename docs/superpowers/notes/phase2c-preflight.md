@@ -945,3 +945,271 @@ already demands this for the stride; it applies to all five.
   which Task 2 already had to solve — the coarse grid fits in one tile at the default budget.
 - **A candidate set of one.** A permuted candidate list is the same list when there is one
   candidate, so the positional comparison cannot be distinguished from a set comparison.
+
+---
+
+## Plan Task 5 — the two-pass driver, audited before any code
+
+**THE BRIEF** is the plan's Task 5 plus [*What plan Task 5 inherits*](../../../PROGRESS.md):
+`run` grows a two-pass mode — decimate, fit cold, barrier, fit warm — with no new tiling, no new
+store schema and no warm-start cache. Warm-starting is disableable by config and its use is
+recorded in provenance. `ALGORITHM_VERSION` is hand-bumped here, unconditionally, in its own
+commit, moving all three `GOLDEN_*` constants. 2c computes and records the source-index array,
+the exhaustion count, the ladder-rung distribution and the two passes' wall clocks. Pass 1's
+store is read one tile's worth of sources at a time and never loaded whole, asserted by peak RSS.
+README's two-pass documentation falls due here.
+
+### (a4) THE BRIEF'S WORKED EXAMPLE FOR UNCONDITIONALITY DOES NOT DEMONSTRATE A COLLISION
+
+The requirement is right and is implemented as written. **Its stated justification is not**, and
+recomputing it is what (a4) is for.
+
+The brief says: *"A user who disables warm-starting after Task 5 gets cold fits again — and their
+pre-Task-5 store also holds cold fits, under a `fit_hash` computed from the same field values, so
+a conditional bump lets the two collide."* Walk it. A pre-Task-5 store written with
+`warm_start.enabled = false` holds cold fits under `algorithm_version = "1"`. The same
+configuration after this task, under a bump made conditional on `enabled`, would not bump, so it
+also holds cold fits under `"1"`. **The two populations are therefore bit-identical** — nothing on
+the cold path moves in this task; Task 0 already established that a false validity cell is
+bit-identical to `x0=None` — **so their sharing one `fit_hash` is correct reuse and not a
+collision.** The example describes the one case in which a conditional bump would be right.
+
+**WHERE THE COLLISION ACTUALLY IS: `enabled` DEFAULTS TO `True`.** A pre-Task-5 store written at
+the default holds **cold** fits under `algorithm_version = "1"`; the same configuration after this
+task produces **warm-started** fits, and with **no** bump the resume gate accepts the store and the
+two populations mix inside it — converged-looking fits at two different optima. That is the
+failure, it arrives through the default rather than through a user disabling anything, and it is
+closed by *any* bump.
+
+**SO UNCONDITIONALITY NEEDS A DIFFERENT ARGUMENT, AND THERE ARE THREE.**
+
+1. **`ALGORITHM_VERSION` is a `STAMPED_IDENTITY_FIELD`, and the installed code is authoritative
+   for it.** Reading it off `warm_start_enabled` makes the installed code's identity a function of
+   a **request** — the self-reported-identity class `FIT_RELEVANT_FIELDS` names as the fourth class
+   and says must stay empty. `data_uri` and `metamer_version` were both that.
+2. **It would be a second copy of a value already in the payload.** `warm_start_enabled` is in
+   `FIT_RELEVANT_FIELDS` in its own right, so a version string that varies with it records one
+   fact twice, and two copies drift the moment either is written from a different place.
+3. **The constant's own docstring is a statement about a CHANGE, not about a run**: *"when and only
+   when a change alters the value of `theta_hat` or `log_lik` for some input that previously fit."*
+   Some input previously fit does move. That is the whole test, and it has no configuration in it.
+
+**THE COST IS OVER-INVALIDATION, AND THAT IS WHAT "SEPARATES ERAS" MEANS.** A store built before
+this task with `enabled = false` holds fits this task does not move, and the bump invalidates it
+anyway. **That is accepted, not overlooked**: an era boundary is coarser than the set of values
+that actually changed, which is the price of a hand-bumped constant over a per-field one.
+
+### (a5) THE GOLDENS ARE FIVE AND THEY LIVE IN TWO FILES, NOT THREE IN ONE
+
+The brief says the bump *"moves all three `GOLDEN_*` constants"*. Grepped:
+
+| file | constants | payload strings |
+|---|---|---|
+| `tests/test_hashing.py` | `GOLDEN_FIT_HASH`, `GOLDEN_COMPAT_HASH`, `GOLDEN_RUN_HASH` | `GOLDEN_FIT_PAYLOAD`, `GOLDEN_COMPAT_PAYLOAD`, `GOLDEN_RUN_PAYLOAD` |
+| `tests/test_config.py` | `GOLDEN_FIT_HASH`, `GOLDEN_COMPAT_HASH` | `_GOLDEN_FIT_PAYLOAD`, `_GOLDEN_COMPAT_PAYLOAD` |
+
+**Five hashes and five hand-written strings move, not three and three.** The two files' *fit*
+goldens are deliberately the same value — that identity is the claim `test_config.py` exists to
+make, that a config off disk produces the same payload as a hand-built mapping — but the two
+*compat* goldens are **different values**, because the two modules' fixtures name different
+criterion sets. Neither is a copy of the other, so neither can be updated by copying.
+
+**AND THE REVERSAL DISCIPLINE EXISTS IN ONE FILE ONLY.** `_HISTORY` and
+`test_the_goldens_reverse_through_the_allowlist_history` are `test_hashing.py`'s;
+`tests/test_config.py` has no chain, so *"`_HISTORY` gains a hop"* leaves its two goldens
+re-derived and **unreversed**. A pasted value is indistinguishable from a derived one there.
+**Closed here rather than recorded**: `test_config.py` gains its own one-hop reversal, asserting
+that substituting `"algorithm_version":"1"` back into each of its two hand-written strings
+reproduces `1eb1fd731b4ae8d6` and `8e7c1e4c82d36022` exactly. That is the same evidence `_HISTORY`
+provides, at the two constants `_HISTORY` does not reach.
+
+### (a7) "THE SOURCE-INDEX ARRAY" IS A FIELD-SIZED TERM AND THIS TASK'S OWN INVARIANT FORBIDS ONE
+
+The `--explain` bullet asks 2c to *"compute and record the source-index array, the exhaustion
+count, the ladder-rung distribution and the two passes' wall clocks"*. Three of those four are
+scalars or small histograms. **The first is `(B, M)` over the whole grid**: at 10⁷ points with
+M = 2 candidates and int64 indices, 10⁷ × 2 × 8 = **160 MB** retained for the length of the run —
+against the same task's invariant that *"peak RAM is derivable from the memory budget alone"* and
+its refusal of a source read that *"grows with the field"*. **The bullet and the invariant cannot
+both be satisfied**, and the invariant is the one the design doc states.
+
+**RESOLUTION: THE AGGREGATES ARE RECORDED AND THE PER-POINT ARRAY IS NOT RETAINED.** The source
+map is built per tile, consumed by that tile's fit, and dropped; what survives is the exhaustion
+count, the source-radius histogram, the init-rung distribution and the per-pass wall clock — all
+`O(1)` in the field. A per-point source map is a **spatial** diagnostic and its home is the store,
+which this task's own Goal forbids extending.
+
+**AND THE STORE'S ROOT ATTRS CANNOT HOLD THE AGGREGATES EITHER, WHICH IS A FORCED ANSWER RATHER
+THAN A PREFERENCE.** `create_store(attrs=...)` writes the root attrs **once, at creation, before
+any tile is fitted**, and a resumed run does not rewrite them. Counts accumulated during the tile
+loop therefore have no honest slot there: writing them at creation records zeros, and writing them
+at the end either overwrites the previous run's counts or needs a merge rule — a new durability
+problem in a task whose Goal is *"no new store schema"*. **So they go in `RunReport`**, alongside
+`tiles_written`, and they are a fact about the **run** rather than about the store: on a resume
+they cover the tiles this run fitted and no others, exactly as `tiles_written` does.
+
+`warm_start_used` is different and stays in attrs: it is known **before** the loop, which is why
+`store.provenance_attrs` could already take it.
+
+### THE INVARIANT SAYS "NEVER LOADED WHOLE" AND ONE ARRAY STILL MUST BE
+
+Task 3's `source_map` takes `coarse_ok` over the **full** coarse grid and validates its shape
+against the full fine `shape`. That is not incidental: *"building the map from tile-local indices
+is named in the plan as the single most likely way to lose §11.3's guarantee"*, and a full-grid
+`coarse_ok` with absolute coarse indices is what makes tile-independence structural rather than
+tested into existence. **So pass 1's `/status/outcome` is read whole, and the invariant as written
+forbids that.**
+
+**THE MAGNITUDES, BECAUSE A DEVIATION WITHOUT ONE IS NOT REVIEWABLE.** At design doc §9.4's
+3600 × 7200 grid with `k = 8` the coarse grid is `len(range(0, 3600, 8)) = 450` by
+`len(range(0, 7200, 8)) = 900`, i.e. **405 000 coarse points**. At 2a's fixture candidate set
+(`white`, `white + matern12`: M = 2, `p_total` = 4):
+
+| array | dtype | whole-store bytes |
+|---|---|---|
+| `/status/outcome` | uint8 × M | 405 000 × 2 = **810 kB** |
+| `/warmstart/theta_unconstrained` | float64 × `p_total` | 405 000 × 4 × 8 = **12.96 MB** |
+| one fine tile, for scale | float64, side 272, N = 630 | 272² × 630 × 8 = **372.9 MB** |
+
+**This task reads the second per tile and the first whole**, so the term it removes is 16× the
+term it leaves. **The residual is real and still grows linearly with the field**, and it is
+recorded rather than fixed: narrowing it means passing `source_map` a halo slice with translated
+indices, which is the tile-local-index construction Task 3 was written to prevent. **Changing that
+contract is Task 3's decision, not this task's.** Deferred item, with its magnitude.
+
+### (i8) THE PLAN'S RSS ASSERTION CANNOT BE WRITTEN AGAINST A WHOLE RUN, AND THE OBSTACLE IS ABSOLUTE SIZE
+
+*"Pass 1's store is not loaded whole, asserted by peak RSS against a bound at a field size where
+whole-loading would be visible."* Whole-loading exceeds one fine tile when
+`(n_y n_x / k²) · p_total > side² · n_time`, which a small grid satisfies easily — at `k = 2`,
+`p_total = 4`, `n_time = 24` and `side = 4` it holds above 384 fine points. **But the ratio is not
+the difficulty; the absolute figure is.** On a 32 × 32 fine grid the whole coarse
+`theta_unconstrained` is 256 × 4 × 8 = **8 kB**, which no RSS difference can see, and a fine grid
+large enough to make it megabytes is hours of fitting.
+
+**SO THE SUBJECT OF THE MEASUREMENT IS THE READER, NOT THE RUN.** The assertion is on the function
+that reads a tile's warm starts, measured in a child process against a pass-1 store whose whole
+`theta_unconstrained` is **20.48 MB** — 800 × 800 coarse points, `p_total` = 4, float64 — where one
+tile's sources at fine tile side 64, `k = 2` and `spiral_bound = 4` cover a 40 × 40 coarse
+footprint, **51.2 kB, a factor of 400 below.** The bound sits between the two.
+
+**THAT STORE IS BUILT BY `create_store` AND DIRECT ARRAY WRITES, NOT BY A RUN, AND THE BARRIER'S
+DISCIPLINE DOES NOT EXTEND TO IT.** `tests/test_barrier.py` requires every pass-1 store to come
+from a real `run(decimate=True)` because **its** subject is the attrs a writer records. This
+subject is **byte volume**, about which a hand-built store of the right shapes and dtypes is the
+same object; and 640 000 coarse series cannot be fitted in a test. The positive control is the
+same child reading `array[:]` and breaching the bound (i2), so the fixture is shown to be able to
+express the defect it is placed against.
+
+### (c) A SIGTERM DURING PASS 1 MUST EXIT 2, AND THE BARRIER WOULD MAKE IT EXIT 3
+
+Pass 1 is a `run`, so it honours SIGTERM and returns `interrupted=True` with tiles outstanding.
+**If the driver then calls the barrier, `check_pass1_complete` raises `ValidationError` and the
+command exits 3 — "your configuration is wrong" — for a run that was preempted and is resumable.**
+The two send a user to entirely different places, and 14.3's exit 2 is *"aborted early —
+resumable"*, which is exactly what happened. **The driver returns after an interrupted pass 1
+without entering the barrier**, with no pass-2 report, and the command line maps that to
+`ABORTED_EARLY`. The barrier keeps its refusal for the case it was written for: a pass-1 store
+that is incomplete for a reason this invocation did not witness.
+
+### (a5) `warm_start.enabled = false` AND A SUPPLIED SOURCE MUST NOT BE SILENTLY RECONCILED
+
+`run(warm_start_from=...)` with `config.warm_start.enabled` false is a request that contradicts
+itself, and either half could be honoured. **Refused at layer 3, naming both**, on the standing
+precedent of the `--calibrate`-with-`--reuse-fits-from` and `--calibrate`-with-`engine=` refusals:
+a flag that parses and does nothing reads as supported. The config's `false` is what makes the
+whole two-pass path a single cold run; it is not an argument the driver may quietly override.
+
+### (a2c) TWO OF THE FIVE WARM-START FIT FIELDS GAIN CONSUMERS HERE, AND TWO STILL HAVE NONE
+
+Grepped for each of `_WARM_START_FIT_FIELDS`' five config sources:
+
+| field | consumer before this task | after |
+|---|---|---|
+| `coarse_stride` | `run.py`, the decimation | unchanged |
+| `enabled` | **none** — the defect the bump closes | the driver's cold/warm branch |
+| `spiral_bound` | **none** in production; `source_map`'s parameter had only test callers | passed by the tile loop |
+| `interpolation_rule` | none | none |
+| `tie_break` | none | none |
+
+**The last two are not (a2c) defects and the reason is their type.** Both are single-member
+`Literal`s, so no second value exists for a consumer to discriminate — they are declared regimes
+(a3), and `warmstart.py` implements exactly `nearest_valid` with a `lowest_yx` tie-break. **Stated
+because the handoff names `enabled` alone and the sweep found `spiral_bound` beside it**, which is
+the field whose unit Task 3 had to settle.
+
+### (a6) `pass1_store_path`'s DOCSTRING ALREADY CLAIMS README CARRIES THE RULE
+
+`decimate.pass1_store_path` says of the permanent-artifact rule: *"It is in `README.md` for the
+same reason."* **It is not.** Task 2 deliberately deferred the README paragraph — there was no
+user-reachable two-pass entry point — but the docstring was written in the present tense against a
+fact that had not happened. This task creates the entry point and writes the paragraph, which
+makes the sentence true; recorded because a claim that shipped ahead of its fact is the same shape
+as a comment describing code nobody wrote.
+
+**AND README'S STATUS BLOCK IS STALE IN THREE PLACES, NOT ONE.** *"Phase 1 complete"*, *"588
+tests"* and *"Not yet built: `metamer.batch` and `metamer.cli`"* in **Status**; *"Only the first
+exists today"* in **Planned structure**; and **Where to look** lists no Phase 2 document at all.
+The handoff says this must not *silently* become Task 5's scope and must not be left uncorrected.
+**Both are satisfied by doing it loudly and separately**: the sweep lands in its own commit, named
+as the (a6) debt it is, and not folded into the two-pass paragraph.
+
+### THE CANDIDATE-SUPERSET HAZARD IS CLOSED BY AN EXISTING GATE, READ RATHER THAN RECALLED
+
+Pass 1's `theta_unconstrained` is unpadded onto a **ragged** axis whose blocks come from pass 1's
+candidate list. If pass 2 could run with a **superset** — which §12.8 permits in general, and which
+is the stated reason `candidates` is in no allowlist — then `RaggedIndex.block(m)` for an added
+candidate would address past the end of pass 1's axis. **Checked in the code rather than assumed**:
+`resume._check_candidates` refuses a requested list that is shorter **and** one that is longer, the
+second naming that extension *"needs fits that do not exist"*. The barrier imports that same
+comparison, so the two stores always share a candidate count and pass 1's ragged index **is**
+pass 2's. Nothing is owed here; the hazard is recorded so a later loosening of that gate knows what
+else it would move.
+
+### (k) NOTHING NEW DEPENDS ON PROCESS-LOCAL STATE, WITH ONE NAMED EXCEPTION
+
+The source map is a pure function of the full grid, the stride, the bound and `coarse_ok`; the warm
+start values are float64 in a store; `fit` reads `x0[b : b+1, c, :p]` per series. **Neither tile
+side nor traversal order nor thread count can reach `θ̂` through this path**, which is what the
+two-budget bitwise test asserts. The exception is the per-pass wall clock, which is process-local
+by definition — it is provenance, reaches no hash and no store, and is reported and never compared.
+
+### (e2)/(i2) THE MUTATIONS TO RUN, AND EACH MUST BE SHOWN TO DIFFER FIRST
+
+Before any of these is recorded as caught, the mutant is shown to change some output — a surviving
+mutation that could not have changed anything is not evidence about the suite.
+
+1. **The source map built from the tile's own extent** rather than the full grid with a `region`.
+   Differs wherever a tile boundary does not fall on a coarse point; caught by the two-budget
+   bitwise test.
+2. **`x0_valid` rebuilt as `index >= 0` at the call site** instead of taken from `SourceMap.valid`.
+   Cannot differ today — it is the same expression — so it is **not** a mutation this suite can
+   catch, and saying otherwise would be (e2) exactly. Recorded as unprovable rather than as caught.
+3. **The barrier dropped from the driver.** Differs on a partial pass-1 store; caught by the
+   incomplete-pass-1 test.
+4. **`warm_start_used` read off `config.warm_start.enabled`.** Differs on pass 1's own store, which
+   is cold under a config whose `enabled` is true; caught by asserting pass 1's attr is false.
+5. **The whole-array read in the source reader.** Differs by 20.4 MB of peak RSS; caught by the
+   reader's bound, with the whole-read as its own positive control.
+
+### WHAT WOULD MAKE THIS TASK'S TESTS VACUOUS, NAMED IN ADVANCE
+
+- **A single-tile pass 2 in the two-budget test.** One tile per budget makes "the tiling does not
+  reach `θ̂`" a statement about two identical traversals. **Both budgets are asserted multi-tile and
+  asserted to derive DIFFERENT sides** — equal sides would make the comparison vacuous in the other
+  direction, and neither is visible from a green suite.
+- **A fixture in which no point is warm-started at all.** Every assertion about the warm path then
+  passes against the cold one. **The init-rung distribution is asserted to contain
+  `InitRung.WARM_START`** in the enabled run and **not to** in the disabled one; that is the one
+  discriminator that cannot be satisfied by a cold run.
+- **Asserting that warm and cold `θ̂` DIFFER.** They need not: agreement is the property §11.2's
+  audit exists to measure, and a test demanding disagreement would fail on a well-behaved fixture
+  and pass on a broken one. The rung distribution is the discriminator instead.
+- **A pass-1 store with every coarse fit `OK`.** Exhaustion is then unreachable and the count is
+  asserted at zero forever. The count's arithmetic is exercised at unit level against a constructed
+  source map with `-1` entries, and the end-to-end case asserts zero **with** that unit control
+  beside it — a zero reading is not evidence of absence, (a0)'s fifth register.
+- **A pass-1 store whose grid is a multiple of the stride**, or **square**. Both were named at
+  Task 3 and both apply again wherever a coarse index is turned back into a `(row, column)` pair:
+  `n_cx` and `n_cy` are interchangeable on a square grid, so a transposed decode reads correct.
+  **The fixtures stay non-square and not stride-aligned.**
