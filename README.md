@@ -50,6 +50,45 @@ the latter is an independent oracle the Matérn ν=1/2 likelihood is checked aga
 pip install "metamer[test]"
 ```
 
+## Usage
+
+A run is a config file and a store path:
+
+```
+python -m metamer config.toml out.zarr
+```
+
+The store is resumable: the same command after an interruption skips the tiles whose
+completion bits are set and finishes the rest, bit for bit as an uninterrupted run would.
+Peak RAM is derived from `memory_budget_gb` (or `--memory-budget`) alone, and the output
+does not depend on it.
+
+### The two-pass warm start
+
+```
+python -m metamer config.toml out.zarr --two-pass
+```
+
+Pass 1 fits a coarse grid — every `warm_start.coarse_stride`-th point on both spatial
+axes — from a cold start. Pass 2 then fits **every** point of the full grid, each one
+warm-started from its nearest valid coarse fit. On a simulated field this cut iterations
+substantially; on real altimetry it has not been measured, and the saving is a ceiling
+rather than an estimate.
+
+**Pass 1's store is written beside the output**, with `.pass1` inserted before the
+extension: `out.zarr` gives `out.pass1.zarr`.
+
+> **IT IS A PERMANENT ARTIFACT AND NOT SCRATCH. DO NOT DELETE IT WHEN PASS 2
+> COMPLETES.** It holds cold fits of the coarse points, and it is the **only** record of
+> what those points fit to without a warm start — which makes it the sole reference the
+> hysteresis audit can compare against. Deleting it does not free a cache; it discards a
+> measurement that cannot be recovered without refitting.
+
+Setting `warm_start.enabled = false` makes `--two-pass` a single cold pass: no coarse
+store is written, and the output is what a plain run produces. The setting is part of the
+fit identity, so a store fitted with warm starts and one fitted without do not share a
+`fit_hash` and neither resumes the other.
+
 ## Where to look
 
 | Document | What it is |
