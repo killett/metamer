@@ -105,27 +105,47 @@ from tests.test_criteria import _scores
 # BUMPING `hashing.ALGORITHM_VERSION` MOVES ALL THREE OF THESE, and it is meant
 # to: that is what invalidating stored fits looks like. Rewrite the strings by
 # hand and re-hash them; do not paste the values out of the failure.
+#
+# REWRITTEN BY HAND ON 2026-08-27 (Phase 2c Task 5), when `ALGORITHM_VERSION`
+# went from "1" to "2" because a default run began warm-starting. **This is the
+# first hop that moves no FIELD**: the allowlist is unchanged and one value
+# inside it is different, which is the other way a payload moves and the way the
+# reversal below has never been exercised until now.
+#
+# VERIFIED BY REVERSAL BEFORE THE SUITE WAS RUN. Substituting
+# `"algorithm_version":"1"` back into each of the three strings reproduces
+#
+#     1eb1fd731b4ae8d6 / d368e07b5f99efe9 / 0b82f20c43f2f378
+#
+# exactly, so the separators, the sort rule, the digest, the truncation and every
+# other field are unchanged and only the stamped version moved.
+# `test_the_goldens_reverse_through_the_allowlist_history` keeps that executable.
+#
+# **THE GOLDENS ARE FIVE, NOT THREE, AND `tests/test_config.py` HOLDS THE OTHER
+# TWO.** Its fit payload is deliberately the same string as this module's and its
+# compat payload is not -- the two fixtures name different criterion sets -- so
+# its constants are re-derived and reversed there rather than copied from here.
 _GOLDEN_WARM_START = (
     '"warm_start_coarse_stride":8,"warm_start_enabled":true,'
     '"warm_start_interpolation_rule":"nearest_valid","warm_start_spiral_bound":4,'
     '"warm_start_tie_break":"lowest_yx"'
 )
 GOLDEN_FIT_PAYLOAD = (
-    '{"algorithm_version":"1","engine":"kalman",'
+    '{"algorithm_version":"2","engine":"kalman",'
     '"geometry_hash":"0123456789abcdef",'
     '"objective":"ml","registry_version":"1","seed":0,'
     '"signal_terms":["constant","trend","annual"],"variable":"sla",'
     f"{_GOLDEN_WARM_START}}}"
 )
 GOLDEN_COMPAT_PAYLOAD = (
-    '{"algorithm_version":"1","criteria":["aic"],"engine":"kalman",'
+    '{"algorithm_version":"2","criteria":["aic"],"engine":"kalman",'
     '"geometry_hash":"0123456789abcdef",'
     '"objective":"ml","registry_version":"1","seed":0,'
     '"signal_terms":["constant","trend","annual"],"variable":"sla",'
     f"{_GOLDEN_WARM_START}}}"
 )
 GOLDEN_RUN_PAYLOAD = (
-    '{"algorithm_version":"1","candidates":["white+matern12"],"criteria":["aic"],'
+    '{"algorithm_version":"2","candidates":["white+matern12"],"criteria":["aic"],'
     '"data_uri":"s3://bucket/ssh.zarr","engine":"kalman",'
     '"geometry_hash":"0123456789abcdef","memory_budget_gb":4.0,'
     '"metamer_version":"0.1.0","objective":"ml","output":"out.zarr",'
@@ -133,9 +153,21 @@ GOLDEN_RUN_PAYLOAD = (
     '"signal_terms":["constant","trend","annual"],"threads":4,"variable":"sla",'
     f"{_GOLDEN_WARM_START}}}"
 )
-GOLDEN_FIT_HASH = "1eb1fd731b4ae8d6"
-GOLDEN_COMPAT_HASH = "d368e07b5f99efe9"
-GOLDEN_RUN_HASH = "0b82f20c43f2f378"
+GOLDEN_FIT_HASH = "91d7cbf6d0350072"
+GOLDEN_COMPAT_HASH = "bc021496c7ccb6e6"
+GOLDEN_RUN_HASH = "776fe870f70b22db"
+
+
+def _hop_algorithm_version_two_to_one(fields: dict[str, object]) -> dict[str, object]:
+    """Undo 2026-08-27: `algorithm_version` goes back from "2" to "1".
+
+    **THE FIRST HOP THAT CHANGES A VALUE RATHER THAN THE FIELD SET.** Every hop
+    below it adds or removes a key; this one leaves the key set alone, so it is
+    the only entry that exercises the chain's ability to see a payload move
+    without the allowlist moving. A hop that also deleted the key would reverse
+    to a payload `_subset` would refuse to build.
+    """
+    return dict(fields, algorithm_version="1")
 
 
 def _hop_geometry_to_data_uri(fields: dict[str, object]) -> dict[str, object]:
@@ -165,6 +197,11 @@ def _hop_drop_warm_start(fields: dict[str, object]) -> dict[str, object]:
 # which is what makes them an independent reference rather than a computation
 # this file could get wrong in the same way twice.
 _HISTORY = (
+    (
+        "2026-08-27: ALGORITHM_VERSION 1 -> 2, the warm-start era boundary",
+        _hop_algorithm_version_two_to_one,
+        ("1eb1fd731b4ae8d6", "d368e07b5f99efe9", "0b82f20c43f2f378"),
+    ),
     (
         "2026-08-12: data_uri -> geometry_hash",
         _hop_geometry_to_data_uri,

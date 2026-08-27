@@ -69,7 +69,7 @@ from typing import Any
 
 from metamer.core.registry import REGISTRY_VERSION
 
-ALGORITHM_VERSION = "1"
+ALGORITHM_VERSION = "2"
 """Identity of the code that computes theta-hat and log_lik. HAND-BUMPED.
 
 **Bump this, in its own commit, when and only when a change alters the value
@@ -108,6 +108,38 @@ of tagging or of committing.** Its one real cost is that it can be forgotten,
 which is the cost of every declared-identity mechanism here, `FIT_RELEVANT_FIELDS`
 included, and is answered the same way: the rule is stated where the constant
 lives and repeated on the release checklist in `RELEASING.md`.
+
+THE HISTORY, ONE ENTRY PER BUMP.
+
+- **"1"**, from 2026-08-10, when this field stopped holding the package
+  version.
+- **"2"**, 2026-08-27, at Phase 2c Task 5: a default run began WARM-STARTING
+  from a coarse first pass, so `theta_hat` moves for an input that previously
+  fit. Every store written before it holds cold fits and no longer resumes.
+
+**THE 2026-08-27 BUMP IS UNCONDITIONAL AND IS NOT CONTINGENT ON
+`warm_start_enabled`, WHICH IS THE MISTAKE THE PRE-FLIGHT NAMED.** Three
+reasons, and the first is this constant's own class. It is a
+`STAMPED_IDENTITY_FIELD`: **the installed code is authoritative for it**, so a
+value that varied with a config field would be the installed code's identity
+computed from a *request* -- the self-reported class `FIT_RELEVANT_FIELDS` says
+must stay empty, and which `data_uri` and `metamer_version` both were. Second,
+`warm_start_enabled` is already in the allowlist in its own right, so a version
+that tracked it would record one fact twice. Third, the rule above is a
+statement about a **change**, not about a run: *some* input that previously fit
+moves, and no configuration appears in that test.
+
+**WHAT IT DOES NOT REST ON, RECORDED BECAUSE THE PLAN SAID IT DID.** The plan
+argued that a user disabling warm-starting after Task 5 would otherwise collide
+with their own pre-Task-5 store. Those two populations are both **cold** and
+bit-identical -- nothing on the cold path moved -- so sharing a `fit_hash` would
+have been correct reuse. **The collision is at the DEFAULT**, where
+`warm_start.enabled` is `True`: without any bump, a store of cold fits resumes
+clean and its remaining tiles are written warm, mixing two optima inside one
+store. **The cost of unconditionality is over-invalidation** -- a store built
+with warm-starting switched off is invalidated although its fits did not move --
+**and that is what "separates eras rather than configurations" means**, not an
+oversight.
 """
 
 ALGORITHM_VERSION_KEY = "algorithm_version"

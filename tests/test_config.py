@@ -47,7 +47,7 @@ xarray's rounding of a coordinate array.
 """
 
 _GOLDEN_FIT_PAYLOAD = (
-    '{"algorithm_version":"1","engine":"kalman",'
+    '{"algorithm_version":"2","engine":"kalman",'
     '"geometry_hash":"0123456789abcdef",'
     '"objective":"ml","registry_version":"1","seed":0,'
     '"signal_terms":["constant","trend","annual"],"variable":"sla",'
@@ -56,7 +56,7 @@ _GOLDEN_FIT_PAYLOAD = (
     '"warm_start_tie_break":"lowest_yx"}'
 )
 _GOLDEN_COMPAT_PAYLOAD = (
-    '{"algorithm_version":"1","criteria":["aic","hqic"],"engine":"kalman",'
+    '{"algorithm_version":"2","criteria":["aic","hqic"],"engine":"kalman",'
     '"geometry_hash":"0123456789abcdef",'
     '"objective":"ml","registry_version":"1","seed":0,'
     '"signal_terms":["constant","trend","annual"],"variable":"sla",'
@@ -64,8 +64,19 @@ _GOLDEN_COMPAT_PAYLOAD = (
     '"warm_start_interpolation_rule":"nearest_valid","warm_start_spiral_bound":4,'
     '"warm_start_tie_break":"lowest_yx"}'
 )
-GOLDEN_FIT_HASH = "1eb1fd731b4ae8d6"
-GOLDEN_COMPAT_HASH = "8e7c1e4c82d36022"
+GOLDEN_FIT_HASH = "91d7cbf6d0350072"
+GOLDEN_COMPAT_HASH = "71f01dd155aace17"
+
+#: What the two strings above hashed to before `ALGORITHM_VERSION` became "2".
+#:
+#: **THIS MODULE'S GOLDENS HAD NO REVERSAL UNTIL 2026-08-27, AND THAT WAS THE
+#: GAP.** `tests/test_hashing.py` carries `_HISTORY` and reverses its three
+#: constants one hop at a time; these two are not in it, so for two allowlist
+#: changes and one version bump they were re-derived with nothing able to tell a
+#: hand derivation from a value pasted out of a failure. The pair below closes
+#: that for the bump, and `test_the_goldens_reverse_to_the_previous_version` is
+#: the executable form.
+_PREVIOUS_VERSION_HASHES = ("1eb1fd731b4ae8d6", "8e7c1e4c82d36022")
 
 # NO GOLDEN FOR `run_hash`, AND THE REASON IS WORTH STATING. `run_hash` carries
 # `metamer_version`, which `hatch-vcs` derives from the git tag, so it changes
@@ -151,6 +162,41 @@ def test_the_config_path_produces_the_hand_derived_payloads(tmp_path):
         _GOLDEN_COMPAT_PAYLOAD
     )
     assert cfg.compat_hash(_GEOMETRY) == GOLDEN_COMPAT_HASH
+
+
+def test_the_goldens_reverse_to_the_previous_version():
+    """Undoing the 2026-08-27 bump reproduces the constants it replaced.
+
+    Expected values determined independently: `_PREVIOUS_VERSION_HASHES` are the
+    two strings this module carried before `ALGORITHM_VERSION` became "2". They
+    are hardcoded history, derived nowhere, so they are a reference this file
+    cannot get wrong in the same way twice.
+
+    THIS IS THE ONLY THING THAT SAYS THE REGENERATION WAS HONEST, and it did not
+    exist here until the bump. A golden edited to match failing output passes
+    `test_the_config_path_produces_the_hand_derived_payloads` exactly as a
+    hand-derived one does -- both are self-consistent. What separates them is
+    that a hand-written string still contains the previous one as a sub-case, so
+    putting the old version back must return the old digests.
+
+    Bug this catches: closing the next `ALGORITHM_VERSION` bump by running the
+    suite and pasting two new hex strings, which pins whatever the code now
+    produces and turns this module into a mirror of `hashing.py`.
+
+    **The substitution is textual and touches nothing else**, so a bump that had
+    also moved a field would fail here rather than reverse cleanly -- which is
+    the case the assertion is really about.
+    """
+    for payload, previous in zip(
+        (_GOLDEN_FIT_PAYLOAD, _GOLDEN_COMPAT_PAYLOAD),
+        _PREVIOUS_VERSION_HASHES,
+        strict=True,
+    ):
+        before = payload.replace(
+            '"algorithm_version":"2"', '"algorithm_version":"1"', 1
+        )
+        assert before != payload, "the substitution must actually change the string"
+        assert hashlib.sha256(before.encode("utf-8")).hexdigest()[:16] == previous
 
 
 # --------------------------------------------------------------------------
