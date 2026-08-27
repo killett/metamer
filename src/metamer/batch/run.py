@@ -50,6 +50,7 @@ first task that fits and is where it must arrive.**
 from __future__ import annotations
 
 import os
+from collections import Counter
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -61,6 +62,7 @@ from numpy.typing import NDArray
 
 from metamer.batch import calibration as calibration_cache
 from metamer.batch import reuse
+from metamer.batch.barrier import check_pass1_complete, check_pass1_store
 from metamer.batch.completion import (
     completed_tiles,
     flush_on_sigterm,
@@ -97,6 +99,7 @@ from metamer.batch.validation import (
     identifiability_warnings,
     load_config,
 )
+from metamer.batch.warmstart import coarse_ok, read_warm_starts, source_map
 from metamer.batch.write import check_status_invariant, write_selection, write_tile
 from metamer.config.model import Config
 from metamer.core import machine
@@ -122,6 +125,51 @@ from metamer.core.signal import SignalSpec
 from metamer.core.signal import k_beta as signal_k_beta
 from metamer.core.statespace import StateSpace
 from metamer.core.terms import ProcessSpec
+
+
+@dataclass(frozen=True)
+class WarmStartSummary:
+    """What pass 2's warm starts were, in aggregate. `O(1)` in the field.
+
+    **THE PER-POINT SOURCE MAP IS NOT HERE, AND THAT IS THE TASK'S ONE
+    DEVIATION FROM ITS OWN BRIEF.** §13.4's list asks 2c to record *"the
+    source-index array"*; at 10^7 points with two candidates and int64 indices
+    that is **160 MB** held for the length of the run, against the same task's
+    invariant that peak RAM is derivable from the memory budget alone. The map
+    is built per tile, consumed by that tile's fit and dropped; what survives is
+    everything below, none of which grows with the grid. A per-point map is a
+    SPATIAL diagnostic and belongs in the store, which this task is forbidden
+    from extending.
+
+    **AND THIS IS A FACT ABOUT THE RUN, NOT ABOUT THE STORE**, which is why it
+    is here and not in `store.provenance_attrs`. Root attrs are written once, at
+    creation, before any tile is fitted; a counter that accumulates through the
+    tile loop has no honest slot there, because writing it at creation records
+    zeros and writing it at the end either overwrites a previous run's counts or
+    needs a merge rule. **On a resume these cover the tiles THIS run fitted**,
+    exactly as `tiles_written` does. `warm_start_used` is different and stays in
+    attrs: it is known before the loop.
+
+    Attributes:
+        source: Pass 1's store, the one the barrier and the gate accepted.
+        cells: `(point, candidate)` cells this run asked the source map about.
+        warm_started: Cells that got a source. `cells - exhausted`.
+        exhausted: Cells where the spiral found no usable coarse fit within the
+            bound and the moment ladder ran instead. **Counted rather than
+            inferred from `init_rung`**: a cell can be exhausted and also
+            refused by the design precheck, and then no rung is recorded at all.
+        radius_histogram: Chebyshev distance in FINE index units to the chosen
+            source, against how many cells took it. `0` is a coarse point
+            sourcing itself -- D12's lattice, which is intrinsic and bounded
+            rather than a defect. Keys are ints; the exhausted cells are NOT in
+            here, they are the count above.
+    """
+
+    source: Path
+    cells: int
+    warm_started: int
+    exhausted: int
+    radius_histogram: Mapping[int, int]
 
 
 @dataclass(frozen=True)
@@ -184,6 +232,19 @@ class RunReport:
             run driven off the main thread, where `signal.signal` cannot be
             called at all; the alternative to reporting it is claiming a
             protection that is not there.
+        init_rungs: Which rung of the initialization ladder started each fit
+            this run performed, counted by name. **Populated for every fitting
+            run, warm or cold**, and empty for a recompute, which fits nothing.
+            `optimize.InitRung.WARM_START` appears exactly when a warm start was
+            honoured, which makes it the one reading that tells a warm run from
+            a cold one without comparing two stores -- `theta_hat` need not
+            differ, and demanding that it does would fail on a well-behaved
+            fixture and pass on a broken one. **It was computed and discarded
+            until Phase 2c Task 5**: `FitResult.init_rung` had no consumer.
+        warm_start: What this run's warm starts were, or None for a run that
+            took none. **None is the answer for a cold run and for pass 1**, on
+            the same grounds as `source` and `calibration` in the store's attrs:
+            the absence is the fact.
     """
 
     config: Config
@@ -209,6 +270,8 @@ class RunReport:
     tiles_skipped: int
     interrupted: bool
     sigterm_armed: bool
+    init_rungs: Mapping[str, int]
+    warm_start: WarmStartSummary | None
 
 
 def _recompute_tile(
@@ -479,6 +542,7 @@ def run(
     calibration_cache_path: Path | str | None = None,
     calibration_ladder: tuple[int, ...] | None = None,
     decimate: bool = False,
+    warm_start_from: Path | str | None = None,
 ) -> RunReport:
     """Validate a configuration, fit every tile, and write the store.
 
@@ -579,14 +643,42 @@ def run(
             rule; this parameter does not choose the path, because a caller that
             passed the same `store_path` for both passes would have pass 2
             resume pass 1's coarse store.
+        warm_start_from: A COMPLETE pass-1 store to warm-start every fit from --
+            Phase 2c's pass 2 (D1, D12). **The barrier and the cross-store gate
+            run before anything expensive**: pass 1 must be complete, and its
+            recorded parent fit identity must equal this run's, which is one
+            equality over the whole of `FIT_RELEVANT_FIELDS` rather than an
+            enumeration.
+
+            **Every point of the full grid is fitted, the coarse points
+            included** (D12). Each `(point, candidate)` cell takes the nearest
+            valid coarse fit under `warmstart.source_map`, and a cell the spiral
+            exhausts takes the moment ladder instead -- bit-identical to the
+            same cell fit with no warm start, which is what makes the ladder a
+            fallback and not a third path.
+
+            **The source map is built from the FULL grid with a region, never
+            from the tile's own extent.** That is what keeps §11.3's guarantee
+            structural: which coarse fit a point starts from is a function of
+            the dataset and the stride, so the memory budget, the tile side and
+            the traversal order cannot reach `theta_hat` through it.
+
+            Refused alongside `decimate` (pass 1 is the thing being started
+            from), alongside `reuse_fits_from` (a recompute fits nothing, so
+            there is nothing to start), and when `config.warm_start.enabled` is
+            false -- a request that contradicts itself, where honouring either
+            half silently is worse than refusing both.
 
     Returns:
         What the run established.
 
     Raises:
         ValidationError: Layers 1-3 -- the config, a resume whose stored tile
-            side this run's budget cannot hold, and a calibration asked for
-            alongside a recompute or an injected engine. Exit code 3.
+            side this run's budget cannot hold, a calibration asked for
+            alongside a recompute or an injected engine, a warm start asked for
+            alongside a decimation, a recompute or a config that disables it,
+            and a pass-1 store that is incomplete or that this configuration
+            does not describe. Exit code 3.
         InputContractError: Layer 4 -- the data. Exit code 4.
     """
     # RESOLVED ONCE, ABOVE EVERYTHING, so the tile loop keeps exactly the call
@@ -622,7 +714,42 @@ def run(
             "engine's calibration key having measured another one",
         )
 
+    # **THE SAME RULE AS THE TWO ABOVE: A REQUEST THAT CONTRADICTS ITSELF IS
+    # REFUSED, NEVER PART-HONOURED.** Each of these could be "resolved" by
+    # dropping one half, and each resolution is a different run from the one
+    # that was asked for.
+    if warm_start_from is not None and decimate:
+        raise ValidationError(
+            ValidationLayer.SEMANTIC,
+            "a decimated run IS pass 1, so it cannot warm-start from a pass-1 "
+            "store -- and warm-starting it from itself would fit the coarse "
+            "grid from converged fits of the same coarse grid. Drop --decimate, "
+            "or drop the warm-start source",
+        )
+    if warm_start_from is not None and reuse_fits_from is not None:
+        raise ValidationError(
+            ValidationLayer.SEMANTIC,
+            "a recompute reads a finished store's primitives instead of "
+            "fitting, so there is no optimizer for a warm start to start. Drop "
+            "the warm-start source, or fit rather than recompute",
+        )
+
     config = load_config(config_path)
+    # AFTER THE LOAD, BECAUSE IT IS ABOUT THE CONFIG. `enabled` is fit identity
+    # and it is the switch that makes the whole two-pass path a single cold run;
+    # a driver that quietly overrode it would produce warm-started fits under a
+    # `fit_hash` whose `warm_start_enabled` says false, which is the mismatch
+    # that field is in the allowlist to prevent.
+    if warm_start_from is not None and not config.warm_start.enabled:
+        raise ValidationError(
+            ValidationLayer.SEMANTIC,
+            f"{config_path} sets warm_start.enabled = false and this run was "
+            f"given the warm-start source {warm_start_from}. The two ask for "
+            "different runs and the setting is in fit_hash, so honouring the "
+            "source would write warm-started fits under an identity that says "
+            "they are cold. Set warm_start.enabled = true, or drop the source",
+        )
+
     if memory_budget_gb is not None:
         config = _with_memory_budget(config, memory_budget_gb, source="--memory-budget")
 
@@ -764,6 +891,18 @@ def run(
             source_attrs = dict(zarr.open_group(str(reuse_fits_from), mode="r").attrs)
         if Path(store_path).exists():
             check_resume(store_path, config, geometry_hash=rollup)
+
+        # **THE BARRIER AND THE CROSS-STORE GATE SIT WITH THE OTHER IDENTITY
+        # GATES, ABOVE THE CALIBRATION AND ABOVE THE TILING**, for the reason
+        # 13.7 gives and one of its own: a run that cannot legitimately consume
+        # its pass-1 store must be refused before it spends ~26.5 h measuring,
+        # and `rollup` here is exactly the parent fingerprint the gate needs --
+        # pass 2 runs over the undecimated grid, so no second open is required.
+        # The ARRAY the source maps read is deliberately not opened yet; see
+        # below.
+        if warm_start_from is not None:
+            check_pass1_complete(warm_start_from)
+            check_pass1_store(warm_start_from, config, geometry_hash=rollup)
 
         # **THE CALIBRATION RUNS AFTER THE IDENTITY GATES AND BEFORE THE
         # GEOMETRY, WHICH IS 13.7's ORDER AND MATTERS MORE HERE THAN ANYWHERE
@@ -949,6 +1088,13 @@ def run(
 
         attrs = provenance_attrs(
             config,
+            # A FACT ABOUT THE RUN, NOT ABOUT THE CONFIG. Reading it off
+            # `config.warm_start.enabled` would write `true` for pass 1's own
+            # store, which is COLD and whose config enables warm-starting for
+            # pass 2. It is knowable here, before the loop, which is why it can
+            # live in attrs at all -- the counts that accumulate during the loop
+            # cannot; see `WarmStartSummary`.
+            warm_start_used=warm_start_from is not None,
             geometry_components=components,
             thread_limits=dict(observed),
             read_amplification=amplification,
@@ -986,6 +1132,15 @@ def run(
         done = completed_tiles(store_path)
         written = 0
         skipped = 0
+        rungs: Counter[str] = Counter()
+        radii: Counter[int] = Counter()
+        exhausted = 0
+        warm_started = 0
+        # **READ HERE AND NOT AT THE GATE**, so a refusal costs no array read at
+        # all. It is the ONE array of pass 1 this run reads whole -- see
+        # `warmstart.coarse_ok` for why the full coarse grid is what makes
+        # §11.3's tile-independence structural, and for the size it costs.
+        usable = None if warm_start_from is None else coarse_ok(warm_start_from)
         with flush_on_sigterm() as termination:
             for tile in tiles:
                 position = tile_index(tile, side)
@@ -995,6 +1150,50 @@ def run(
                 if reuse_fits_from is None:
                     with budget.phase(Phase.ASSEMBLE):
                         block = assemble_tile(handle, tile)
+                    # THE FULL GRID WITH A REGION, NEVER THE TILE'S OWN EXTENT.
+                    # `region` chooses which points are answered and never what
+                    # the answer is, which is the whole of §11.3's guarantee on
+                    # this path: build the map from tile-local indices and the
+                    # memory budget reaches `theta_hat`.
+                    starts = None
+                    validity = None
+                    if warm_start_from is not None and usable is not None:
+                        sources = source_map(
+                            shape=grid,
+                            stride=int(config.warm_start.coarse_stride),
+                            coarse_ok=usable,
+                            spiral_bound=int(config.warm_start.spiral_bound),
+                            region=(
+                                tile.y_start,
+                                tile.y_stop,
+                                tile.x_start,
+                                tile.x_stop,
+                            ),
+                        )
+                        starts = read_warm_starts(
+                            warm_start_from,
+                            sources,
+                            index,
+                            coarse_shape=(usable.shape[0], usable.shape[1]),
+                        )
+                        # **`x0_valid` IS `SourceMap.valid` ITSELF.** Task 0's
+                        # dtype gate catches the two arrays being SWAPPED and
+                        # nothing catches a THIRD array disagreeing with both,
+                        # so there is no third array.
+                        validity = sources.valid
+                        warm_started += int(sources.valid.sum())
+                        exhausted += int((~sources.valid).sum())
+                        taken = sources.radius[sources.valid]
+                        distances, counts = np.unique(taken, return_counts=True)
+                        radii.update(
+                            dict(
+                                zip(
+                                    (int(v) for v in distances),
+                                    (int(c) for c in counts),
+                                    strict=True,
+                                )
+                            )
+                        )
                     with budget.phase(Phase.FIT):
                         result = fit(
                             block,
@@ -1005,8 +1204,15 @@ def run(
                             mask=np.isfinite(block),
                             objective=Objective(config.objective),
                             engine=engine,
+                            x0=starts,
+                            x0_valid=validity,
                             max_iter=iteration_cap,
                         )
+                    # THE RUNG WAS COMPUTED AND DISCARDED UNTIL THIS TASK, which
+                    # made `FitResult.init_rung` a populated field nothing acted
+                    # on. It is the one reading that separates a warm run from a
+                    # cold one without comparing two stores.
+                    rungs.update(str(value) for value in result.init_rung.ravel())
                     write_tile(
                         store_path,
                         tile,
@@ -1042,6 +1248,16 @@ def run(
             tiles_skipped=skipped,
             interrupted=written + skipped < len(tiles),
             sigterm_armed=termination.armed,
+            init_rungs=dict(rungs),
+            warm_start=None
+            if warm_start_from is None
+            else WarmStartSummary(
+                source=Path(warm_start_from),
+                cells=warm_started + exhausted,
+                warm_started=warm_started,
+                exhausted=exhausted,
+                radius_histogram=dict(radii),
+            ),
             config=config,
             memory_budget_requested_gb=requested_budget_gb,
             budget_warning=budget_warning,

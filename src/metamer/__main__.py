@@ -26,7 +26,8 @@ from typing import NoReturn
 
 from metamer import __version__
 from metamer.batch.input import InputContractError
-from metamer.batch.run import run
+from metamer.batch.run import RunReport, run
+from metamer.batch.twopass import run_two_pass
 from metamer.batch.validation import ExitCode, ValidationError, exit_code_for, layer_of
 
 
@@ -112,6 +113,19 @@ def _build_parser() -> _Parser:
             "change an expiry stands in for -- so this is the only override"
         ),
     )
+    parser.add_argument(
+        "--two-pass",
+        action="store_true",
+        dest="two_pass",
+        help=(
+            "fit a coarse pass first and warm-start the full grid from it "
+            "(Phase 2c). The coarse store is written beside the output as "
+            "<store>.pass1.<ext> and is a PERMANENT artifact: it is the only "
+            "record of what the same points fit to without a warm start. "
+            "warm_start.enabled = false in the configuration makes this one "
+            "cold pass and writes no coarse store"
+        ),
+    )
     parser.add_argument("--version", action="version", version=f"metamer {__version__}")
     return parser
 
@@ -125,17 +139,60 @@ def main(argv: Sequence[str] | None = None) -> int:
     Returns:
         One of `ExitCode`.
     """
-    arguments = _build_parser().parse_args(argv)
+    parser = _build_parser()
+    arguments = parser.parse_args(argv)
 
-    try:
-        report = run(
-            arguments.config,
-            arguments.store,
-            memory_budget_gb=arguments.memory_budget,
-            reuse_fits_from=arguments.reuse_fits_from,
-            calibrate=arguments.calibrate,
-            recalibrate=arguments.recalibrate,
+    # **REFUSED AT THE PARSER, WHICH IS WHERE A COMBINATION OF FLAGS BELONGS.**
+    # A recompute fits nothing, so there is no optimizer for a warm start to
+    # start; `run` refuses the same pair inside, and this one exists so the
+    # message names the two FLAGS a user typed rather than the two arguments
+    # they became.
+    if arguments.two_pass and arguments.reuse_fits_from is not None:
+        parser.error(
+            "--two-pass fits the grid twice and --reuse-fits-from does not fit "
+            "at all; a recompute has no optimizer for a warm start to start"
         )
+
+    pass1: RunReport | None = None
+    pass1_seconds: float | None = None
+    try:
+        if arguments.two_pass:
+            two = run_two_pass(
+                arguments.config,
+                arguments.store,
+                memory_budget_gb=arguments.memory_budget,
+                calibrate=arguments.calibrate,
+                recalibrate=arguments.recalibrate,
+            )
+            pass1, pass1_seconds = two.pass1, two.pass1_seconds
+            if two.pass2 is None:
+                # PASS 1 STOPPED SHORT AND PASS 2 NEVER STARTED. Exit 2, not 3:
+                # the store is resumable and the same command finishes it. This
+                # is the case the driver returns before the barrier for -- the
+                # barrier's refusal is layer 3 and would report a preempted run
+                # as an invalid request.
+                outstanding = (
+                    0
+                    if pass1 is None
+                    else pass1.tiles_total - pass1.tiles_written - pass1.tiles_skipped
+                )
+                print(
+                    f"aborted early: pass 1 has {outstanding} tiles outstanding "
+                    "after SIGTERM and pass 2 has not started; the same command "
+                    "resumes",
+                    file=sys.stderr,
+                )
+                return ExitCode.ABORTED_EARLY
+            report = two.pass2
+        else:
+            report = run(
+                arguments.config,
+                arguments.store,
+                memory_budget_gb=arguments.memory_budget,
+                reuse_fits_from=arguments.reuse_fits_from,
+                calibrate=arguments.calibrate,
+                recalibrate=arguments.recalibrate,
+            )
     except (ValidationError, InputContractError) as error:
         # LAYER 4's TYPE CARRIES NO LAYER PREFIX OF ITS OWN, so the naming
         # happens here for both. That keeps "each layer names itself" satisfied
@@ -186,6 +243,27 @@ def main(argv: Sequence[str] | None = None) -> int:
         f"tiles:      side={report.tile_side}  written={report.tiles_written}  "
         f"skipped={report.tiles_skipped}  of {report.tiles_total}"
     )
+    if pass1 is not None and pass1_seconds is not None:
+        print(
+            f"pass 1:     store={pass1.store_path}  side={pass1.tile_side}  "
+            f"tiles={pass1.tiles_total}  {pass1_seconds:.1f} s  "
+            "(KEEP IT: the only cold reference for these points)"
+        )
+    # THE AGGREGATES 2c MEASURES AND §13.4 WILL PRINT PROPERLY. The per-point
+    # source map is deliberately not among them -- see `run.WarmStartSummary`.
+    if report.warm_start is not None:
+        warm = report.warm_start
+        farthest = max(warm.radius_histogram, default=0)
+        print(
+            f"warm start: source={warm.source}  "
+            f"{warm.warm_started}/{warm.cells} cells warm  "
+            f"{warm.exhausted} exhausted  farthest source {farthest} cells"
+        )
+    if report.init_rungs:
+        rungs = "  ".join(
+            f"{name}={count}" for name, count in sorted(report.init_rungs.items())
+        )
+        print(f"init rungs: {rungs}")
     print(
         f"fit_hash={report.fit_hash}  compat_hash={report.compat_hash}  "
         f"store={report.store_path}"

@@ -10,10 +10,40 @@ cannot masquerade as a per-candidate one.
 
 from __future__ import annotations
 
+import json
+import os
+import subprocess
+import sys
+import textwrap
+from pathlib import Path
+from typing import Any, Literal
+
 import numpy as np
 import pytest
+import xarray as xr
+import zarr
 
-from metamer.batch.warmstart import SourceMap, source_map
+from metamer.batch.geometry import geometry_components
+from metamer.batch.input import open_input
+from metamer.batch.ragged import build_ragged_index, noise_extent
+from metamer.batch.run import run
+from metamer.batch.store import (
+    StoreShape,
+    TileSideBasis,
+    create_store,
+    provenance_attrs,
+)
+from metamer.batch.warmstart import (
+    SourceMap,
+    coarse_ok,
+    read_warm_starts,
+    source_map,
+)
+from metamer.config import load
+from metamer.config.model import Config
+from metamer.core.memory import FloorReport
+from metamer.core.outcomes import Outcome
+from tests.conftest import STUB_FLOOR_PEAK, rss_validity
 
 
 def _reference(
@@ -503,3 +533,463 @@ def test_the_source_map_is_a_frozen_dataclass_of_three_arrays():
     assert set(got.__dataclass_fields__) == {"index", "valid", "radius"}
     with pytest.raises(AttributeError):
         got.index = got.index  # type: ignore[misc]
+
+
+# --------------------------------------------------------------------------
+# Reading the sources: `coarse_ok` and `read_warm_starts`
+# --------------------------------------------------------------------------
+#
+# **THESE FIXTURES ARE REAL `run(decimate=True)` STORES, WITH ONE STATED
+# EXCEPTION.** The subject is what a pass-1 store actually contains -- the
+# ragged packing, the outcome codes, the NaN a failed fit leaves -- and a
+# hand-assembled store would carry whatever the test wrote. The exception is the
+# residency measurement at the bottom, whose subject is BYTE VOLUME and whose
+# fixture is 640 000 coarse series; that one says so where it is.
+
+
+def _array_of(
+    store: Path | str,
+    group: str,
+    name: str,
+    *,
+    mode: Literal["r", "r+"] = "r",
+) -> Any:
+    """Open one array of a store, narrowed for the type checker.
+
+    Args:
+        store: The store.
+        group: Group name.
+        name: Array name within it.
+        mode: zarr open mode.
+
+    Returns:
+        The array.
+    """
+    holder = zarr.open_group(str(store), mode=mode)[group]
+    assert isinstance(holder, zarr.Group)
+    array = holder[name]
+    assert isinstance(array, zarr.Array)
+    return array
+
+
+_READER_CONFIG = """
+data_uri = "{uri}"
+variable = "sla"
+signal_terms = ["constant", "trend"]
+candidates = ["white", "white + matern12"]
+criteria = ["aic"]
+memory_budget_gb = 1.0
+
+[warm_start]
+coarse_stride = 2
+spiral_bound = 4
+"""
+
+
+def _reader_input(tmp_path: Path, n_y: int = 9, n_x: int = 7) -> str:
+    """A non-square input whose extent is not a multiple of the stride."""
+    origin = np.datetime64("2000-01-01")
+    dataset = xr.Dataset(
+        {
+            "sla": (
+                ("time", "y", "x"),
+                np.random.default_rng(17)
+                .standard_normal((24, n_y, n_x))
+                .astype("float32"),
+            )
+        },
+        coords={
+            "time": np.array([origin + np.timedelta64(31 * i, "D") for i in range(24)]),
+            "y": 100.0 + 2.5 * np.arange(n_y),
+            "x": 500.0 - 0.5 * np.arange(n_x),
+        },
+    )
+    path = tmp_path / "in.zarr"
+    dataset.to_zarr(path)
+    return str(path)
+
+
+def _reader_pass1(tmp_path: Path) -> tuple[Path, Config, str]:
+    """A complete pass-1 store from a real decimated run, its config and input."""
+    uri = _reader_input(tmp_path)
+    config_path = tmp_path / "c.toml"
+    config_path.write_text(_READER_CONFIG.format(uri=uri))
+    store = tmp_path / "coarse.zarr"
+    run(config_path, store, decimate=True)
+    return store, load(config_path), uri
+
+
+def test_coarse_ok_is_boolean_and_marks_exactly_the_ok_fits(tmp_path):
+    """Pass 1's usability mask is `outcome == OK`, as a bool array.
+
+    Behaviour under test: the predicate a source map searches over. `fit`
+    refuses a warm start that is non-finite or at a diagnostic limit, and `OK`
+    is the outcome that guarantees neither -- `optimize_series` returns
+    `DIAGNOSTIC_LIMIT` before it can return `OK`, and returns `OK` only with a
+    Hessian, which is the branch `core.fit` writes `theta_unconstrained` under.
+
+    Expected values determined independently: the store's `/status/outcome` is
+    read here and compared against `Outcome.OK.code` in the test, not read back
+    out of the function under test.
+
+    Bug this catches: **returning the outcome codes themselves.** `source_map`
+    refuses a non-boolean array precisely because an outcome array reads every
+    failure code as True and `OK` -- which is 0 -- as False, inverting the mask
+    exactly, with every shape intact and no exception anywhere.
+
+    **With the fixture guard that makes it non-vacuous:** the mask is asserted
+    to contain both values. An all-True mask cannot tell this function from one
+    that returns `np.ones`, and a zero reading is not evidence of absence.
+    """
+    store, _, _ = _reader_pass1(tmp_path)
+    mask = coarse_ok(store)
+    stored = np.asarray(_array_of(store, "status", "outcome")[:], dtype=np.uint8)
+
+    assert mask.dtype == np.bool_
+    assert mask.shape == stored.shape
+    assert np.array_equal(mask, stored == Outcome.OK.code)
+    assert mask.any() and not mask.all(), (
+        "a uniform mask cannot distinguish this from a constant, and it would "
+        "also leave the per-candidate search untested"
+    )
+
+
+def test_the_reader_returns_the_stored_optimum_of_each_chosen_source(tmp_path):
+    """Every warm cell carries its source's `theta_unconstrained`, re-padded.
+
+    Behaviour under test: the join. Pass 1 stores the unconstrained optimum
+    **unpadded on a ragged axis** -- each candidate's free parameters
+    concatenated -- and `fit` wants `(B, M, p_max)` with NaN padding. The reader
+    is the only place that inversion happens.
+
+    Expected values determined independently: the whole array is read here, the
+    flat coarse index is decoded here, and each expected row is sliced with the
+    ragged index built here from the config. Nothing is compared against a
+    second call of the function under test.
+
+    Bug this catches: the ragged offsets applied to the wrong candidate. Every
+    array keeps its shape and every value stays finite, and the warm start for
+    `white` would be `matern12`'s `sigma` -- which is a legal starting point, so
+    the fit converges and the only symptom is a different optimum. It also
+    catches the flat index being decoded with `n_coarse_y` instead of
+    `n_coarse_x`, which agrees on a square coarse grid and this one is 5 x 4.
+
+    **And the padding is asserted NaN**, because `fit` reads each candidate's
+    row to `:p` and a number in the padding of the narrower candidate would mean
+    the reader had written past its extent.
+    """
+    store, config, uri = _reader_pass1(tmp_path)
+    specs = list(config.process_specs())
+    index = build_ragged_index(specs, noise_extent)
+    mask = coarse_ok(store)
+    n_cy, n_cx = mask.shape[0], mask.shape[1]
+    assert (n_cy, n_cx) == (5, 4), "the coarse grid must not be square"
+
+    sources = source_map(
+        shape=(9, 7),
+        stride=2,
+        coarse_ok=mask,
+        spiral_bound=4,
+        region=(2, 7, 1, 6),
+    )
+    warm = read_warm_starts(store, sources, index, coarse_shape=(n_cy, n_cx))
+
+    stored = np.asarray(
+        _array_of(store, "warmstart", "theta_unconstrained")[:], dtype=np.float64
+    )
+    assert warm.shape == (5 * 5, len(specs), max(index.extents))
+    assert bool(sources.valid.any()), "no warm cell would make this vacuous"
+
+    for point in range(warm.shape[0]):
+        for model, extent in enumerate(index.extents):
+            row = warm[point, model]
+            if not bool(sources.valid[point, model]):
+                assert np.isnan(row).all()
+                continue
+            flat = int(sources.index[point, model])
+            expected = stored[flat // n_cx, flat % n_cx, index.block(model)]
+            assert np.array_equal(row[:extent], expected)
+            assert np.isnan(row[extent:]).all(), "padding beyond p must stay NaN"
+
+
+def test_the_reader_leaves_an_exhausted_cell_entirely_unwarmed(tmp_path):
+    """A `-1` source index produces an all-NaN row, never a neighbour's values.
+
+    Behaviour under test: exhaustion carried through the read. `fit` is handed
+    `x0` and `x0_valid` together and skips the warm start where validity is
+    false, but it never inspects `x0` there -- so a reader that filled an
+    exhausted row with whatever was adjacent in the read block would be
+    invisible until someone flipped a validity bit.
+
+    Expected values determined independently: the map is CONSTRUCTED here with
+    known `-1` entries rather than produced by a spiral, because a fixture whose
+    exhaustion depends on which coarse fits happened to fail cannot place one
+    where the test wants it -- (i8), a fixture that cannot express the defect.
+
+    Bug this catches: indexing the read block with `-1`, which numpy accepts as
+    "the last element". The row would then be a real optimum from the far corner
+    of the coarse grid, finite and plausible, and `_check_warm_starts` would
+    pass it.
+
+    **With the positive control in the same array**: the valid cell beside it is
+    asserted to carry its source's values, so an all-NaN return would fail.
+    """
+    store, config, _ = _reader_pass1(tmp_path)
+    specs = list(config.process_specs())
+    index = build_ragged_index(specs, noise_extent)
+    mask = coarse_ok(store)
+    n_cx = int(mask.shape[1])
+    live = int(np.flatnonzero(mask[:, :, 0].ravel())[0])
+
+    constructed = SourceMap(
+        index=np.array([[live, -1], [-1, -1]], dtype=np.int64),
+        valid=np.array([[True, False], [False, False]], dtype=np.bool_),
+        radius=np.array([[0, -1], [-1, -1]], dtype=np.int64),
+    )
+    warm = read_warm_starts(
+        store, constructed, index, coarse_shape=(mask.shape[0], mask.shape[1])
+    )
+
+    stored = np.asarray(
+        _array_of(store, "warmstart", "theta_unconstrained")[:], dtype=np.float64
+    )
+    expected = stored[live // n_cx, live % n_cx, index.block(0)]
+    assert np.array_equal(warm[0, 0, : index.extents[0]], expected)
+    assert not np.isnan(expected).any(), "the control must carry real values"
+    assert np.isnan(warm[0, 1]).all()
+    assert np.isnan(warm[1]).all()
+
+
+#: Coarse points in the residency fixture's pass-1 store: 800 x 800.
+#:
+#: **CHOSEN SO THE WHOLE ARRAY IS TENS OF MEGABYTES, WHICH IS THE ONLY THING
+#: THAT MAKES THE DEFECT VISIBLE.** At `p_total = 4` and float64 this is
+#: 640 000 x 4 x 8 = **20.48 MB**; one tile's sources are 51.2 kB. The plan asks
+#: for the assertion "at a field size where whole-loading would be visible", and
+#: the obstacle is absolute size rather than ratio: a 32 x 32 fine grid already
+#: makes whole-loading exceed one fine tile, and 8 kB is invisible to any RSS
+#: difference.
+_RESIDENCY_COARSE_SIDE = 800
+
+#: Its tile side, and therefore its chunk side. `_chunk_side` cannot subdivide
+#: below the 4 MB target here, so the chunk is `(64, 64, 4)` float64 = 131 kB --
+#: which is what actually bounds a windowed read, since zarr materializes whole
+#: chunks. **A store with one chunk per array would make the rectangle
+#: irrelevant**, and that is a property of the store's geometry rather than of
+#: the reader.
+_RESIDENCY_TILE_SIDE = 64
+
+#: Bytes of resident growth the windowed read may not exceed.
+#:
+#: **PLACED BETWEEN TWO MEASUREMENTS RATHER THAN CHOSEN.** On 2026-08-27, three
+#: fresh interpreters each: the windowed read grew **1.39, 1.43 and 1.44 MB**;
+#: loading the same array whole grew **26.96, 27.11 and 27.35 MB**. Eight
+#: megabytes is **5.5x the first and 3.4x below the second**, so it catches a
+#: read that becomes field-sized and says nothing finer.
+_RESIDENCY_BOUND_BYTES = 8e6
+
+
+def _residency_store(tmp_path: Path) -> tuple[Path, Path, int]:
+    """A pass-1 store of 640 000 coarse points, built WITHOUT fitting.
+
+    **THIS IS THE ONE FIXTURE IN THIS MODULE THAT IS NOT A REAL RUN, AND THE
+    EXCEPTION IS DELIBERATE.** `tests/test_barrier.py` requires every pass-1
+    store to come from `run(decimate=True)` because ITS subject is the attrs a
+    writer records, and a hand-built store carries whatever the test wrote. The
+    subject here is **byte volume**: shapes, dtypes and chunk geometry, about
+    which a store built by `create_store` is the same object that a run would
+    produce. Fitting 640 000 coarse series to find that out is hours.
+
+    **The attrs describe the small input this opens rather than the 800 x 800
+    grid**, which is harmless and is stated rather than hidden: the reader opens
+    two arrays and reads no attr at all, and the gate that does read them is
+    `barrier.check_pass1_store`, tested against real runs elsewhere.
+
+    Returns:
+        The config path, the store path, and the store's `P_total`.
+    """
+    origin = np.datetime64("2000-01-01")
+    dataset = xr.Dataset(
+        {"sla": (("time", "y", "x"), np.zeros((6, 4, 4), dtype="float32"))},
+        coords={
+            "time": np.array([origin + np.timedelta64(31 * i, "D") for i in range(6)]),
+            "y": np.arange(4.0),
+            "x": np.arange(4.0),
+        },
+    )
+    uri = tmp_path / "in.zarr"
+    dataset.to_zarr(uri)
+    config_path = tmp_path / "big.toml"
+    config_path.write_text(_READER_CONFIG.format(uri=uri))
+    config = load(config_path)
+    specs = list(config.process_specs())
+    index = build_ragged_index(specs, noise_extent)
+
+    floor = FloorReport(
+        pre_warm_bytes=STUB_FLOOR_PEAK,
+        post_warm_bytes=STUB_FLOOR_PEAK,
+        with_input_bytes=STUB_FLOOR_PEAK,
+        peak_bytes=STUB_FLOOR_PEAK,
+        components={"override": STUB_FLOOR_PEAK},
+    )
+    attrs = provenance_attrs(
+        config,
+        geometry_components=geometry_components(open_input(str(uri), "sla")),
+        thread_limits={"numba": 1},
+        read_amplification=1.0,
+        unique_dt_count=1,
+        tile_sides={"shared": _RESIDENCY_TILE_SIDE},
+        tile_side_basis=TileSideBasis.DEFAULT,
+        memory_budget_requested_gb=1.0,
+        max_iter=200,
+        floor=floor,
+    )
+    store = tmp_path / "big.pass1.zarr"
+    create_store(
+        store,
+        specs=specs,
+        criteria=list(config.criteria),
+        shape=StoreShape(
+            n_y=_RESIDENCY_COARSE_SIDE,
+            n_x=_RESIDENCY_COARSE_SIDE,
+            n_beta=2,
+            tile_side=_RESIDENCY_TILE_SIDE,
+        ),
+        attrs=attrs,
+    )
+    unconstrained = _array_of(store, "warmstart", "theta_unconstrained", mode="r+")
+    outcome = _array_of(store, "status", "outcome", mode="r+")
+    generator = np.random.default_rng(1)
+    band = 200
+    for start in range(0, _RESIDENCY_COARSE_SIDE, band):
+        unconstrained[start : start + band] = generator.standard_normal(
+            (band, _RESIDENCY_COARSE_SIDE, index.total)
+        )
+        outcome[start : start + band] = np.full(
+            (band, _RESIDENCY_COARSE_SIDE, len(specs)), Outcome.OK.code, dtype=np.uint8
+        )
+    return config_path, store, index.total
+
+
+_RESIDENCY_PROGRAM = """
+import json, sys
+import numpy as np, zarr
+from metamer.batch.ragged import build_ragged_index, noise_extent
+from metamer.batch.warmstart import coarse_ok, read_warm_starts, source_map
+from metamer.config import load
+from metamer.core.machine import current_rss_bytes, reclaim_shortfall_bytes
+
+mode, config_path, store = sys.argv[1], sys.argv[2], sys.argv[3]
+config = load(config_path)
+index = build_ragged_index(list(config.process_specs()), noise_extent)
+usable = coarse_ok(store)
+sources = source_map(
+    shape=(1600, 1600), stride=2, coarse_ok=usable, spiral_bound=4,
+    region=(0, 64, 0, 64),
+)
+# READ IN THE CHILD, which is the process the difference below is taken in.
+reference = current_rss_bytes()
+before = current_rss_bytes()
+if mode == "tile":
+    warm = read_warm_starts(
+        store, sources, index, coarse_shape=(usable.shape[0], usable.shape[1])
+    )
+    checksum = float(np.nansum(warm))
+else:
+    # THE SAME WARM STARTS, BUILT THE OTHER WAY. This is the mutant: identical
+    # output, whole-array read. The re-padding below is `read_warm_starts`'
+    # own, so the only difference between the two branches is what was loaded.
+    array = zarr.open_group(store, mode="r")["warmstart"]["theta_unconstrained"]
+    whole = np.asarray(array[:], dtype=np.float64)
+    n_cx = int(usable.shape[1])
+    warm = np.full(
+        (sources.index.shape[0], sources.index.shape[1], max(index.extents)), np.nan
+    )
+    for model, extent in enumerate(index.extents):
+        selected = sources.valid[:, model]
+        chosen = sources.index[selected, model]
+        warm[selected, model, :extent] = whole[chosen // n_cx, chosen % n_cx][
+            :, index.block(model)
+        ]
+    checksum = float(np.nansum(warm))
+print(json.dumps({
+    "delta": current_rss_bytes() - before,
+    "checksum": checksum,
+    "cells": int(sources.valid.sum()),
+    "shortfall": reclaim_shortfall_bytes(reference),
+}))
+"""
+
+
+def _residency_reading(mode: str, config_path: Path, store: Path) -> dict[str, float]:
+    """Run one measurement in a FRESH interpreter and return its JSON."""
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            textwrap.dedent(_RESIDENCY_PROGRAM),
+            mode,
+            str(config_path),
+            str(store),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        env={**os.environ, "METAMER_FLOOR_BYTES": str(STUB_FLOOR_PEAK)},
+    )
+    assert result.returncode == 0, result.stderr
+    parsed: dict[str, float] = json.loads(result.stdout.splitlines()[-1])
+    return parsed
+
+
+@pytest.mark.machine
+def test_the_reader_does_not_load_pass_ones_store_whole(tmp_path):
+    """One tile's warm starts cost a rectangle, not the coarse field.
+
+    Behaviour under test: the invariant §11.1's general form breaks through if
+    it fails. Peak RAM must be derivable from the memory budget alone, and a
+    source read proportional to the FIELD is a second term the budget cannot
+    see -- invisible at test sizes and 12.96 MB at design doc §9.4's grid, still
+    invisible, and unbounded above that.
+
+    Expected values determined independently, by measurement rather than from
+    the code: see `_RESIDENCY_BOUND_BYTES` for the six readings the bound sits
+    between.
+
+    Bug this catches: `array[:]` in the reader instead of a windowed read. It
+    produces identical warm starts -- the control below has the same checksum
+    restricted to the same points -- so nothing except residency can see it.
+
+    **THE POSITIVE CONTROL IS THE WHOLE-ARRAY READ ITSELF** (i2), in its own
+    fresh interpreter. A pure "under 8 MB" assertion is satisfied by a fixture
+    too small to breach any bound; this one shows the same fixture breaching it
+    when the read is done the other way.
+
+    **AND WHAT BOUNDS THE WINDOWED READ IS THE STORE'S CHUNK GEOMETRY, NOT THE
+    RECTANGLE.** zarr materializes whole chunks, so the read costs
+    `(chunks touched) x (chunk bytes)` -- and both are properties of pass 1's
+    tile side, which comes from its memory budget. That is exactly the shape
+    §11.1.1 asks for: a term the budget bounds, rather than one the grid does.
+    """
+    config_path, store, p_total = _residency_store(tmp_path)
+    whole_bytes = _RESIDENCY_COARSE_SIDE**2 * p_total * 8
+    # FIXTURE GUARD: a store whose whole array is small cannot express the
+    # defect, and shrinking it later would make this test pass for that reason.
+    assert whole_bytes > 20e6, f"the fixture must be tens of MB, got {whole_bytes}"
+
+    witnessed: dict[str, float] = {}
+    with rss_validity(
+        "one tile's warm starts against the whole coarse field",
+        witness=lambda: witnessed.get("shortfall", 0.0),
+    ):
+        windowed = _residency_reading("tile", config_path, store)
+        witnessed["shortfall"] = float(windowed["shortfall"])
+        assert windowed["cells"] == 64 * 64 * 2, "every cell must have a source"
+        assert windowed["delta"] < _RESIDENCY_BOUND_BYTES
+
+        control = _residency_reading("whole", config_path, store)
+        assert control["checksum"] == windowed["checksum"], (
+            "the control must produce the SAME warm starts, or it is not a "
+            "control on how they were read"
+        )
+        assert control["delta"] > _RESIDENCY_BOUND_BYTES

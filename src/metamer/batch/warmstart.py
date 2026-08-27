@@ -78,9 +78,44 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from functools import cache
+from pathlib import Path
+from typing import Any
 
 import numpy as np
+import zarr
 from numpy.typing import NDArray
+
+from metamer.batch.ragged import RaggedIndex
+from metamer.core.outcomes import Outcome
+
+
+def _array(root: zarr.Group, group: str, name: str) -> zarr.Array[Any]:
+    """Return one array of an opened store, narrowed for the type checker.
+
+    A third spelling of `write._array` and `reuse._array`. **Left duplicated
+    deliberately rather than consolidated in a feature commit**: hoisting it
+    would edit two modules this task otherwise does not touch, and a refactor
+    landing beside a behaviour change is how one of them comes to explain the
+    other's failure.
+
+    Args:
+        root: An opened store.
+        group: Group name.
+        name: Array name within it.
+
+    Returns:
+        The array.
+
+    Raises:
+        TypeError: If either name does not hold what the schema says it does.
+    """
+    holder = root[group]
+    if not isinstance(holder, zarr.Group):  # pragma: no cover - store invariant
+        raise TypeError(f"{group} is not a group")
+    array = holder[name]
+    if not isinstance(array, zarr.Array):  # pragma: no cover - store invariant
+        raise TypeError(f"{group}/{name} is not an array")
+    return array
 
 
 @dataclass(frozen=True)
@@ -254,4 +289,121 @@ def source_map(
     return SourceMap(index=index, valid=index >= 0, radius=radius)
 
 
-__all__ = ["SourceMap", "source_map"]
+def coarse_ok(pass1_path: Path | str) -> NDArray[np.bool_]:
+    """Read pass 1's per-candidate usability mask over the whole coarse grid.
+
+    **`OK` IS THE RIGHT PREDICATE AND IT WAS CHECKED RATHER THAN ASSUMED.** The
+    question a source map asks is *"does this coarse cell hold a warm start a
+    fit could legitimately start from?"*, and `fit` refuses one that is
+    non-finite or at a diagnostic limit. `optimize_series` returns
+    `DIAGNOSTIC_LIMIT` before it can return `OK`, and returns `OK` only with a
+    Hessian in hand -- which is the branch `core.fit` writes
+    `theta_unconstrained` under. So `outcome == OK` implies a finite
+    unconstrained optimum strictly inside both limits, which is exactly the
+    contract `_check_warm_starts` enforces on the other side.
+
+    **THIS IS THE ONE ARRAY OF PASS 1 THAT IS READ WHOLE, AND IT IS DELIBERATE
+    RATHER THAN OVERLOOKED.** `source_map` takes `coarse_ok` over the FULL
+    coarse grid and answers in absolute coarse indices, which is what makes
+    §11.3's tile-independence structural instead of tested into existence; a
+    halo slice would need translated indices, the construction that module
+    exists to avoid. **The cost is a term that grows with the field**: at design
+    doc §9.4's 3600 x 7200 grid with `k = 8` the coarse grid is 450 x 900, so at
+    two candidates this is 810 kB of uint8 -- against 12.96 MB for the same
+    store's `theta_unconstrained` at `p_total = 4`, which `read_warm_starts`
+    does NOT read whole, and against 372.9 MB for one fine tile at side 272 and
+    N = 630. Recorded in `PROGRESS.md` with those figures.
+
+    Args:
+        pass1_path: A complete pass-1 store, past the barrier and the gate.
+
+    Returns:
+        `(n_coarse_y, n_coarse_x, M)` bool, the shape and dtype `source_map`
+        requires. **Boolean, never the outcome codes**: `source_map` refuses a
+        non-boolean array because an outcome array reads every non-`OK` code as
+        True and `OK` -- which is 0 -- as False, inverting it exactly.
+    """
+    root = zarr.open_group(str(pass1_path), mode="r")
+    outcome = np.asarray(_array(root, "status", "outcome")[:], dtype=np.uint8)
+    return np.asarray(outcome == Outcome.OK.code, dtype=np.bool_)
+
+
+def read_warm_starts(
+    pass1_path: Path | str,
+    sources: SourceMap,
+    index: RaggedIndex,
+    *,
+    coarse_shape: tuple[int, int],
+) -> NDArray[np.float64]:
+    """Read one tile's warm starts out of pass 1, in `fit`'s `(B, M, p_max)` layout.
+
+    **ONE TILE'S SOURCES, NOT THE STORE.** The read is a single rectangle: the
+    bounding box of the coarse cells this tile's source map actually names,
+    which the spiral bounds at the tile's own coarse footprint plus
+    `spiral_bound` coarse steps on each side. At fine tile side 272 with
+    `k = 8` and `bound = 4` that is 42 x 42 = 1764 coarse points, **56 kB at
+    `p_total = 4`**, and it does not move when the field grows. Loading the
+    array whole instead would put a field-sized term under §11.1.1's
+    peak-RAM-from-the-budget guarantee, which is the door §11.1's general form
+    breaks through.
+
+    **THE RAGGED AXIS IS UNPACKED WITH THE RUN'S OWN INDEX, NOT A SECOND ONE.**
+    `/warmstart/theta_unconstrained` is `(y, x, P_total)`: each candidate's free
+    parameters concatenated, with no padding, because on the ragged axis a NaN
+    means the fit failed and nothing else (§12.3). Re-padding to `(B, M, p_max)`
+    is `RaggedIndex.block(m)` per candidate, and the index handed in is the one
+    the run tiles against -- **the two stores share a candidate count**, which
+    `resume._check_candidates` enforces in both directions from inside the
+    cross-store gate.
+
+    Args:
+        pass1_path: A complete pass-1 store, past the barrier and the gate.
+        sources: This tile's source map, `(B, M)`, in row-major grid order --
+            the order `tiling.assemble_tile` returns series in.
+        index: The run's `/noise/` ragged index, whose extents are the per
+            candidate free-parameter counts.
+        coarse_shape: `(n_coarse_y, n_coarse_x)`, needed to turn a flat coarse
+            index back into a row and a column. **Taken from `coarse_ok`'s own
+            shape by the caller** rather than recomputed from the grid and the
+            stride: two derivations of the coarse extent is how one of them
+            comes to disagree with the store that has it.
+
+    Returns:
+        `(B, M, p_max)` float64. **NaN wherever `sources.valid` is false**, and
+        NaN in the padding of any candidate narrower than the widest -- the
+        layout `fit` reads to `:p` per candidate and never inspects beyond.
+    """
+    n_cx = int(coarse_shape[1])
+    batch, models = sources.index.shape
+    p_max = max(index.extents)
+    warm = np.full((batch, models, p_max), np.nan, dtype=np.float64)
+    if not bool(sources.valid.any()):
+        return warm
+
+    flat = sources.index[sources.valid]
+    rows, columns = np.divmod(flat, n_cx)
+    # THE BOUNDING BOX OF WHAT THIS TILE ASKED FOR, which is what makes the read
+    # a function of the tile rather than of the field. It is taken from the
+    # indices themselves rather than from the tile plus the bound, so a change
+    # to the spiral's reach cannot leave this reading the wrong rectangle.
+    row_start, row_stop = int(rows.min()), int(rows.max()) + 1
+    column_start, column_stop = int(columns.min()), int(columns.max()) + 1
+
+    root = zarr.open_group(str(pass1_path), mode="r")
+    stored = _array(root, "warmstart", "theta_unconstrained")
+    block = np.asarray(
+        stored[row_start:row_stop, column_start:column_stop, :], dtype=np.float64
+    )
+
+    for model, extent in enumerate(index.extents):
+        selected = np.asarray(sources.valid[:, model], dtype=np.bool_)
+        if not bool(selected.any()):
+            continue
+        chosen = sources.index[selected, model]
+        i = chosen // n_cx - row_start
+        j = chosen % n_cx - column_start
+        warm[selected, model, :extent] = block[i, j][:, index.block(model)]
+    return warm
+
+
+__all__ = ["SourceMap", "coarse_ok", "read_warm_starts", "source_map"]
