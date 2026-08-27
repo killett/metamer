@@ -1,9 +1,9 @@
 # Phase 2c — the two-pass warm start, its barrier, and the hysteresis audit
 
-**Status: APPROVED 2026-08-24. TASKS 0–4 ARE DONE (2026-08-24); Tasks 5–8 have no code.
-Task 5 is the next action.** The single source for this plan's status is this line. **What each task
-found beyond its brief is in [`PROGRESS.md`](../../../PROGRESS.md)'s *What plan Task N
-established*, not here.**
+**Status: APPROVED 2026-08-24. TASKS 0–5 ARE DONE (0–4 on 2026-08-24, Task 5 on 2026-08-27);
+Tasks 6–8 have no code. Task 6 is the next action.** The single source for this plan's status is
+this line. **What each task found beyond its brief is in
+[`PROGRESS.md`](../../../PROGRESS.md)'s *What plan Task N established*, not here.**
 
 > **TASK 1 WAS AN AUDIT, NOT A BUILD, AND IT MOVED A REQUIREMENT.** Its mechanism was already
 > implemented in Phase 2a; **the `ALGORITHM_VERSION` bump it claimed now belongs to Task 5**,
@@ -430,6 +430,15 @@ new store schema, no warm-start cache** — pass 1's store **is** the cache (D11
   from the same field values**, so the two would collide. **`ALGORITHM_VERSION` separates ERAS,
   not configurations**, which is the whole reason it is a code constant rather than a config
   field.
+
+  > **THE PARAGRAPH ABOVE IS WRONG AND IS LEFT STANDING WITH THIS CORRECTION, 2026-08-27.** The
+  > two populations it names are **both cold and bit-identical**, so a conditional bump would have
+  > let them share a `fit_hash` **correctly**. The collision is at the **default**, where
+  > `enabled` is `True`. Unconditionality rests on `ALGORITHM_VERSION` being a stamped identity the
+  > installed code is authoritative for, on a config-conditional stamp being a second copy of
+  > `warm_start_enabled`, and on the bump rule being about a **change** rather than a run. Full
+  > form at the constant and in [`PROGRESS.md`](../../../PROGRESS.md)'s *What plan Task 5
+  > established*.
 
   **It closes a defect that has been in the tree since 2026-08-11.** `WarmStart.enabled` defaults
   to **`True`** and is in `fit_hash`, while nothing consumed it. **The store is not silent about

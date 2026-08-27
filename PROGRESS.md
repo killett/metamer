@@ -3,10 +3,10 @@
 ## Start here (cold-start summary)
 
 1. **Branch `main`, everything on it, every commit pushed by a hook** — https://github.com/killett/metamer. **A SHA here is stale the moment the next commit lands, so nothing here names one:** `git log --oneline -8` is the authority.
-2. **DONE:** Phase 1 (0–18), Phase 2 preliminaries P0–P4, **Phase 2a (0–13)**, **Phase 2b (COMPLETE 2026-08-19 — 10 met / 4 reduced scope / 2 FAILED)**, **Phase 2c's brainstorm (D1–D12)**, and **2c plan Tasks 0–4 (2026-08-24)**. The modelling sub-phase was decided against 2026-08-22 and **re-decided on closed facts 2026-08-23: it does not open.** Sections below carry each; **none is restated here.**
-3. **NEXT ACTION: PHASE 2c TASK 5 — the two-pass driver.** Plan: [`2026-08-24-metamer-phase2c.md`](docs/superpowers/plans/2026-08-24-metamer-phase2c.md) — **9 tasks, 12 exit criteria each naming its reading; Tasks 0–4 done, Tasks 5–8 have no code.** **Every task's FIRST step is the pre-flight**, run against the brief **before code** and appended to [`phase2c-preflight.md`](docs/superpowers/notes/phase2c-preflight.md). **Read [What plan Task 5 inherits](#what-plan-task-5-inherits-written-2026-08-26-before-any-of-it-exists) before anything else** — it carries the three things Task 5 cannot be written correctly without, the first being that **its `ALGORITHM_VERSION` bump is UNCONDITIONAL and the task cannot ship without it.**
+2. **DONE:** Phase 1 (0–18), Phase 2 preliminaries P0–P4, **Phase 2a (0–13)**, **Phase 2b (COMPLETE 2026-08-19 — 10 met / 4 reduced scope / 2 FAILED)**, **Phase 2c's brainstorm (D1–D12)**, and **2c plan Tasks 0–5 (0–4 on 2026-08-24, Task 5 on 2026-08-27)**. The modelling sub-phase was decided against 2026-08-22 and **re-decided on closed facts 2026-08-23: it does not open.** Sections below carry each; **none is restated here.**
+3. **NEXT ACTION: PHASE 2c TASK 6 — the audit's arms, and the four-reading table.** Plan: [`2026-08-24-metamer-phase2c.md`](docs/superpowers/plans/2026-08-24-metamer-phase2c.md) — **9 tasks, 12 exit criteria each naming its reading; Tasks 0–5 done, Tasks 6–8 have no code.** **Every task's FIRST step is the pre-flight**, run against the brief **before code** and appended to [`phase2c-preflight.md`](docs/superpowers/notes/phase2c-preflight.md). **`ALGORITHM_VERSION` IS `"2"` SINCE 2026-08-27** and every store written before it holds cold fits — see [how to read a store written before 2c Task 5](#how-to-read-a-store-written-before-2c-task-5-recorded-2026-08-24-and-it-cannot-be-reconstructed-later), which is not re-derivable from the stores.
 4. ## THE STANDING LIMITATION ON EVERYTHING 2c DECIDED: **NO 2c NUMBER COMES FROM REAL DATA.** Warm-starting was authorized — and every decision after D1 inherits this — on a **simulated field whose spatial coherence is a construction parameter**. **The spatial coherence of real altimetry optima has never been measured.** Weaker coherence gives a **smaller** saving, and **§11.2's 30% threshold could fail on real data.** **THE NAMED CLOSER, not an open worry: a spike on a real gridded product — same three arms, same record-length lever.** **AND SINCE 2026-08-24 THERE IS A SECOND REGISTER OF IT: every 2c saving is a CEILING, not an estimate**, because the instrument searched with no effective spiral bound — see [what 2c's tasks inherit](#what-2cs-tasks-inherit-2026-08-24).
-5. **Tests: 1157 passed, 0 failed, 0 INDETERMINATE — 2026-08-24, 1143.52 s on a box at 3.3 GB available (read after the run, not during it).** **`pixi run test` is the full sweep and every end-of-task verification must run it; `test-fast` and `test-ci` are NOT evidence** — the full sweep has caught **seven** things a fast run could not. **Every run prints `RSS measurement validity`, including at zero**; a nonzero count is INDETERMINATE, neither pass nor fail.
+5. **Tests: 1174 passed, 0 failed, 0 INDETERMINATE — 2026-08-27, 1698.10 s (the three sweeps that day ran 1698, 1732 and 2286 s on a byte-identical test tree, which is the machine and not the suite).** **`pixi run test` is the full sweep and every end-of-task verification must run it; `test-fast` and `test-ci` are NOT evidence** — the full sweep has caught **seven** things a fast run could not. **Every run prints `RSS measurement validity`, including at zero**; a nonzero count is INDETERMINATE, neither pass nor fail.
 6. **Verify a fresh checkout with `pixi run test && pixi run typecheck && pixi run lint`**, plus `pixi run pre-commit run --all-files` before every commit. **AND `git add` A NEW FILE BEFORE THAT SWEEP, NEVER AT COMMIT TIME** — `--all-files` covers **tracked** files only, so an untracked new module makes every hook print `Passed` without being read. Measured 2026-08-24; it cost two full twenty-minute sweeps before it was noticed.
 7. **THE METHOD IS THE PRE-FLIGHT AND IT LIVES IN EXACTLY ONE PLACE:** [`phase1-to-phase2-handoff.md`](docs/superpowers/notes/phase1-to-phase2-handoff.md) §1 — (a0)–(a9), (a)–(k), the standing rules, the fixture facts, **and the thirteen 2c added:** (i2b) a high-ceiling control converts a null into a **located** null · (i2c) a sign-unstable benefit is worse than a small one · (j5) a second instrument is a cross-check only if it measures the same quantity under the same conditions · (j6) bound the unmeasured region before measuring it · (i11) refutation clauses in **both** directions · (a2b) make an invalid value **unavailable** rather than caveated · (h2) stratify only by axes at the metric's **own** granularity · (j7) never stratify by a quantity the treatment can move · (c4) a validator must be specified in the **coordinates and extent** the validated object actually has · **(c5) a gate over a set that can GROW must be written against the set, not an enumeration of its members** · (e2) prove a mutant differs before recording a surviving mutation — **(e) now has six causes** · (e3) its opposite colour, a **red** suite hiding a dead assertion · (a2c) populated but nothing **acts** on it · (a2d) a hashed value's **unit** is part of its identity · (a2e) encode a classification as a **construction** · (i12) a **uniform fixture set** cannot test a freedom the contract leaves open · (j8) an adopted verdict makes the **instrument** part of the specification · plus (a0)'s sixth register (**a check that never read the file prints the same word as one that did**) and (a4)'s (**"checked" in your own pre-flight is a claim**). **Do not restate them here** — the two copies drifted once already.
 8. **CI IS GREEN and the deliberate red is CLOSED** (2026-08-22, by the repair its own criterion chose: the fixture was **enlarged**, the bound was **not** widened and the test was **not** marked). **CI runs `-m "not machine"` and therefore executes exactly ONE of the nine RSS assertions**, so it is not a substitute for the local sweep. See [THE CI FIXTURE DECISION](#the-ci-fixture-decision--taken-measured-and-verified-2026-08-22).
@@ -3107,8 +3107,9 @@ has already run*, which then has to run again, and this project's rule is that a
 
 ### HOW TO READ A STORE WRITTEN BEFORE 2c TASK 5 (recorded 2026-08-24, and it cannot be reconstructed later)
 
-> **ANY STORE WHOSE `algorithm_version` IS BELOW THE VALUE 2c TASK 5 SHIPS HOLDS COLD FITS,
-> REGARDLESS OF WHAT `warm_start_enabled` SAYS IN ITS FIT PAYLOAD.**
+> **ANY STORE WHOSE `algorithm_version` IS `"1"` HOLDS COLD FITS, REGARDLESS OF WHAT
+> `warm_start_enabled` SAYS IN ITS FIT PAYLOAD.** The boundary value was unknown when this was
+> written and is now fixed: **`"2"`, shipped 2026-08-27 at 2c Task 5.**
 
 `WarmStart.enabled` has defaulted to **`True`** and sat in `fit_hash` since **2026-08-11**, while
 **nothing consumed it** until Task 5. So a pre-bump store's fit payload records a warm-start
@@ -3121,10 +3122,25 @@ distinguishable only by `algorithm_version`** — a boundary nobody can re-deriv
 themselves. **The bump is what makes the eras separable at the resume gate; this note is what
 makes an old store readable at all.**
 
-**AND THE BUMP IS UNCONDITIONAL, NOT CONTINGENT ON `warm_start.enabled`.** A user who disables
-warm-starting after Task 5 gets cold fits — and their pre-Task-5 store also holds cold fits under a
-`fit_hash` computed from the same field values, so a conditional bump would let the two collide.
-**`ALGORITHM_VERSION` separates eras, not configurations.**
+**AND THE BUMP IS UNCONDITIONAL, NOT CONTINGENT ON `warm_start.enabled` — BUT NOT FOR THE REASON
+THIS NOTE GAVE UNTIL 2026-08-27, WHICH WAS WRONG AND IS CORRECTED RATHER THAN DELETED.** It said:
+*"a user who disables warm-starting after Task 5 gets cold fits, and their pre-Task-5 store also
+holds cold fits under a `fit_hash` computed from the same field values, so a conditional bump would
+let the two collide."* **Walk it: both populations are cold and bit-identical**, nothing on the cold
+path moved, so sharing a `fit_hash` would have been correct reuse. That example describes the one
+case where a conditional bump would be *right*.
+
+**THE COLLISION IS AT THE DEFAULT.** `enabled` is `True` unless a user says otherwise, so a
+pre-Task-5 store holds **cold** fits at `algorithm_version = "1"` and the same configuration
+afterwards produces **warm-started** ones — and with **no** bump the resume gate accepts the store
+and writes the two populations into it side by side. Unconditionality then follows from three
+things that have nothing to do with any run's config, and they live at the constant:
+`ALGORITHM_VERSION` is a **stamped identity the installed code is authoritative for**; a
+config-conditional stamp would be a **second copy** of `warm_start_enabled`, which is already in
+the allowlist; and the bump rule is a statement about a **change**, not about a run. **The cost is
+over-invalidation** — a warm-start-disabled store whose fits did not move is invalidated anyway —
+**and that is what "separates eras, not configurations" means.** Full form in `hashing.py`'s
+`ALGORITHM_VERSION` docstring and in the Task 5 pre-flight.
 
 **PRECEDENCE, AMENDED 2026-08-12.** The rule carried since Phase 1 was *"if PROGRESS.md and the
 plan disagree, the design doc is authoritative"*. Task 6 produced the first disagreement in the
@@ -5423,6 +5439,154 @@ per-candidate one.
 radius, a spiral starting at radius 1, the bound read as fine units, `valid` as `index > 0`, the
 coarse geometry taken from the region, a per-point search, exhaustion falling through to the
 nearest point regardless of its outcome, and column-major point ordering.
+
+### What plan Task 5 established (done 2026-08-27 — read before touching the warm-start path, the goldens or `ALGORITHM_VERSION`)
+
+**`batch/twopass.py` is the ORDER between two `run` calls and nothing else.** Pass 1 stays
+`run(decimate=True)`; pass 2 is `run(warm_start_from=...)`. `warmstart.py` gained `coarse_ok` and
+`read_warm_starts`; `run` gained the parameter, three refusals, the per-tile source map and the
+aggregates; `__main__` gained `--two-pass`.
+
+#### THE BUMP SHIPPED, AND ITS OWN JUSTIFICATION WAS THE FIRST FINDING
+
+`ALGORITHM_VERSION` is **`"2"`**. The plan's worked example for making it unconditional does not
+demonstrate a collision — the two populations it names are both cold and bit-identical — and the
+requirement stands on three other grounds. Corrected in
+[how to read a store written before 2c Task 5](#how-to-read-a-store-written-before-2c-task-5-recorded-2026-08-24-and-it-cannot-be-reconstructed-later)
+and at the constant; **not restated here.**
+
+**IT LANDED BEFORE THE DRIVER, NOT AFTER, AND THE ORDER IS A DECISION.** The plan reads as *"this
+is the commit at which `θ̂` moves"*, which suggests bumping with or after the driver. The
+post-commit hook publishes every commit, so bumping second would publish **one commit in which a
+default run warm-starts under `algorithm_version = "1"`** — exactly the mixing the bump exists to
+prevent. Bumping first is inert: nothing warm-starts yet and it only invalidates stores.
+
+#### THE GOLDENS ARE FIVE, IN TWO FILES, AND ONE FILE HAD NO REVERSAL AT ALL
+
+| file | hashes | payload strings |
+|---|---|---|
+| `tests/test_hashing.py` | `GOLDEN_FIT_HASH`, `GOLDEN_COMPAT_HASH`, `GOLDEN_RUN_HASH` | three |
+| `tests/test_config.py` | `GOLDEN_FIT_HASH`, `GOLDEN_COMPAT_HASH` | two |
+
+The two **fit** goldens are deliberately the same value — that identity is the claim `test_config`
+exists to make — and the two **compat** goldens are **different**, because the fixtures name
+different criterion sets. `_HISTORY` gained a hop, and it is **the first that moves no field**: the
+allowlist is unchanged and one value inside it differs, which the chain had never exercised.
+**`tests/test_config.py` had no chain**, so its two goldens had been re-derived across two
+allowlist changes with nothing able to tell a hand derivation from a paste; it now carries its own
+one-hop reversal. Every string was rewritten by hand and verified by reversal **before** the suite
+ran.
+
+#### WHAT THE `--explain` BULLET ASKED FOR THAT WAS NOT BUILT, AND WHY
+
+**"Record the source-index array" is a 160 MB field-sized term** at 10⁷ points with two candidates
+and int64 indices, against this task's own invariant that peak RAM is derivable from the memory
+budget alone. **The map is built per tile, consumed and dropped.** What survives is `O(1)` in the
+field: the exhaustion count, the source-radius histogram, the init-rung distribution and the two
+passes' wall clocks.
+
+**AND THEY LIVE IN `RunReport`, NOT IN THE STORE, FOR A FORCED REASON.** `create_store(attrs=...)`
+writes root attrs **once, at creation, before any tile is fitted**, and a resumed run does not
+rewrite them — so a counter that accumulates through the tile loop has no honest slot there:
+written at creation it records zeros, written at the end it overwrites the previous run's or needs
+a merge rule. On a resume the aggregates cover **the tiles this run fitted**, exactly as
+`tiles_written` does. `warm_start_used` is different and stays in attrs because it is known before
+the loop — and it is now actually **passed**, which it never was.
+
+#### THE READ IS PER TILE, EXCEPT FOR ONE ARRAY — WITH THE FIGURES
+
+`read_warm_starts` reads the bounding box of the coarse cells a tile's map names, taken from the
+indices themselves rather than from the tile plus the bound. **But `source_map`'s contract takes
+`coarse_ok` over the FULL coarse grid**, which is what makes tile-independence structural, so
+`/status/outcome` **is** read whole. At §9.4's 3600 × 7200 grid with `k = 8` the coarse grid is
+450 × 900 = **405 000 points**, and at 2a's candidate set (`M = 2`, `p_total = 4`):
+
+| what | bytes |
+|---|---|
+| `/status/outcome`, read WHOLE | 405 000 × 2 = **810 kB** |
+| `/warmstart/theta_unconstrained`, NOT read whole | 405 000 × 4 × 8 = **12.96 MB** |
+| one tile's sources, at side 272 and bound 4 | 42² × 4 × 8 = **56 kB** |
+| one fine tile, for scale | 272² × 630 × 8 = **372.9 MB** |
+
+**The 16× term is removed and the smaller one remains, and it still grows linearly with the
+field.** Narrowing it means passing `source_map` a halo with translated indices — the tile-local
+construction Task 3 was written to prevent — so **it is Task 3's decision and is deferred, not
+fixed.**
+
+**AND WHAT ACTUALLY BOUNDS A WINDOWED READ IS THE STORE'S CHUNK GEOMETRY**, because zarr
+materializes whole chunks: the cost is `(chunks touched) × (chunk bytes)`, and both come from
+pass 1's tile side, which comes from its memory budget. That is the shape §11.1.1 asks for — a
+term the **budget** bounds rather than one the grid does.
+
+#### THE RSS ASSERTION'S SUBJECT IS THE READER, BECAUSE A WHOLE RUN CANNOT EXPRESS IT
+
+Whole-loading exceeds one fine tile above ~384 fine points at `k = 2`, so the **ratio** is easy;
+the **absolute figure** is not — on a 32 × 32 grid the whole coarse array is **8 kB**, invisible to
+any RSS difference, and a grid large enough to make it megabytes is hours of fitting. So the
+measurement is on `read_warm_starts` in a child process, against a hand-built 800 × 800 coarse
+store whose whole array is **20.48 MB**. Three fresh interpreters each, 2026-08-27: the windowed
+read grew **1.39, 1.43 and 1.44 MB**; the whole-array read grew **26.96, 27.11 and 27.35 MB**.
+**The bound is 8 MB**, 5.5× the first and 3.4× below the second. That fixture is the one pass-1
+store in the suite not built by a real run, and the reason is stated at it: the subject is byte
+volume, and 640 000 coarse series cannot be fitted in a test.
+
+#### A VALID WARM START IS NOT THE SAME AS A WARM START **USED**
+
+Measured, not predicted. A test asserted `init_rungs[WARM_START] == warm_started` and read
+**147 against 182** on a fixture with a block of all-NaN series: **a series the design precheck
+refuses never reaches the optimizer**, so no warm rung is recorded although the map offered one.
+The relation that holds is `WARM_START ≤ warm_started`; equality holds only where every series is
+fittable. **Both forms are now asserted, in the two fixtures that separate them.**
+
+#### A SIGTERM DURING PASS 1 RETURNS BEFORE THE BARRIER, AND THAT IS AN EXIT-CODE DECISION
+
+`check_pass1_complete` on a preempted pass 1 raises layer 3 → **exit 3, "your request is wrong"**,
+for a run that is resumable → **§14.3's exit 2**. The driver returns with no pass-2 report and the
+same command resumes. The barrier keeps its refusal for a store incomplete for a reason this
+invocation did not witness, and `run(warm_start_from=...)` still enforces it — a caller can reach
+`run` directly.
+
+#### FIVE MUTATIONS, FOUR CAUGHT AND ONE RECORDED AS UNPROVABLE
+
+Caught, each shown to change some output first: a **tile-local source map with consistently
+translated indices** (the two-budget bitwise test — the naive form raises on `coarse_ok`'s shape,
+so the mutant had to be built properly), `warm_start_used` **read off the config**, the driver's
+**early return deleted**, and `warm_started` counting `.size` **instead of** `.sum()`. Plus two on
+the reader: the flat index decoded with `n_coarse_y`, and the ragged block replaced by `0:extent`.
+
+**UNPROVABLE, AND SAID SO RATHER THAN LISTED AS CAUGHT** (e2): rebuilding `x0_valid` as
+`index >= 0` at the call site **cannot differ** from `SourceMap.valid` — it is the same expression.
+
+#### THREE THINGS CHECKED AND FOUND ALREADY CLOSED, READ RATHER THAN RECALLED
+
+- **The candidate-superset hazard.** Pass 1's `theta_unconstrained` is ragged over pass 1's
+  candidate list, so a pass 2 with a superset would address past the end of its axis.
+  `resume._check_candidates` refuses a requested list that is **shorter and longer**, and the
+  barrier imports it. Recorded so a later loosening of that gate knows what else it moves.
+- **`outcome == OK` is a safe warm-start predicate.** `optimize_series` returns
+  `DIAGNOSTIC_LIMIT` before it can return `OK`, and returns `OK` only with a Hessian — which is
+  the branch `core.fit` writes `theta_unconstrained` under. So `OK` implies finite and strictly
+  inside both diagnostic limits, which is exactly what `_check_warm_starts` demands.
+- **`interpolation_rule` and `tie_break` still have no consumer, and are not (a2c) defects.** Both
+  are single-member `Literal`s, so no second value exists to discriminate on; they are declared
+  regimes (a3). `enabled` and `spiral_bound` gained their first production consumers here.
+
+#### FOUR RESIDUALS, RECORDED AND NOT FIXED
+
+1. **`/status/outcome` is read whole**, above, with its magnitude and its closer.
+2. **A third `_array` narrowing helper** now exists beside `write._array` and `reuse._array`.
+   Hoisting it would have edited two modules this task does not touch, in a commit that also
+   changes behaviour.
+3. **`main`'s `pass2 is None → ExitCode.ABORTED_EARLY` branch is unexercised.** Reaching it through
+   a subprocess means timing a SIGTERM into pass 1, which is a race whose failure to reproduce
+   proves nothing. The driver's half is asserted.
+4. **`run.py`'s Task 2 comment says the two passes derive DIFFERENT tile sides from one budget, and
+   they do not.** `tile_side_for` takes the budget, the floor and the model — **no grid** — so both
+   passes derive the **same** side; what differs is how many tiles that side makes of each grid.
+   Measured at this task's fixtures. The comment's *conclusion* (do not force one side across both
+   stores) is unaffected; its *premise* is wrong.
+
+---
 
 ### What plan Task 5 inherits (written 2026-08-26, before any of it exists)
 
