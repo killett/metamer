@@ -134,6 +134,28 @@ effect separates them**, and the cost of constructing it is always far below the
 structural claim being wrong — here it would have sent the task to a worse instrument for a
 better-sounding reason.
 
+#### AND THE SIXTH REGISTER, AT A TOOL: A CHECK THAT NEVER READ THE FILE PRINTS THE SAME WORD AS ONE THAT DID
+
+> **"Not checked" and "checked and clean" are the same output.** Before trusting a verification
+> tool, establish **what it actually covered** — not what its name says it covered. A tool that
+> silently skips a file reports success, and the skip is invisible in exactly the situation the
+> check was worth most.
+
+**Phase 2c Task 4, 2026-08-24, and reasoning would not have found it — running it did.**
+`pre-commit run --all-files` reported **every hook Passed** with `src/metamer/batch/barrier.py` and
+`tests/test_barrier.py` present but **untracked**. *"All files"* means every file **git knows
+about**, and a file never `git add`-ed is not one. The very next `git commit`, which stages them
+first, had `ruff-format` **reformat both**. **Nothing about the files changed in between.**
+
+**IT BITES EXACTLY WHEN A TASK ADDS A MODULE, WHICH IS MOST TASKS** — and it is worst here,
+because a formatter touching `src/` invalidates the full test sweep that preceded it, so the cost
+is a repeated twenty-minute run rather than a repeated command. **It happened twice in one
+sub-phase before it was noticed.**
+
+> **THE PRACTICE LINE, NOT JUST THE FINDING: `git add` a new file BEFORE the verification sweep,
+> never at commit time.** Staging is what puts a file inside the tool's idea of "all". This is now
+> in the standing rules below.
+
 ### (a1) RE-DERIVATION AT RESUME IS THE HAZARD, NOT AN UNHASHED ANCESTOR
 
 > **A stored geometry READ BACK from the store is safe, however it was originally
@@ -1328,6 +1350,44 @@ values, no exception, and the damage lands precisely on the cells the mechanism 
 **when two arrays of the same shape and different meaning will be passed adjacently, make the
 type system or a gate distinguish them before the caller exists.**
 
+### (c5) A GATE OVER A SET THAT CAN GROW MUST BE WRITTEN AGAINST THE SET, NOT AGAINST AN ENUMERATION OF ITS MEMBERS
+
+> **An enumerated check leaves every later addition UNPROTECTED BY DEFAULT, and the omission is
+> invisible because the gate looks complete.** Where a per-member comparison is unavoidable,
+> **derive the member list from the authoritative set at runtime** rather than transcribing it, so
+> adding a member extends the gate automatically.
+
+**THE FAILURE IS IN THE FUTURE, WHICH IS WHY REVIEW DOES NOT CATCH IT.** At the moment it is
+written an enumerated gate is correct and complete; it becomes wrong when somebody adds a member
+somewhere else entirely, and **nothing fails at that moment either.** The two edits are separated
+by weeks and by files, so neither reviewer sees a defect.
+
+**It is the allowlist argument pointed at a comparison instead of at a set.** `FIT_RELEVANT_FIELDS`
+exists because *"with a denylist every newly added field silently becomes compat-relevant"* — and
+a gate that enumerates that allowlist's members reintroduces exactly that, one layer out.
+
+Worked instance, Phase 2c Task 4, 2026-08-24. The cross-store gate's brief named **three** checks
+— the coarse stride, the parent geometry and the candidate set — against a fit identity of
+**twelve** fields. **A warm start taken from a store fitted under a different `objective` is
+exactly as wrong as one taken at a different stride**, and silent in the same way: every array the
+right shape, every value finite, every status `ok`, `θ̂` at another likelihood's optimum.
+
+**AND THE PROOF CAME FROM INSIDE THE SAME SUB-PHASE, ONE TASK EARLIER.** Task 3 found that
+`spiral_bound`'s **unit** was ambiguous — the config counted coarse steps, the instrument counted
+fine cells. **If the two passes disagree about what it counts the warm starts are wrong, and a
+stride-only gate passes that through unnoticed.** The field was in the allowlist the whole time;
+only the enumeration left it out.
+
+**THE REPAIR WAS TO FIND THE COMPARISON THAT COVERS THE SET.** Here the geometry difference between
+the two stores cancels exactly under a substituted rollup, so the gate became **one equality over
+`config.fit_hash(parent_rollup)`** — every member, including ones added after the gate was
+written. Where no such single comparison exists, iterate the authoritative set itself:
+`for key in FIT_RELEVANT_FIELDS`, never `for key in ("stride", "geometry", ...)`.
+
+**And compare the KEY SETS before the values**, or a member present in the authoritative set and
+absent from the thing being checked is **a comparison that silently does not happen** — the same
+defect one level in, and (a0)'s excluded-versus-missing register at a diff.
+
 ### (d) Grep for the vocabulary the task requires
 
 "mask", "n_used", "realized" appearing **zero** times in a 234-line brief was detectable in
@@ -2472,6 +2532,11 @@ tests could not see.** `pixi run test-fast` would have shipped both.
 
 ### The other standing rules
 
+- **`git add` a new file BEFORE the verification sweep, never at commit time.**
+  `pre-commit run --all-files` covers **tracked** files only, so an untracked new module makes
+  every hook print `Passed` without being read. Staging is what puts it inside "all". Measured at
+  2c Task 4 — see (a0)'s sixth register — and it costs a repeated full test sweep, because a
+  formatter touching `src/` invalidates the sweep that preceded it.
 - **Oracles must not share a derivation path** — see (j).
 - **A QUANTITY ASSUMED TO CANCEL IN A RATIO MUST BE MEASURED TO CANCEL**, because the
   assumption is precisely what a ratio cannot reveal. This is the cancellation rule (a)

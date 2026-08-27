@@ -2,15 +2,15 @@
 
 ## Start here (cold-start summary)
 
-1. **Branch `main`, everything on it, every commit pushed by a hook** — https://github.com/killett/metamer. Head at the time of writing: **the plan Task 0 implementation commit**, 2026-08-24. **A SHA here is stale the moment the next commit lands, so it is named by content rather than by hash** — `git log --oneline -5` is the authority.
-2. **DONE:** Phase 1 (0–18), Phase 2 preliminaries P0–P4, **Phase 2a (0–13)**, **Phase 2b (COMPLETE 2026-08-19 — 10 met / 4 reduced scope / 2 FAILED)**, and **Phase 2c's brainstorm (D1–D12) plus its Task 0 and Task 1 measurements**. The scope decision on a modelling sub-phase was taken 2026-08-22 and **re-taken on closed facts 2026-08-23: it does not open.** Sections below carry each; **none is restated here.**
-3. **NEXT ACTION: PHASE 2c TASK 5 — the two-pass driver.** The plan is [`2026-08-24-metamer-phase2c.md`](docs/superpowers/plans/2026-08-24-metamer-phase2c.md) — **9 tasks, 12 exit criteria each naming its reading, approved 2026-08-24. TASKS 0–4 ARE DONE (2026-08-24); Tasks 5–8 have no code.** **Every task's FIRST step is the pre-flight**, run against the task brief **before code** and appended to [`phase2c-preflight.md`](docs/superpowers/notes/phase2c-preflight.md). **Read the *What plan Task N established* sections first.** **AND ONE PRE-EXISTING DEFECT IS OPEN AND UNOWNED, FOUND AT TASK 2: `tiling.py` requires the spatial dims to be literally `y` and `x` in four places while stage 4a requires only that `time` is first, so a `latitude`/`longitude` input passes the contract and dies in assembly without exit code 4.** Two closers, both scope decisions; see Task 2's section. **WHICHEVER IS CHOSEN DECIDES WHETHER THE CONTRACT IS NAME-BASED OR POSITIONAL — and stage 4a's own message already calls it positional, so the message and the implementation disagree today. That message is the THIRD document in the set and it moves either way.** **TASK 5 NOW CARRIES A MANDATORY `ALGORITHM_VERSION` BUMP** that Task 1's brief wrongly claimed; it closes a defect present since 2026-08-11 and Task 5 cannot ship without it.
-4. ## THE STANDING LIMITATION ON EVERYTHING 2c DECIDED: **NO 2c NUMBER COMES FROM REAL DATA.** Warm-starting was authorized — and every decision after D1 inherits this — on a **simulated field whose spatial coherence is a construction parameter**. **The spatial coherence of real altimetry optima has never been measured.** A field with **weaker** coherence gives a **smaller** saving, and **§11.2's 30% threshold could fail on real data.** **THE NAMED CLOSER, not an open worry: a spike on a real gridded product — same three arms (cold, warm, self-ceiling), same record-length lever.** Until it runs, D1 is authorized on simulation. See [what 2c's tasks inherit](#what-2cs-tasks-inherit-2026-08-24).
+1. **Branch `main`, everything on it, every commit pushed by a hook** — https://github.com/killett/metamer. **A SHA here is stale the moment the next commit lands, so nothing here names one:** `git log --oneline -8` is the authority.
+2. **DONE:** Phase 1 (0–18), Phase 2 preliminaries P0–P4, **Phase 2a (0–13)**, **Phase 2b (COMPLETE 2026-08-19 — 10 met / 4 reduced scope / 2 FAILED)**, **Phase 2c's brainstorm (D1–D12)**, and **2c plan Tasks 0–4 (2026-08-24)**. The modelling sub-phase was decided against 2026-08-22 and **re-decided on closed facts 2026-08-23: it does not open.** Sections below carry each; **none is restated here.**
+3. **NEXT ACTION: PHASE 2c TASK 5 — the two-pass driver.** Plan: [`2026-08-24-metamer-phase2c.md`](docs/superpowers/plans/2026-08-24-metamer-phase2c.md) — **9 tasks, 12 exit criteria each naming its reading; Tasks 0–4 done, Tasks 5–8 have no code.** **Every task's FIRST step is the pre-flight**, run against the brief **before code** and appended to [`phase2c-preflight.md`](docs/superpowers/notes/phase2c-preflight.md). **Read [What plan Task 5 inherits](#what-plan-task-5-inherits-written-2026-08-26-before-any-of-it-exists) before anything else** — it carries the three things Task 5 cannot be written correctly without, the first being that **its `ALGORITHM_VERSION` bump is UNCONDITIONAL and the task cannot ship without it.**
+4. ## THE STANDING LIMITATION ON EVERYTHING 2c DECIDED: **NO 2c NUMBER COMES FROM REAL DATA.** Warm-starting was authorized — and every decision after D1 inherits this — on a **simulated field whose spatial coherence is a construction parameter**. **The spatial coherence of real altimetry optima has never been measured.** Weaker coherence gives a **smaller** saving, and **§11.2's 30% threshold could fail on real data.** **THE NAMED CLOSER, not an open worry: a spike on a real gridded product — same three arms, same record-length lever.** **AND SINCE 2026-08-24 THERE IS A SECOND REGISTER OF IT: every 2c saving is a CEILING, not an estimate**, because the instrument searched with no effective spiral bound — see [what 2c's tasks inherit](#what-2cs-tasks-inherit-2026-08-24).
 5. **Tests: 1157 passed, 0 failed, 0 INDETERMINATE — 2026-08-24, 1143.52 s on a box at 3.3 GB available (read after the run, not during it).** **`pixi run test` is the full sweep and every end-of-task verification must run it; `test-fast` and `test-ci` are NOT evidence** — the full sweep has caught **seven** things a fast run could not. **Every run prints `RSS measurement validity`, including at zero**; a nonzero count is INDETERMINATE, neither pass nor fail.
-6. **Verify a fresh checkout with `pixi run test && pixi run typecheck && pixi run lint`**, plus `pixi run pre-commit run --all-files` before every commit.
-7. **THE METHOD IS THE PRE-FLIGHT AND IT LIVES IN EXACTLY ONE PLACE:** [`phase1-to-phase2-handoff.md`](docs/superpowers/notes/phase1-to-phase2-handoff.md) §1 — (a0)–(a9), (a)–(k), the standing rules, the fixture facts, **and the ten 2c added: (i2b) a high-ceiling control converts a null into a LOCATED null, (i2c) a sign-unstable benefit is worse than a small one, (j5) a second instrument is a cross-check only if it measures the same quantity under the same conditions, (j6) bound the unmeasured region before measuring it, (i11) state refutation clauses in BOTH directions, (a2b) make an invalid value UNAVAILABLE rather than caveated, (h2) a metric may only be stratified by axes at its OWN granularity, (j7) never stratify by a quantity the treatment can move, (c4) a validator must be specified in the coordinates and the EXTENT the validated object actually has, (e2) prove a mutant differs from the original before recording a surviving mutation — (e) now has SIX causes, and the sixth makes you distrust a test that is fine — (e3) its opposite colour, a RED suite hiding a dead assertion, read WHICH failure fired, (a2c) populated but nothing acts on it: for each hashed field name the code that ACTS on it, (a2e) encode a classification as a construction — a set defined as the union of its classes, with the forbidden class declared nowhere, (i12) a uniform fixture SET cannot test a degree of freedom the contract leaves open, (a2d) a hashed value's UNIT is part of its identity — two runs can agree on the number and disagree on the quantity, (j8) when a measurement's verdict is adopted as a decision the INSTRUMENT becomes part of the specification, and (a4)'s newest register: **"checked" in your own pre-flight is a claim, and a NEGATIVE one is what licenses the action.** **(e2) and (e3) are filed adjacently on purpose; so are (a2c) and (a2e), which are the same question asked about a field and about a rule.** **Do not restate it here** — the two copies drifted once already.
-8. **CI IS GREEN and the deliberate red is CLOSED** (2026-08-22, by the repair its own criterion chose: the CI fixture was **enlarged**, the bound was **not** widened and the test was **not** marked). **CI runs `-m "not machine"` and therefore executes exactly ONE of the nine RSS assertions**, so it is not a substitute for the local sweep. See [THE CI FIXTURE DECISION](#the-ci-fixture-decision--taken-measured-and-verified-2026-08-22).
-9. **Read before touching 2c:** [what 2c's tasks inherit](#what-2cs-tasks-inherit-2026-08-24) — the numbers a cold session cannot re-derive — then the decisions [D1–D12](#phase-2c-brainstorm--settled-decisions-2026-08-23) and the verdict [`warmstart-spike-verdict.md`](docs/superpowers/notes/warmstart-spike-verdict.md). **For 2b, read [THE PEAK, END TO END](#the-peak-end-to-end--the-state-at-the-close-of-the-oq18-characterisation-line-2026-08-21) first**; it is the assembled answer and the only place its four parts appear together.
+6. **Verify a fresh checkout with `pixi run test && pixi run typecheck && pixi run lint`**, plus `pixi run pre-commit run --all-files` before every commit. **AND `git add` A NEW FILE BEFORE THAT SWEEP, NEVER AT COMMIT TIME** — `--all-files` covers **tracked** files only, so an untracked new module makes every hook print `Passed` without being read. Measured 2026-08-24; it cost two full twenty-minute sweeps before it was noticed.
+7. **THE METHOD IS THE PRE-FLIGHT AND IT LIVES IN EXACTLY ONE PLACE:** [`phase1-to-phase2-handoff.md`](docs/superpowers/notes/phase1-to-phase2-handoff.md) §1 — (a0)–(a9), (a)–(k), the standing rules, the fixture facts, **and the thirteen 2c added:** (i2b) a high-ceiling control converts a null into a **located** null · (i2c) a sign-unstable benefit is worse than a small one · (j5) a second instrument is a cross-check only if it measures the same quantity under the same conditions · (j6) bound the unmeasured region before measuring it · (i11) refutation clauses in **both** directions · (a2b) make an invalid value **unavailable** rather than caveated · (h2) stratify only by axes at the metric's **own** granularity · (j7) never stratify by a quantity the treatment can move · (c4) a validator must be specified in the **coordinates and extent** the validated object actually has · **(c5) a gate over a set that can GROW must be written against the set, not an enumeration of its members** · (e2) prove a mutant differs before recording a surviving mutation — **(e) now has six causes** · (e3) its opposite colour, a **red** suite hiding a dead assertion · (a2c) populated but nothing **acts** on it · (a2d) a hashed value's **unit** is part of its identity · (a2e) encode a classification as a **construction** · (i12) a **uniform fixture set** cannot test a freedom the contract leaves open · (j8) an adopted verdict makes the **instrument** part of the specification · plus (a0)'s sixth register (**a check that never read the file prints the same word as one that did**) and (a4)'s (**"checked" in your own pre-flight is a claim**). **Do not restate them here** — the two copies drifted once already.
+8. **CI IS GREEN and the deliberate red is CLOSED** (2026-08-22, by the repair its own criterion chose: the fixture was **enlarged**, the bound was **not** widened and the test was **not** marked). **CI runs `-m "not machine"` and therefore executes exactly ONE of the nine RSS assertions**, so it is not a substitute for the local sweep. See [THE CI FIXTURE DECISION](#the-ci-fixture-decision--taken-measured-and-verified-2026-08-22).
+9. **TWO DEFECTS ARE OPEN AND UNOWNED, AND NEITHER IS 2c's TO FIX.** (a) **`tiling.py` requires the spatial dims to be literally `y` and `x` in four places** while stage 4a requires only that `time` is first — so a `latitude`/`longitude` input **passes the contract and dies in assembly without exit code 4**, and **stage 4a's own message already calls the contract positional**, so the message and the implementation disagree today. Two closers, both scope decisions — see [What plan Task 2 established](#what-plan-task-2-established-done-2026-08-24--read-before-touching-the-decimation-the-two-stores-identities-or-any-spatial-dimension-name). (b) **Open question 20**: what else is uniform across all sixteen input fixtures and unconstrained by the contract — **coordinate monotonic direction first**, because a decreasing latitude axis is the ordinary case in real altimetry and yields a *plausible* answer rather than an error.
 10. **Precedence: the design doc is authoritative on INTENT; a measured, dated number supersedes an unmeasured one wherever it lives, including in the design doc. Any measurement stated twice has one copy DELETED, never reconciled.**
 
 ---
@@ -5404,10 +5404,10 @@ The lattice has only `k²` residue classes, and **within a ring, ordering by abs
 equals ordering by offset** because every candidate shares the target's base — so one precomputed
 order serves a whole class.
 
-> **MEASURED, NOT ASSERTED (2026-08-24):** one 338 × 338 tile at `k = 8`, `bound = 4`, `M = 2`,
-> 5% of coarse points failed — **0.163 s, 1.43 µs/point**, extrapolating to **~14 s over 10⁷
-> points**. **Indicative only:** one run, one fixture, no host quiet check, and **no claim about
-> scaling in `bound`**, whose search order grows as `(2·bound + 1)²`.
+> **MEASURED, NOT ASSERTED (2026-08-24), AND THE FIGURES LIVE IN
+> `batch/warmstart.py`'s MODULE DOCSTRING — NOT HERE**, on the `GRAD_TOL` precedent that a
+> measurement belongs beside the code a reader is deciding about. **Indicative only:** one run,
+> one fixture, no host quiet check, and **no claim about scaling in `bound`**.
 
 #### THREE WAYS THESE TESTS COULD HAVE BEEN VACUOUS, CLOSED IN THE FIXTURE
 
@@ -5423,6 +5423,80 @@ per-candidate one.
 radius, a spiral starting at radius 1, the bound read as fine units, `valid` as `index > 0`, the
 coarse geometry taken from the region, a per-point search, exhaustion falling through to the
 nearest point regardless of its outcome, and column-major point ordering.
+
+### What plan Task 5 inherits (written 2026-08-26, before any of it exists)
+
+**READ THIS BEFORE THE PLAN'S TASK 5 BRIEF.** Three things are not in that brief, and Task 5
+cannot be written correctly without them. Everything else it needs is in the *What plan Task N
+established* sections for 0–4.
+
+#### 1. THE `ALGORITHM_VERSION` BUMP IS MANDATORY, UNCONDITIONAL, AND IN ITS OWN COMMIT
+
+**Task 5 is the commit at which `θ̂` moves for an input that previously fit** — a default run
+begins warm-starting — which is `ALGORITHM_VERSION`'s stated trigger. **Task 1's brief claimed the
+bump; Task 1 does not move any optimum and the bump was moved here on 2026-08-24.**
+
+> **UNCONDITIONAL. NOT CONTINGENT ON `warm_start.enabled`, AND READING IT OFF THE CONFIG IS THE
+> MISTAKE TO AVOID.** A user who **disables** warm-starting after Task 5 gets cold fits — and
+> their **pre-Task-5 store also holds cold fits, under a `fit_hash` computed from the same field
+> values**, so a conditional bump lets the two collide. **The constant separates ERAS, not
+> configurations**, which is the whole reason it is a code constant rather than a config field.
+
+**IT CLOSES A DEFECT PRESENT SINCE 2026-08-11.** `WarmStart.enabled` defaults to **`True`** and is
+in `fit_hash` while **nothing consumes it**. The store is *not* silent — `warm_start_used` is
+written as an explicit run fact defaulting to `False` — **but that is an attr and not a gate**: it
+is nowhere in `fit_hash`, so the **resume gate cannot see it**, a pre-Task-5 store resumes clean,
+and the two populations mix in one store. **Readable-and-ungated is a different defect from
+invisible, and only the second half is closed by the bump.**
+
+**THE OBVIOUS ALTERNATIVE IS WRONG AND IS NAMED SO IT IS NOT TRIED.** `Screening` is *"refused at
+layer 3 until Phase 4"*, and mirroring that for `WarmStart` **would refuse every run** —
+`screening.enabled` defaults to `False` and this defaults to `True`.
+
+**It moves all three `GOLDEN_*` constants**, which is what invalidating stored fits looks like.
+**Re-derive them by hand and verify by reversal; `_HISTORY` gains a hop. Never regenerate them
+from the failure.** This is the golden movement Task 1 was written to expect and did not owe.
+
+**AND THE PRE-BUMP STORES' CONTENTS ARE RECORDED WHERE A PUZZLED READER WILL LOOK** — see
+[how to read a store written before 2c Task 5](#how-to-read-a-store-written-before-2c-task-5-recorded-2026-08-24-and-it-cannot-be-reconstructed-later).
+That note **cannot be reconstructed after the bump**, because the era boundary is not derivable
+from the stores themselves.
+
+#### 2. THE README'S TWO-PASS DOCUMENTATION IS OWED HERE, NOT AT TASK 2
+
+D11 requires pass 1's store path rule to be **user-facing**, and Task 2 put the rule at the
+derivation (`decimate.pass1_store_path`) but **did not add it to `README.md`** — deliberately:
+there was no user-reachable two-pass entry point, and documenting a feature nobody can invoke is
+worse than documenting it late. **Task 5 creates that entry point, so the debt falls due here.**
+
+**What it must say:** pass 1's store is `out.pass1.zarr` beside `out.zarr`, it is a **permanent
+artifact and not scratch**, and **deleting it discards the §11.2 audit's only cold reference** —
+there is no other record of what the same points fit to without a warm start.
+
+> **AND README's STATUS BLOCK IS STALE INDEPENDENTLY OF THIS.** It still says *"Phase 1
+> complete"*, *"588 tests"* and *"Not yet built: `metamer.batch`"*. **That is an (a6) sweep no task
+> has owned**; do not let it silently become Task 5's, and do not leave it uncorrected while
+> adding a paragraph two sections below it.
+
+#### 3. THE THREE PIECES TASKS 0–4 LEFT FOR IT TO WIRE TOGETHER
+
+| piece | where | what Task 5 must not re-derive |
+|---|---|---|
+| `fit(x0=…, x0_valid=…)` | `core/fit.py` | validity is `(B, M)` and **boolean dtype is enforced**; a false cell is **bit-identical** to `x0=None` |
+| `run(..., decimate=True)` | `batch/run.py` | the stride has **one source**, `config.warm_start.coarse_stride`; pass 1's store records `parent_geometry_hash`, `parent_fit_hash`, `parent_fit_payload` |
+| `source_map(...)` and `check_pass1_complete` / `check_pass1_store` | `batch/warmstart.py`, `batch/barrier.py` | `SourceMap.index` is a **coarse-grid** flat index with `-1` for exhausted; `valid` is **derived** as `index >= 0` |
+
+**THE ONE JOIN THAT IS TASK 5's OWN, AND IT IS WHERE THE INVARIANT LIVES:** reading pass 1's
+`theta_unconstrained` for a tile's sources. §11.1's general form breaks *"through a new door"* if
+that read is field-sized — **pass 1's store is read one tile's worth of sources at a time, never
+loaded whole**, and the plan asks for that asserted by peak RSS at a field size where whole-loading
+would be visible.
+
+**And `x0_valid` comes from `SourceMap.valid` directly.** Do not rebuild it: Task 0's dtype gate
+catches the two arrays being **swapped**, and nothing catches a **third** array disagreeing with
+both.
+
+---
 
 ### What plan Task 4 established (done 2026-08-24 — read before adding a check to the cross-store gate)
 
@@ -5856,9 +5930,11 @@ keeps finding it.**
 
 **TWO INDEPENDENT AXES, EITHER OF WHICH ALONE DISQUALIFIES IT.** 2b's flag was the first — pass 1
 fits a **coarse subsample**, so its batch is a fraction of a production tile even though it
-assembles a full one. **Task 0 added the second: pass 1 is COLD and pass 2 is WARM**, which at
-`N = 630` is **42.28% fewer iterations and 45.90% less wall clock per series.** **A measurement of
-the wrong batch doing the wrong work is not a calibration of pass 2 in any sense.**
+assembles a full one. **Task 0 added the second: pass 1 is COLD and pass 2 is WARM**, and the
+gap between the two arms at production length is large — the figures are in
+[the saving table](#the-saving-and-the-ceiling-beside-it--never-quote-one-without-the-other) and
+**deleted from here rather than restated, per the one-copy rule.** **A measurement of the wrong
+batch doing the wrong work is not a calibration of pass 2 in any sense.**
 
 **THE "CORRECT FOR THE DIFFERENCE" OPTION IS REJECTED AS ILL-POSED, NOT DEFERRED.** A correction
 for the batch-size difference needs **a model of how peak scales with B** — the term the
