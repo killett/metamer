@@ -3,10 +3,10 @@
 ## Start here (cold-start summary)
 
 1. **Branch `main`, everything on it, every commit pushed by a hook** — https://github.com/killett/metamer. **A SHA here is stale the moment the next commit lands, so nothing here names one:** `git log --oneline -8` is the authority.
-2. **DONE:** Phase 1 (0–18), Phase 2 preliminaries P0–P4, **Phase 2a (0–13)**, **Phase 2b (COMPLETE 2026-08-19 — 10 met / 4 reduced scope / 2 FAILED)**, **Phase 2c's brainstorm (D1–D12)**, and **2c plan Tasks 0–5 (0–4 on 2026-08-24, Task 5 on 2026-08-27)**. The modelling sub-phase was decided against 2026-08-22 and **re-decided on closed facts 2026-08-23: it does not open.** Sections below carry each; **none is restated here.**
-3. **NEXT ACTION: PHASE 2c TASK 6 — the audit's arms, and the four-reading table.** Plan: [`2026-08-24-metamer-phase2c.md`](docs/superpowers/plans/2026-08-24-metamer-phase2c.md) — **9 tasks, 12 exit criteria each naming its reading; Tasks 0–5 done, Tasks 6–8 have no code.** **Every task's FIRST step is the pre-flight**, run against the brief **before code** and appended to [`phase2c-preflight.md`](docs/superpowers/notes/phase2c-preflight.md). **`ALGORITHM_VERSION` IS `"2"` SINCE 2026-08-27** and every store written before it holds cold fits — see [how to read a store written before 2c Task 5](#how-to-read-a-store-written-before-2c-task-5-recorded-2026-08-24-and-it-cannot-be-reconstructed-later), which is not re-derivable from the stores.
+2. **DONE:** Phase 1 (0–18), Phase 2 preliminaries P0–P4, **Phase 2a (0–13)**, **Phase 2b (COMPLETE 2026-08-19 — 10 met / 4 reduced scope / 2 FAILED)**, **Phase 2c's brainstorm (D1–D12)**, and **2c plan Tasks 0–6 (0–4 on 2026-08-24, Task 5 on 2026-08-27, Task 6 on 2026-08-28)**. The modelling sub-phase was decided against 2026-08-22 and **re-decided on closed facts 2026-08-23: it does not open.** Sections below carry each; **none is restated here.**
+3. **NEXT ACTION: PHASE 2c TASK 7 — the audit's strata and its report.** Plan: [`2026-08-24-metamer-phase2c.md`](docs/superpowers/plans/2026-08-24-metamer-phase2c.md) — **9 tasks, 12 exit criteria each naming its reading; Tasks 0–6 done, Tasks 7–8 have no code.** **Every task's FIRST step is the pre-flight**, run against the brief **before code** and appended to [`phase2c-preflight.md`](docs/superpowers/notes/phase2c-preflight.md). **`ALGORITHM_VERSION` IS `"2"` SINCE 2026-08-27** and every store written before it holds cold fits — see [how to read a store written before 2c Task 5](#how-to-read-a-store-written-before-2c-task-5-recorded-2026-08-24-and-it-cannot-be-reconstructed-later), which is not re-derivable from the stores.
 4. ## THE STANDING LIMITATION ON EVERYTHING 2c DECIDED: **NO 2c NUMBER COMES FROM REAL DATA.** Warm-starting was authorized — and every decision after D1 inherits this — on a **simulated field whose spatial coherence is a construction parameter**. **The spatial coherence of real altimetry optima has never been measured.** Weaker coherence gives a **smaller** saving, and **§11.2's 30% threshold could fail on real data.** **THE NAMED CLOSER, not an open worry: a spike on a real gridded product — same three arms, same record-length lever.** **AND SINCE 2026-08-24 THERE IS A SECOND REGISTER OF IT: every 2c saving is a CEILING, not an estimate**, because the instrument searched with no effective spiral bound — see [what 2c's tasks inherit](#what-2cs-tasks-inherit-2026-08-24).
-5. **Tests: 1174 passed, 0 failed, 0 INDETERMINATE — 2026-08-27, 1698.10 s (the three sweeps that day ran 1698, 1732 and 2286 s on a byte-identical test tree, which is the machine and not the suite).** **`pixi run test` is the full sweep and every end-of-task verification must run it; `test-fast` and `test-ci` are NOT evidence** — the full sweep has caught **seven** things a fast run could not. **Every run prints `RSS measurement validity`, including at zero**; a nonzero count is INDETERMINATE, neither pass nor fail.
+5. **Tests: 1187 passed, 0 failed, 0 INDETERMINATE — 2026-08-28, 2554.77 s (sweeps that week ran 1698–2555 s on byte-identical trees, which is the machine and not the suite).** **`pixi run test` is the full sweep and every end-of-task verification must run it; `test-fast` and `test-ci` are NOT evidence** — the full sweep has caught **seven** things a fast run could not. **Every run prints `RSS measurement validity`, including at zero**; a nonzero count is INDETERMINATE, neither pass nor fail.
 6. **Verify a fresh checkout with `pixi run test && pixi run typecheck && pixi run lint`**, plus `pixi run pre-commit run --all-files` before every commit. **AND `git add` A NEW FILE BEFORE THAT SWEEP, NEVER AT COMMIT TIME** — `--all-files` covers **tracked** files only, so an untracked new module makes every hook print `Passed` without being read. Measured 2026-08-24; it cost two full twenty-minute sweeps before it was noticed.
 7. **THE METHOD IS THE PRE-FLIGHT AND IT LIVES IN EXACTLY ONE PLACE:** [`phase1-to-phase2-handoff.md`](docs/superpowers/notes/phase1-to-phase2-handoff.md) §1 — (a0)–(a9), (a)–(k), the standing rules, the fixture facts, **and the thirteen 2c added:** (i2b) a high-ceiling control converts a null into a **located** null · (i2c) a sign-unstable benefit is worse than a small one · (j5) a second instrument is a cross-check only if it measures the same quantity under the same conditions · (j6) bound the unmeasured region before measuring it · (i11) refutation clauses in **both** directions · (a2b) make an invalid value **unavailable** rather than caveated · (h2) stratify only by axes at the metric's **own** granularity · (j7) never stratify by a quantity the treatment can move · (c4) a validator must be specified in the **coordinates and extent** the validated object actually has · **(c5) a gate over a set that can GROW must be written against the set, not an enumeration of its members** · **(c6) a practice enforced by a MECHANISM must be checked to reach every instance — a partially-installed guard prints a complete-looking green** · (e2) prove a mutant differs before recording a surviving mutation — **(e) now has six causes** · (e3) its opposite colour, a **red** suite hiding a dead assertion · (a2c) populated but nothing **acts** on it · (a2d) a hashed value's **unit** is part of its identity · (a2e) encode a classification as a **construction** · (i12) a **uniform fixture set** cannot test a freedom the contract leaves open · (j8) an adopted verdict makes the **instrument** part of the specification · plus (a0)'s sixth register (**a check that never read the file prints the same word as one that did**) and (a4)'s two (**"checked" in your own pre-flight is a claim**, and **a decision's own EXAMPLE can be the case that refutes it — and a retired argument stays visible**). **Do not restate them here** — the two copies drifted once already.
 8. **CI IS GREEN and the deliberate red is CLOSED** (2026-08-22, by the repair its own criterion chose: the fixture was **enlarged**, the bound was **not** widened and the test was **not** marked). **CI runs `-m "not machine"` and therefore executes exactly ONE of the nine RSS assertions**, so it is not a substitute for the local sweep. See [THE CI FIXTURE DECISION](#the-ci-fixture-decision--taken-measured-and-verified-2026-08-22).
@@ -5439,6 +5439,102 @@ per-candidate one.
 radius, a spiral starting at radius 1, the bound read as fine units, `valid` as `index > 0`, the
 coarse geometry taken from the region, a per-point search, exhaustion falling through to the
 nearest point regardless of its outcome, and column-major point ordering.
+
+### What plan Task 6 established (done 2026-08-28 — read before touching the audit's arms, its seed or its subject)
+
+**`batch/audit.py` builds four arms over one batch at one call site.** The four-reading table is in
+its module docstring, **registered before any arm produced a number.** Two extractions landed in
+`core/`: `optimize.ladder_start` and `fit.warm_start_faults`, each because the alternative was a
+second spelling of a rule that has to stay bit-identical.
+
+#### THE SUBJECT MOVED, AND THREE RECORDED DECISIONS MOVED WITH IT
+
+The audit draws **fine** points and computes its own cold arm. The argument is at
+[D6](#d6--the-coarse-stride-is-k--8-chosen-on-a-written-objective-and-closed-by-a-bound) and at
+D10, and **not restated here.** One line: a coarse point sources itself, so its `warm` arm starts
+from its own cold optimum.
+
+#### THE SEED IS `audit.seed`, AND THE FIELD ALREADY CALLED `seed` IS THE TRAP
+
+`Config.seed` is *"for anything stochastic"*, has **no consumer anywhere in `src`** — `fit` has no
+stochastic component, which is D7's own reason a cold-versus-cold arm cannot exist — and is in
+`FIT_RELEVANT_FIELDS`. **Using it would make re-running an audit at a different seed invalidate the
+store it audits**, which is the boundary the audit block exists on the other side of.
+
+**AND THE TEST THAT ENFORCES THAT BOUNDARY ENUMERATED TWO FIELDS.**
+`test_the_audit_settings_move_no_gate` was written as `subsample = 500` and `stratify = true`, so
+`seed` would have been added with the boundary **silently not covering it** — (c6), one day after
+promoting it. It now derives the list from `Audit.model_fields` and **raises on a type it cannot
+perturb rather than skipping the field**, because a skipped field is the same defect inside the
+repair.
+
+#### THE DIRECTION IS KEYED, AND THAT IS THE (k) FINDING
+
+N2 introduces the **only randomness in the system**, so it is the only place §11.3's
+traversal-independence can now be lost. **One `Generator` consumed in a loop loses it** — cell `n`'s
+direction depends on how many were drawn before it, hence on the point set's order, hence on tiling
+— **and recording the seed does not save that.** The direction is a pure function of
+`(seed, GRID-GLOBAL point index, candidate)` through a `SeedSequence`. **The grid-global index, not
+the row number**: keyed on the row, enlarging the subsample moves every existing cell's direction
+and two audits of one store stop being comparable.
+
+#### N1 AND N2 SHARE THE DIRECTION, AND `N1_EPSILON` IS DERIVED
+
+The table's second row reads *"the sensitivity is to start DISTANCE, not direction"*, which follows
+**only** if the two arms differ in nothing but distance. The three arms are a **magnitude ladder
+along one ray**.
+
+`N1_EPSILON = fd_step(1.0) = eps^(1/3) = 6.055e-06`, in unconstrained coordinates — **the step
+`optimize_series`' own finite-difference gradient actually takes**, since it differentiates with
+`curvature=None` and that ratio is one at every scale. So *"N1 non-zero"* means the answer moved
+under a displacement **the optimizer cannot distinguish from zero**. A picked `1e-3` would make
+that row read *"the surface has structure at 1e-3"*, which is an ordinary property of a likelihood.
+
+#### AN INADMISSIBLE N2 START IS EXCLUDED AND COUNTED, NEVER RUN COLD
+
+`r` is a real distance and the diagnostic box is finite, so an unlucky direction puts a start
+outside it — and `_check_warm_starts` refuses the **whole call**. **The one-line fix is the defect**:
+setting `x0_valid` false falls back to the moment ladder, so the N2 arm would silently contain
+**cold** fits and *"N2 agrees with cold"* would be true by construction at exactly the cells where
+the perturbation was largest — (a0)'s fourth register. One admissibility array is built and both
+`x0_valid` and the result mask derive from it.
+
+Two more classes are counted rather than folded in, because each **looks like agreement**: `r = 0`
+(N2 collapses onto cold) and an exhausted spiral (no warm start, so no distance, and no hysteresis
+question either).
+
+#### SEVEN MUTANTS: SIX CAUGHT, AND THE SEVENTH PROVEN EQUIVALENT RATHER THAN LISTED
+
+Caught: N1 given a fixed direction, N2 matched on the **mean** distance, a streamed RNG, a
+direction drawn at `p_max` for every candidate, a seed recorded but unused, and the warm arm run
+cold.
+
+**THE SURVIVOR IS `cold_starts`' `objective` ARGUMENT, AND IT IS NOT A COVERAGE GAP.** Substituting
+`REML` for `ML` there changes nothing: the ladder start is `moment_init` — which takes the **spec**
+and the data, neither an engine nor an objective — followed by `to_unconstrained`, a per-parameter
+transform. **Measured: `max |difference| = 0.0`.** (e2) satisfied by proving the mutant does not
+differ rather than by recording a surviving mutation. **The argument is passed anyway**, because
+what is wanted is the objective the audited fit ran under, and a parameterisation that ever became
+objective-dependent would otherwise make the floor arms perturb around a point production never
+started from. Recorded at the function.
+
+#### A FIXTURE FACT THAT COST TWO FAILING TESTS
+
+**A hand-built decimal-year axis is not `to_decimal_years`.** `2000 + i * 31/365.25` over the same
+monthly coordinate moved `θ̂` by **6.7e-05 relative** — large enough to fail a bitwise comparison
+against the store, small enough to read as a floating-point detail and be argued away. **The
+conversion is under `ALGORITHM_VERSION`**, so a second derivation of it is a second derivation of
+fit identity. Every test here takes the axis from the input.
+
+#### AND THE SUITE'S COST WAS CUT BY 4×, WHICH IS RECORDED BECAUSE IT CHANGES NOTHING ELSE
+
+`tests/test_audit.py` ran at **495 s** with three end-to-end tests each building their own two-pass
+store and their own arms. Module-scoped fixtures for the store and for the two arm sets, and an
+audited point set capped at **8** fine points rather than all 31, bring it to **121 s**. Every
+assertion is per cell over whatever cells exist, and the tests that need a specific cell
+**construct** it, so nothing depended on the count.
+
+---
 
 ### What plan Task 5 established (done 2026-08-27 — read before touching the warm-start path, the goldens or `ALGORITHM_VERSION`)
 
