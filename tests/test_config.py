@@ -21,6 +21,7 @@ from pydantic import ValidationError
 
 import metamer
 from metamer import config as config_module
+from metamer.config.model import Audit
 from metamer.core import hashing
 
 # The canonical rendering of `_GOLDEN_TOML` restricted to each allowlist,
@@ -465,26 +466,79 @@ def test_a_run_only_field_moves_no_gate_and_the_helper_can_still_move_one(tmp_pa
     )
 
 
-def test_the_audit_settings_move_no_gate(tmp_path):
+def _perturbed(field: str, annotation: object, default: object) -> str:
+    """A TOML line for `field` holding a value DIFFERENT from its default.
+
+    A different value is the whole point: `_moved` compares against a golden
+    that omits the block entirely, so a field written at its default moves
+    nothing and would be indistinguishable from one the payload never carried.
+
+    **IT RAISES ON A TYPE IT DOES NOT KNOW RATHER THAN SKIPPING THE FIELD.** A
+    silently skipped field is one the boundary does not cover while the suite
+    still prints green -- which is (c6) reintroduced inside the repair for (c6).
+
+    Args:
+        field: The field name.
+        annotation: Its declared type.
+        default: Its declared default.
+
+    Returns:
+        One line of TOML.
+
+    Raises:
+        TypeError: If the type has no perturbation rule here.
+    """
+    if annotation is bool:
+        return f"{field} = {str(not default).lower()}"
+    if annotation is int:
+        return f"{field} = {int(default) + 500}"  # type: ignore[call-overload]
+    raise TypeError(
+        f"audit field {field!r} is typed {annotation!r}, which this test does "
+        f"not know how to perturb. Extend the rule -- do not skip the field, or "
+        f"the boundary stops covering it and says nothing about having stopped"
+    )
+
+
+def test_every_audit_setting_moves_run_hash_and_neither_gate(tmp_path):
     """Re-running an audit must not invalidate the store it audits.
 
-    THE BOUNDARY AGAINST `WarmStart`, MADE EXECUTABLE. §11.1's argument -- a
-    stale warm start lands at the wrong optimum -- is correct and, read one
-    clause too far, sweeps in the audit settings as well. It must not: the audit
-    MEASURES a store, and a subsample size is a property of the measurement.
+    THE BOUNDARY AGAINST `WarmStart`, MADE EXECUTABLE OVER **EVERY FIELD `Audit`
+    DECLARES**. §11.1's argument -- a stale warm start lands at the wrong
+    optimum -- is correct and, read one clause too far, sweeps in the audit
+    settings as well. It must not: the audit MEASURES a store, and a subsample
+    size, a stratification and a seed are properties of the measurement.
 
-    Bug this catches: someone adding `subsample` to the `warm_start` block, or
-    adding `audit_*` to `FIT_RELEVANT_FIELDS` on the reasoning that it is
-    "warm-start related". Either makes a 10^7-point store unresumable the first
-    time an audit is re-run at a different size, and the run that does it looks
-    innocent.
+    Expected values determined independently: the field list comes from
+    `Audit.model_fields`, so it is the model's own answer rather than a
+    transcription, and each value is perturbed away from its declared default.
+
+    Bug this catches: `audit.seed` -- or any field added later -- entering
+    `FIT_RELEVANT_FIELDS`, or being declared in the `warm_start` block because
+    it is "warm-start related". Either makes a 10^7-point store unresumable the
+    first time an audit is re-run, and the run that does it looks innocent.
+
+    **AND IT CATCHES THE SHAPE THIS TEST ITSELF HAD UNTIL 2026-08-28.** It was
+    written as `subsample = 500` and `stratify = true` -- an enumeration of the
+    two fields that existed then -- so `Audit.seed` was added at Phase 2c Task 6
+    with the boundary silently not covering it. **A partially-installed guard
+    prints a complete-looking green**, (c6), and deriving the list from the
+    model is what makes the next field covered without a second edit.
 
     The control for this negative is `test_the_warm_start_coarse_stride_moves_fit_hash`
     immediately above: same helper, adjacent block, and it does move both gates.
     """
-    assert _moved(
-        tmp_path, "audit.toml", _WITH + "\n[audit]\nsubsample = 500\nstratify = true\n"
-    ) == (False, False, True)
+    fields = Audit.model_fields
+    assert set(fields) >= {"subsample", "stratify", "seed"}
+    block = "\n".join(
+        _perturbed(name, info.annotation, info.default) for name, info in fields.items()
+    )
+    assert all(f"{name} =" in block for name in fields), "every field is exercised"
+
+    assert _moved(tmp_path, "audit.toml", _WITH + "\n[audit]\n" + block + "\n") == (
+        False,
+        False,
+        True,
+    )
 
 
 def test_the_candidate_set_moves_neither_gate(tmp_path):

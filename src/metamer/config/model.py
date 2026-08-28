@@ -142,12 +142,27 @@ class Audit(BaseModel):
     Attributes:
         subsample: How many points the audit compares.
         stratify: Whether the subsample is stratified across the grid.
+        seed: Seed for the audit's `N2` arm, whose start is displaced in a
+            RANDOM direction. **`fit` has no stochastic component** -- which is
+            why a cold-versus-cold arm cannot exist and why the null needs a
+            perturbation at all -- so this is the only randomness in the system
+            and the one place reproducibility can now be lost.
+
+            **IT IS NOT `Config.seed`, AND THAT FIELD IS THE TRAP.** The
+            top-level `seed` is documented as *"for anything stochastic"*, has
+            no consumer anywhere in `src`, and is in `FIT_RELEVANT_FIELDS` --
+            so putting the audit's randomness there would make **re-running an
+            audit at a different seed invalidate the store it is auditing**,
+            which is exactly the boundary this block exists on the other side
+            of. D7 calls the seed *"fit-relevant for the audit arm and for
+            nothing else"*, and that is this block.
     """
 
     model_config = _STRICT
 
     subsample: int = Field(default=0, ge=0)
     stratify: bool = False
+    seed: int = Field(default=0, ge=0)
 
 
 class Detail(BaseModel):

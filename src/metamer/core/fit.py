@@ -158,6 +158,98 @@ def _out_of_limits(
     return np.asarray((natural <= lo) | (natural >= hi), dtype=np.bool_)
 
 
+def warm_start_faults(
+    x0: NDArray[np.float64], candidates: list[ProcessSpec]
+) -> tuple[NDArray[np.bool_], dict[tuple[int, int], str]]:
+    """Which `(series, candidate)` cells hold a start no legitimate source produces.
+
+    **ONE DERIVATION OF THE RULE, TWO CONSUMERS, AND THE SECOND IS WHY THIS IS
+    A FUNCTION.** `_check_warm_starts` below turns it into a refusal; Phase 2c's
+    hysteresis audit needs it as a **mask**, because its N2 arm displaces the
+    start by a real distance in a random direction and can land outside the
+    diagnostic box -- at which point the refusal would abort the whole audit
+    rather than lose one cell. **Writing a vectorized twin in the audit would be
+    the THIRD spelling of the limits rule**: `_out_of_limits` is already the
+    second, and it is pinned by a test for exactly this reason.
+
+    **THE TWO FAULTS ARE SEPARATE AND THE ORDER BETWEEN THEM IS LOAD-BEARING.**
+    `at_diagnostic_limit` returns False for NaN, so an all-NaN row -- what a
+    FAILED fit legitimately writes into `theta_unconstrained` -- would pass a
+    limits-only validator in silence. And an infinity fails BOTH: `forward(inf)`
+    is `inf`, which is beyond every upper limit. Finiteness is therefore
+    reported first, or an `inf` would be described as an out-of-range value
+    rather than as a missing one.
+
+    Only the first `p` columns of each candidate's row are inspected. The rest
+    of the `p_max` width is NaN by design for any candidate narrower than the
+    widest, so a validator reading the full width refuses every well-formed warm
+    start but the widest candidate's.
+
+    Args:
+        x0: Warm starts in unconstrained coordinates, shape (B, M, p_max).
+        candidates: The candidate set, in model-axis order.
+
+    Returns:
+        A `(B, M)` boolean admissibility mask, and a mapping from each
+        INADMISSIBLE cell to a clause naming the offending parameter and both
+        its values. **The mapping holds only faulty cells**, so it is empty on
+        the production path and small on the audit's.
+
+    Note:
+        **Validity is NOT consulted here.** The mask describes the values, and
+        whether a cell was offered as a warm start is a separate question --
+        which is what lets the audit ask about cells it has not decided to use
+        yet.
+    """
+    batch, models = x0.shape[0], x0.shape[1]
+    admissible = np.ones((batch, models), dtype=np.bool_)
+    faults: dict[tuple[int, int], str] = {}
+
+    for c, spec in enumerate(candidates):
+        free = free_param_index(spec)
+        by_label = dict(zip(spec.labels(), spec.terms, strict=True))
+        rows = x0[:, c, : len(free)]
+        label = spec.spec_hash()[:12]
+        for index, (term_label, name) in enumerate(free):
+            param = by_label[term_label].params[name]
+            column = np.asarray(rows[:, index], dtype=np.float64)
+
+            # **`& admissible[:, c]` KEEPS THE FIRST FAULT AND DISCARDS THE
+            # REST**, which is what the refusal reported when it raised on the
+            # first offending parameter. Without it a cell failing two
+            # parameters would have its clause overwritten by the later one.
+            offending = ~np.isfinite(column) & admissible[:, c]
+            for b in np.flatnonzero(offending).tolist():
+                faults[(int(b), c)] = (
+                    f"its warm start for {term_label}.{name} is "
+                    f"{column[b]!r}, which is not finite. Candidate {c} is "
+                    f"{label}. A failed fit writes NaN into "
+                    f"theta_unconstrained, so a source map that marks it valid "
+                    f"is a spiral bug: mark the cell invalid instead."
+                )
+            admissible[offending, c] = False
+
+            # exp() of a large unconstrained coordinate overflows to inf, which
+            # is the correct verdict here rather than a warning.
+            with np.errstate(over="ignore"):
+                natural = np.asarray(param.transform.forward(column), dtype=np.float64)
+            offending = (
+                _out_of_limits(natural, param.diagnostic_limits) & admissible[:, c]
+            )
+            for b in np.flatnonzero(offending).tolist():
+                faults[(int(b), c)] = (
+                    f"its warm start for {term_label}.{name} is "
+                    f"{column[b]!r} in unconstrained coordinates, which is "
+                    f"{natural[b]!r} in natural units -- at or beyond its "
+                    f"diagnostic limits {param.diagnostic_limits}. Candidate "
+                    f"{c} is {label}. An OK fit is strictly inside both limits, "
+                    f"so no legitimate source produces this."
+                )
+            admissible[offending, c] = False
+
+    return admissible, faults
+
+
 def _check_warm_starts(
     x0: NDArray[np.float64],
     x0_valid: NDArray[np.bool_],
@@ -165,16 +257,9 @@ def _check_warm_starts(
 ) -> None:
     """Refuse a warm start that a store could not have produced legitimately.
 
-    **A warm start arriving from a store is data, not a return value.** The
-    two refusals are separate on purpose: `at_diagnostic_limit` returns False
-    for NaN, so an all-NaN row -- what a FAILED fit legitimately writes into
-    `theta_unconstrained`, and the single fault class the `(B, M)` validity
-    array exists to make loud -- would pass a limits-only validator in silence.
-
-    Only the first `p` columns of each candidate's row are inspected. The rest
-    of the `p_max` width is NaN by design for any candidate narrower than the
-    widest, so a validator reading the full width refuses every well-formed
-    warm start but the widest candidate's.
+    **A warm start arriving from a store is data, not a return value.** The rule
+    itself is `warm_start_faults`; this is the half that turns it into a
+    refusal, and it is separate because the audit needs the other half.
 
     Args:
         x0: Warm starts in unconstrained coordinates, shape (B, M, p_max).
@@ -186,41 +271,12 @@ def _check_warm_starts(
             whose natural-unit image is at or beyond a diagnostic limit. The
             message names the series, the candidate index and its `spec_hash`.
     """
-    for c, spec in enumerate(candidates):
-        free = free_param_index(spec)
-        by_label = dict(zip(spec.labels(), spec.terms, strict=True))
-        rows = x0[:, c, : len(free)]
-        selected = np.asarray(x0_valid[:, c], dtype=np.bool_)
-        label = spec.spec_hash()[:12]
-        for index, (term_label, name) in enumerate(free):
-            param = by_label[term_label].params[name]
-            column = np.asarray(rows[:, index], dtype=np.float64)
-            offending = selected & ~np.isfinite(column)
-            if bool(np.any(offending)):
-                b = int(np.flatnonzero(offending)[0])
-                raise ValueError(
-                    f"x0[{b}, {c}] is marked valid in x0_valid but its warm "
-                    f"start for {term_label}.{name} is {column[b]!r}, which is "
-                    f"not finite. Candidate {c} is {label}. A failed fit writes "
-                    f"NaN into theta_unconstrained, so a source map that marks "
-                    f"it valid is a spiral bug: mark the cell invalid instead."
-                )
-            # exp() of a large unconstrained coordinate overflows to inf, which
-            # is the correct verdict here rather than a warning.
-            with np.errstate(over="ignore"):
-                natural = np.asarray(param.transform.forward(column), dtype=np.float64)
-            offending = selected & _out_of_limits(natural, param.diagnostic_limits)
-            if bool(np.any(offending)):
-                b = int(np.flatnonzero(offending)[0])
-                raise ValueError(
-                    f"x0[{b}, {c}] is marked valid in x0_valid but its warm "
-                    f"start for {term_label}.{name} is {column[b]!r} in "
-                    f"unconstrained coordinates, which is {natural[b]!r} in "
-                    f"natural units -- at or beyond its diagnostic limits "
-                    f"{param.diagnostic_limits}. Candidate {c} is {label}. An "
-                    f"OK fit is strictly inside both limits, so no legitimate "
-                    f"source produces this."
-                )
+    admissible, faults = warm_start_faults(x0, candidates)
+    offending = np.asarray(x0_valid, dtype=np.bool_) & ~admissible
+    if not bool(np.any(offending)):
+        return
+    b, c = (int(index) for index in np.argwhere(offending)[0])
+    raise ValueError(f"x0[{b}, {c}] is marked valid in x0_valid but {faults[(b, c)]}")
 
 
 def fit(
@@ -489,4 +545,4 @@ def fit(
     )
 
 
-__all__ = ["FitResult", "InitRung", "fit"]
+__all__ = ["FitResult", "InitRung", "fit", "warm_start_faults"]

@@ -496,6 +496,42 @@ def moment_init(
     return start, tuple(rungs)
 
 
+def ladder_start(
+    objective: ConcentratedObjective,
+    y: NDArray[np.float64],
+    mask: NDArray[np.bool_],
+    t: NDArray[np.float64],
+) -> tuple[NDArray[np.float64], tuple[InitRung, ...]]:
+    """The COLD starting point, in unconstrained coordinates, and its rungs.
+
+    **EXTRACTED SO THERE IS ONE DERIVATION, NOT TWO.** `optimize_series` used to
+    inline these two lines, which was fine while it was the only thing that
+    needed them. Phase 2c's hysteresis audit needs the same point to build its
+    perturbed arms from -- N1 starts at this point plus a tiny epsilon and N2 at
+    this point plus a matched displacement -- and `FitResult` records the *rung*
+    but not the *start*, so there is no way to read it back afterwards.
+
+    **A second spelling in the audit would be two lines that must stay
+    bit-identical**, and the test that depends on it (*"N1 at epsilon = 0 is
+    bit-identical to cold"*) would fail the first time either line moved, for a
+    reason that is not a defect. Same argument as `_out_of_limits` being pinned
+    against `at_diagnostic_limit`, resolved the cheaper way: one function.
+
+    Args:
+        objective: The concentrated objective, which owns the transforms.
+        y: Observations, shape (B, N).
+        mask: Presence mask, shape (B, N).
+        t: Shared time axis, shape (N,).
+
+    Returns:
+        The start in unconstrained coordinates, shape (B, p_free), and one rung
+        per series. **Unconstrained, not natural**: this is what the optimizer
+        is handed and what a perturbation has to be expressed in.
+    """
+    start_natural, rungs = moment_init(objective.spec, y, mask, t)
+    return objective.to_unconstrained(start_natural), rungs
+
+
 def optimize_series(
     objective: ConcentratedObjective,
     y: NDArray[np.float64],
@@ -559,9 +595,9 @@ def optimize_series(
         )
 
     if x0 is None:
-        start_natural, rungs = moment_init(objective.spec, y, mask, t)
+        starts, rungs = ladder_start(objective, y, mask, t)
         rung = rungs[0]
-        u0 = objective.to_unconstrained(start_natural)[0]
+        u0 = starts[0]
     else:
         u0, rung = np.asarray(x0, dtype=np.float64)[0], InitRung.WARM_START
 
