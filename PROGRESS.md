@@ -8,7 +8,7 @@
 4. ## THE STANDING LIMITATION ON EVERYTHING 2c DECIDED: **NO 2c NUMBER COMES FROM REAL DATA.** Warm-starting was authorized — and every decision after D1 inherits this — on a **simulated field whose spatial coherence is a construction parameter**. **The spatial coherence of real altimetry optima has never been measured.** Weaker coherence gives a **smaller** saving, and **§11.2's 30% threshold could fail on real data.** **THE NAMED CLOSER, not an open worry: a spike on a real gridded product — same three arms, same record-length lever.** **AND SINCE 2026-08-24 THERE IS A SECOND REGISTER OF IT: every 2c saving is a CEILING, not an estimate**, because the instrument searched with no effective spiral bound — see [what 2c's tasks inherit](#what-2cs-tasks-inherit-2026-08-24).
 5. **Tests: 1174 passed, 0 failed, 0 INDETERMINATE — 2026-08-27, 1698.10 s (the three sweeps that day ran 1698, 1732 and 2286 s on a byte-identical test tree, which is the machine and not the suite).** **`pixi run test` is the full sweep and every end-of-task verification must run it; `test-fast` and `test-ci` are NOT evidence** — the full sweep has caught **seven** things a fast run could not. **Every run prints `RSS measurement validity`, including at zero**; a nonzero count is INDETERMINATE, neither pass nor fail.
 6. **Verify a fresh checkout with `pixi run test && pixi run typecheck && pixi run lint`**, plus `pixi run pre-commit run --all-files` before every commit. **AND `git add` A NEW FILE BEFORE THAT SWEEP, NEVER AT COMMIT TIME** — `--all-files` covers **tracked** files only, so an untracked new module makes every hook print `Passed` without being read. Measured 2026-08-24; it cost two full twenty-minute sweeps before it was noticed.
-7. **THE METHOD IS THE PRE-FLIGHT AND IT LIVES IN EXACTLY ONE PLACE:** [`phase1-to-phase2-handoff.md`](docs/superpowers/notes/phase1-to-phase2-handoff.md) §1 — (a0)–(a9), (a)–(k), the standing rules, the fixture facts, **and the thirteen 2c added:** (i2b) a high-ceiling control converts a null into a **located** null · (i2c) a sign-unstable benefit is worse than a small one · (j5) a second instrument is a cross-check only if it measures the same quantity under the same conditions · (j6) bound the unmeasured region before measuring it · (i11) refutation clauses in **both** directions · (a2b) make an invalid value **unavailable** rather than caveated · (h2) stratify only by axes at the metric's **own** granularity · (j7) never stratify by a quantity the treatment can move · (c4) a validator must be specified in the **coordinates and extent** the validated object actually has · **(c5) a gate over a set that can GROW must be written against the set, not an enumeration of its members** · (e2) prove a mutant differs before recording a surviving mutation — **(e) now has six causes** · (e3) its opposite colour, a **red** suite hiding a dead assertion · (a2c) populated but nothing **acts** on it · (a2d) a hashed value's **unit** is part of its identity · (a2e) encode a classification as a **construction** · (i12) a **uniform fixture set** cannot test a freedom the contract leaves open · (j8) an adopted verdict makes the **instrument** part of the specification · plus (a0)'s sixth register (**a check that never read the file prints the same word as one that did**) and (a4)'s (**"checked" in your own pre-flight is a claim**). **Do not restate them here** — the two copies drifted once already.
+7. **THE METHOD IS THE PRE-FLIGHT AND IT LIVES IN EXACTLY ONE PLACE:** [`phase1-to-phase2-handoff.md`](docs/superpowers/notes/phase1-to-phase2-handoff.md) §1 — (a0)–(a9), (a)–(k), the standing rules, the fixture facts, **and the thirteen 2c added:** (i2b) a high-ceiling control converts a null into a **located** null · (i2c) a sign-unstable benefit is worse than a small one · (j5) a second instrument is a cross-check only if it measures the same quantity under the same conditions · (j6) bound the unmeasured region before measuring it · (i11) refutation clauses in **both** directions · (a2b) make an invalid value **unavailable** rather than caveated · (h2) stratify only by axes at the metric's **own** granularity · (j7) never stratify by a quantity the treatment can move · (c4) a validator must be specified in the **coordinates and extent** the validated object actually has · **(c5) a gate over a set that can GROW must be written against the set, not an enumeration of its members** · **(c6) a practice enforced by a MECHANISM must be checked to reach every instance — a partially-installed guard prints a complete-looking green** · (e2) prove a mutant differs before recording a surviving mutation — **(e) now has six causes** · (e3) its opposite colour, a **red** suite hiding a dead assertion · (a2c) populated but nothing **acts** on it · (a2d) a hashed value's **unit** is part of its identity · (a2e) encode a classification as a **construction** · (i12) a **uniform fixture set** cannot test a freedom the contract leaves open · (j8) an adopted verdict makes the **instrument** part of the specification · plus (a0)'s sixth register (**a check that never read the file prints the same word as one that did**) and (a4)'s two (**"checked" in your own pre-flight is a claim**, and **a decision's own EXAMPLE can be the case that refutes it — and a retired argument stays visible**). **Do not restate them here** — the two copies drifted once already.
 8. **CI IS GREEN and the deliberate red is CLOSED** (2026-08-22, by the repair its own criterion chose: the fixture was **enlarged**, the bound was **not** widened and the test was **not** marked). **CI runs `-m "not machine"` and therefore executes exactly ONE of the nine RSS assertions**, so it is not a substitute for the local sweep. See [THE CI FIXTURE DECISION](#the-ci-fixture-decision--taken-measured-and-verified-2026-08-22).
 9. **TWO DEFECTS ARE OPEN AND UNOWNED, AND NEITHER IS 2c's TO FIX.** (a) **`tiling.py` requires the spatial dims to be literally `y` and `x` in four places** while stage 4a requires only that `time` is first — so a `latitude`/`longitude` input **passes the contract and dies in assembly without exit code 4**, and **stage 4a's own message already calls the contract positional**, so the message and the implementation disagree today. Two closers, both scope decisions — see [What plan Task 2 established](#what-plan-task-2-established-done-2026-08-24--read-before-touching-the-decimation-the-two-stores-identities-or-any-spatial-dimension-name). (b) **Open question 20**: what else is uniform across all sixteen input fixtures and unconstrained by the contract — **coordinate monotonic direction first**, because a decreasing latitude axis is the ordinary case in real altimetry and yields a *plausible* answer rather than an error.
 10. **Precedence: the design doc is authoritative on INTENT; a measured, dated number supersedes an unmeasured one wherever it lives, including in the design doc. Any measurement stated twice has one copy DELETED, never reconciled.**
@@ -5580,11 +5580,13 @@ the reader: the flat index decoded with `n_coarse_y`, and the ragged block repla
 3. **`main`'s `pass2 is None → ExitCode.ABORTED_EARLY` branch is unexercised.** Reaching it through
    a subprocess means timing a SIGTERM into pass 1, which is a race whose failure to reproduce
    proves nothing. The driver's half is asserted.
-4. **`run.py`'s Task 2 comment says the two passes derive DIFFERENT tile sides from one budget, and
-   they do not.** `tile_side_for` takes the budget, the floor and the model — **no grid** — so both
-   passes derive the **same** side; what differs is how many tiles that side makes of each grid.
-   Measured at this task's fixtures. The comment's *conclusion* (do not force one side across both
-   stores) is unaffected; its *premise* is wrong.
+4. ~~**`run.py`'s Task 2 comment says the two passes derive DIFFERENT tile sides from one budget,
+   and they do not.**~~ **FIXED IN PLACE 2026-08-28.** `tile_side_for` takes the budget, the floor
+   and the model — **no grid** — so both passes derive the **same** side; what differs is how many
+   tiles that side makes of each grid. **The comment's conclusion (do not force one side across
+   both stores) stands and its premise did not**, which is the third instance in this sub-phase of
+   a conclusion surviving its reasoning — (a4)'s fourth register. Corrected where it sits rather
+   than annotated elsewhere, because a comment is read at the code it describes.
 
 ---
 
@@ -6462,6 +6464,35 @@ rather than discovering it as a spatial signal. **A known artifact that is detec
 output is a diagnostic; an unknown one is a scientific error** — and at 1/64 sampling this gives
 the audit a **free, global, permanent** cold-like reference everywhere in the field rather than
 only in a subsample.
+
+> ## THE ENABLING ASSUMPTION OF THE PARAGRAPH ABOVE DID NOT SURVIVE TASK 5, AND THE CONCLUSION DOES — ON A DIFFERENT INSTRUMENT (2026-08-27)
+>
+> **THE SOURCE COARSE INDEX IS NOT STORED PER POINT.** Task 5 refused to: at 10⁷ points with two
+> candidates and int64 indices that array is **160 MB** carried for the length of the run, against
+> the same task's invariant that peak RAM is derivable from the memory budget alone — and it could
+> not go into the store either, because `create_store` writes root attrs **once, before any tile
+> is fitted**, and no new store schema was in scope. The map is built per tile, consumed by that
+> tile's fit and dropped; the aggregates that survive are `O(1)` in the field.
+>
+> **SO D12'S LATTICE TEST NEEDS A DIFFERENT INSTRUMENT, AND ONE EXISTS THAT IS EXACT RATHER THAN
+> APPROXIMATE.** *"Self-sourced"* is not a fact that has to be read back: a point is coarse iff
+> `y % k == 0 and x % k == 0`, which is **arithmetic on the stride**, and a coarse point sources
+> **itself** exactly when its own pass-1 fit is `OK` for that candidate — which is
+> `/status/outcome` in pass 1's store, at a cell the same arithmetic names. **Two things already
+> on disk, joined by the stride, reproduce the stored array's discriminating power for the
+> self-sourced case without storing anything.**
+>
+> **WHAT THE STORED ARRAY WOULD HAVE ADDED, STATED SO THE LOSS IS NOT DISCOVERED LATER:** the
+> source of a **non**-self-sourced point — which coarse cell a fine point actually took, and at
+> what radius — is **not** recoverable this way. Reconstructing it means re-running `source_map`
+> over pass 1's store, which is cheap (1.43 µs per point, measured at Task 3) and deterministic,
+> so it is available to an audit that wants it; it is simply not a column in the output. **The
+> aggregate radius histogram is in `RunReport` and the per-point radius is not.**
+>
+> **THE CLAIM ABOUT THE GLOBAL COLD-LIKE REFERENCE IS UNAFFECTED**, because it rests on **which**
+> points are coarse and not on a stored index — and that was always derivable. This is (a4)'s
+> fourth register: the conclusion survives, and re-deriving it changes what has to exist for it
+> to hold.
 
 ### D2 — TASK 0's METHOD IS THE TEMPLATE FOR EVERY REMAINING 2c PREMISE THAT IS UNMEASURED
 

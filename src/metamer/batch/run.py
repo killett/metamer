@@ -1067,16 +1067,23 @@ def run(
             else TileSideBasis(source_attrs["tile_side_basis"])
         )
         if Path(store_path).exists():
-            # **EACH STORE IS GUARDED AGAINST ITS OWN GRID, AND UNDER A TWO-PASS
-            # RUN THAT MEANS THE TWO STORES HOLD DIFFERENT TILE SIDES. THAT IS
-            # CORRECT AND IT READS AS WRONG.** `grid` here is the contract's,
-            # which for pass 1 is the DECIMATED grid -- 1/k^2 the size -- so the
-            # same budget derives a different side for the two passes, and a
-            # budget change between them is legal and moves them independently.
-            # **Do not "fix" this by forcing one side across both stores**: that
-            # either exceeds the budget in one pass or refuses a resume that is
-            # geometrically identical, which is the failure this function's own
-            # docstring says the rule-over-the-side exists to prevent.
+            # **EACH STORE IS GUARDED AGAINST ITS OWN GRID, AND THE GUARD IS
+            # RIGHT FOR A DIFFERENT REASON THAN THIS COMMENT GAVE UNTIL
+            # 2026-08-27.** It said the same budget derives a DIFFERENT side for
+            # the two passes because pass 1's grid is 1/k^2 the size. **That
+            # premise is false and was measured so at Task 5**: `tile_side_for`
+            # takes the budget, the floor and the model -- **no grid** -- so both
+            # passes derive the SAME side from one budget. What differs is how
+            # many tiles that side makes of each grid, and `grid` here is the
+            # contract's, which for pass 1 is the decimated one.
+            #
+            # **The conclusion stands.** A budget change BETWEEN passes is legal
+            # and moves the two stores independently, and each store's shards --
+            # and therefore what its completion bits index -- were fixed when it
+            # was created. **Do not "fix" this by forcing one side across both
+            # stores**: that either exceeds the budget in one pass or refuses a
+            # resume that is geometrically identical, which is the failure this
+            # function's own docstring says the rule-over-the-side prevents.
             side = resume_tile_side(
                 store_path,
                 derived_side=side,

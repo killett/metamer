@@ -831,6 +831,42 @@ and it is named in the survey rather than left to be discovered.
 > establish that, because *"the premise is false"* and *"the assertion is unsafe"* are different
 > statements and the gap between them is a number.
 
+#### AND THE SIXTH: A DECISION'S OWN EXAMPLE CAN BE THE CASE THAT REFUTES IT
+
+> **When a decision is justified by an example, check that the example exhibits the property the
+> decision turns on.** An illustrative case chosen for clarity may be exactly the case where the
+> **rejected alternative is right**, and the decision then looks supported by evidence against
+> it.
+
+**THE OTHER FIVE REGISTERS ARE ABOUT A DERIVATION BEING WRONG. THIS ONE IS ABOUT THE DERIVATION
+BEING FINE AND THE ILLUSTRATION POINTING THE OTHER WAY**, which is harder to see: an example is
+read as a concrete instance of the argument rather than as a claim to check, and its whole
+purpose is to be easier to follow than the argument. **The failure is silent in the flattering
+direction** — the reader finishes more convinced than before.
+
+Worked instance, Phase 2c Task 5. `ALGORITHM_VERSION`'s bump had to be **unconditional**, not
+contingent on `warm_start.enabled`, and the plan justified that with: *a user who disables
+warm-starting after Task 5 gets cold fits, and their pre-Task-5 store also holds cold fits under
+a `fit_hash` computed from the same field values, so a conditional bump lets the two collide.*
+**Walk it: both populations are cold and bit-identical** — nothing on the cold path moved — so
+sharing a `fit_hash` would have been *correct reuse*. The example names the one configuration
+where a **conditional** bump is right.
+
+The conclusion survives on three independent grounds, none of which appears in the example: the
+constant is a **stamped identity the installed code is authoritative for**, so a config-contingent
+value would be the self-reported class; `warm_start_enabled` is **already in the allowlist**, so a
+version tracking it records one fact twice; and the bump rule is a statement about a **change**,
+not about a run. **The real collision is at the DEFAULT** — `enabled` is `True` unless a user says
+otherwise, and there a pre-bump store of cold fits resumes clean and takes warm-started tiles
+alongside them.
+
+> **AND THE HANDLING IS PART OF THE RULE: A RETIRED ARGUMENT STAYS VISIBLE.** The wrong paragraphs
+> were **left standing with the correction beside them** in the plan and in `PROGRESS.md`, rather
+> than deleted. Deleting a refuted argument removes the only evidence that it was considered and
+> rejected, so **the next reader re-derives it** — and, having derived it independently, trusts it
+> more than the first author did. The same practice as ~~struck~~ figures elsewhere in these
+> notes, applied to reasoning instead of to numbers.
+
 #### A POINT BETWEEN TWO MEASURED POINTS IS NOT MEASURED
 
 > **Interpolation between measurements is inference, and a threshold can sit between any two
@@ -1387,6 +1423,44 @@ written. Where no such single comparison exists, iterate the authoritative set i
 **And compare the KEY SETS before the values**, or a member present in the authoritative set and
 absent from the thing being checked is **a comparison that silently does not happen** — the same
 defect one level in, and (a0)'s excluded-versus-missing register at a diff.
+
+### (c6) A PRACTICE ENFORCED BY A MECHANISM MUST BE CHECKED TO REACH EVERY INSTANCE IT COVERS
+
+> **Where a discipline is enforced by a mechanism, enumerate every instance the discipline should
+> cover and check that the mechanism reaches each one.** A partially-installed guard produces a
+> **complete-looking green**: it passes wherever it runs, and it only ever runs where somebody
+> installed it.
+
+**(c5) IS THE SAME SHAPE AT A RUNTIME GATE; THIS IS IT AT A TEST DISCIPLINE**, and the two
+together say: **check the set, not the instances you can see.** (c5) fails when the set grows past
+the enumeration; this fails when the enumeration was never the set — the practice was installed
+where the author was looking, and the instances elsewhere were never in view.
+
+**WHAT MAKES IT INVISIBLE IS THAT THE MECHANISM REPORTS ON ITSELF.** A reversal chain that covers
+three constants passes; nothing anywhere says *"and two constants have no chain"*, because the
+thing that would say it is the chain. **(a0)'s sixth register at a tool** — a check that never
+read the file prints the same word as one that did — one level up: a discipline that never
+reached an instance reports the same green as one that did.
+
+Worked instance, Phase 2c Task 5, 2026-08-27. `tests/test_hashing.py` carries `_HISTORY` and
+`test_the_goldens_reverse_through_the_allowlist_history`, which is *"the only thing that says a
+regeneration was honest"* — a hand-derived golden still contains the previous one as a sub-case,
+so removing exactly what a change added must return exactly the digests that preceded it.
+**There are five golden hashes, and they live in two files.** `tests/test_config.py` holds two
+more; its **fit** golden is deliberately the same value as the other module's, and its **compat**
+golden is a **different** one, because the two fixtures name different criterion sets.
+
+**It had no chain at all.** Across the 2026-08-11 and 2026-08-12 allowlist changes those two
+constants were re-derived three times with nothing able to distinguish a hand derivation from a
+value pasted out of a failure — **and every run of the discipline passed**, because the discipline
+only ever ran in the other file. The repair is a one-hop reversal installed in the second module,
+not a second copy of the first module's chain.
+
+> **AND THE NEW HOP MOVES NO FIELD, WHICH IS LEGITIMATE AND WAS WORTH CHECKING.** Every earlier
+> hop adds or removes a key; the 2026-08-27 hop changes **one value inside an unchanged key set**.
+> A chain records that a *change happened*, and a change that moves the hash without moving the
+> field set is exactly what a chain must be able to express — a chain that could only reverse
+> field-set changes would have a whole class of invalidation it cannot witness.
 
 ### (d) Grep for the vocabulary the task requires
 
@@ -2532,6 +2606,16 @@ tests could not see.** `pixi run test-fast` would have shipped both.
 
 ### The other standing rules
 
+- **WHEN ONE TASK CHANGES BOTH A BEHAVIOUR AND THE IDENTITY THAT DESCRIBES IT, THE IDENTITY SHIPS
+  FIRST.** With a post-commit hook that pushes every commit, **the order within a task decides
+  what is published intermediately**, and every intermediate state is a state somebody can pull.
+  Phase 2c Task 5 bumped `ALGORITHM_VERSION` in its own commit **before** the two-pass driver:
+  shipping the driver first would have published one commit in which a default run warm-starts
+  under `algorithm_version = "1"` — exactly the population mixing the bump exists to prevent.
+  **The identity-first order is always inert**: a version that describes behaviour nothing yet
+  produces invalidates stores and nothing else, while behaviour that outruns its identity is the
+  defect. The brief said *"this is the commit at which `θ̂` moves"*, which reads as the opposite
+  order; it is silent on ordering and the ordering is a decision.
 - **`git add` a new file BEFORE the verification sweep, never at commit time.**
   `pre-commit run --all-files` covers **tracked** files only, so an untracked new module makes
   every hook print `Passed` without being read. Staging is what puts it inside "all". Measured at
@@ -2804,6 +2888,16 @@ Questions 1–4 and 9 are in `PROGRESS.md`. **9 (`HESSIAN_COND_LIMIT`) was close
 
 Every one of these was discovered by building a fixture that could not fail.
 
+- **A VALID WARM START IS NOT A WARM START USED, AND ANY COUNT MUST SAY WHICH IT COUNTS.**
+  **Validity is a property of the SOURCE** — the spiral found a coarse fit within the bound that
+  is `OK` for that candidate. **Usage is a property of the FIT** — the optimizer actually started
+  from it and `optimize_series` recorded `InitRung.WARM_START`. **The gap is every series that
+  fails before the optimizer runs**, which the design precheck refuses outright: land, permanent
+  ice, too few valid samples. Measured 2026-08-27 on a fixture with a block of all-NaN series:
+  **147 warm rungs against 182 valid sources.** The relation is `used ≤ valid`, and equality holds
+  only where **every** series is fittable — which is true of a random-field fixture and false of
+  anything shaped like real altimetry. A test asserting equality on the first fixture and reused
+  on the second fails for a reason that is not a defect.
 - **`DIAGNOSTIC_LIMIT` in a DESIGNED fit is reached through `sigma`'s lower limit (1e-8),
   not `rho`'s upper one (1e6).** A slow cosine does not do it — a design carrying constant,
   trend, offset and rate change absorbs it and leaves an ordinary residual; measured, that
