@@ -1213,3 +1213,274 @@ mutation that could not have changed anything is not evidence about the suite.
   Task 3 and both apply again wherever a coarse index is turned back into a `(row, column)` pair:
   `n_cx` and `n_cy` are interchangeable on a square grid, so a transposed decode reads correct.
   **The fixtures stay non-square and not stride-aligned.**
+
+---
+
+## Plan Task 6 — the audit's arms and the four-reading table, audited before any code
+
+**THE BRIEF** is the plan's Task 6 and D7: measure hysteresis against a **designed floor** rather
+than against zero. Three arms beside `warm` — **N2**, cold from a perturbation whose magnitude
+equals that cell's own warm/cold start distance in unconstrained coordinates and whose direction is
+random, matched **per cell**; **N1**, cold from the moment-ladder start perturbed by a tiny ε; and
+**no cold-versus-cold arm**, because `fit` has no stochastic component and re-running cold measures
+zero by construction. The four-reading table is written into the audit's own documentation
+**before** the arms run. N2's seed is recorded. Task 0's `random` arm is **not** this control.
+
+### (i7) THE AUDIT'S SUBJECT CANNOT BE THE COARSE POINTS, AND THREE RECORDED DECISIONS ASSUME IT IS
+
+**This is the finding that decides what Task 6 builds**, and it is a collision between decisions
+rather than a gap in one.
+
+D5 lists *"cold audit reference"* among pass 1's four surviving jobs. D6's table calls it **"THE
+BINDING CHECK"** on the stride. D10 discharges that check with an occupancy table computed over
+**the coarse point count** — `10⁷ / 64 = 156 250`, and `156 250 / 30 = 1 in 5 208`. **All three
+read the audit's subject as pass 1's coarse set, with pass 1's store as the free cold arm.**
+
+**D12 makes that set the one place the effect cannot appear.** A coarse point's nearest valid
+coarse source is **itself**, at radius 0 — geometry, not a special case — so pass 2's `warm` fit at
+a coarse point starts from **pass 1's own converged optimum for the same series and the same
+candidate**. Comparing the two there asks *"does restarting the optimizer from its own optimum move
+it?"*, which is **convergence idempotence, not hysteresis**: there is no neighbour in the
+comparison at all.
+
+**AND D12 ALREADY MEASURED IT, WHICH IS WHY THIS IS ARITHMETIC RATHER THAN AN ARGUMENT.** `self`
+against `cold` is **239/240 = 99.58%** with `|Δℓ|` **exactly zero at 43%** of cells and a maximum of
+**1.24e-07**, against **95.00%** for fine points — *"the lattice signal is ≈ 4.6 percentage points
+of excess cold-likeness"*. **An audit drawn from the coarse set is a fixture placed exactly where
+the two functions agree** — (i7), and in its strongest form: those points carry **none** of the
+effect, not merely less of it.
+
+**SO THE SUBJECT IS A SUBSAMPLE OF FINE POINTS AND THE COLD ARM IS COMPUTED, NOT READ.** No cold
+fit exists on disk for a fine point, and the one that does exist is at the unrepresentative points.
+**63 of every 64 shipped answers are neighbour-sourced**, and those are what §11.2 asks about.
+
+> **THREE CONSEQUENCES, AND ALL THREE POINT THE SAME WAY, SO NOTHING MOVES.**
+>
+> 1. **The stride stops binding the audit.** D6's *"binding check"* rests on the audit drawing from
+>    the coarse set. It does not, so `k` constrains the audit's sample size **not at all** — the
+>    size is `audit.subsample`, chosen. **`k = 8` is strengthened, not threatened.**
+> 2. **D10's occupancy table becomes conservative by a factor of `k²`.** Its members were coarse
+>    points; the real population is the whole grid, **64× larger**, so every threshold in that
+>    table is 64× easier to clear. Its conclusion — *"stratum adequacy is a property of FIELD SIZE,
+>    not of the stride"* — holds **a fortiori**, and the 30-member rule with (a2b)'s
+>    unavailable-rather-than-caveated handling is unaffected.
+> 3. **Pass 1's "cold audit reference" job survives in a narrower and still useful form.** It is a
+>    **free, global, permanent** cold fit at 1/64 of the field, and its use is as a **cross-check
+>    on the audit's own cold arm**: a freshly computed cold fit at a coarse point must reproduce
+>    pass 1's stored one bitwise. That is a genuine cross-check by **(j5)** — same quantity, same
+>    conditions, same code — unlike the calibration cross-check D5 rejected on exactly that test.
+
+**Recorded in D5, D6 and D10 rather than only here**, because three decisions carry a reading of
+one word — *"the audit's sample"* — that this task is the first to have to act on.
+
+### N1 AND N2 MUST SHARE THE RANDOM DIRECTION, OR THE TABLE'S SECOND ROW DOES NOT FOLLOW
+
+The brief specifies N2's direction as random and says only *"perturbed by a tiny ε"* of N1. **The
+table's second row reads `N1 zero, N2 non-zero → the sensitivity is to start DISTANCE, not
+direction`**, and that inference is valid only if the two arms differ in **nothing but distance.**
+
+Give N1 a fixed direction — all-ones, or the first coordinate — and a non-zero N2 beside a zero N1
+has two available explanations: the magnitude, or the fact that N2 happened to move in a direction
+the surface is sensitive to and N1 did not. **The reading the table promises is then unavailable,
+and the arms were run anyway.**
+
+**So N1 is N2's direction at magnitude ε.** One draw per cell, two magnitudes. The three arms are
+then a **magnitude ladder along one ray** — `ε`, `r`, and the warm start's actual displacement —
+which is exactly what rows 1 and 2 discriminate, and it costs nothing.
+
+### THE ε IS DERIVED, NOT PICKED, AND ITS DERIVATION SETTLES WHAT ROW 1 MEANS
+
+`ε = gradients.fd_step(1.0) = eps^(1/3) = 6.055e-06`, **in unconstrained coordinates**, which is
+the space N1 perturbs and the space `fd_step`'s own docstring states its result in.
+
+**It is not a small number chosen to be small.** It is **the smallest displacement the optimizer's
+gradient can resolve**: `optimize_series` differentiates with `fd_gradient(..., curvature=None)`,
+whose ratio is one at every scale, so the step it actually takes **is** `eps^(1/3)`. A start moved
+by less than that is a start the first gradient evaluation cannot distinguish from the unmoved one.
+
+**That is what makes row 1 readable.** *"N1 non-zero"* then means the answer moved under a
+displacement the optimizer cannot see — i.e. **the surface has structure below the resolution of
+the method**, which is precisely *"the surface is deciding, no start is reliable"*. A picked ε of
+`1e-3` would make row 1 mean *"the surface has structure at 1e-3"*, which is an ordinary property
+of a likelihood and would fire everywhere.
+
+**Per the standing rule, the exponent is read off the path and not copied from a neighbour**: this
+is a first difference (`m = 1`), so `eps^(1/(m+2))`, the same construction as `fd_step` and **not**
+`X_RANK_RTOL`'s `eps^(1/2)`, which thresholds a squared quantity and happens to be the familiar
+`2⁻²⁶`.
+
+### (k) A SEQUENTIAL RNG MAKES THE AUDIT DEPEND ON TRAVERSAL ORDER, WHICH IS THE ONE PROPERTY 2c PROTECTS
+
+N2 is *"the only randomness in the system"*, so it is also the only place §11.3's
+traversal-independence can now be lost — and the natural implementation loses it. **Draw from one
+`Generator` in a loop and cell `n`'s direction depends on how many cells were drawn before it**,
+hence on the subsample's order, hence on tiling if the audit ever tiles. Recording the seed does
+**not** save it: the same seed with a different order gives different directions, so the audit
+would be reproducible only under a fixed traversal that nothing enforces.
+
+**The direction is keyed, not streamed.** Each cell's generator is seeded from
+`(seed, global point index, candidate index)` through a `SeedSequence`, so the draw is a **pure
+function of the cell** — order-independent, subsample-size-independent, and reproducible from the
+recorded seed alone. **The point index is the GRID-GLOBAL flat index, never a position within the
+subsample**, or enlarging the subsample changes every existing cell's direction and two audits of
+one store cannot be compared.
+
+**This is `source_map`'s tile-independence argument at a second mechanism**, and it is structural
+in the same way: there is no traversal for the answer to depend on.
+
+### (a2) THE ARM'S IDENTITY CANNOT COME FROM `init_rung`, BECAUSE N1 AND N2 REPORT `warm_start`
+
+`optimize_series` sets `rung = InitRung.WARM_START` **whenever `x0` is supplied**, without asking
+where it came from. N1 and N2 supply an explicit `x0`, so **all three perturbed arms come back
+labelled `warm_start`** and the cold arm comes back `moment`/`clipped`/`default`.
+
+**That is not a defect in `optimize_series`** — from its side "a start was supplied" is exactly what
+the rung means — but it makes `init_rung` **unusable as the arm label**, which is the obvious
+shortcut. The arm is the audit's own; `init_rung` is recorded beside it as what the fit reported
+and is never read back as identity. **(a2), a name that is not a gate**, one layer out from the
+place this project keeps finding it.
+
+### (c3) THE ADMISSIBILITY RULE ALREADY EXISTS AND MUST NOT BE WRITTEN A THIRD TIME
+
+**N2's start can leave the admissible region, and then `fit` REFUSES THE WHOLE CALL.**
+`_check_warm_starts` raises `ValueError` if any cell marked valid is non-finite or at or beyond a
+diagnostic limit — so a single unlucky direction at a large `r` aborts the entire audit rather than
+losing one cell. The perturbation is unbounded in principle: `r` is a real distance and the
+diagnostic box is finite.
+
+**Enumerating what that validator refuses, against this caller's purpose** — (c3):
+
+| it refuses | right for N2? |
+|---|---|
+| non-finite in a valid cell | **yes** — a start that is not a number is not a start |
+| natural-unit value at or beyond a diagnostic limit | **yes, and for the audit's own reason**: a start there is one no legitimate source produces, so a fit from it measures the validator's absence rather than the surface |
+| only the first `p` columns per candidate | **yes** — the padding is NaN by design |
+
+**So the rule is reused, and the repair is to give it one derivation with two consumers.** The
+predicate is factored out of `_check_warm_starts` into a `(B, M)` admissibility computation that
+the refusal uses to decide **and** to build its message; the audit takes the mask. Writing a
+vectorised twin in the audit would be the **third** spelling of the limits rule — `_out_of_limits`
+already exists as the second, and it is pinned by a test for exactly this reason.
+
+**AND AN INADMISSIBLE CELL MUST NOT BE HANDLED BY SETTING `x0_valid = False`**, which is the
+one-line fix and is (a0)'s fourth register: a false cell **falls back to the moment ladder**, so the
+N2 arm would silently contain **cold** fits and *"N2 agrees with cold"* would be true by
+construction at exactly the cells where the perturbation was largest. **One array is built —
+admissibility — and it is both what `x0_valid` is derived from and what masks the results
+afterwards**, so the two cannot disagree. The count is reported.
+
+### THE DEGENERATE CELLS, NAMED IN ADVANCE BECAUSE EACH LOOKS LIKE AGREEMENT
+
+- **`r = 0`.** A cell whose warm start equals its ladder start has **N2 ≡ N1(ε) ≡ cold** up to the
+  ε step. It contributes *"N2 agrees"* while measuring nothing. **Counted separately.**
+- **The spiral exhausted the cell.** No warm start, so no distance, so **N2 is undefined** — and
+  the cell is not warm-started either, so it is outside the question. **Excluded and counted**, not
+  folded in as agreement.
+- **A cell whose `warm` or `cold` fit did not return `OK`.** The comparison has no operands. This is
+  the fixture fact promoted at Task 5 one level on: **a valid warm start is not a warm start used**,
+  and here an arm that ran is not an arm that produced a comparable answer.
+
+### THE WARM ARM IS RECOMPUTED, NOT READ, AND THAT BUYS A CROSS-CHECK
+
+Reading pass 2's stored `θ̂` is cheaper and is the wrong choice: the other three arms come from a
+fresh `fit` call in this process, and comparing a stored result against three fresh ones is a
+comparison across conditions — **(j5)**. All four arms come from the **same batch, the same call
+site and the same session**, which is the discipline that saved the stride sweep from a spurious
+15% when cold was re-run rather than reused across sessions.
+
+**And because it is recomputed, it can be checked**: the audit's `warm` arm must reproduce pass 2's
+store **bitwise** at the audited points. That single assertion validates the whole audit path
+against the shipped one — the source map, the reader, the ragged unpacking and the fit — and it is
+free.
+
+### (a5) THE SUBSAMPLE SELECTOR IS NOT THIS TASK'S, AND SAYING SO KEEPS THE ARMS TESTABLE
+
+`Audit.subsample` is *"how many points the audit compares"* and **has no consumer** — (a2c), and it
+stays that way after this task. **Which** points is D9's stratification question and the plan's
+Task 7. So the arms take an **explicit point set** from their caller: the selection policy is not
+baked into the arms, and a test can place points where it needs them rather than accepting whatever
+a selector returns. **A fixture that cannot choose its own cells could not construct the degenerate
+cases above.**
+
+**No CLI flag lands here either.** There is nothing to print until Task 7 has a report, and *"a flag
+that parses and does nothing reads as supported"* is the rule `--reuse-fits-from` and `engine=` were
+both held to.
+
+### (c6), ONE DAY AFTER PROMOTING IT: THE AUDIT-BOUNDARY TEST ENUMERATES TWO FIELDS
+
+`Audit` needs a **seed** — D7 requires it recorded, and it is an audit setting, so it must reach
+`run_hash` and **neither gate**. `tests/test_config.py::test_the_audit_settings_move_no_gate` is
+what enforces that boundary, and it is written as
+
+    _WITH + "\n[audit]\nsubsample = 500\nstratify = true\n"
+
+— **an enumeration of the two fields that existed when it was written.** Adding `seed` leaves it
+uncovered, and the test still passes: the mechanism only ever ran where it was installed. **The
+repair is to derive the field list from `Audit`'s own model fields**, so a field added later is
+covered without a second edit — (c5)'s construction at a test rather than at a gate.
+
+### (d) THE VOCABULARY, AND ONE COLLISION WORTH DECLARING
+
+Grepped: **`N1`, `N2` and "hysteresis" as an implemented thing appear nowhere in `src/`** — the
+audit's vocabulary is entirely new, so nothing is being reused under a different meaning.
+
+**But "arm" is already taken.** `reuse.py`, `resume.py`, `calibration.py` and `memory.py` all use it
+for a **branch of a conditional** — *"the recompute arm"*, *"the stored > derived arm"*. The audit
+uses it in the **statistical** sense, which is D7's word and the one the subject needs.
+**Declared in the audit module's docstring rather than renamed**: two meanings of one word in one
+codebase is worth a sentence, and inventing a synonym for the plan's own term is worse.
+
+### (g) AND ONE INTERFACE THIS TASK NEEDS THAT DOES NOT EXIST YET
+
+**The ladder start is not obtainable from any public path.** `optimize_series` computes it inline —
+`moment_init(spec, y, mask, t)` then `objective.to_unconstrained(start_natural)[0]` — and
+`FitResult` records the **rung** but not the **start**. N1 and N2 both need it.
+
+**Recomputing those two lines in the audit is a second derivation of the thing the test
+`N1 at ε = 0 is bit-identical to cold` depends on**, and it would fail for a reason that is not a
+defect the first time either line moves. **So the two lines are extracted into `optimize.py` and
+`optimize_series` calls the extraction** — one derivation, two callers, the pattern `RunGeometry`
+already carries. It is a change in `core/` inside a task about the audit, and it is stated here
+rather than made quietly.
+
+### WHAT WOULD MAKE THIS TASK'S TESTS VACUOUS, NAMED IN ADVANCE
+
+- **An audit run over coarse points only.** Every arm agrees, every reading is row 4, and the suite
+  is green — the (i7) finding above, as a test fixture. **The fixture's points are fine points**,
+  and that they are is asserted.
+- **A fixture whose warm/cold distances are all equal.** N2's per-cell match is then
+  indistinguishable from a match on the mean, which is the exact defect the plan names. **The
+  fixture is asserted to carry more than one distinct `r`.**
+- **A fixture where every `r` is small.** N2 then never leaves the admissible box, the inadmissible
+  path never runs, and its handling is untested. **Its own constructed case**, with an `r` large
+  enough to push a start past a diagnostic limit.
+- **Asserting N2's magnitude in aggregate.** `‖perturbation‖ == r` is asserted **cell by cell**, as
+  the plan requires; a mean over cells is satisfied by a control that is wrong everywhere and right
+  on average.
+- **A one-candidate fixture.** The direction is drawn per `(point, candidate)` and `p` differs
+  between candidates — 1 and 3 at 2a's set — so a single candidate cannot show a direction drawn
+  at the wrong width, and a `p = 1` candidate alone cannot show a direction that is not a unit
+  vector.
+- **Testing the seed with one seed.** *"The same seed reproduces N2 bitwise"* is satisfied by an
+  implementation that ignores the seed entirely; the paired negative — **a different seed gives a
+  different N2** — is what makes it bite, and the plan asks for both.
+
+### (a2c) AND THE SEED THE AUDIT MUST NOT USE IS THE ONE ALREADY CALLED `seed`
+
+`Config.seed` exists, is documented as *"seed for anything stochastic"*, defaults to 0 — **and is
+in `FIT_RELEVANT_FIELDS`.** Grepped: **nothing in `src/` reads it.** `fit` has no stochastic
+component, which is D7's own reason a cold-versus-cold arm cannot exist, so the field has had no
+consumer since it was declared — (a2c), populated with nothing acting on it.
+
+**THE AUDIT IS THE FIRST THING IN THIS PROJECT THAT NEEDS RANDOMNESS, AND `config.seed` IS THE
+OBVIOUS FIELD TO REACH FOR. IT IS THE WRONG ONE.** It is fit identity, so N2's seed reaching it
+would mean **re-running the audit at a different seed invalidates the store the audit is
+auditing** — precisely the failure `_WARM_START_FIT_FIELDS`' boundary exists to prevent, and which
+`tests/test_config.py` already asserts against for `subsample` and `stratify`. D7 says the seed is
+*"fit-relevant for the audit arm and for nothing else"*, which is the audit block and not the top
+level.
+
+**So the field is `audit.seed`, and `config.seed` is left alone.** Filling in an unused field
+because it has the right name is (a2) — a name is not a gate — and it would be the second time a
+plausible-looking value entered fit identity through its name rather than through its role, after
+`data_uri` and `metamer_version`.

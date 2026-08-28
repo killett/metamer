@@ -6131,10 +6131,27 @@ four remaining jobs.** Scale alone does not settle it, and the three jobs differ
 | job | does `k` bind it? |
 |---|---|
 | early-abort evaluation | **no.** It needs a stratified global sample; `1/64` of 10⁷ is ~156 000 points, and the stratification property comes from **dataset coordinates**, which `k` does not affect |
-| **cold audit reference** | **THIS IS THE BINDING CHECK, AND IT IS A COUNT-PER-CELL QUESTION RATHER THAN A TOTAL.** The audit stratifies by difficulty proxy **and candidate** (D4), so the cells multiply — **a rare stratum at `1/64` sampling may have too few members to say anything.** Recorded as **owed and unverified** |
+| **cold audit reference** | ~~**THIS IS THE BINDING CHECK, AND IT IS A COUNT-PER-CELL QUESTION RATHER THAN A TOTAL.** The audit stratifies by difficulty proxy **and candidate** (D4), so the cells multiply — **a rare stratum at `1/64` sampling may have too few members to say anything.** Recorded as **owed and unverified**~~ — **discharged by D10, and then the QUESTION ITSELF DISSOLVED at 2c Task 6's pre-flight: see below. It is not a binding check, because the audit's subject is not the coarse set.** |
 | `/detail/` default | **not a constraint — a decision.** Sixteen times fewer points getting full covariances may be the right number or too few, and it is chosen rather than forced |
 
 ~~**`k = 8` STANDS UNLESS THE AUDIT-STRATUM COUNT FAILS**~~ — **CHECK RUN AND DISCHARGED 2026-08-24, see D10: it passes at production scale with ~3 orders of magnitude of margin, and the binding constraint turned out to be FIELD SIZE rather than the stride.**
+
+> ## AND AT 2c TASK 6 THE QUESTION DISSOLVED RATHER THAN PASSING AGAIN (2026-08-28)
+>
+> **THE AUDIT'S SUBJECT IS NOT THE COARSE SET, SO THE STRIDE NEVER CONSTRAINED IT.** D5's table
+> above, D6's *"binding check"* and D10's occupancy arithmetic all read *"cold audit reference"* as
+> *"the audit's members are pass 1's points"*. **D12 makes that the one set where the effect cannot
+> appear**: a coarse point's nearest valid source is **itself**, so pass 2's warm fit there starts
+> from pass 1's own optimum for the same series — **convergence idempotence, with no neighbour in
+> the comparison.** D12 measured it: **99.58%** agreement against **95.00%** at fine points.
+>
+> **So the audit draws FINE points and computes its own cold arm**, and its sample size is
+> `audit.subsample` rather than `n_points / k²`. **Everything this changes points the same way:**
+> the stride binds nothing here, D10's thresholds are conservative by a factor of `k²` = 64, and
+> `k = 8` is strengthened. **Pass 1's cold-reference job survives narrower and still useful** — a
+> free, global, permanent cold fit at 1/64 of the field, whose use is as a **(j5)-clean cross-check
+> on the audit's own cold arm**: a freshly computed cold fit at a coarse point must reproduce the
+> stored one bitwise. Full argument in the Task 6 pre-flight.
 
 ### D6 — THE COARSE STRIDE IS `k = 8`, CHOSEN ON A WRITTEN OBJECTIVE AND CLOSED BY A BOUND
 
@@ -6375,6 +6392,17 @@ the stride never has to carry a constraint that belongs to the run.
 
 **NOTHING MOVES.** `k = 8` stands, `PUBLISHED_TILE_SIDE` is untouched, and the one new obligation
 is a member-count column the audit was going to need anyway.
+
+> **AND THE TABLE ABOVE IS CONSERVATIVE BY A FACTOR OF `k²`, ESTABLISHED 2026-08-28 AT TASK 6's
+> PRE-FLIGHT.** Every threshold in it was computed over the **coarse** point count — `10⁷ / 64 =
+> 156 250`, and `156 250 / 30 = 1 in 5 208` — because the audit's members were read as pass 1's
+> points. **They are not**: D12 makes the coarse set the one place the effect cannot appear, so the
+> audit draws **fine** points and computes its own cold arm, and the population is the whole grid.
+> **Every figure in the table is 64× easier to clear than stated**, the 30-member rule and its
+> (a2b) handling are unchanged, and the section's own conclusion — *"stratum adequacy is a property
+> of FIELD SIZE"* — holds with more margin rather than less. **The table is left as measured rather
+> than recomputed**, because its purpose is the comparison between `k = 4` and `k = 8`, which is
+> exactly `4×` at every field size either way.
 
 ### D11 — PASS 1 WRITES ITS OWN STORE. THE COMPLETION BITMAP GAINS NO NOTION OF PASSES
 
