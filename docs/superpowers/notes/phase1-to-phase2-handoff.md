@@ -984,6 +984,43 @@ against a **named** exclusion set, and **the excluded key asserted present in bo
 > deliberately placed in the arm where the resume proceeds, with the other arm named as the
 > next task's subject.
 
+#### AND (a5) EXTENDS ACROSS DECISIONS: CHECK A DECISION AGAINST THE MEASUREMENTS TAKEN FOR THE OTHERS
+
+> **When a decision is taken, check it against the measurements taken for OTHER decisions, not
+> only against its own.** A phrase carried between decisions acquires a reading nobody chose, and
+> **the refuting evidence may already exist under a different heading.**
+
+**THE TELL IS A TERM OF ART REPEATED ACROSS DECISIONS**, where each use assumes the others fixed
+its meaning. Nobody defines it, because everybody is reading it off somebody else — and a
+brainstorm that produces a dozen decisions in sequence manufactures these: the later ones inherit
+the earlier ones' vocabulary at speed, which is what makes them cheap to write.
+
+**IT IS THE DOCUMENT-LEVEL REGISTER ONE LEVEL FURTHER OUT.** The register above is about a
+constraint in a document nobody has open; this one is about a **measurement in a decision everybody
+has read**, which is worse, because the evidence was never missing. It was filed under a heading
+the reader had no reason to re-open.
+
+Worked instance, Phase 2c, 2026-08-28. The term was **"the cold audit reference"**. D5 listed it
+among pass 1's four surviving jobs; D6's table called it **THE BINDING CHECK** on the coarse
+stride; D10 discharged that check with an occupancy table computed over **the coarse point count**
+— `10⁷ / 64 = 156 250`, and `156 250 / 30 = 1 in 5 208`. **All three read it as "the audit's
+members are pass 1's points."** Nobody decided that; each inherited it.
+
+**D12 HAD ALREADY MEASURED THAT THOSE POINTS CARRY NONE OF THE EFFECT.** A coarse point's nearest
+valid source is **itself**, so its warm arm starts from its own cold optimum — convergence
+idempotence, with no neighbour in the comparison. D12's own numbers: `self` against `cold` agrees
+at **99.58%** where fine points agree at **95.00%**. **The refutation was three decisions earlier,
+in the record, under a heading about a lattice artifact.**
+
+> **AND FOUR DECISIONS MOVED, ALL IN THE SAME DIRECTION, WHICH IS WHAT MAKES THIS WORTH THE
+> PARAGRAPH RATHER THAN A CORRECTION.** The audit's subject is **fine** points and its cold arm is
+> **computed**; pass 1's store keeps the narrower and better job of **cross-checking that cold
+> arm** (j5); **the stride binds the audit not at all**, so D6's binding check does not pass again
+> — it **dissolves**; D10's thresholds are **conservative by a factor of `k²` = 64**, since the
+> population is the whole grid rather than 1/64 of it; and **`k = 8` is strengthened.** A finding
+> that moves four decisions and costs nothing is the shape to expect here: the reading was never
+> load-bearing, it was just never checked.
+
 #### AN ENUMERATION OVER STATES BEATS A CONDITION INFERRED FROM TWO
 
 > **Where a brief states a CONDITION, enumerate the state space it partitions and check the
@@ -1461,6 +1498,27 @@ not a second copy of the first module's chain.
 > A chain records that a *change happened*, and a change that moves the hash without moving the
 > field set is exactly what a chain must be able to express — a chain that could only reverse
 > field-set changes would have a whole class of invalidation it cannot witness.
+
+**IT FIRED AGAIN ONE DAY LATER, WHICH IS RECORDED AS EVIDENCE THE RULE IS LIVE RATHER THAN
+HISTORICAL.** Phase 2c Task 6 added `Audit.seed`, and the test that enforces the audit block's
+boundary against fit identity —
+`test_the_audit_settings_move_no_gate` — was written as
+
+    _WITH + "\n[audit]\nsubsample = 500\nstratify = true\n"
+
+**an enumeration of the two fields that existed when it was written.** The new field would have
+been added with the boundary silently not covering it, and the suite would have stayed green.
+**Two instances a day apart, in a sub-phase whose own subject was enumeration** — Task 4's gate
+named three of twelve fields — is not a coincidence to note; it is the base rate.
+
+> **AND "RAISES RATHER THAN SKIPS" IS THE HALF THAT MATTERS IN THE REPAIR.** Deriving the field
+> list from `Audit.model_fields` is only half of it: the values still have to be perturbed away
+> from their defaults, and a perturbation table keyed on type will one day meet a type it does not
+> know. **A `continue` there is the (a0) shape at a test** — the field is silently uncovered and
+> the mechanism reports the same green as one that covered it, which is the exact defect the
+> repair was for. So the table **raises**, naming the field and saying to extend the rule. **A
+> guard that cannot cover something must say so; a guard that quietly does not is worse than no
+> guard, because it is counted.**
 
 ### (d) Grep for the vocabulary the task requires
 

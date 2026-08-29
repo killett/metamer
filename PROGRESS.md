@@ -4,11 +4,11 @@
 
 1. **Branch `main`, everything on it, every commit pushed by a hook** — https://github.com/killett/metamer. **A SHA here is stale the moment the next commit lands, so nothing here names one:** `git log --oneline -8` is the authority.
 2. **DONE:** Phase 1 (0–18), Phase 2 preliminaries P0–P4, **Phase 2a (0–13)**, **Phase 2b (COMPLETE 2026-08-19 — 10 met / 4 reduced scope / 2 FAILED)**, **Phase 2c's brainstorm (D1–D12)**, and **2c plan Tasks 0–6 (0–4 on 2026-08-24, Task 5 on 2026-08-27, Task 6 on 2026-08-28)**. The modelling sub-phase was decided against 2026-08-22 and **re-decided on closed facts 2026-08-23: it does not open.** Sections below carry each; **none is restated here.**
-3. **NEXT ACTION: PHASE 2c TASK 7 — the audit's strata and its report.** Plan: [`2026-08-24-metamer-phase2c.md`](docs/superpowers/plans/2026-08-24-metamer-phase2c.md) — **9 tasks, 12 exit criteria each naming its reading; Tasks 0–6 done, Tasks 7–8 have no code.** **Every task's FIRST step is the pre-flight**, run against the brief **before code** and appended to [`phase2c-preflight.md`](docs/superpowers/notes/phase2c-preflight.md). **`ALGORITHM_VERSION` IS `"2"` SINCE 2026-08-27** and every store written before it holds cold fits — see [how to read a store written before 2c Task 5](#how-to-read-a-store-written-before-2c-task-5-recorded-2026-08-24-and-it-cannot-be-reconstructed-later), which is not re-derivable from the stores.
+3. **NEXT ACTION: PHASE 2c TASK 7 — the audit's strata and its report.** Plan: [`2026-08-24-metamer-phase2c.md`](docs/superpowers/plans/2026-08-24-metamer-phase2c.md) — **9 tasks, 12 exit criteria each naming its reading; Tasks 0–6 done, Tasks 7–8 have no code.** **Every task's FIRST step is the pre-flight**, run against the brief **before code** and appended to [`phase2c-preflight.md`](docs/superpowers/notes/phase2c-preflight.md). **Read [What plan Task 7 inherits](#what-plan-task-7-inherits-written-2026-08-28-before-any-of-it-exists) first** — Task 7 reports on a population Task 6 redefined, and it carries D8 and D9 in the form Task 7 implements them. **`ALGORITHM_VERSION` IS `"2"` SINCE 2026-08-27** and every store written before it holds cold fits — see [how to read a store written before 2c Task 5](#how-to-read-a-store-written-before-2c-task-5-recorded-2026-08-24-and-it-cannot-be-reconstructed-later), which is not re-derivable from the stores.
 4. ## THE STANDING LIMITATION ON EVERYTHING 2c DECIDED: **NO 2c NUMBER COMES FROM REAL DATA.** Warm-starting was authorized — and every decision after D1 inherits this — on a **simulated field whose spatial coherence is a construction parameter**. **The spatial coherence of real altimetry optima has never been measured.** Weaker coherence gives a **smaller** saving, and **§11.2's 30% threshold could fail on real data.** **THE NAMED CLOSER, not an open worry: a spike on a real gridded product — same three arms, same record-length lever.** **AND SINCE 2026-08-24 THERE IS A SECOND REGISTER OF IT: every 2c saving is a CEILING, not an estimate**, because the instrument searched with no effective spiral bound — see [what 2c's tasks inherit](#what-2cs-tasks-inherit-2026-08-24).
 5. **Tests: 1187 passed, 0 failed, 0 INDETERMINATE — 2026-08-28, 2554.77 s (sweeps that week ran 1698–2555 s on byte-identical trees, which is the machine and not the suite).** **`pixi run test` is the full sweep and every end-of-task verification must run it; `test-fast` and `test-ci` are NOT evidence** — the full sweep has caught **seven** things a fast run could not. **Every run prints `RSS measurement validity`, including at zero**; a nonzero count is INDETERMINATE, neither pass nor fail.
 6. **Verify a fresh checkout with `pixi run test && pixi run typecheck && pixi run lint`**, plus `pixi run pre-commit run --all-files` before every commit. **AND `git add` A NEW FILE BEFORE THAT SWEEP, NEVER AT COMMIT TIME** — `--all-files` covers **tracked** files only, so an untracked new module makes every hook print `Passed` without being read. Measured 2026-08-24; it cost two full twenty-minute sweeps before it was noticed.
-7. **THE METHOD IS THE PRE-FLIGHT AND IT LIVES IN EXACTLY ONE PLACE:** [`phase1-to-phase2-handoff.md`](docs/superpowers/notes/phase1-to-phase2-handoff.md) §1 — (a0)–(a9), (a)–(k), the standing rules, the fixture facts, **and the thirteen 2c added:** (i2b) a high-ceiling control converts a null into a **located** null · (i2c) a sign-unstable benefit is worse than a small one · (j5) a second instrument is a cross-check only if it measures the same quantity under the same conditions · (j6) bound the unmeasured region before measuring it · (i11) refutation clauses in **both** directions · (a2b) make an invalid value **unavailable** rather than caveated · (h2) stratify only by axes at the metric's **own** granularity · (j7) never stratify by a quantity the treatment can move · (c4) a validator must be specified in the **coordinates and extent** the validated object actually has · **(c5) a gate over a set that can GROW must be written against the set, not an enumeration of its members** · **(c6) a practice enforced by a MECHANISM must be checked to reach every instance — a partially-installed guard prints a complete-looking green** · (e2) prove a mutant differs before recording a surviving mutation — **(e) now has six causes** · (e3) its opposite colour, a **red** suite hiding a dead assertion · (a2c) populated but nothing **acts** on it · (a2d) a hashed value's **unit** is part of its identity · (a2e) encode a classification as a **construction** · (i12) a **uniform fixture set** cannot test a freedom the contract leaves open · (j8) an adopted verdict makes the **instrument** part of the specification · plus (a0)'s sixth register (**a check that never read the file prints the same word as one that did**) and (a4)'s two (**"checked" in your own pre-flight is a claim**, and **a decision's own EXAMPLE can be the case that refutes it — and a retired argument stays visible**). **Do not restate them here** — the two copies drifted once already.
+7. **THE METHOD IS THE PRE-FLIGHT AND IT LIVES IN EXACTLY ONE PLACE:** [`phase1-to-phase2-handoff.md`](docs/superpowers/notes/phase1-to-phase2-handoff.md) §1 — (a0)–(a9), (a)–(k), the standing rules, the fixture facts, **and the ones 2c added:** (i2b) a high-ceiling control converts a null into a **located** null · (i2c) a sign-unstable benefit is worse than a small one · (j5) a second instrument is a cross-check only if it measures the same quantity under the same conditions · (j6) bound the unmeasured region before measuring it · (i11) refutation clauses in **both** directions · (a2b) make an invalid value **unavailable** rather than caveated · (h2) stratify only by axes at the metric's **own** granularity · (j7) never stratify by a quantity the treatment can move · (c4) a validator must be specified in the **coordinates and extent** the validated object actually has · **(c5) a gate over a set that can GROW must be written against the set, not an enumeration of its members** · **(c6) a practice enforced by a MECHANISM must be checked to reach every instance — a partially-installed guard prints a complete-looking green** · (e2) prove a mutant differs before recording a surviving mutation — **(e) now has six causes** · (e3) its opposite colour, a **red** suite hiding a dead assertion · (a2c) populated but nothing **acts** on it · (a2d) a hashed value's **unit** is part of its identity · (a2e) encode a classification as a **construction** · (i12) a **uniform fixture set** cannot test a freedom the contract leaves open · (j8) an adopted verdict makes the **instrument** part of the specification · plus (a0)'s sixth register (**a check that never read the file prints the same word as one that did**) and (a4)'s two (**"checked" in your own pre-flight is a claim**, and **a decision's own EXAMPLE can be the case that refutes it — and a retired argument stays visible**), and (a5)'s across-DECISIONS register (**check a decision against the measurements taken for the OTHERS; a term of art repeated across decisions acquires a reading nobody chose**). **Do not restate them here** — the two copies drifted once already.
 8. **CI IS GREEN and the deliberate red is CLOSED** (2026-08-22, by the repair its own criterion chose: the fixture was **enlarged**, the bound was **not** widened and the test was **not** marked). **CI runs `-m "not machine"` and therefore executes exactly ONE of the nine RSS assertions**, so it is not a substitute for the local sweep. See [THE CI FIXTURE DECISION](#the-ci-fixture-decision--taken-measured-and-verified-2026-08-22).
 9. **TWO DEFECTS ARE OPEN AND UNOWNED, AND NEITHER IS 2c's TO FIX.** (a) **`tiling.py` requires the spatial dims to be literally `y` and `x` in four places** while stage 4a requires only that `time` is first — so a `latitude`/`longitude` input **passes the contract and dies in assembly without exit code 4**, and **stage 4a's own message already calls the contract positional**, so the message and the implementation disagree today. Two closers, both scope decisions — see [What plan Task 2 established](#what-plan-task-2-established-done-2026-08-24--read-before-touching-the-decimation-the-two-stores-identities-or-any-spatial-dimension-name). (b) **Open question 20**: what else is uniform across all sixteen input fixtures and unconstrained by the contract — **coordinate monotonic direction first**, because a decreasing latitude axis is the ordinary case in real altimetry and yields a *plausible* answer rather than an error.
 10. **Precedence: the design doc is authoritative on INTENT; a measured, dated number supersedes an unmeasured one wherever it lives, including in the design doc. Any measurement stated twice has one copy DELETED, never reconciled.**
@@ -5439,6 +5439,133 @@ per-candidate one.
 radius, a spiral starting at radius 1, the bound read as fine units, `valid` as `index > 0`, the
 coarse geometry taken from the region, a per-point search, exhaustion falling through to the
 nearest point regardless of its outcome, and column-major point ordering.
+
+### What plan Task 7 inherits (written 2026-08-28, before any of it exists)
+
+**READ THIS BEFORE THE PLAN'S TASK 7 BRIEF.** Task 7 is the second-largest task in 2c: D8 and D9
+together specify two granularity classes, the `κ` and margin bins, per-candidate crossing, the
+outcome flip with its own denominators, the both-OK intersection as a reported fraction,
+per-stratum-only output with a max-over-strata headline, and the 30-member rule. **It is also where
+the audit's numbers first become readable, so it will generate findings.**
+
+#### 1. THE POPULATION IT REPORTS ON WAS REDEFINED ONE TASK AGO
+
+**The audit's subject is FINE points and its cold arm is COMPUTED.** D5, D6 and D10 each read *"the
+cold audit reference"* as *"the audit's members are pass 1's points"*; D12 had already measured
+that those points carry **none** of the effect — a coarse point sources **itself**, so its warm arm
+starts from its own cold optimum. The full argument and its magnitudes are at
+[D6](#d6--the-coarse-stride-is-k--8-chosen-on-a-written-objective-and-closed-by-a-bound), at D10
+and in the Task 6 pre-flight; **the promotion is (a5) across decisions**, in the handoff's §1.
+
+**Four consequences Task 7 acts on directly:**
+
+1. **Pass 1's store is the cold-arm CROSS-CHECK, never the audit's sample.** Its use is the (j5)
+   comparison a Task 6 test already makes, and Task 7 must not reach for it as a source of
+   members.
+2. **The stride binds the audit not at all.** The sample size is `config.audit.subsample`, chosen.
+   D6's binding check does not pass again — it **dissolves**.
+3. **D10's occupancy thresholds are conservative by a factor of `k²` = 64**, because the
+   population is the whole grid rather than 1/64 of it. **The table stays as measured** — its
+   purpose is the `k = 4` against `k = 8` comparison, which is exactly `4×` either way.
+4. **`k = 8` is strengthened**, and nothing about the stride reopens.
+
+#### 2. D9's STRATA, IN FULL, BECAUSE TASK 7 IMPLEMENTS THEM RATHER THAN CHOOSING THEM
+
+**Each metric crosses only axes defined at its own granularity** — (h2). That is what dissolved the
+81-cell problem rather than trading it away.
+
+| metric | granularity | strata |
+|---|---|---|
+| selection disagreement | per **point** | selection margin × winning candidate |
+| `\|Δℓ\|`, parameter distance, signed-trend disagreement | per **cell** | candidate × `κ` |
+
+**Nothing is crossed that does not share a granularity.** The cell counts at `M = 12` are in D9
+and are **not restated here.**
+
+**THE BOUNDARIES ARE FIXED CONSTANTS FROM OUTSIDE THIS PROJECT, NEVER QUANTILES** — a quantile bin
+means something different in every run, which is the pooled-number problem one level in. `κ` at
+**`2²⁶`** and **`2⁵²`**; selection margin at **2** and **10**, from Burnham & Anderson, **so they
+cannot have been chosen with the audit's answer in view.** What each constant is a fact about is in
+D9, once.
+
+> **A COUNT IN THE BRIEFING FOR THIS TASK IS WRONG AND IS CORRECTED HERE RATHER THAN CARRIED.**
+> The handoff request named *"five kappa bins ... with a fifth bin for undefined"*. **Two
+> boundaries give THREE intervals** — `< 2²⁶`, `[2²⁶, 2⁵²)`, `≥ 2⁵²` — **and `undefined` is the
+> FOURTH**, which is what D9's own table says (`κ (4)`) and what its own sentence says (*"a fourth
+> bin, `undefined`"*). **Four, not five.** The margin count is right at three. Recorded because a
+> stratum count that is wrong by one is not visible in any output the audit produces.
+
+**`κ` IS BINNED BY THE COLD ARM**, and D9 flags this as the one most likely to be got wrong later:
+both values are sitting right there, and binning by the warm arm's `κ` would let **the mechanism
+under test move cells between strata** — conditioning on a post-treatment variable, promoted as
+**(j7)**. **`undefined` is its own bin** for a non-positive-definite Hessian; letting it fall into
+the worst bin is a category error reading as a severity.
+
+**FAILURE STATUS IS A PARTITION, NOT A STRATUM.** The audit compares on the **both-OK**
+intersection, so within it every cell is OK/OK and the axis is degenerate. **What varies is the
+outcome FLIP** — a fit appearing or vanishing rather than moving — and it is **its own count with
+its own denominators, per candidate**: the rescue rate over **cold-failed** cells, the loss rate
+over **cold-OK** cells. A single "flip rate" has no obvious base and the choice moves the number.
+
+**AND THE BOTH-OK INTERSECTION IS ITSELF A SELECTION EFFECT, REPORTED AS ONE.** Its size goes in
+**as a fraction of all attempted cells, per candidate**: near 1.0 and the effect is negligible;
+below that, **every disagreement figure is conditioned on survival and must say so.**
+
+#### 3. D8: PER STRATUM ONLY, ALWAYS, AND THE HEADLINE IS THE WORST ONE
+
+**There is no pooled mean, ever.** The headline is the **maximum over strata**, never an average —
+*"the quoted number is a true one"*. **Below 30 members the count is reported in place of the
+rate** — (a2b) for the third time: a rate invalid under a condition the code can detect is made
+**unavailable**, not caveated.
+
+**THE 30 IS DERIVED AND MUST NOT BE RE-PICKED.** A binomial rate over `n = 30` has a standard error
+of **~9% at `p = 0.5`** — enough to tell a rare stratum from a common one, **not enough to quote a
+rate.**
+
+**WITHHOLDING THE POOLED FIGURE COSTS NO DECISION RULE ANYTHING, WHICH IS WHY IT IS FREE.** Nothing
+in this system consumes one. **The withholding must be VISIBLE, not silent** — the report says it
+was withheld and why, on the same argument as `RSS measurement validity` printing at zero — and
+**the strata definitions must be stable across runs**, or per-stratum figures are no more
+comparable than the pooled one was. D8 records the boundary-stability obligation as **owed**; D9's
+fixed constants are what discharge it, and the report must **record the boundaries with the
+figures.**
+
+#### 4. WHAT TASK 6 BUILT, AND THE FOUR THINGS TASK 7 MUST NOT RE-DERIVE
+
+| piece | where | what it settles |
+|---|---|---|
+| `Arm`, `run_arms`, `ArmStarts` | `batch/audit.py` | four arms over one batch at one call site; the four-reading table is in the module docstring |
+| `arm_directions` | same | the direction is a pure function of `(seed, GRID-GLOBAL point index, candidate)` |
+| `optimize.ladder_start` | `core/optimize.py` | the cold start, one derivation |
+| `fit.warm_start_faults` | `core/fit.py` | the admissibility rule, one derivation, two consumers |
+
+- **N1 and N2 share the direction**, and the table's second row is why: it reads *"sensitivity to
+  start DISTANCE, not direction"*, which follows only if the arms differ in nothing but distance.
+  The three arms are a **magnitude ladder along one ray.**
+- **`N1_EPSILON = fd_step(1.0)`**, the step the optimizer's own finite-difference gradient takes,
+  so *"N1 non-zero"* means the answer moved under a displacement **the optimizer cannot resolve.**
+- **The seed is `config.audit.seed`, never `Config.seed`** — which has no consumer anywhere in
+  `src` and **is in `FIT_RELEVANT_FIELDS`**, so using it would make re-running an audit at a
+  different seed invalidate the store it audits.
+- **An inadmissible N2 start is EXCLUDED and COUNTED, never marked invalid.** Marking it invalid
+  falls back to the moment ladder, so the N2 arm would silently hold **cold** fits and *"N2 agrees
+  with cold"* would be true by construction at exactly the cells where the perturbation was
+  largest. Two further classes are counted rather than folded in, because each **looks like
+  agreement**: `r = 0`, and an exhausted spiral.
+
+#### 5. THE FIXTURE FACT TO CARRY HARDEST
+
+**A HAND-BUILT DECIMAL-YEAR AXIS IS NOT `to_decimal_years`.** `2000 + i * 31/365.25` over the same
+monthly coordinate moves `θ̂` by **6.7e-05 relative** — and **the conversion is under
+`ALGORITHM_VERSION`**, so a second derivation of it is a second derivation of fit identity.
+
+**IT COST TWO FAILING TESTS AT TASK 6 AND IT IS THE SHAPE THAT GETS "FIXED" BY LOOSENING A
+TOLERANCE**: large enough to fail a bitwise comparison against the store, small enough to read as
+a floating-point detail somebody rounds away. **Take the axis from the input.** Task 7 compares
+arms against each other and against stored values throughout, so every one of its fixtures meets
+this.
+
+---
 
 ### What plan Task 6 established (done 2026-08-28 — read before touching the audit's arms, its seed or its subject)
 
