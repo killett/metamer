@@ -8559,6 +8559,20 @@ rule for the watermark incident, and this is the mechanism that manufactures the
 
 Docs-only commits may follow each other freely: they cannot change what a run would find.
 
+> **AND IT FIRED AGAIN ON 2026-08-29, AT 2c TASK 8, WITH THE RULE ON THE PAGE.** The suite commit
+> `9576f25` pushed; its run was **cancelled at 35 seconds** by a docs commit refreshing the
+> cold-start test count. **The docs commit was written precisely to keep *"the sweep ran on the
+> exact tree committed"* true of the code commit** — the count states that sweep's own result and
+> could not have been in the tree the sweep read — so the two disciplines pulled in opposite
+> directions and the second one won by being the thing that was moving.
+>
+> **NOTHING WAS LOST AND THAT IS AGAIN LUCK, IN THE SAME FORM THE 2026-08-22 ENTRY NAMES**: the
+> later run's tree contains the earlier tree plus one line of `PROGRESS.md`, which no test reads
+> and the wheel does not carry. **THE FIX IS ORDERING, NOT RESTRAINT:** a docs commit that reports
+> a sweep's result must wait for the code commit's run to COMPLETE, not merely be started. It is
+> the one docs-only case the paragraph above does not cover, because it is a docs commit whose
+> whole purpose is to follow a `src/` commit immediately.
+
 ### WHAT EACH COMMIT OWES THE SUITE, STATED AS AN ALLOCATION (2026-08-22)
 
 **A commit that touches `tests/` or `src/` owes a full `pixi run test` — ~850 s — on the tree that
