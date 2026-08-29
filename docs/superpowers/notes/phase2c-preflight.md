@@ -1484,3 +1484,239 @@ level.
 because it has the right name is (a2) — a name is not a gate — and it would be the second time a
 plausible-looking value entered fit identity through its name rather than through its role, after
 `data_uri` and `metamer_version`.
+
+---
+
+## Plan Task 7 — the audit's strata and its report, audited before any code
+
+**THE BRIEF** is the plan's Task 7 with D8, D9 and D10: each metric crosses only axes at its own
+granularity — selection disagreement per **point** by margin × winning candidate, `|Δℓ|` /
+parameter distance / signed-trend per **cell** by candidate × `κ`. Fixed external boundaries, `κ`
+binned by the **cold** arm, failure status a partition rather than a stratum, the outcome flip with
+its own denominators per candidate, the both-OK intersection reported as a fraction, per-stratum
+only with a max-over-strata headline, and a stratum below 30 members reporting its count instead of
+a rate — visibly.
+
+### (i7) THE `κ` AXIS IS DEGENERATE ON THE POPULATION IT STRATIFIES, AND THE BOUNDARY IS THIS PROJECT'S OWN OK/FAILED CUT
+
+**This is the finding that decides what Task 7 can honestly report, and it is arithmetic rather
+than a judgement.**
+
+Four facts, each read off the tree rather than recalled:
+
+1. `optimize.HESSIAN_COND_LIMIT = float(EPS) ** -0.5`. **Measured: `67108864.0`, and
+   `== 2.0**26` is `True`.**
+2. `optimize_series` returns `Outcome.DEGENERATE_HESSIAN` — **not `OK`** — for every fit whose
+   `float(np.linalg.cond(hessian)) > hessian_cond_limit` (`optimize.py:667`).
+3. `fit` writes `loglik`, `theta`, `theta_unconstrained` and `theta_err` **only** where
+   `result.outcome is Outcome.OK`; everything else stays NaN (`fit.py:449`).
+4. D9's per-cell metrics are defined on the **both-OK intersection**, and D9's first `κ` boundary
+   is **`2²⁶`**.
+
+**So the first `κ` boundary and the OK/`DEGENERATE_HESSIAN` cut are the same number, derived the
+same way, from the same `eps`.** Every cell the audit can compute `|Δℓ|` on has a cold `κ` of at
+most `2²⁶`. **Bin `[2²⁶, 2⁵²)` can hold only a cell whose `cond(H)` is exactly `2²⁶`** — `>` is
+strict — **and bin `≥ 2⁵²` is strictly empty.** Two of the four bins are unreachable by
+construction, not by fixture.
+
+**THE `undefined` BIN IS NOT EMPTY, AND THAT IS WHAT SAVES THE AXIS FROM BEING A NO-OP.** D9 defines
+it as a **non-positive-definite** Hessian, and `optimize_series` never tests positive definiteness —
+it thresholds `cond`, which is a ratio of singular values and is finite for an indefinite matrix.
+A finite-difference Hessian at a converged optimum with one near-zero eigenvalue can come back
+indefinite and well-conditioned, be reported `OK`, and reach the audit. **So the axis is really
+binary — well-conditioned-and-PD against not-PD — and it must be reported as four bins anyway,
+because D9 fixes the boundaries and Task 7 implements them rather than choosing them.**
+
+> **WHAT IS OWED IS THE VISIBILITY, NOT A NEW BIN.** *"Zero cells in the two ill-conditioned bins"*
+> reads as a fact about the field and is a fact about `HESSIAN_COND_LIMIT`. **The report records,
+> beside the boundaries, that bins 2 and 3 are unreachable given the outcome taxonomy** — same
+> argument as `RSS measurement validity` printing at zero, and the same argument D8 makes for the
+> withheld pooled figure. **Nothing about D9 moves**; a decision is not re-taken because its
+> implementation exposed an arithmetic consequence.
+
+### (g) AND `κ` HAS NO PRODUCER: `FitResult` THROWS THE HESSIAN AWAY
+
+`SeriesFit.hessian` exists, `fit` inverts it once for `theta_err` (`fit.py:460`) and **keeps neither
+the matrix nor its condition number.** `Detail`'s own docstring already says so in as many words —
+*"the Hessian at the optimum is not stored"*. **D9's stratification axis has no value to read.**
+
+Two ways to get it, and the choice is not stylistic:
+
+- **Recompute in the audit** via `hessian_at_optimum` at `theta_unconstrained`. It is a second call
+  site for a number `optimize_series` already computed and discarded, and — the deciding
+  objection — **the number the audit bins by would no longer be provably the number the
+  OK/`DEGENERATE_HESSIAN` verdict was made on.** A cell could be `OK` and bin as ill-conditioned.
+- **Surface it from where the threshold is applied.** `SeriesFit` gains `hessian_cond`, `FitResult`
+  gains a `(B, M)` array of it. **One derivation, at the site that already owns the rule**, so the
+  bin and the outcome cannot disagree by construction.
+
+**The second, and it is a `core/` change inside a task about the audit — stated here rather than
+made quietly.** The plan's own line *"this is the only `metamer.core` change 2c requires"* (Task 0)
+is **false as of this task**, and that is a deviation reported rather than absorbed.
+
+**IT DOES NOT BUMP `ALGORITHM_VERSION`, AND THE RULE WAS READ RATHER THAN RECALLED.** The constant's
+docstring says bump *"when and only when a change alters the value of `theta_hat` or `log_lik` for
+some input that previously fit"*, and explicitly excludes *"the reporting layer"*. `hessian_cond` is
+computed from a matrix the optimizer already built, is fed back into nothing, and moves no optimum.
+**No bump.** Both new fields also acquire a consumer in this same task, so neither is (a2c).
+
+### §11.2's PER-TERM PARAMETER DISAGREEMENT IS MANDATORY AND APPEARS IN NEITHER D9 NOR THE BRIEF
+
+§11.2 states it as a consequence, not a suggestion: *"The audit must report per-term parameter
+disagreement separately from the aggregate, or a pure label-switching signal is averaged into the
+parameter-disagreement metric and attributed to warm starting."* **D9's per-cell row says
+"parameter distance" and stops**, and the plan's Task 7 brief repeats D9.
+
+**The design doc is authoritative on INTENT and this is intent**, so the per-term split ships. It
+costs one more axis on one metric — per `(candidate, κ bin, free parameter)` — and without it the
+audit's single most alarming published number, **max parameter distance 154 SE**, has no way to be
+told apart from a label-switching artifact.
+
+### §11.2's PARAMETER DISTANCE IS IN UNCONSTRAINED COORDINATES AND THE ONLY SE IN `FitResult` IS NATURAL
+
+*"Distance in unconstrained coordinates, normalized by estimated standard error."* `theta_err` is
+the **natural-unit** standard error — `cov_u` pushed through `delta_method_cov` (`fit.py:461`).
+**Dividing an unconstrained distance by a natural-unit SE is a unit error**, and it is the kind that
+produces a plausible number: both arrays have the same shape and neither is NaN.
+
+`fit` already holds `cov_u = inv(result.hessian)` on the line above. **`sqrt(diag(cov_u))` is the
+unconstrained SE and is one line at a site that already has the matrix** — so `FitResult` gains
+`theta_err_unconstrained` beside `hessian_cond`, and the metric is computed in one coordinate
+system throughout. (a2d) at a metric rather than at a hash: the **unit** is part of what the number
+means.
+
+### THE FOUR METRICS ARE NOT ALL RATES, AND THE 30-MEMBER RULE IS ABOUT THE ONES THAT ARE
+
+D8's 30 is derived from **a binomial standard error of ~9% at `p = 0.5`**. That derivation applies
+to a proportion and to a mean; **it does not apply to a maximum**, which is an exact statement about
+the members present rather than an estimate of a population parameter.
+
+| metric | per-stratum statistic | 30-member rule |
+|---|---|---|
+| selection disagreement | **rate** | applies |
+| rescue / loss | **rate** | applies |
+| `\|Δℓ\|` | **maximum** | does not — a max over 3 members is a true max over 3 members |
+| parameter distance (SE), aggregate and per term | **maximum** | does not |
+| signed-trend disagreement | **mean signed difference** | applies |
+
+**THE MEAN SIGNED DIFFERENCE IS COVERED BY D8's RULE RATHER THAN BY AN EXTENSION OF IT.** Its
+standard error scales as `1/√n` for exactly the reason a rate's does, so it is *"a value invalid
+under a condition the code can detect"* — (a2b), made unavailable and replaced by the count.
+
+**AND `|Δℓ|` IS REPORTED AS A MAXIMUM RATHER THAN AS A THRESHOLDED RATE, WHICH IS A DEPARTURE FROM
+§11.2's WORDING.** §11.2 says *"`|ℓ_warm − ℓ_cold|` above a threshold"*; **no such threshold exists
+anywhere in this project**, the spike harness's `0.01` was picked and its code is not in the tree,
+and inventing one here would be a quantile boundary by another name — a constant chosen with the
+audit's answer in view, which D9's whole boundary argument forbids. **The maximum answers §11.2's
+question — *"different optimum or same optimum to different precision"* — strictly more
+informatively than a rate against a threshold, and it needs no constant.** Recorded as a departure
+from the wording, in service of the intent.
+
+### THE SIGNED HEADLINE CANNOT BE A MAXIMUM OVER SIGNED VALUES
+
+D8's argument for the max is *"a mean dilutes and a maximum cannot understate"*. **That is false of a
+signed quantity**: a max over strata of a mean signed difference returns the most positive stratum
+and is blind to a stratum with an equally large negative bias, which §11.2 calls *"systematic
+contamination"* in either direction. **The headline for signed trend is the maximum over strata of
+the ABSOLUTE per-stratum mean**, and the per-stratum values keep their signs. Stated because
+"maximum over strata" applied literally to five metrics would get exactly one of them wrong.
+
+### (a2b) THE SELECTION MARGIN IS UNDEFINED AT A POINT WITH FEWER THAN TWO RANKABLE CANDIDATES
+
+The margin is *ΔIC to next-best*, and `Ranking.delta_ic` is zero at the winner and **NaN for every
+candidate at a point with no winner**; `best_index` is **−1** there and `n_valid` counts how many
+fitted. **At `n_valid ≤ 1` there is no next-best and no margin**, and `np.nanmin` over an empty
+selection returns NaN with a warning rather than a bin. **Those points are excluded and counted**,
+never binned — the third (a2b) in this decision line, and the same shape as Task 6's inadmissible
+N2 start. A point where the two arms disagree about *whether there is a winner at all* is a
+selection disagreement and is counted as one; a point where neither arm has a winner is neither.
+
+### THE BOTH-OK INTERSECTION IS PER CELL AND ONE OF THE METRICS IS PER POINT
+
+D9 reports the intersection *"as a fraction of all attempted cells, per candidate"*, which is the
+conditioning statement for `|Δℓ|`, parameter distance and signed trend. **Selection disagreement is
+per POINT and is not conditioned on that set** — it is conditioned on both arms having a winner,
+which is a different partition and has a different denominator. **Reporting one fraction and letting
+it cover both metrics would attach the wrong conditioning statement to the more interpretable
+number.** Two fractions, each at the granularity of the metrics it qualifies.
+
+### (a5) ACROSS DECISIONS, IN `src` THIS TIME: A FOURTH SITE CARRIES THE RETIRED READING
+
+Task 6 moved D5, D6 and D10 off *"the audit's members are pass 1's points"*. **`config/model.py`'s
+`Detail.subsample` docstring still carries it**: *"Defaults to pass 1's coarse grid, because §11.2's
+audit wants covariances at COLD-fitted points and pass-1 points are cold by construction."*
+
+**The default may still be right for `/detail/`** — a coarse-grid selection for stored covariances
+is a defensible thing on its own terms — **but the reason given for it is now false**, and a reason
+is what a later reader re-derives the default from. The docstring is corrected; the field is not
+touched. (a5)'s across-decisions register reaching code rather than prose.
+
+### AND §11.2's STRATIFIED SUBSAMPLE IS NOT CONSTRUCTIBLE FOR THE POPULATION THE AUDIT NOW DRAWS FROM
+
+§11.2: *"The audit subsample is stratified, not uniform random ... Stratify by a post-fit difficulty
+proxy — Hessian condition number, ΔIC to next-best, or failure-taxonomy status."* **Every one of
+those three is post-fit.** While the audit's subject was pass 1's coarse set, they were free:
+pass 1's store holds a cold fit at every candidate point. **Task 6 moved the subject to FINE points,
+where no cold fit exists until the audit computes one** — so selecting a stratified sample requires
+the fits that selecting the sample was supposed to precede.
+
+**This is a real consequence of Task 6's move that nobody has recorded, and it is why Task 7 does
+not build a selector.** The plan's Task 7 brief specifies strata and a report and never mentions
+point selection; Task 6's pre-flight sentence *"which points is D9's stratification question and the
+plan's Task 7"* **conflates two things that share a word** — §11.2's stratification of the
+**sample** (`Audit.stratify`) and D9's stratification of the **report**. Task 7 implements the
+second. **`Audit.subsample` and `Audit.stratify` still have no consumer after this task**, and that
+is filed as an open question rather than closed by an unbriefed sampler built on a circularity the
+design doc never resolved.
+
+### D4's GEOGRAPHIC STRATUM HAS NO PRODUCER AND D9 DOES NOT CARRY IT
+
+D4 constraint 1: the regime axis is *"a column in the audit"*. **D9's two strata tables do not have
+it**, and neither does the plan's Task 7 brief. **D4's own constraint 3 is the resolution rather
+than the conflict**: *"Real data carries no regime label, so the geographic axis exists on simulated
+fields and not on real ones."* Nothing in `src` — no config field, no store array — carries a regime
+label, so there is no value to put in the column. **No regime column ships**, and the disagreement
+between D4 and D9 is reported rather than silently resolved either way.
+
+### (d) THE VOCABULARY, AND ONE IDIOM THAT FITS RATHER THAN COLLIDES
+
+Grepped: **`stratum`, `strata` and `kappa` appear nowhere in `src/`.** The reporting vocabulary is
+entirely new.
+
+**`Report` is already an idiom here and that is the reason to use it, not to avoid it.**
+`memory.py` has `FloorReport`, `AccumulationReport` and `LinearityReport`; `twopass.py` has
+`TwoPassReport`. Each is a frozen dataclass of measured quantities returned by the function that
+measured them. `AuditReport` is the same construction and reads as one.
+
+**And `arm` stays in the statistical sense Task 6 declared it in**, since this module consumes
+`AuditArms` directly.
+
+### WHAT WOULD MAKE THIS TASK'S TESTS VACUOUS, NAMED IN ADVANCE
+
+- **A fixture where every stratum is under 30 members.** Every rate is then withheld, no rate is
+  ever computed, and a binner that puts every cell in one stratum passes. **The boundary is tested
+  from both sides with counts CONSTRUCTED at 29 and at 30**, not sampled from a fitted run — a real
+  audit fixture at this scale cannot reach 30 members in a stratum at all.
+- **A fixture whose cold and warm `κ` fall in the same bin.** The (j7) test then passes under an
+  implementation that bins by the warm arm. **The warm-arm perturbation is constructed to cross a
+  boundary**, and that it crosses one is asserted before the binning is compared.
+- **Testing (j7) by perturbing both arms.** A binner reading either arm is then unchanged, which is
+  the null the test is supposed to break. **Only the warm arm moves, and the cold arm is asserted
+  byte-identical.**
+- **A one-candidate fixture.** The candidate axis is then degenerate, per-candidate denominators
+  cannot be told apart from pooled ones, and a rescue rate computed over the wrong base looks right.
+  **Two candidates with different `p` throughout**, as Task 6's suite already requires for the
+  direction's width.
+- **A flip fixture with no flips, or with flips in one direction only.** *"The rescue and loss rates
+  use their stated denominators"* is satisfied by `0/0` handled any way at all. **The constructed
+  fixture carries both a rescue and a loss, and the two denominators DIFFER**, so a single flip rate
+  over a common base gives a different number and the assertion separates them.
+- **Asserting "no pooled mean" by grepping the source.** That tests the spelling, not the output.
+  **The assertion is over the report's own emitted fields**, so a pooled figure reintroduced under
+  any name fails it.
+- **A withheld stratum tested by its absence.** Silence and absence are the same bytes. **The test
+  asserts the withheld stratum is PRESENT in the output with its count and with no rate**, which is
+  the `RSS measurement validity` argument at a stratum.
+- **A hand-built decimal-year axis.** Task 6's fixture fact, unchanged: `2000 + i * 31/365.25` moves
+  `θ̂` by **6.7e-05 relative** against `to_decimal_years`, and the conversion is under
+  `ALGORITHM_VERSION`. **Every fixture takes its axis from the input.**
