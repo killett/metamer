@@ -22,6 +22,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+from metamer.core import optimize as optimize_module
 from metamer.core.capability import Objective
 from metamer.core.engines.kalman import KalmanEngine
 from metamer.core.gradients import EPS, fd_gradient, richardson_gradient
@@ -32,6 +33,7 @@ from metamer.core.optimize import (
     InitRung,
     SeriesFit,
     hessian_at_optimum,
+    hessian_condition,
     hessian_step,
     moment_init,
     optimize_series,
@@ -750,3 +752,152 @@ def test_an_ill_conditioned_design_is_not_laundered_into_nonfinite():
     assert got.outcome is Outcome.ILL_CONDITIONED_X
     assert np.isnan(got.loglik)
     assert got.hessian is None
+
+
+# --------------------------------------------------------------------------
+# `hessian_condition` -- D9's kappa axis, and the two causes of "undefined"
+# --------------------------------------------------------------------------
+
+
+def test_an_indefinite_hessian_has_no_condition_number_although_cond_returns_one():
+    """A non-positive-definite Hessian reports UNDEFINED, not a severity.
+
+    Behaviour under test: `hessian_condition`'s definiteness test, which is
+    the whole difference between it and `np.linalg.cond`.
+
+    Expected values determined independently: `diag(1, -4)` is symmetric with
+    eigenvalues 1 and -4, so it is indefinite by inspection; `np.linalg.cond`
+    of it is the singular-value ratio 4.0, computed here to show that the
+    naive implementation returns a perfectly ordinary number.
+
+    Bug this catches: `hessian_condition` implemented as `np.linalg.cond`
+    alone. D9 gives `undefined` a bin of its own precisely so a
+    non-positive-definite Hessian does not fall into the worst conditioning
+    bin -- a category reported as a severity. The defect is invisible in any
+    output the audit produces: the cell lands in a real bin with a real
+    number.
+    """
+    indefinite = np.diag([1.0, -4.0])
+    assert np.isclose(float(np.linalg.cond(indefinite)), 4.0), (
+        "the naive implementation must return a finite ordinary number here, "
+        "or this test is not showing what it claims to"
+    )
+    assert np.isnan(hessian_condition(indefinite))
+
+    # The paired positive: the same ratio on a POSITIVE definite matrix is
+    # reported, so the NaN above is the definiteness test and not a blanket
+    # refusal.
+    assert hessian_condition(np.diag([1.0, 4.0])) == 4.0
+
+
+def test_no_hessian_and_a_nonfinite_hessian_are_both_undefined():
+    """The other two causes of NaN, each on its own.
+
+    Behaviour under test: `None` and a matrix carrying NaN both report
+    undefined rather than raising or returning `inf`.
+
+    Bug this catches: `float(np.linalg.cond(None))`, which raises, and
+    `np.linalg.cond` of a NaN-carrying matrix, which returns NaN from LAPACK
+    on some builds and raises `LinAlgError` on others -- a platform-dependent
+    audit. Every early return in `optimize_series` supplies `None` here.
+    """
+    assert np.isnan(hessian_condition(None))
+    assert np.isnan(hessian_condition(np.array([[np.nan, 0.0], [0.0, 1.0]])))
+
+
+def test_the_recorded_condition_number_travels_with_the_verdict_it_was_taken_on():
+    """`DEGENERATE_HESSIAN` keeps its matrix AND its number.
+
+    Behaviour under test: `hessian_cond` is populated on the one non-OK
+    outcome that carries a curvature, and on OK, and the fit that is healthy at
+    the production limit is the same fit that degenerates under a lowered one
+    -- so the number the audit bins by is the number the verdict was taken on.
+
+    Expected value determined independently: the limit is driven below the
+    fixture's own recorded condition number, through `optimize_series`'s
+    `hessian_cond_limit` argument, which exists (per its docstring) so the
+    branch can be exercised without a fixture whose degeneracy is itself in
+    question.
+
+    Bug this catches: `hessian_cond` recorded only on the OK path. D9 bins the
+    audit's cells by the COLD arm's value, and a cold arm that failed with
+    `DEGENERATE_HESSIAN` would then carry NaN for a curvature that exists and
+    was measured -- the `undefined` bin absorbing a cell that belongs in the
+    worst real one, which is the same category error read backwards.
+    """
+    spec, state_space, _, t, y = _ou_series(n=200)
+    obj = _objective(spec, state_space)
+    mask = np.ones_like(y, dtype=bool)
+
+    healthy = optimize_series(obj, y, mask, t, None)
+    assert healthy.outcome is Outcome.OK, "the fixture must fit before it degenerates"
+    assert np.isfinite(healthy.hessian_cond)
+    assert healthy.hessian is not None
+    assert healthy.hessian_cond == float(np.linalg.cond(healthy.hessian))
+
+    degenerate = optimize_series(
+        obj, y, mask, t, None, hessian_cond_limit=healthy.hessian_cond / 2.0
+    )
+    assert degenerate.outcome is Outcome.DEGENERATE_HESSIAN
+    assert degenerate.hessian is not None
+    assert np.isfinite(degenerate.hessian_cond)
+
+
+def test_an_indefinite_hessian_is_ok_with_an_undefined_kappa_and_still_degenerates(
+    monkeypatch,
+):
+    """The verdict reads `np.linalg.cond`; the audit's axis reads definiteness.
+
+    Behaviour under test: the two disagree on exactly one class of matrix, and
+    each keeps its own rule. This is the branch that decides whether adding the
+    diagnostic moved a verdict.
+
+    **THE HESSIAN IS SUBSTITUTED BECAUSE NO FIXTURE IN THIS TREE PRODUCES AN
+    INDEFINITE ONE THROUGH `optimize_series`**, and constructing a series that
+    did would be a fixture whose definiteness is itself in question. Exactly
+    one collaborator is replaced -- the curvature -- and everything asserted
+    is downstream of it.
+
+    Expected values determined independently: `diag(1, -4, ...)` is indefinite
+    by inspection with `np.linalg.cond` equal to 4.0, so under the production
+    limit of 2**26 the taxonomy must say `OK`, and under a limit of 1.0 it must
+    say `DEGENERATE_HESSIAN`. `hessian_condition` must say `undefined` in both.
+
+    Bug this catches: `if hessian_condition(hessian) > limit`, the obvious
+    tidy-up once the function exists. `nan > 1.0` is False, so the second call
+    below would come back `OK` -- every indefinite Hessian silently
+    reclassified as healthy, with `theta_err` published from an inverse that is
+    not a covariance. It ALSO catches the reverse tidy-up, `hessian_cond`
+    assigned from `np.linalg.cond` at the call site: the first call would then
+    report a finite 4.0 for a matrix that has no condition number, and D9's
+    `undefined` bin would never receive a member.
+    """
+    spec, state_space, _, t, y = _ou_series(n=200)
+    obj = _objective(spec, state_space)
+    mask = np.ones_like(y, dtype=bool)
+
+    def indefinite(fn, u, scale=1.0, curvature=None, step=None):
+        width = np.asarray(u).size
+        eigenvalues = np.ones(width)
+        eigenvalues[-1] = -4.0
+        return np.diag(eigenvalues)
+
+    monkeypatch.setattr(optimize_module, "hessian_at_optimum", indefinite)
+
+    ok = optimize_series(obj, y, mask, t, None)
+    assert ok.outcome is Outcome.OK, (
+        "cond(diag(1, ..., -4)) is 4.0, far under the production limit, so the "
+        "taxonomy must still call this fit OK"
+    )
+    assert np.isnan(ok.hessian_cond), (
+        "an indefinite Hessian has no condition number, so D9's `undefined` bin "
+        "is reachable on an OK cell -- which is the only reason that bin is not "
+        "empty by construction the way the two upper ones are"
+    )
+
+    forced = optimize_series(obj, y, mask, t, None, hessian_cond_limit=1.0)
+    assert forced.outcome is Outcome.DEGENERATE_HESSIAN, (
+        "the verdict is taken on np.linalg.cond, which is 4.0 > 1.0; routing it "
+        "through hessian_condition would compare nan > 1.0 and return OK"
+    )
+    assert np.isnan(forced.hessian_cond)

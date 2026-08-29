@@ -273,6 +273,22 @@ class SeriesFit:
             unconstrained coordinates, or None. Present for `OK` and for
             `DEGENERATE_HESSIAN`; None for every other outcome, because
             curvature away from an optimum is not a number worth reporting.
+        hessian_cond: `cond(H)`, or NaN where it is undefined. **This is the
+            number the `DEGENERATE_HESSIAN` verdict was taken on**, recorded
+            here rather than recomputed by a caller so the two cannot disagree.
+
+            **NaN MEANS UNDEFINED AND HAS TWO CAUSES, WHICH IS (a2b) RATHER
+            THAN A SHORTCUT.** There is no Hessian at all, or there is one and
+            it is **not positive definite** -- at which point it is not a
+            curvature and its condition number describes nothing. `np.linalg.
+            cond` is finite for an indefinite matrix, so a caller reading the
+            ratio alone would file such a fit under a severity when what it has
+            is a category. **The value is made unavailable, not caveated.**
+
+            **THE POSITIVE-DEFINITENESS TEST DOES NOT MOVE ANY VERDICT.** The
+            taxonomy thresholds `cond` and has never tested definiteness; that
+            is unchanged here, deliberately, because changing it would move
+            `outcome` for some input that previously fit.
     """
 
     theta: NDArray[np.float64]
@@ -281,6 +297,7 @@ class SeriesFit:
     n_iter: int
     init_rung: InitRung
     hessian: NDArray[np.float64] | None
+    hessian_cond: float
 
 
 def outcome_for_status(status: int) -> Outcome:
@@ -370,6 +387,57 @@ def hessian_at_optimum(
             ) / (4.0 * h * h)
             out[i, j] = out[j, i] = value
     return out
+
+
+def hessian_condition(hessian: NDArray[np.float64] | None) -> float:
+    """`cond(H)` where that describes a curvature, and NaN where it does not.
+
+    **THE STRATIFICATION AXIS OF THE §11.2 HYSTERESIS AUDIT (D9), AND IT LIVES
+    HERE RATHER THAN IN THE AUDIT FOR ONE REASON.** `optimize_series` already
+    computes `np.linalg.cond` on this matrix to decide `OK` against
+    `DEGENERATE_HESSIAN`, and `fit` discards the matrix after inverting it once
+    for `theta_err`. An audit that recomputed the curvature from
+    `theta_unconstrained` would be binning cells by a number that is **not
+    provably the number the outcome verdict was taken on** -- so a cell could
+    report `OK` and bin as ill-conditioned, with nothing in the tree able to
+    say which was right.
+
+    **NaN IS "UNDEFINED", AND IT HAS TWO CAUSES.** No Hessian at all, or a
+    Hessian that is **not positive definite**. `np.linalg.cond` is a ratio of
+    singular values, so it returns a perfectly finite number for an indefinite
+    matrix -- and a finite-difference Hessian at a converged optimum with one
+    near-zero eigenvalue can come back indefinite. Reporting its ratio would
+    file a **category** under a **severity**, which is D9's own argument for
+    giving `undefined` a bin of its own instead of letting it fall into the
+    worst one. (a2b): the value is made unavailable rather than caveated.
+
+    **THIS MOVES NO VERDICT.** The taxonomy thresholds `np.linalg.cond`
+    directly and has never tested definiteness. Routing that threshold through
+    this function would reclassify every indefinite Hessian as `OK`, since
+    `nan > limit` is False -- which is a change to `outcome` for input that
+    previously fit, i.e. exactly what a diagnostic is not allowed to be.
+
+    Args:
+        hessian: The explicit Hessian of the negative log-likelihood in
+            unconstrained coordinates, or None.
+
+    Returns:
+        The 2-norm condition number, or NaN where it is undefined.
+    """
+    if hessian is None:
+        return float("nan")
+    matrix = np.asarray(hessian, dtype=np.float64)
+    if not np.all(np.isfinite(matrix)):
+        return float("nan")
+    # Cholesky rather than an eigenvalue sign test: it is the definition of
+    # positive definiteness for a symmetric matrix, it is cheaper, and it does
+    # not need a tolerance -- which would be a picked constant sitting between
+    # this function and D9's fixed boundaries.
+    try:
+        np.linalg.cholesky(matrix)
+    except np.linalg.LinAlgError:
+        return float("nan")
+    return float(np.linalg.cond(matrix))
 
 
 def moment_init(
@@ -566,6 +634,9 @@ def optimize_series(
     # and silently shift every later coordinate.
     free = free_param_index(objective.spec)
     p = len(free)
+    # Every early return carries an UNDEFINED condition number, because every
+    # early return is a fit with no Hessian. See `hessian_condition`.
+    nan = float("nan")
 
     # The DATA-LEVEL fact is established first and merged with the design
     # precheck through the module's own declared precedence, never decided by
@@ -592,6 +663,7 @@ def optimize_series(
             0,
             InitRung.DEFAULT,
             None,
+            float("nan"),
         )
 
     if x0 is None:
@@ -638,18 +710,20 @@ def optimize_series(
             if int(verdict[0]) != Outcome.OK.code
             else Outcome.NONFINITE_OBJECTIVE
         )
-        return SeriesFit(theta, float("nan"), failed, n_iter, rung, None)
+        return SeriesFit(theta, float("nan"), failed, n_iter, rung, None, nan)
 
     by_label = dict(zip(objective.spec.labels(), objective.spec.terms, strict=True))
     if any(
         by_label[label].params[name].at_diagnostic_limit(float(theta[0, index]))
         for index, (label, name) in enumerate(free)
     ):
-        return SeriesFit(theta, loglik, Outcome.DIAGNOSTIC_LIMIT, n_iter, rung, None)
+        return SeriesFit(
+            theta, loglik, Outcome.DIAGNOSTIC_LIMIT, n_iter, rung, None, nan
+        )
 
     status = outcome_for_status(result.status)
     if status is Outcome.TRUST_RADIUS_COLLAPSED:
-        return SeriesFit(theta, loglik, status, n_iter, rung, None)
+        return SeriesFit(theta, loglik, status, n_iter, rung, None, nan)
 
     if status is Outcome.ITER_CAP_LARGE_GRAD or n_iter >= max_iter:
         magnitude = float(np.linalg.norm(jac(result.x)))
@@ -658,14 +732,26 @@ def optimize_series(
             if magnitude < GRAD_TOL * max(abs(loglik), 1.0)
             else Outcome.ITER_CAP_LARGE_GRAD
         )
-        return SeriesFit(theta, loglik, capped, n_iter, rung, None)
+        return SeriesFit(theta, loglik, capped, n_iter, rung, None, nan)
 
     if status is not Outcome.OK:
-        return SeriesFit(theta, loglik, status, n_iter, rung, None)
+        return SeriesFit(theta, loglik, status, n_iter, rung, None, nan)
 
     hessian = hessian_at_optimum(negative, result.x, scale=abs(loglik))
+    condition = hessian_condition(hessian)
+    # **THE VERDICT IS TAKEN ON `np.linalg.cond` AND NOT ON `condition`.** They
+    # differ by exactly one thing -- `condition` is NaN for an indefinite
+    # matrix -- and `nan > limit` is False, so routing the threshold through it
+    # would silently reclassify every indefinite Hessian as `OK`. That is a
+    # taxonomy change, which this diagnostic is not allowed to be.
     if float(np.linalg.cond(hessian)) > float(hessian_cond_limit):
         return SeriesFit(
-            theta, loglik, Outcome.DEGENERATE_HESSIAN, n_iter, rung, hessian
+            theta,
+            loglik,
+            Outcome.DEGENERATE_HESSIAN,
+            n_iter,
+            rung,
+            hessian,
+            condition,
         )
-    return SeriesFit(theta, loglik, Outcome.OK, n_iter, rung, hessian)
+    return SeriesFit(theta, loglik, Outcome.OK, n_iter, rung, hessian, condition)

@@ -83,6 +83,23 @@ class FitResult:
             where a candidate has fewer than `p_max` free parameters.
         theta_err: Natural-unit standard errors, same shape. First-order; see
             the module docstring.
+        theta_err_unconstrained: Standard errors in UNCONSTRAINED coordinates,
+            same shape -- `sqrt(diag(H^-1))`, taken from the same `H^-1` that
+            `theta_err` is pushed through `delta_method_cov` from.
+
+            **THE UNIT IS THE POINT OF IT.** §11.2 specifies the hysteresis
+            audit's parameter disagreement as *"distance in unconstrained
+            coordinates, normalized by estimated standard error"*, and
+            `theta_err` is in NATURAL units. Dividing an unconstrained distance
+            by a natural-unit SE produces a plausible number of the wrong
+            quantity -- both arrays have this shape and neither is NaN, so
+            nothing downstream would notice. (a2d) at a metric.
+        hessian_cond: `cond(H)` per cell, shape (B, M), from
+            `optimize.hessian_condition`. **NaN where undefined**, which
+            includes every cell that is not `OK`, and every cell whose Hessian
+            is not positive definite. This is D9's `κ` stratification axis for
+            the §11.2 audit, and it is surfaced rather than recomputed so the
+            bin and the `DEGENERATE_HESSIAN` verdict cannot disagree.
         theta_unconstrained: The optimum in unconstrained coordinates, same
             shape. This is what Phase 2 feeds back as `x0`, **paired with an
             `x0_valid` that is false wherever `outcome` is not `OK`** -- those
@@ -117,7 +134,9 @@ class FitResult:
     candidates: tuple[ProcessSpec, ...]
     theta: NDArray[np.float64]
     theta_err: NDArray[np.float64]
+    theta_err_unconstrained: NDArray[np.float64]
     theta_unconstrained: NDArray[np.float64]
+    hessian_cond: NDArray[np.float64]
     beta: NDArray[np.float64]
     beta_err: NDArray[np.float64]
     loglik: NDArray[np.float64]
@@ -402,12 +421,14 @@ def fit(
     theta = np.full((batch, n_cand, p_max), np.nan)
     theta_u = np.full((batch, n_cand, p_max), np.nan)
     theta_err = np.full((batch, n_cand, p_max), np.nan)
+    theta_err_u = np.full((batch, n_cand, p_max), np.nan)
     beta = np.full((batch, n_cand, k_beta), np.nan)
     beta_err = np.full((batch, n_cand, k_beta), np.nan)
     loglik = np.full((batch, n_cand), np.nan)
     outcome = np.full((batch, n_cand), Outcome.NOT_ATTEMPTED.code, dtype=np.uint8)
     rung = np.empty((batch, n_cand), dtype=object)
     n_iter = np.zeros((batch, n_cand), dtype=np.int64)
+    hessian_cond = np.full((batch, n_cand), np.nan)
     k = np.full((batch, n_cand), np.nan)
     n = np.full((batch, n_cand), np.nan)
     eff_bic = np.full((batch, n_cand), np.nan)
@@ -446,6 +467,11 @@ def fit(
             outcome[b, c] = result.outcome.code
             rung[b, c] = result.init_rung
             n_iter[b, c] = result.n_iter
+            # Recorded BEFORE the OK gate, because `DEGENERATE_HESSIAN` keeps
+            # its matrix and is the one non-OK outcome with a curvature worth
+            # reporting -- see `optimize`'s precedence note. Every other early
+            # return already carries NaN.
+            hessian_cond[b, c] = result.hessian_cond
             if result.outcome is not Outcome.OK:
                 continue
 
@@ -460,6 +486,11 @@ def fit(
             cov_u = np.asarray(np.linalg.inv(result.hessian), dtype=np.float64)
             cov_nat = delta_method_cov(obj.dforward(u_hat[None, :])[0], cov_u)
             theta_err[b, c, :p] = np.sqrt(np.clip(np.diag(cov_nat), 0.0, np.inf))
+            # The SAME `H^-1`, before the delta method moves it to natural
+            # units. Two SEs of one fit in two coordinate systems is not a
+            # duplication: §11.2's parameter-disagreement metric is defined in
+            # the unconstrained one and the store publishes the natural one.
+            theta_err_u[b, c, :p] = np.sqrt(np.clip(np.diag(cov_u), 0.0, np.inf))
             # One evaluation at the optimum yields beta and beta_cov. An
             # earlier draft ran a second full filter pass purely to recover
             # quantities the objective had already computed and discarded.
@@ -528,7 +559,9 @@ def fit(
         candidates=tuple(candidates),
         theta=theta,
         theta_err=theta_err,
+        theta_err_unconstrained=theta_err_u,
         theta_unconstrained=theta_u,
+        hessian_cond=hessian_cond,
         beta=beta,
         beta_err=beta_err,
         loglik=loglik,

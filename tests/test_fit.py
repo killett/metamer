@@ -1053,6 +1053,172 @@ def test_uncertainties_are_the_delta_method_push_through_not_the_raw_hessian():
         assert not np.allclose(out.theta_err[b, 0], sigma_u, rtol=1e-2)
 
 
+def test_the_unconstrained_error_is_the_raw_hessian_one_the_natural_one_is_not():
+    """`theta_err_unconstrained` is `sqrt(diag(H^-1))`, recomputed independently.
+
+    Behaviour under test: that the two error arrays are in the two coordinate
+    systems they claim, and that the unconstrained one is the raw square root
+    rather than a second copy of the natural one.
+
+    Expected values determined independently: the Hessian is rebuilt from the
+    objective at the published `theta_unconstrained`, sharing no code with the
+    driver's own path -- the same reference
+    `test_uncertainties_are_the_delta_method_push_through_not_the_raw_hessian`
+    uses, read the other way round.
+
+    Bug this catches: `theta_err_unconstrained` populated from `theta_err`, or
+    from `cov_nat` instead of `cov_u`. Under a `Log` transform the two differ
+    by exactly `theta`, so on a timescale of 8 the audit's parameter distance
+    would come out 8x too small -- a plausible number of the wrong quantity,
+    which is why §11.2's *"normalized by estimated standard error"* needs the
+    unit pinned rather than assumed. **The negative half is what bites**: an
+    implementation that simply copies `theta_err` passes the positive
+    assertion, since the reference is the same fit.
+    """
+    y, t, signal, mask = _plain_batch(batch=2, n=250)
+    spec = ProcessSpec((_term("matern12"),))
+    out = fit(y, t, signal, [spec], criterion=Criterion.AIC, mask=mask)
+    ok = np.flatnonzero(out.outcome[:, 0] == Outcome.OK.code)
+    assert ok.size, "this fixture is meant to produce at least one OK fit"
+
+    state_space = StateSpace.from_spec(spec)
+    obj = ConcentratedObjective(spec, state_space, KalmanEngine(), Objective.ML)
+    for b in ok:
+        one = signal.design_info(t, mask).series(int(b))
+
+        def negative(u, b=b, one=one):
+            return -float(
+                obj.unconstrained_loglik(
+                    np.asarray(u)[None, :], y[b : b + 1], mask[b : b + 1], t, one
+                )[0]
+            )
+
+        u_hat = out.theta_unconstrained[b, 0]
+        hessian = hessian_at_optimum(negative, u_hat, scale=abs(negative(u_hat)))
+        sigma_u = np.sqrt(np.diag(np.linalg.inv(hessian)))
+
+        np.testing.assert_allclose(
+            out.theta_err_unconstrained[b, 0], sigma_u, rtol=1e-3
+        )
+        # And the two arrays are NOT the same array. `Log`'s Jacobian is
+        # `theta`, which is ~8 here, so a copy would be off by that factor.
+        assert not np.allclose(
+            out.theta_err_unconstrained[b, 0], out.theta_err[b, 0], rtol=1e-2
+        )
+
+
+def test_every_ok_cell_bins_under_the_first_kappa_boundary_and_the_padding_is_nan():
+    """`hessian_cond` is present exactly where a curvature is, and bounded.
+
+    Behaviour under test: TWO things the §11.2 audit's `κ` stratum rests on.
+
+    First, the axis has a value wherever it is used: every `OK` cell carries a
+    finite `hessian_cond` or an explicit NaN, and never a stale zero -- the
+    array is NaN-initialized and written per cell.
+
+    Second, and this is the Task 7 pre-flight finding made executable: **no
+    `OK` cell can exceed `HESSIAN_COND_LIMIT`**, because `optimize_series`
+    reports `DEGENERATE_HESSIAN` above it -- and that limit IS `2**26`, D9's
+    first `κ` boundary. So on the both-OK intersection the audit compares over,
+    D9's bins `[2**26, 2**52)` and `>= 2**52` are unreachable. The report says
+    so beside the boundaries rather than letting zero members read as a finding
+    about the data.
+
+    Expected values determined independently: `HESSIAN_COND_LIMIT` is the
+    module constant, and `2.0**26` is arithmetic. Neither is recomputed from a
+    fit.
+
+    Bug this catches: `hessian_cond` populated from something other than the
+    matrix the verdict was taken on -- a Hessian recomputed at a slightly
+    different point, or `np.linalg.cond` called a second time on a rebuilt
+    matrix. Either can put an `OK` cell above the limit, at which point a cell
+    reports `OK` and bins as ill-conditioned and nothing in the tree can say
+    which is right.
+    """
+    y, t, signal, mask = _mixed_batch()
+    out = fit(y, t, signal, _candidates(), criterion=Criterion.AIC, mask=mask)
+
+    assert HESSIAN_COND_LIMIT == 2.0**26, (
+        "D9's first kappa boundary and this project's OK/DEGENERATE_HESSIAN cut "
+        "are the same number; if that stops being true the audit's report must "
+        "stop claiming the two upper bins are unreachable"
+    )
+
+    ok = out.outcome == Outcome.OK.code
+    assert ok.any(), "no OK cell would make this vacuous"
+    finite = ok & np.isfinite(out.hessian_cond)
+    assert finite.any(), "every OK cell undefined would make the bound vacuous"
+    assert np.all(out.hessian_cond[finite] <= HESSIAN_COND_LIMIT)
+
+    # And a cell that was never attempted carries no curvature at all.
+    skipped = out.outcome == Outcome.NOT_ATTEMPTED.code
+    if skipped.any():
+        assert np.all(np.isnan(out.hessian_cond[skipped]))
+    # Nor does one that failed before the Hessian was ever built. Every
+    # early return in `optimize_series` carries NaN; `DEGENERATE_HESSIAN` is
+    # the one non-OK outcome excluded here, because it keeps its matrix.
+    early = (
+        (out.outcome != Outcome.OK.code)
+        & (out.outcome != Outcome.DEGENERATE_HESSIAN.code)
+        & (out.outcome != Outcome.NOT_ATTEMPTED.code)
+    )
+    assert early.any(), "the mixed batch is meant to hold failed cells"
+    assert np.all(np.isnan(out.hessian_cond[early]))
+
+
+def test_a_degenerate_cell_reaches_the_driver_with_its_condition_number(monkeypatch):
+    """`hessian_cond` survives the OK gate, because that outcome is the finding.
+
+    Behaviour under test: `fit` records the condition number BEFORE it skips
+    the non-OK cells. `DEGENERATE_HESSIAN` is the one non-OK outcome that keeps
+    its matrix -- `optimize`'s own precedence note -- and `κ` is the number that
+    matrix is kept for. A cell that failed because its curvature was
+    unresolvable must not be indistinguishable, in this array, from one that
+    never had a curvature at all.
+
+    **THE HESSIAN IS SUBSTITUTED BECAUSE `fit` EXPOSES NO `hessian_cond_limit`**
+    and no fixture in this tree degenerates at the production limit on purpose;
+    the alternative is a series whose degeneracy is itself in question. Exactly
+    one collaborator is replaced, and everything asserted is downstream of it.
+
+    Expected values determined independently: `diag(1, 4e12)` is positive
+    definite with `cond` exactly `4e12`, which is above `2**26` and below
+    `2**52`, so the taxonomy must say `DEGENERATE_HESSIAN` and the recorded
+    number must be that same `4e12`.
+
+    Bug this catches: moving `hessian_cond[b, c] = ...` below the
+    `outcome is not OK` gate -- which is the tidier-looking order, changes
+    nothing any consumer reads today, and would silently empty D9's two upper
+    `κ` bins of the only cells that could ever occupy them. **Found as a
+    surviving mutant of `test_every_ok_cell_bins_under_the_first_kappa_boundary
+    _and_the_padding_is_nan`, which pins the OK side and not this one.**
+    """
+    from metamer.core import optimize as optimize_module
+
+    def ill_conditioned(fn, u, scale=1.0, curvature=None, step=None):
+        width = np.asarray(u).size
+        eigenvalues = np.ones(width)
+        eigenvalues[-1] = 4e12
+        return np.diag(eigenvalues)
+
+    monkeypatch.setattr(optimize_module, "hessian_at_optimum", ill_conditioned)
+
+    y, t, signal, mask = _plain_batch(batch=2, n=250)
+    spec = ProcessSpec((_term("matern12"),))
+    out = fit(y, t, signal, [spec], criterion=Criterion.AIC, mask=mask)
+
+    degenerate = out.outcome == Outcome.DEGENERATE_HESSIAN.code
+    assert degenerate.any(), (
+        "cond(diag(1, 4e12)) is 4e12, above the 2**26 limit, so every fit that "
+        "reached the curvature check must report DEGENERATE_HESSIAN"
+    )
+    np.testing.assert_allclose(out.hessian_cond[degenerate], 4e12, rtol=1e-9)
+    # And the cell is still excluded from every published quantity, so the
+    # number above is a diagnostic and not a fit that slipped through.
+    assert np.all(np.isnan(out.loglik[degenerate]))
+    assert np.all(np.isnan(out.theta_unconstrained[degenerate]))
+
+
 def test_the_reported_trend_effective_size_is_the_trend_column_s():
     """`n_eff_trend` is recomputed from the published outputs, for column 2.
 
