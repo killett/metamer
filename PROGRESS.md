@@ -3,8 +3,8 @@
 ## Start here (cold-start summary)
 
 1. **Branch `main`, everything on it, every commit pushed by a hook** — https://github.com/killett/metamer. **A SHA here is stale the moment the next commit lands, so nothing here names one:** `git log --oneline -8` is the authority.
-2. **DONE:** Phase 1 (0–18), Phase 2 preliminaries P0–P4, **Phase 2a (0–13)**, **Phase 2b (COMPLETE 2026-08-19 — 10 met / 4 reduced scope / 2 FAILED)**, **Phase 2c's brainstorm (D1–D12)**, and **2c plan Tasks 0–6 (0–4 on 2026-08-24, Task 5 on 2026-08-27, Task 6 on 2026-08-28)**. The modelling sub-phase was decided against 2026-08-22 and **re-decided on closed facts 2026-08-23: it does not open.** Sections below carry each; **none is restated here.**
-3. **NEXT ACTION: PHASE 2c TASK 7 — the audit's strata and its report.** Plan: [`2026-08-24-metamer-phase2c.md`](docs/superpowers/plans/2026-08-24-metamer-phase2c.md) — **9 tasks, 12 exit criteria each naming its reading; Tasks 0–6 done, Tasks 7–8 have no code.** **Every task's FIRST step is the pre-flight**, run against the brief **before code** and appended to [`phase2c-preflight.md`](docs/superpowers/notes/phase2c-preflight.md). **Read [What plan Task 7 inherits](#what-plan-task-7-inherits-written-2026-08-28-before-any-of-it-exists) first** — Task 7 reports on a population Task 6 redefined, and it carries D8 and D9 in the form Task 7 implements them. **`ALGORITHM_VERSION` IS `"2"` SINCE 2026-08-27** and every store written before it holds cold fits — see [how to read a store written before 2c Task 5](#how-to-read-a-store-written-before-2c-task-5-recorded-2026-08-24-and-it-cannot-be-reconstructed-later), which is not re-derivable from the stores.
+2. **DONE:** Phase 1 (0–18), Phase 2 preliminaries P0–P4, **Phase 2a (0–13)**, **Phase 2b (COMPLETE 2026-08-19 — 10 met / 4 reduced scope / 2 FAILED)**, **Phase 2c's brainstorm (D1–D12)**, and **2c plan Tasks 0–7 (0–4 on 2026-08-24, Task 5 on 2026-08-27, Task 6 on 2026-08-28, Task 7 on 2026-08-29)**. The modelling sub-phase was decided against 2026-08-22 and **re-decided on closed facts 2026-08-23: it does not open.** Sections below carry each; **none is restated here.**
+3. **NEXT ACTION: PHASE 2c TASK 8 — the 2c exit-criteria suite, and the close of 2c.** Plan: [`2026-08-24-metamer-phase2c.md`](docs/superpowers/plans/2026-08-24-metamer-phase2c.md) — **9 tasks, 12 exit criteria each naming its reading; Tasks 0–7 done, Task 8 has no code.** **Every task's FIRST step is the pre-flight**, run against the brief **before code** and appended to [`phase2c-preflight.md`](docs/superpowers/notes/phase2c-preflight.md). **Read [What plan Task 7 established](#what-plan-task-7-established-done-2026-08-29--read-before-quoting-any-audit-number-or-the-κ-axis) first — criteria 10 and 11 are about the report Task 7 built, and criterion 11's `κ` axis is DEGENERATE on the population it stratifies: `HESSIAN_COND_LIMIT` IS D9's first boundary, so two of the four bins are unreachable by construction and a third was empty in fact.** **`ALGORITHM_VERSION` IS `"2"` SINCE 2026-08-27** and every store written before it holds cold fits — see [how to read a store written before 2c Task 5](#how-to-read-a-store-written-before-2c-task-5-recorded-2026-08-24-and-it-cannot-be-reconstructed-later), which is not re-derivable from the stores.
 4. ## THE STANDING LIMITATION ON EVERYTHING 2c DECIDED: **NO 2c NUMBER COMES FROM REAL DATA.** Warm-starting was authorized — and every decision after D1 inherits this — on a **simulated field whose spatial coherence is a construction parameter**. **The spatial coherence of real altimetry optima has never been measured.** Weaker coherence gives a **smaller** saving, and **§11.2's 30% threshold could fail on real data.** **THE NAMED CLOSER, not an open worry: a spike on a real gridded product — same three arms, same record-length lever.** **AND SINCE 2026-08-24 THERE IS A SECOND REGISTER OF IT: every 2c saving is a CEILING, not an estimate**, because the instrument searched with no effective spiral bound — see [what 2c's tasks inherit](#what-2cs-tasks-inherit-2026-08-24).
 5. **Tests: 1187 passed, 0 failed, 0 INDETERMINATE — 2026-08-28, 2554.77 s (sweeps that week ran 1698–2555 s on byte-identical trees, which is the machine and not the suite).** **`pixi run test` is the full sweep and every end-of-task verification must run it; `test-fast` and `test-ci` are NOT evidence** — the full sweep has caught **seven** things a fast run could not. **Every run prints `RSS measurement validity`, including at zero**; a nonzero count is INDETERMINATE, neither pass nor fail.
 6. **Verify a fresh checkout with `pixi run test && pixi run typecheck && pixi run lint`**, plus `pixi run pre-commit run --all-files` before every commit. **AND `git add` A NEW FILE BEFORE THAT SWEEP, NEVER AT COMMIT TIME** — `--all-files` covers **tracked** files only, so an untracked new module makes every hook print `Passed` without being read. Measured 2026-08-24; it cost two full twenty-minute sweeps before it was noticed.
@@ -5029,6 +5029,176 @@ the third executable. The pre-flight now reads **(a)–(k) with (a2), (a3) and (
 
 ## Phase 2c execution
 
+### What plan Task 7 established (done 2026-08-29 — read before quoting any audit number, or the `κ` axis)
+
+**`batch/audit_report.py` turns four arms into per-stratum numbers and nothing quotable without
+one.** D8 and D9 as written; the plan states them and they are not restated here. **`core` gained
+two diagnostic fields**, which is a deviation from the plan and is the first item below.
+
+#### THE `κ` AXIS IS DEGENERATE ON THE POPULATION IT STRATIFIES, AND THE BOUNDARY IS THIS PROJECT'S OWN OK/FAILED CUT
+
+**`optimize.HESSIAN_COND_LIMIT` is `float(EPS) ** -0.5`. Measured: `67108864.0`, and
+`== 2.0**26` is `True` — D9's first `κ` boundary, the same constant by the same derivation.**
+`optimize_series` refuses `OK` above it and `fit` writes `loglik` only for `OK` cells, so **every
+cell the audit can compare has a cold `κ` at or below the first boundary.** Bin `[2²⁶, 2⁵²)` can
+hold only a cell whose `cond(H)` is exactly `2²⁶` — `>` is strict — and bin `≥ 2⁵²` is **strictly
+empty**.
+
+**THE `undefined` BIN STAYS REACHABLE, AND IT IS THE ONLY REASON THE AXIS IS NOT A NO-OP.** D9
+defines it as a **non-positive-definite** Hessian, and the taxonomy thresholds `cond` — a ratio of
+singular values, finite for an indefinite matrix — and **never tests definiteness**. A
+finite-difference Hessian at a converged optimum with one near-zero eigenvalue can come back
+indefinite, well-conditioned, `OK`, and in the audit.
+
+**MEASURED ON REAL ARMS, 2026-08-29: 8 live cells, ALL in `< 2²⁶`. The other three bins hold
+zero.** So on this fixture the whole `κ` stratification is one bin, and **two of the three empty
+bins are empty by construction rather than by fixture.**
+
+> **NOTHING ABOUT D9 MOVES, AND WHAT IS OWED IS THE VISIBILITY.** *"Zero cells in the two
+> ill-conditioned bins"* reads as a fact about the field and is a fact about `HESSIAN_COND_LIMIT`;
+> it would read identically on a field made entirely of them. **`AuditReport.unreachable_kappa_bins`
+> is emitted beside the boundaries on every run**, on the argument that makes `RSS measurement
+> validity` print at zero. A decision is not re-taken because its implementation exposed an
+> arithmetic consequence.
+
+#### AND `κ` HAD NO PRODUCER, SO `core` GAINED TWO FIELDS — WHICH THE PLAN SAYS IT WOULD NOT
+
+`fit` inverted the Hessian once for `theta_err` and kept **neither the matrix nor its condition
+number**; `Detail`'s own docstring already said *"the Hessian at the optimum is not stored"*.
+**The plan's Task 0 line — *"this is the only `metamer.core` change 2c requires"* — is false as of
+this task**, and it is reported rather than absorbed.
+
+`optimize.hessian_condition` lives at the site that already applies the threshold, so **the number
+the audit bins by is provably the number the verdict was taken on.** Recomputing it in the audit was
+the alternative and fails exactly there: a cell could report `OK` and bin as ill-conditioned with
+nothing in the tree able to say which is right. **NaN means undefined**, from either cause, by
+(a2b).
+
+`FitResult.theta_err_unconstrained` is `sqrt(diag(H⁻¹))` from the same inverse. **§11.2's parameter
+disagreement is *"distance in unconstrained coordinates, normalized by estimated standard error"*
+and `theta_err` is NATURAL** — the arrays have the same shape and neither is NaN, so the unit error
+produces a plausible number of a quantity nobody named. **`ALGORITHM_VERSION` does not move**, read
+off its own docstring: neither field alters `θ̂` or `log_lik`, and it excludes the reporting layer
+by name.
+
+#### §11.2's PER-TERM PARAMETER DISAGREEMENT IS MANDATORY AND IS IN NEITHER D9 NOR THE BRIEF
+
+*"The audit must report per-term parameter disagreement separately from the aggregate, or a pure
+label-switching signal is averaged into the parameter-disagreement metric and attributed to warm
+starting."* **D9's per-cell row says "parameter distance" and stops.** The design doc is
+authoritative on intent, so the split ships.
+
+**THE AGGREGATE IS THE MAXIMUM OF THE COMPONENTS, NOT A NORM OVER THEM.** That makes the relation
+exact rather than approximate — the two cannot drift apart, and a signal in one term is visible as
+that term carrying the aggregate. **A Euclidean norm IS the averaging §11.2 names as the defect.**
+
+#### `|Δℓ|` IS A PER-STRATUM MAXIMUM AND NOT A THRESHOLDED RATE, WHICH DEPARTS FROM §11.2's WORDING
+
+§11.2 says *"above a threshold"*. **No such threshold exists anywhere in this project** — the spike
+harness's `0.01` was picked and its code is not in the tree — and inventing one here is a boundary
+chosen with the audit's answer in view, which is what D9's fixed-constant rule forbids. The maximum
+answers §11.2's question strictly more informatively and needs no constant. **Recorded as a
+departure from the wording in service of the intent.**
+
+#### THE 30-MEMBER RULE COVERS THE RATES AND THE MEAN, AND NOT THE MAXIMA
+
+D8's 30 is derived from **a binomial standard error of ~9% at `p = 0.5`** — an estimate of a
+population parameter from `n` draws. **The signed-trend mean's standard error scales as `1/√n` for
+the same reason**, so it is covered; that is applying D8, not extending it. **A maximum is not an
+estimate**: the largest of 29 members is the largest of 29 members, and the count beside it says so.
+
+#### THE SIGNED HEADLINE CANNOT BE A MAXIMUM OVER SIGNED VALUES
+
+D8's argument is *"a mean dilutes and a maximum cannot understate"*. **That is false of a signed
+quantity**: a max over signed values returns the most positive stratum and is blind to an equally
+biased negative one, which §11.2 calls systematic contamination in **either** direction. **The
+signed headline ranks on absolute value and reports the value with its sign.** One of five metrics
+gets this right only by being singled out.
+
+#### (j7) APPLIES TO THE WINNING CANDIDATE TOO, AND D9 DOES NOT SAY SO
+
+D9 gives the cold-arm guard for `κ` and calls it *"the one most likely to be got wrong later"*. **Its
+argument is identical for the per-point strata's winning candidate, with a sharper edge: the metric
+being measured IS whether the winner moved.** Grouping by the warm arm's winner files every
+disagreeing point under the candidate warm-starting moved it **to**. **Both axes read the cold arm**,
+and the omission is recorded at `PointStratum` rather than left for the next reader.
+
+#### THE INTERSECTION FRACTION IS PER CELL AND ONE METRIC IS PER POINT
+
+D9 reports the both-OK fraction *"per candidate"*, which qualifies `|Δℓ|`, parameter distance and
+signed trend. **Selection disagreement is per point and is conditioned on both arms having a
+WINNER** — a different partition with a different denominator. Reporting one fraction and letting it
+cover both attaches the wrong conditioning statement to the more interpretable number. **Two
+fractions, each at the granularity of what it qualifies**, and a point ranked by only one arm is
+counted rather than called a disagreement.
+
+#### (a5) ACROSS DECISIONS, IN `src` THIS TIME: A FOURTH SITE CARRIED THE RETIRED READING
+
+`config/model.py`'s `Detail.subsample` docstring still said *"Defaults to pass 1's coarse grid,
+because §11.2's audit wants covariances at COLD-fitted points"*. **The default survives; its stated
+reason does not.** Corrected in place, with the four sites named. D5, D6 and D10 were the other
+three.
+
+#### §11.2's STRATIFIED SUBSAMPLE IS NOT CONSTRUCTIBLE FOR THE POPULATION TASK 6 MOVED THE AUDIT TO
+
+*"Stratify by a post-fit difficulty proxy — Hessian condition number, ΔIC to next-best, or
+failure-taxonomy status."* **All three are post-fit.** They were free while the subject was pass 1's
+coarse set; **at fine points no cold fit exists until the audit computes one**, so selecting the
+sample needs the fits that selecting it was supposed to precede.
+
+**SO NO SELECTOR SHIPS, AND `audit.subsample` / `audit.stratify` STILL HAVE NO CONSUMER.** Task 6's
+pre-flight sentence *"which points is D9's stratification question and the plan's Task 7"*
+**conflates two things that share a word** — §11.2's stratification of the **sample** and D9's
+stratification of the **report**. Task 7 built the second. Open question 21 carries the first.
+
+#### D4's REGIME COLUMN HAS NO PRODUCER AND D9 DOES NOT CARRY IT
+
+D4 constraint 1 calls the geography *"a column in the audit"*; **D9's two strata tables do not have
+it and neither does the brief.** **D4's own constraint 3 is the resolution rather than the
+conflict**: *"real data carries no regime label, so the geographic axis exists on simulated fields
+and not on real ones."* Nothing in `src` — no config field, no store array — carries one. **No regime
+column ships**, and the disagreement is reported rather than resolved silently.
+
+#### TWENTY MUTANTS: NINETEEN CAUGHT, TWO FOUND SURVIVING FIRST, AND THE TWENTIETH PROVEN EQUIVALENT
+
+Two survivors of the first sweep, both real and both now closed:
+
+1. **The 30-member boundary was asserted on a MEAN and not on a RATE.** D8's rule is stated about a
+   rate; the two go through different helpers, so an off-by-one in the rate helper was invisible to
+   the whole suite. A 30/29 pair of **point** strata now pins it from both sides.
+2. **The both-ranked filter could be dropped from the point strata with every test still green**,
+   because the fixture had **zero** disagreements and `0/30 = 0/35`. The numerator cannot change, so
+   the defect lives entirely in the denominator — a **diluted** rate, always in the reassuring
+   direction. The fixture now carries ten real disagreements and asserts `10/30`.
+
+**THE SURVIVOR IS `disagree`'s REDUNDANT `both &`, AND IT IS PROVEN EQUIVALENT RATHER THAN LISTED.**
+Every membership mask is built as `both & ...`, so `members & (both & d)` and `members & d` are the
+same set — **checked over 2000 random `(cold_best, warm_best, margin, model)` fixtures,
+`max |difference| = 0`.** (e2) satisfied by proving the mutant does not differ. **It is kept because
+the redundancy is where the rule is written down**: `-1` compares unequal to everything, so a
+`disagree` without it calls every unranked point a disagreement the first time a caller uses it
+without the membership mask.
+
+Also caught: `κ` binned by the warm arm, the winner grouped by the warm arm, withheld strata dropped
+from the output, one shared flip denominator, `cold_failed` as `!= OK`, parameter distance scaled by
+the **natural** SE, the aggregate as a Euclidean norm, the signed headline as a plain maximum, the
+margin read from the **worst** candidate, a missing margin becoming `0.0`, `undefined` folded into
+the worst bin, the per-term split dropped, a missing trend column defaulting to column 0, an empty
+scope allowed, and the rate floor moved in **both** directions.
+
+#### WHAT SHIPPED, AND THE ONE THING THAT MAKES "NO POOLED FIGURE" CHECKABLE
+
+`Quantity` carries a **non-empty `scope`** and refuses construction without one, so **a number
+reported over everything cannot be built** — D8's argument is that labelling a number does not stop
+it being quoted, so the number must not exist. `AuditReport.quantities()` walks every emitted
+number, which is what lets the suite assert *"no pooled mean"* **over the output** rather than by
+grepping the source for `mean(`; the per-stratum signed mean is a legitimate `mean(` and a pooled
+figure need not contain the word.
+
+**A WITHHELD QUANTITY IS AN OBJECT WITH ITS REASON, NEVER AN ABSENT FIELD**, and the denominator is
+reported in the value's place. Silence and absence are the same bytes, and a reader supplies the
+more flattering of the two.
+
 ### What plan Task 0 established (done 2026-08-24 — read before touching `fit`'s signature or any warm-start validator)
 
 **`fit` gained `x0_valid`, and `fit.py:227`'s call-level all-or-nothing is gone.** The mechanism is
@@ -8918,6 +9088,35 @@ question; compute/bandwidth roofline pair for cross-machine prediction) are in d
 ## Open questions
 
 Still open. **A new session must not assume these were settled.**
+
+21. **HOW DOES THE AUDIT SELECT ITS POINTS, GIVEN THAT §11.2's STRATIFIED SUBSAMPLE IS NOT
+    CONSTRUCTIBLE FOR THE POPULATION IT NOW DRAWS FROM?** Opened 2026-08-29 at 2c Task 7.
+
+    §11.2 requires the subsample be **stratified, not uniform random** — *"a uniform random
+    subsample is dominated by easy points and reports a reassuringly low rate"* — and names three
+    proxies to stratify by: **Hessian condition number, ΔIC to next-best, failure-taxonomy
+    status.** **All three are post-fit.**
+
+    They were free while the audit's subject was pass 1's coarse set, where a cold fit exists on
+    disk at every point. **Task 6 moved the subject to FINE points and the cold arm to computed**
+    (D12: a coarse point sources itself and carries none of the effect), so **selecting a
+    stratified sample now requires the fits that selecting it was supposed to precede.** Nobody
+    recorded this when the subject moved; Task 7 is the first task that had to act on it.
+
+    **So `config.audit.subsample` and `config.audit.stratify` still have no consumer** — (a2c),
+    and deliberately: Task 7 built D9's stratification of the **report**, which is a different
+    thing that shares a word. Task 6's pre-flight sentence *"which points is D9's stratification
+    question and the plan's Task 7"* conflates the two.
+
+    **THREE ROUTES, NONE TAKEN, AND THE COST IS NOT SYMMETRIC.** (a) Stratify on a **pre-fit**
+    proxy — record length, gap fraction, variance — which is constructible but is not what §11.2
+    asked for and would need its own argument that it correlates with difficulty. (b) Fit a
+    uniform sample cold **first**, stratify on its own proxies, then audit a second sample — two
+    cold passes, and the audit's cost is already four arms. (c) **Audit a uniform sample and
+    report the strata**, which is what Task 7's report does today: the strata are still computed
+    per point, so a rare stratum is under-represented rather than invisible — and the 30-member
+    rule makes the under-representation **visible** rather than silent. **(c) is what ships by
+    default, and the open question is whether (a) is worth building.**
 
 20. **WHAT ELSE IS UNIFORM ACROSS ALL SIXTEEN INPUT FIXTURES AND UNCONSTRAINED BY THE CONTRACT?**
     Opened 2026-08-24 at 2c Task 2, which found the first instance: **every input fixture in the

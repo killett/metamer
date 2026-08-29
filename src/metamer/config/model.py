@@ -177,8 +177,21 @@ class Detail(BaseModel):
     Attributes:
         region: Named region in dataset coordinates, or None.
         subsample: Deterministic subsample selector. Defaults to pass 1's coarse
-            grid, because §11.2's audit wants covariances at COLD-fitted points
-            and pass-1 points are cold by construction.
+            grid, which is a free, global, permanent set of cold-fitted points.
+
+            **THE REASON THIS FIELD USED TO GIVE WAS RETIRED AT 2c TASK 6, AND
+            THE DEFAULT SURVIVES IT.** It read *"because §11.2's audit wants
+            covariances at COLD-fitted points"*. **The audit's subject is FINE
+            points and its cold arm is computed, not read** -- a coarse point's
+            nearest valid source is itself (D12), so its warm arm starts from
+            its own cold optimum and carries **none** of the effect. Pass 1's
+            store is the audit's cold-arm CROSS-CHECK, never its sample.
+
+            The default stands on its own terms -- a cold-fitted lattice is a
+            reasonable thing to store covariances at -- but it is no longer the
+            audit's requirement, and a reader re-deriving the default from the
+            old sentence would rebuild the retired reading. The fourth site to
+            carry it; D5, D6 and D10 were the other three.
     """
 
     model_config = _STRICT

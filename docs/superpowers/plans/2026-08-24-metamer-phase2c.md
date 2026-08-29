@@ -1,7 +1,7 @@
 # Phase 2c — the two-pass warm start, its barrier, and the hysteresis audit
 
-**Status: APPROVED 2026-08-24. TASKS 0–6 ARE DONE (0–4 on 2026-08-24, Task 5 on 2026-08-27,
-Task 6 on 2026-08-28); Tasks 7–8 have no code. Task 7 is the next action.** The single source for this plan's status is
+**Status: APPROVED 2026-08-24. TASKS 0–7 ARE DONE (0–4 on 2026-08-24, Task 5 on 2026-08-27,
+Task 6 on 2026-08-28, Task 7 on 2026-08-29); Task 8 has no code. Task 8 is the next action.** The single source for this plan's status is
 this line. **What each task found beyond its brief is in
 [`PROGRESS.md`](../../../PROGRESS.md)'s *What plan Task N established*, not here.**
 
@@ -105,7 +105,16 @@ each is falsifiable by reading and by unit test alone, with no store and no run.
 
 **Goal.** `fit` can be told *"warm-start this cell, ladder that one"*. Today it cannot, and
 §11.3's *"on exhaustion fall back to the moment-init ladder with the rung recorded as such"* has
-no expressible implementation. **This is the only `metamer.core` change 2c requires.**
+no expressible implementation. ~~**This is the only `metamer.core` change 2c requires.**~~
+
+> **THAT LAST SENTENCE WAS FALSIFIED AT TASK 7, 2026-08-29, AND IS STRUCK RATHER THAN DELETED.**
+> D9 stratifies the audit by the cold arm's `cond(H)` and **no such value existed**:
+> `optimize_series` computed it to decide `OK` against `DEGENERATE_HESSIAN` and discarded the
+> number, and `fit` inverted the matrix once for `theta_err` and discarded that. So `SeriesFit`
+> and `FitResult` gained `hessian_cond`, and `FitResult` gained `theta_err_unconstrained` —
+> §11.2's parameter metric is specified in unconstrained coordinates and the only SE in
+> `FitResult` was natural. **Both are additive diagnostics; `ALGORITHM_VERSION` does not move.**
+> The full argument is in PROGRESS.md's *What plan Task 7 established*.
 
 **Behaviour** (D3).
 

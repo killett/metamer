@@ -802,3 +802,87 @@ def test_the_cold_arm_reproduces_pass_ones_store_at_a_coarse_point(two_pass):
         np.testing.assert_array_equal(
             fresh.theta[:, model, :extent].astype(np.float32), want.astype(np.float32)
         )
+
+
+# --------------------------------------------------------------------------
+# The report, on the arms this module already builds
+# --------------------------------------------------------------------------
+
+
+def test_the_report_reads_real_arms_and_no_cell_reaches_an_upper_kappa_bin(
+    two_pass, arms
+):
+    """§11.2's report on a real two-pass store, and the `κ` axis on real fits.
+
+    Behaviour under test: three things the constructed fixtures in
+    `tests/test_audit_report.py` cannot show, because they build their own
+    `FitResult`s.
+
+    First, `FitResult.hessian_cond` **arrives populated through the whole
+    path** -- `optimize_series` to `fit` to `run_arms` to the report. A field
+    that is populated and one that nothing acts on look identical from inside
+    the module that populates it.
+
+    Second, and this is the Task 7 pre-flight finding on data rather than on
+    argument: **no cell lands in `[2**26, 2**52)` or `>= 2**52`**. That is not
+    a property of this fixture. `optimize.HESSIAN_COND_LIMIT` IS the first
+    boundary, so a fit above it reports `DEGENERATE_HESSIAN` and leaves the
+    both-OK intersection; the two upper bins are unreachable on every store
+    this report will ever be run against, and the report says so in its notes.
+
+    Third, that a real audit at an affordable size puts **every** stratum under
+    the 30-member floor, so every rate is withheld -- which is why the
+    boundary itself is tested on constructed counts and cannot be tested here.
+
+    Expected values determined independently: the stratum counts are
+    `M x 4` and `M x 3` from D9's own tables, and the audited cells are
+    `_AUDITED_POINTS x M`.
+
+    Bug this catches: the report reading `theta_err` or a recomputed
+    curvature rather than the arrays `fit` now publishes -- which would show
+    up here as an all-`undefined` `κ` axis or an exception, and nowhere in the
+    constructed suite, whose `FitResult`s are hand-built and always
+    well-formed.
+    """
+    from metamer.batch.audit_report import KAPPA_BINS, KappaBin, audit_report, kappa_bin
+
+    config = two_pass.config
+    mask = np.isfinite(two_pass.block[two_pass.fine])
+    design = config.signal_spec().design_info(two_pass.years, mask)
+
+    report = audit_report(arms, trend_column=design.trend_column)
+    cold = arms.results[Arm.COLD]
+
+    n_cand = len(config.process_specs())
+    assert len(report.cell_strata) == n_cand * len(KAPPA_BINS)
+    assert len(report.point_strata) == n_cand * 3
+
+    live = (cold.outcome == Outcome.OK.code) & (
+        arms.results[Arm.WARM].outcome == Outcome.OK.code
+    )
+    assert live.any(), "no both-OK cell would make every assertion below vacuous"
+    assert np.any(np.isfinite(cold.hessian_cond[live])), (
+        "hessian_cond must arrive populated through fit and run_arms; an "
+        "all-NaN axis is a field nothing acted on"
+    )
+
+    bins = {KAPPA_BINS[code] for code in kappa_bin(cold.hessian_cond[live])}
+    assert bins <= {KappaBin.WELL_CONDITIONED, KappaBin.UNDEFINED}, (
+        f"an OK fit cannot exceed HESSIAN_COND_LIMIT, which IS the first kappa "
+        f"boundary, so the two upper bins are unreachable here; got {bins}"
+    )
+    assert report.unreachable_kappa_bins == (
+        KappaBin.HALF_PRECISION,
+        KappaBin.SINGULAR,
+    )
+
+    occupied = sum(s.members for s in report.cell_strata)
+    assert occupied == int(np.count_nonzero(live))
+    assert all(s.members < report.min_stratum_members for s in report.cell_strata), (
+        "this fixture is 8 points and cannot populate a stratum to 30; the "
+        "boundary is tested on constructed counts in tests/test_audit_report.py"
+    )
+    assert report.withheld(), "every rate here is below the floor"
+    for quantity in report.quantities():
+        assert quantity.scope
+    assert any("No pooled disagreement figure" in note for note in report.notes)
