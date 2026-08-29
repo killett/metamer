@@ -80,9 +80,17 @@ extension: `out.zarr` gives `out.pass1.zarr`.
 
 > **IT IS A PERMANENT ARTIFACT AND NOT SCRATCH. DO NOT DELETE IT WHEN PASS 2
 > COMPLETES.** It holds cold fits of the coarse points, and it is the **only** record of
-> what those points fit to without a warm start — which makes it the sole reference the
-> hysteresis audit can compare against. Deleting it does not free a cache; it discards a
-> measurement that cannot be recovered without refitting.
+> what those points fit to without a warm start. Deleting it does not free a cache; it
+> discards a measurement that cannot be recovered without refitting.
+>
+> **IT IS THE AUDIT'S CROSS-CHECK, NOT THE AUDIT'S SAMPLE** — this paragraph used to say it
+> was *"the sole reference the hysteresis audit can compare against"*, which is wrong.
+> **A coarse point's nearest valid source is itself**, so pass 2's warm fit there starts from
+> pass 1's own optimum for the same series and the same candidate: comparing them asks whether
+> restarting the optimizer from its own optimum moves it, which is convergence idempotence and
+> not hysteresis. **The audit draws FINE points and computes its own cold arm.** Pass 1's store
+> is what that cold arm is checked against — a freshly computed cold fit at a coarse point must
+> reproduce the stored one bitwise — which is why the store still must not be deleted.
 
 Setting `warm_start.enabled = false` makes `--two-pass` a single cold pass: no coarse
 store is written, and the output is what a plain run produces. The setting is part of the

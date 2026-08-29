@@ -1178,8 +1178,8 @@ of:
 | 1 | the coarse warm-start source | §11.1 |
 | ~~2~~ | ~~the calibration-tile RSS measurement~~ — **RETIRED 2026-08-23 by Phase 2c decision D5.** Pass 1 differs from pass 2 on **two** axes — a fraction of a production tile's batch, and **cold** where pass 2 is **warm**, which at `N = 630` is 42% fewer iterations and 46% less wall clock. **A measurement of the wrong batch doing the wrong work is not a calibration of pass 2 in any sense.** 2b's standalone calibration is the sole source; pass 1 may **call** it, never substitute for it | ~~§11.4~~ |
 | 3 | the early-abort evaluation — stratified by construction, unlike a tile prefix | §14.1 |
-| 4 | the **cold** reference for the hysteresis audit | §11.2 |
-| 5 | the default `/detail/` subsample — the audit wants covariances at **cold-fitted** points, and pass-1 points are cold by construction, so the default costs nothing and serves both | §12.2 |
+| 4 | the **cold CROSS-CHECK** for the hysteresis audit — **narrowed 2026-08-28 by 2c Task 6; it was *"the cold reference"* and was read as *"the audit's sample"*.** A coarse point's nearest valid source is **itself** (D12), so pass 2's warm fit there starts from pass 1's own optimum for the same series and candidate — **convergence idempotence, not hysteresis, with no neighbour in the comparison.** Measured: `self` against `cold` agrees at **99.58%** where fine points agree at **95.00%**. **The audit draws FINE points and COMPUTES its cold arm**; pass 1's store is what that arm is checked against, bitwise, at the coarse points — a cross-check that passes (j5) | §11.2 |
+| 5 | the default `/detail/` subsample — pass-1 points are cold by construction, so a cold-fitted lattice for stored covariances costs nothing. **The clause *"the audit wants covariances at cold-fitted points"* is struck by the same correction**: the audit's subject is fine points, so this job stands on its own terms and not on the audit's | §12.2 |
 
 > **FOUR OF THE FIVE SURVIVE, AND THE COUNT IS STATED SO A LATER READER DOES NOT WONDER WHETHER
 > ONE WAS DROPPED BY ACCIDENT.** Job 2 is retired; jobs 1, 3, 4 and 5 are unchanged.
@@ -1191,10 +1191,19 @@ of:
 > ALONE" WAS INCOMPLETE.** Pass 1's **four surviving jobs all draw from the coarse set**, and the
 > stride sets its size — `k = 8` makes it **sixteen times thinner than `k = 4`**. The early-abort
 > evaluation is unaffected (its stratification comes from **dataset** coordinates, which `k` does
-> not touch) and the `/detail/` default is a **decision** rather than a constraint, but **the cold
+> not touch) and the `/detail/` default is a **decision** rather than a constraint, but ~~**the cold
 > audit reference is a count-PER-CELL question**: the audit stratifies by difficulty proxy **and**
 > candidate, the cells multiply, and a rare stratum at `1/64` sampling may have too few members to
-> say anything. **That check is owed and unverified; `k = 8` stands unless it fails.**
+> say anything. **That check is owed and unverified; `k = 8` stands unless it fails.**~~
+>
+> > **THE COUNT-PER-CELL CHECK DISSOLVED 2026-08-28 (2c Task 6), AND `k = 8` IS STRENGTHENED
+> > RATHER THAN THREATENED.** It rested on the audit drawing from the coarse set. It does not:
+> > the audit draws **fine** points and computes its own cold arm, so **the stride constrains the
+> > audit's sample size not at all** — the size is `config.audit.subsample`, chosen. D10's
+> > occupancy table was computed over the coarse count and is therefore **conservative by a factor
+> > of `k² = 64`**; its conclusion, *"stratum adequacy is a property of FIELD SIZE, not of the
+> > stride"*, holds a fortiori. **Struck rather than deleted, because three decisions rested on
+> > this sentence's reading of one word.**
 >
 > **`k = 8` was chosen on a written objective, `1/k² + (1 − 1/k²)·(T_warm/T_cold)` in TIME**, and
 > measured at `N = 630` on 108 points common to all three strides: net saving **32.95 / 37.69 /

@@ -598,6 +598,28 @@ at all.**
 one run emits the figure and another does not, so **two runs report different quantities under one
 name.** D8 withholds **always**, which is why it is a default rather than a branch.
 
+#### AND THE SAME RULE AT A COUNT: "ZERO CASES" IS A CLAIM ABOUT THE INSTRUMENT UNTIL PROVEN OTHERWISE
+
+> **An empty count is a statement about the FIELD only if the instrument could have produced a
+> non-empty one. Where it could not, the zero is invalid under a condition the code can detect —
+> so make the condition visible rather than caveating the count.**
+
+**This is (a2b) applied to a stratum rather than to a rate**, and the worked case is (h3)'s `κ`
+collision at 2c Task 7. *"Zero cells in the two ill-conditioned bins"* is the most reassuring
+sentence the audit can emit and **it would read identically on a field made entirely of
+ill-conditioned cells**, because the outcome taxonomy removed them before the stratification ran.
+
+**THE FIX IS NOT TO DROP THE BIN AND NOT TO FOOTNOTE THE NUMBER.** The bins are D9's and the
+implementation carries them; what ships beside the boundaries is
+`AuditReport.unreachable_kappa_bins` — **the named condition under which the zero is not a
+measurement** — on the same argument that makes `RSS measurement validity` print at zero.
+
+**THE GENERAL TEST IS (i2)'s, ASKED OF A COUNT:** before reporting zero of something, ask what
+input would have made it non-zero and whether the pipeline admits that input at all. **A zero the
+instrument cannot escape is an artifact of selection**, and it belongs beside the selection rather
+than beside the data. (a0)'s fifth register is the same fact one level down — *a zero reading is
+not evidence of absence*.
+
 ### (a3) DEFER THE FEATURE, DECLARE THE REGIME
 
 > **When deferring a feature, ask separately whether its REGIME must be declared.** If any
@@ -1764,6 +1786,72 @@ and is by construction independent of the mechanism.
 because the treated arm's value is usually the more convenient one to hand. **The question to ask
 is not "which value is better" but "can the treatment move it".**
 
+### (h3) CHECK EVERY STRATUM BOUNDARY AGAINST THE FILTERS THE POPULATION HAS ALREADY PASSED THROUGH
+
+> **Before stratifying, check every boundary against the filters the population has already
+> passed. A threshold derived from the same first principles as an upstream gate will coincide
+> with it, and the resulting empty strata read as a finding about the data rather than as an
+> artifact of selection.**
+
+**The worked case is Phase 2c decision D9's `κ` axis, found at plan Task 7 (2026-08-29).** D9 cuts
+the Hessian condition number at **`2²⁶`** and **`2⁵²`** — `1/√eps` and `1/eps` for float64,
+boundaries chosen as facts about the arithmetic and not about any run. `optimize.HESSIAN_COND_LIMIT`
+is `float(EPS) ** -0.5`. **Measured: `67108864.0`, and `== 2.0**26` is `True`.** They are the same
+constant.
+
+**And the upstream gate selects the population the boundary partitions.** `optimize_series` reports
+`DEGENERATE_HESSIAN` — not `OK` — above that limit, and the audit compares on the **both-OK
+intersection**. So **every cell the audit can see has already been filtered to `κ ≤ 2²⁶`**: bin
+`[2²⁶, 2⁵²)` can hold only a cell at exact equality, and bin `≥ 2⁵²` is **strictly empty**. Three
+of four bins were unreachable before any data landed; measured on real arms, **all eight live cells
+fell in the first bin.**
+
+**THE eps-DERIVED-CONSTANT DISCIPLINE IS WHAT MADE THE COLLISION LIKELY, AND THAT IS WORTH SAYING
+PLAINLY.** Two independent derivations from float64's precision — *"half the significant digits are
+gone after one inversion"* and *"where a finite-difference gradient has lost half its digits"* —
+**arrive at the same number because they are the same argument.** That is a **strength** for each
+constant taken alone: neither was picked. It is a **hazard** the moment one constant *selects* the
+population the other *partitions*. See §2's eps-derived-constants rule, which this now qualifies;
+this project has several such constants and the number of pairs grows quadratically.
+
+**THE CHECK IS CHEAP AND IT IS A CHECK, NOT A JUDGEMENT.** List the population's admission
+filters, list the boundaries, and compare them **as numbers** rather than as derivations — the
+derivations are what make them look unrelated. Where they coincide, **nothing about the
+stratification need move**: what is owed is that the emptiness is reported as a property of the
+selection. See (a2b)'s register on zero counts.
+
+### (h4) A RULE STATED OVER "THE METRICS" MUST BE CHECKED AGAINST EACH KIND OF METRIC
+
+> **A rule that is correct for one metric will be applied to every metric it was stated beside.
+> The tell is a rule written over "the metrics" when the metrics differ in KIND — in granularity,
+> in sign, in whether they estimate anything.**
+
+**The worked case is D8's headline rule, found at plan Task 7.** D8 says *"the headline scalar is
+the maximum over strata, not the mean"*, on the argument that **a mean dilutes and a maximum cannot
+understate.** That is right for a magnitude and **wrong for a signed quantity**: a maximum over
+signed values returns the most positive stratum and is **blind to a stratum with an equally large
+negative bias** — which is precisely the *"systematic contamination"* §11.2 says signed-trend
+disagreement exists to detect, and which it says is contamination **in either direction**.
+
+**THE CORRECTION, WITH ITS REASON: for a signed quantity the headline is the extremum BY MAGNITUDE
+with its sign retained, or both extremes are reported.** Reporting `3.0` unsigned is the other half
+of the same error, because the sign is the whole content of the metric.
+
+**AND THE SAME RULE HIT THREE TIMES IN ONE SUB-PHASE, WHICH IS WHY IT IS A RULE AND NOT AN
+ANECDOTE.** All three are one rule meeting metrics that differ in kind:
+
+| the rule | the metric it does not fit | register |
+|---|---|---|
+| *"stratify by the difficulty proxies and by candidate"* | a per-**point** metric crossed with a per-**cell** axis | **(h2)** |
+| *"the cold audit reference"* / *"the audit's sample"* | the **coarse** points, which carry none of the effect | (a5) across decisions |
+| *"the headline is the maximum over strata"* | the **signed** metric | this |
+
+**The 30-member rule is the same shape caught in time**: D8 derives it from a **binomial standard
+error**, so it covers the rates *and* the signed mean — both estimate a population parameter from
+`n` draws — and **not the maxima**, which are exact statements about the members present. Applying
+it uniformly would have withheld a true maximum over 29 cells; not applying it to the mean would
+have quoted an estimate D8's own derivation refuses.
+
 ### (i) Can the fixture fail at all?
 
 Ask what property of the fixture makes the defect visible; if the answer is "none", the
@@ -2537,6 +2625,25 @@ many times the quantity is squared or differenced on its way to the objective.**
 out at `2^±26` by three different routes, which is a hazard in itself: state each
 derivation separately and never reach for the neighbour's exponent because the answer
 looks familiar.
+
+> ## AND THE SECOND HAZARD, FOUND 2026-08-29: TWO OF THESE CONSTANTS CAN MEET AS A GATE AND A BOUNDARY
+>
+> **Coincidence between derived constants is not a coincidence — it is the discipline working.**
+> Two derivations from float64's precision that count the same number of squarings **arrive at
+> the same number**, and that is a strength for each constant taken alone.
+>
+> **IT BECOMES A HAZARD THE MOMENT ONE CONSTANT SELECTS THE POPULATION THE OTHER PARTITIONS.**
+> Phase 2c's D9 cuts the audit's `κ` strata at `2²⁶` — *"where a finite-difference gradient has
+> lost half its digits"* — and `HESSIAN_COND_LIMIT` is `2²⁶` — *"where one inversion has lost
+> half its digits"*. **The same argument, so the same number**, and the taxonomy refuses `OK`
+> above it. Every cell the strata partition had **already been filtered to one bin**: three of
+> four unreachable, and the emptiness reads as a finding about the data.
+>
+> **So this table is also a collision list.** Before a new threshold partitions a population,
+> compare it **as a number** against every constant in this table that gates admission to that
+> population — the derivations are what make two identical numbers look unrelated. The rule is
+> **(h3)**; the visibility owed when they do coincide is **(a2b)**'s zero-count register. **The
+> number of pairs grows quadratically in the size of this table, and the table is six rows.**
 
 State each in the **units of the quantity it thresholds** so they are comparable. **When a
 fourth is needed, count the squarings and differences and read the exponent off — do not

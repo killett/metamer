@@ -8,7 +8,7 @@
 4. ## THE STANDING LIMITATION ON EVERYTHING 2c DECIDED: **NO 2c NUMBER COMES FROM REAL DATA.** Warm-starting was authorized — and every decision after D1 inherits this — on a **simulated field whose spatial coherence is a construction parameter**. **The spatial coherence of real altimetry optima has never been measured.** Weaker coherence gives a **smaller** saving, and **§11.2's 30% threshold could fail on real data.** **THE NAMED CLOSER, not an open worry: a spike on a real gridded product — same three arms, same record-length lever.** **AND SINCE 2026-08-24 THERE IS A SECOND REGISTER OF IT: every 2c saving is a CEILING, not an estimate**, because the instrument searched with no effective spiral bound — see [what 2c's tasks inherit](#what-2cs-tasks-inherit-2026-08-24).
 5. **Tests: 1214 passed, 0 failed, 0 INDETERMINATE — 2026-08-29, 2340.33 s (sweeps that week ran 1698–2735 s on byte-identical trees, which is the machine and not the suite).** **`pixi run test` is the full sweep and every end-of-task verification must run it; `test-fast` and `test-ci` are NOT evidence** — the full sweep has caught **seven** things a fast run could not. **Every run prints `RSS measurement validity`, including at zero**; a nonzero count is INDETERMINATE, neither pass nor fail.
 6. **Verify a fresh checkout with `pixi run test && pixi run typecheck && pixi run lint`**, plus `pixi run pre-commit run --all-files` before every commit. **AND `git add` A NEW FILE BEFORE THAT SWEEP, NEVER AT COMMIT TIME** — `--all-files` covers **tracked** files only, so an untracked new module makes every hook print `Passed` without being read. Measured 2026-08-24; it cost two full twenty-minute sweeps before it was noticed.
-7. **THE METHOD IS THE PRE-FLIGHT AND IT LIVES IN EXACTLY ONE PLACE:** [`phase1-to-phase2-handoff.md`](docs/superpowers/notes/phase1-to-phase2-handoff.md) §1 — (a0)–(a9), (a)–(k), the standing rules, the fixture facts, **and the ones 2c added:** (i2b) a high-ceiling control converts a null into a **located** null · (i2c) a sign-unstable benefit is worse than a small one · (j5) a second instrument is a cross-check only if it measures the same quantity under the same conditions · (j6) bound the unmeasured region before measuring it · (i11) refutation clauses in **both** directions · (a2b) make an invalid value **unavailable** rather than caveated · (h2) stratify only by axes at the metric's **own** granularity · (j7) never stratify by a quantity the treatment can move · (c4) a validator must be specified in the **coordinates and extent** the validated object actually has · **(c5) a gate over a set that can GROW must be written against the set, not an enumeration of its members** · **(c6) a practice enforced by a MECHANISM must be checked to reach every instance — a partially-installed guard prints a complete-looking green** · (e2) prove a mutant differs before recording a surviving mutation — **(e) now has six causes** · (e3) its opposite colour, a **red** suite hiding a dead assertion · (a2c) populated but nothing **acts** on it · (a2d) a hashed value's **unit** is part of its identity · (a2e) encode a classification as a **construction** · (i12) a **uniform fixture set** cannot test a freedom the contract leaves open · (j8) an adopted verdict makes the **instrument** part of the specification · plus (a0)'s sixth register (**a check that never read the file prints the same word as one that did**) and (a4)'s two (**"checked" in your own pre-flight is a claim**, and **a decision's own EXAMPLE can be the case that refutes it — and a retired argument stays visible**), and (a5)'s across-DECISIONS register (**check a decision against the measurements taken for the OTHERS; a term of art repeated across decisions acquires a reading nobody chose**). **Do not restate them here** — the two copies drifted once already.
+7. **THE METHOD IS THE PRE-FLIGHT AND IT LIVES IN EXACTLY ONE PLACE:** [`phase1-to-phase2-handoff.md`](docs/superpowers/notes/phase1-to-phase2-handoff.md) §1 — (a0)–(a9), (a)–(k), the standing rules, the fixture facts, **and the ones 2c added:** (i2b) a high-ceiling control converts a null into a **located** null · (i2c) a sign-unstable benefit is worse than a small one · (j5) a second instrument is a cross-check only if it measures the same quantity under the same conditions · (j6) bound the unmeasured region before measuring it · (i11) refutation clauses in **both** directions · (a2b) make an invalid value **unavailable** rather than caveated · (h2) stratify only by axes at the metric's **own** granularity · (j7) never stratify by a quantity the treatment can move · **(h3) check every stratum boundary against the filters the population already passed — an eps-derived boundary and an eps-derived GATE arrive at the same number by the same argument, and the empty strata read as a finding about the data** · **(h4) a rule stated over "the metrics" must be checked against each KIND of metric — 2c hit this three times** · **(a2b) at a count: "zero cases" is a claim about the INSTRUMENT until proven otherwise** · (c4) a validator must be specified in the **coordinates and extent** the validated object actually has · **(c5) a gate over a set that can GROW must be written against the set, not an enumeration of its members** · **(c6) a practice enforced by a MECHANISM must be checked to reach every instance — a partially-installed guard prints a complete-looking green** · (e2) prove a mutant differs before recording a surviving mutation — **(e) now has six causes** · (e3) its opposite colour, a **red** suite hiding a dead assertion · (a2c) populated but nothing **acts** on it · (a2d) a hashed value's **unit** is part of its identity · (a2e) encode a classification as a **construction** · (i12) a **uniform fixture set** cannot test a freedom the contract leaves open · (j8) an adopted verdict makes the **instrument** part of the specification · plus (a0)'s sixth register (**a check that never read the file prints the same word as one that did**) and (a4)'s two (**"checked" in your own pre-flight is a claim**, and **a decision's own EXAMPLE can be the case that refutes it — and a retired argument stays visible**), and (a5)'s across-DECISIONS register (**check a decision against the measurements taken for the OTHERS; a term of art repeated across decisions acquires a reading nobody chose**). **Do not restate them here** — the two copies drifted once already.
 8. **CI IS GREEN and the deliberate red is CLOSED** (2026-08-22, by the repair its own criterion chose: the fixture was **enlarged**, the bound was **not** widened and the test was **not** marked). **CI runs `-m "not machine"` and therefore executes exactly ONE of the nine RSS assertions**, so it is not a substitute for the local sweep. See [THE CI FIXTURE DECISION](#the-ci-fixture-decision--taken-measured-and-verified-2026-08-22).
 9. **TWO DEFECTS ARE OPEN AND UNOWNED, AND NEITHER IS 2c's TO FIX.** (a) **`tiling.py` requires the spatial dims to be literally `y` and `x` in four places** while stage 4a requires only that `time` is first — so a `latitude`/`longitude` input **passes the contract and dies in assembly without exit code 4**, and **stage 4a's own message already calls the contract positional**, so the message and the implementation disagree today. Two closers, both scope decisions — see [What plan Task 2 established](#what-plan-task-2-established-done-2026-08-24--read-before-touching-the-decimation-the-two-stores-identities-or-any-spatial-dimension-name). (b) **Open question 20**: what else is uniform across all sixteen input fixtures and unconstrained by the contract — **coordinate monotonic direction first**, because a decreasing latitude axis is the ordinary case in real altimetry and yields a *plausible* answer rather than an error.
 10. **Precedence: the design doc is authoritative on INTENT; a measured, dated number supersedes an unmeasured one wherever it lives, including in the design doc. Any measurement stated twice has one copy DELETED, never reconciled.**
@@ -5132,12 +5132,30 @@ cover both attaches the wrong conditioning statement to the more interpretable n
 fractions, each at the granularity of what it qualifies**, and a point ranked by only one arm is
 counted rather than called a disagreement.
 
-#### (a5) ACROSS DECISIONS, IN `src` THIS TIME: A FOURTH SITE CARRIED THE RETIRED READING
+#### (a5) ACROSS DECISIONS, IN `src` THIS TIME — AND THEN A DELIBERATE SWEEP FOUND FOUR MORE
 
 `config/model.py`'s `Detail.subsample` docstring still said *"Defaults to pass 1's coarse grid,
 because §11.2's audit wants covariances at COLD-fitted points"*. **The default survives; its stated
-reason does not.** Corrected in place, with the four sites named. D5, D6 and D10 were the other
-three.
+reason does not.**
+
+**FINDING IT A TASK LATE IS THE FINDING.** Task 6 moved D5, D6 and D10 and stopped at PROGRESS.md;
+the fourth site was in `src/`, and it surfaced only because Task 7 had to read the config block for
+another reason. **So a sweep was run for a fifth, and it returned three more — in two documents
+nobody had opened:**
+
+| site | what it said | 
+|---|---|
+| `config/model.py` `Detail.subsample` | *"the audit wants covariances at COLD-fitted points"* — found at Task 7 by accident |
+| `README.md`'s permanent-artifact note | pass 1's store is *"the sole reference the hysteresis audit can compare against"* — **false**; the audit computes its own cold arm |
+| design doc §11.4's pass-1 job **4** | *"the **cold** reference for the hysteresis audit"* — narrowed to **cross-check** |
+| design doc §11.4's pass-1 job **5** | the same *"the audit wants covariances at cold-fitted points"* clause |
+| design doc §11.4's **D6 amendment block** | *"the cold audit reference is a count-PER-CELL question ... a rare stratum at `1/64` sampling"* — the D10 reading, struck |
+
+**EIGHT SITES IN FOUR DOCUMENTS, AND THE THREE FOUND BY SWEEP WERE ALL OUTSIDE PROGRESS.md.**
+Every one is struck-and-annotated rather than deleted: a retired argument stays visible, because
+three decisions rested on this sentence's reading of one word and a later reader who finds only the
+correction cannot tell what was corrected. **The rule this pays out on: when a correction moves a
+decision, sweep for the phrase in every document, not just the one the decision lives in.**
 
 #### §11.2's STRATIFIED SUBSAMPLE IS NOT CONSTRUCTIBLE FOR THE POPULATION TASK 6 MOVED THE AUDIT TO
 
@@ -9115,8 +9133,26 @@ Still open. **A new session must not assume these were settled.**
     cold passes, and the audit's cost is already four arms. (c) **Audit a uniform sample and
     report the strata**, which is what Task 7's report does today: the strata are still computed
     per point, so a rare stratum is under-represented rather than invisible — and the 30-member
-    rule makes the under-representation **visible** rather than silent. **(c) is what ships by
-    default, and the open question is whether (a) is worth building.**
+    rule makes the under-representation **visible** rather than silent.
+
+    > **WHAT SHIPS, AND IT IS A DECISION RATHER THAN AN OMISSION.** Route **(c)**: the arms take
+    > an **explicit point set** from their caller and the report stratifies whatever arrives.
+    > **The missing selector is not a gap in the implementation — it is the absence of a
+    > constructible specification**, and a plausible-looking uniform sampler behind an
+    > `audit.stratify` flag would have been (a2) exactly: a name that is not a gate.
+
+    **THE NAMED CLOSER, so this is a condition and not a worry: measure whether a PRE-FIT proxy
+    predicts the post-fit ones.** On the 2c fixtures every cell already carries both — record
+    length, gap fraction and variance on one side; `hessian_cond`, the selection margin and the
+    outcome on the other, all now published by `FitResult`. **If a pre-fit proxy correlates, route
+    (a) is buildable and §11.2's intent is served by a constructible substitute; if it does not,
+    (c) is the answer and this question closes as *"not constructible, and here is the
+    measurement that says so"*** — which is a better outcome than an unbuilt flag, and is the
+    (j6) shape: bound the unmeasured region before building for it.
+
+    **AND `audit.stratify` MUST NOT BE READ AS THE HALF-BUILT HALF OF THIS.** It is an
+    unconsumed boolean; whichever way this closes, the field is either given a consumer or
+    removed, and leaving it is what (a2c) names.
 
 20. **WHAT ELSE IS UNIFORM ACROSS ALL SIXTEEN INPUT FIXTURES AND UNCONSTRAINED BY THE CONTRACT?**
     Opened 2026-08-24 at 2c Task 2, which found the first instance: **every input fixture in the
