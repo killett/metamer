@@ -1,8 +1,11 @@
 # Phase 2c — the two-pass warm start, its barrier, and the hysteresis audit
 
-**Status: APPROVED 2026-08-24. TASKS 0–7 ARE DONE (0–4 on 2026-08-24, Task 5 on 2026-08-27,
-Task 6 on 2026-08-28, Task 7 on 2026-08-29); Task 8 has no code. Task 8 is the next action.** The single source for this plan's status is
-this line. **What each task found beyond its brief is in
+**Status: COMPLETE 2026-08-29. ALL NINE TASKS ARE DONE (0–4 on 2026-08-24, Task 5 on 2026-08-27,
+Task 6 on 2026-08-28, Tasks 7 and 8 on 2026-08-29). The twelve exit criteria closed 10 MET / 2 MET
+WITH REDUCED SCOPE / 0 FAILED, and 2b's criteria 6 and 7 stay FAILED — 2c did not reopen the
+residency model. The verdicts are executable in `tests/exit_criteria_2c.py`; the closing table and
+both closers are in [`PROGRESS.md`](../../../PROGRESS.md).** The single source for this plan's
+status is this line. **What each task found beyond its brief is in
 [`PROGRESS.md`](../../../PROGRESS.md)'s *What plan Task N established*, not here.**
 
 > **TASK 1 WAS AN AUDIT, NOT A BUILD, AND IT MOVED A REQUIREMENT.** Its mechanism was already

@@ -69,14 +69,23 @@ class Verdict(StrEnum):
 class ExitCriterion:
     """One criterion, its verdict, and what the verdict rests on.
 
+    **THE SHAPE IS SHARED ACROSS SUB-PHASES AND THE VOCABULARY IS NOT.** Phase
+    2c's record (`tests/exit_criteria_2c.py`) imports this class and `Verdict`
+    rather than spelling them a second time, but it brings its own `READINGS`:
+    none of 2c's readings is an RSS reading, and 2c requires **every** criterion
+    to name one where 2b has four that do. Each sub-phase's binder asserts
+    against its own tuple, so nothing here has to know which is in play.
+
     Attributes:
-        number: Its number in the plan's table.
+        number: Its number in **its own sub-phase's** plan table. Numbers are
+            not unique across sub-phases and are never renumbered to make them
+            so -- 2c refers to 2b's criteria 6 and 7 by 2b's numbers.
         statement: What it asserts, in one line.
         verdict: Met, met with reduced scope, or failed.
         reading: Which reading of the measured quantity the verdict is about,
-            drawn from `READINGS`. **None only where the criterion is not about
-            a measured quantity at all** -- and that is a claim a test checks,
-            not a default.
+            drawn from **the sub-phase's own `READINGS`**. **None only where the
+            criterion is not about a measured quantity at all** -- and that is a
+            claim a test checks, not a default.
         scope: For a reduced-scope verdict, what it does and does not cover; for
             a failure, **the regime it fails in**. Never empty.
         established_by: The tests that establish it, as function names. **Bound

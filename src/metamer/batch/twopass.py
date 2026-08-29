@@ -103,9 +103,18 @@ class TwoPassReport:
             thing in this report that is not reproducible.
         store_path: Pass 2's store -- the output.
         pass1_path: Where pass 1's store went, or None when it did not run.
-            **A PERMANENT ARTIFACT, NOT SCRATCH.** It is §11.2's only cold
-            reference for the same points, and deleting it discards the sole
-            record of what they fit to without a warm start.
+            **A PERMANENT ARTIFACT, NOT SCRATCH.** It is the only record of what
+            those points fit to without a warm start, and deleting it discards a
+            measurement that cannot be recovered without refitting.
+
+            **IT IS THE AUDIT'S CROSS-CHECK AND NOT THE AUDIT'S SAMPLE** -- this
+            used to say *"§11.2's only cold reference for the same points"*,
+            which reads as *"the audit compares against this"* and is wrong. A
+            coarse point's nearest valid source is **itself** (D12), so pass 2's
+            warm fit there starts from pass 1's own optimum: convergence
+            idempotence, not hysteresis. **The audit draws FINE points and
+            computes its own cold arm**, and pass 1's store is what that arm is
+            checked against, bitwise, at the coarse points.
     """
 
     pass1: RunReport | None

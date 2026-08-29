@@ -3,8 +3,8 @@
 ## Start here (cold-start summary)
 
 1. **Branch `main`, everything on it, every commit pushed by a hook** — https://github.com/killett/metamer. **A SHA here is stale the moment the next commit lands, so nothing here names one:** `git log --oneline -8` is the authority.
-2. **DONE:** Phase 1 (0–18), Phase 2 preliminaries P0–P4, **Phase 2a (0–13)**, **Phase 2b (COMPLETE 2026-08-19 — 10 met / 4 reduced scope / 2 FAILED)**, **Phase 2c's brainstorm (D1–D12)**, and **2c plan Tasks 0–7 (0–4 on 2026-08-24, Task 5 on 2026-08-27, Task 6 on 2026-08-28, Task 7 on 2026-08-29)**. The modelling sub-phase was decided against 2026-08-22 and **re-decided on closed facts 2026-08-23: it does not open.** Sections below carry each; **none is restated here.**
-3. **NEXT ACTION: PHASE 2c TASK 8 — the 2c exit-criteria suite, and the close of 2c.** Plan: [`2026-08-24-metamer-phase2c.md`](docs/superpowers/plans/2026-08-24-metamer-phase2c.md) — **9 tasks, 12 exit criteria each naming its reading; Tasks 0–7 done, Task 8 has no code.** **Every task's FIRST step is the pre-flight**, run against the brief **before code** and appended to [`phase2c-preflight.md`](docs/superpowers/notes/phase2c-preflight.md). **Read [What plan Task 7 established](#what-plan-task-7-established-done-2026-08-29--read-before-quoting-any-audit-number-or-the-κ-axis) first — criteria 10 and 11 are about the report Task 7 built, and criterion 11's `κ` axis is DEGENERATE on the population it stratifies: `HESSIAN_COND_LIMIT` IS D9's first boundary, so two of the four bins are unreachable by construction and a third was empty in fact.** **`ALGORITHM_VERSION` IS `"2"` SINCE 2026-08-27** and every store written before it holds cold fits — see [how to read a store written before 2c Task 5](#how-to-read-a-store-written-before-2c-task-5-recorded-2026-08-24-and-it-cannot-be-reconstructed-later), which is not re-derivable from the stores.
+2. **DONE:** Phase 1 (0–18), Phase 2 preliminaries P0–P4, **Phase 2a (0–13)**, **Phase 2b (COMPLETE 2026-08-19 — 10 met / 4 reduced scope / 2 FAILED)**, **Phase 2c's brainstorm (D1–D12)**, and **Phase 2c (COMPLETE 2026-08-29 — 10 met / 2 reduced scope / 0 failed; Tasks 0–4 on 2026-08-24, Task 5 on 2026-08-27, Task 6 on 2026-08-28, Tasks 7–8 on 2026-08-29)**. The modelling sub-phase was decided against 2026-08-22 and **re-decided on closed facts 2026-08-23: it does not open.** Sections below carry each; **none is restated here.**
+3. **NEXT ACTION: PHASE 2d — the simulated-field benchmark, which is what makes the audit's numbers mean something.** **PHASE 2c IS CLOSED (2026-08-29): 10 met / 2 met with reduced scope / 0 failed**, plus 2b's criteria 6 and 7 which **stay FAILED** — see [the close](#phase-2c-is-closed-2026-08-29--10-met--2-met-with-reduced-scope--0-failed-plus-2bs-two-inherited-failures) for the table, both closers, and **what 2d inherits**. **2d has no plan and no brainstorm yet**; its first act is the brainstorm, and **every task's FIRST step is the pre-flight** — the method is item 7 below. **THE TWO REDUCED-SCOPE VERDICTS ARE 2d's INPUT:** criterion 12's magnitude was measured **on the spike harness and never on the shipped mechanism** (21 s/point/arm at `N = 630` puts the smallest honest lattice at 1.7 hours), and criterion 11's `κ` axis is **degenerate on the population it stratifies** because `HESSIAN_COND_LIMIT` **is** D9's first boundary. **`ALGORITHM_VERSION` IS `"2"` SINCE 2026-08-27** and every store written before it holds cold fits — see [how to read a store written before 2c Task 5](#how-to-read-a-store-written-before-2c-task-5-recorded-2026-08-24-and-it-cannot-be-reconstructed-later), which is not re-derivable from the stores.
 4. ## THE STANDING LIMITATION ON EVERYTHING 2c DECIDED: **NO 2c NUMBER COMES FROM REAL DATA.** Warm-starting was authorized — and every decision after D1 inherits this — on a **simulated field whose spatial coherence is a construction parameter**. **The spatial coherence of real altimetry optima has never been measured.** Weaker coherence gives a **smaller** saving, and **§11.2's 30% threshold could fail on real data.** **THE NAMED CLOSER, not an open worry: a spike on a real gridded product — same three arms, same record-length lever.** **AND SINCE 2026-08-24 THERE IS A SECOND REGISTER OF IT: every 2c saving is a CEILING, not an estimate**, because the instrument searched with no effective spiral bound — see [what 2c's tasks inherit](#what-2cs-tasks-inherit-2026-08-24).
 5. **Tests: 1214 passed, 0 failed, 0 INDETERMINATE — 2026-08-29, 2340.33 s (sweeps that week ran 1698–2735 s on byte-identical trees, which is the machine and not the suite).** **`pixi run test` is the full sweep and every end-of-task verification must run it; `test-fast` and `test-ci` are NOT evidence** — the full sweep has caught **seven** things a fast run could not. **Every run prints `RSS measurement validity`, including at zero**; a nonzero count is INDETERMINATE, neither pass nor fail.
 6. **Verify a fresh checkout with `pixi run test && pixi run typecheck && pixi run lint`**, plus `pixi run pre-commit run --all-files` before every commit. **AND `git add` A NEW FILE BEFORE THAT SWEEP, NEVER AT COMMIT TIME** — `--all-files` covers **tracked** files only, so an untracked new module makes every hook print `Passed` without being read. Measured 2026-08-24; it cost two full twenty-minute sweeps before it was noticed.
@@ -5029,6 +5029,203 @@ the third executable. The pre-flight now reads **(a)–(k) with (a2), (a3) and (
 
 ## Phase 2c execution
 
+### What plan Task 8 established (done 2026-08-29 — the close of Phase 2c)
+
+**`tests/exit_criteria_2c.py` is the record and `tests/test_exit_criteria_2c.py` binds it.** The
+closing table is the section below and is not restated here; **what follows is only what the task
+found that its brief did not say.**
+
+#### FIVE OF THE TWELVE WERE ROLL-UPS, AND THE AUDIT THAT FOUND THEM IS ONE TABLE
+
+**A criterion satisfied by calling the same helper the implementing task's test called verifies
+nothing new** — it re-runs one derivation and reports agreement with itself. Criteria **1, 2, 4, 5
+and 6** were in that state: `fit` called twice, `Config`'s own hashing helpers, `source_map` called
+twice, and a gate called directly. **Each now has an outside that is bytes on disk or a process
+exit code**, neither of which shares a call path with the thing under test.
+
+**AND THREE HAVE NO OUTSIDE AT ALL, WHICH IS RECORDED AS A CASE RATHER THAN A GAP.** The audit has
+no command line — Phase 5's `--explain` is where one lands, and *"a flag that parses and does
+nothing reads as supported"*. That is `NO_CLI_YET` and it is **deliberately a different constant
+from 2b's `NO_OUTSIDE`**: one closes when somebody writes a flag, the other never closes, and a
+reader needs to know which.
+
+#### THE SOURCE INDEX IS NOT ON DISK, WHICH NARROWED TWO OUTSIDES — AND A GOTCHA STILL SAID IT WAS
+
+Criteria 4 and 5 read *"the recorded source index"*, and **there is no such array in the store.**
+Task 5 refused to carry it (160 MB at 10⁷ points with two candidates) and recorded the refusal at
+D12 — **but the Gotchas entry still said *"the source coarse index is stored per point"***, which
+is (a6) at a gotcha and is now struck. **Ninth site of a correction that has now propagated to five
+documents.**
+
+**THE REPLACEMENT IS EXACT RATHER THAN APPROXIMATE, AND TASK 5 ALREADY NAMED IT.** A point is
+coarse iff `y % k == 0 and x % k == 0` — arithmetic on the stride — and it sources itself exactly
+when pass 1's `/status/outcome` is `OK` there. So criterion 5's outside is `radius_histogram[0]`
+against a count built from **the stride and pass 1's store**, with no reference to the source map.
+Criterion 4's is the map's **per-point consequence**: two runs at two tile sides must agree on
+`/warmstart/theta_unconstrained` bitwise.
+
+#### THE BARRIER IS NOT REACHABLE FROM THE COMMAND LINE, AND SAYING SO IS THE FINDING
+
+`run_two_pass` derives both passes from **one** config, so pass 1's recorded parent `fit_hash` and
+pass 2's own can never disagree on that path. **The cross-store gate guards a door only a library
+caller can open.** What a user *can* reach is a pass-1 store left on disk by an earlier run at a
+different stride — the same class of fault caught one gate earlier, at layer 3, with a message
+naming both hashes and two remedies. **Criterion 6's outside is that**, and the docstring says
+which half it covers rather than implying it covers both.
+
+#### AND THE FIRST VERSION OF THAT TEST PASSED WHILE PROVING NOTHING
+
+It wrote the second run to a **different output path**, so pass 1's store was derived to a fresh
+location and there was no mismatch to detect: the command line returned **0** and the test failed
+only because it asserted non-zero. **Had the assertion been `returncode == 0`** — which is what a
+test of the happy path looks like — **it would have been green and meaningless.** (i), and the fix
+is one line plus a comment at the fixture saying why the path is the whole fixture.
+
+#### TEN MUTANTS, TEN CAUGHT — AND ONE OF THEM WAS MALFORMED BEFORE IT WAS INFORMATIVE
+
+Caught at the record: a criterion losing its reading, inventing one outside the vocabulary, naming
+evidence that does not exist, being dropped, sharing a number with another, and losing its outside.
+Caught at the code: `fit` ignoring `x0_valid`, the source map built without its region, and **the
+warm start computed, stored, read back and then not passed to `fit`.**
+
+**THE LAST IS THE ONE CRITERION 12's POSITIVE CONTROL EXISTS FOR.** Under it every report count
+still says `warm_started`, because those counts come from the source map and not from the
+optimizer — a run that reports a working warm start while taking exactly the cold path. **(a2c) at
+the level of a whole mechanism.**
+
+**AND ONE MUTANT SURVIVED UNTIL IT WAS WRITTEN CORRECTLY.** *"Criterion 12 loses its scope"*
+replaced the last fragment of a concatenated string and left the rest, so the scope was still
+substantial and `scope.strip()` still true. **A survivor that is a bad mutant is not a coverage
+gap** — (e2) in the other direction: prove the mutant is the mutant you meant before recording
+anything about it. Rewritten to empty the whole field, it is caught.
+
+---
+
+### PHASE 2c IS CLOSED, 2026-08-29 — 10 MET / 2 MET WITH REDUCED SCOPE / 0 FAILED, PLUS 2b's TWO INHERITED FAILURES
+
+**THE RECORD IS `tests/exit_criteria_2c.py` AND IT IS EXECUTABLE.** Every criterion names its
+reading, names the tests that establish it, and names what it is driven from **or why no outside
+exists**; `tests/test_exit_criteria_2c.py` binds all of that to the collected suite. **The table
+below is the reasoning; the record is the part a test can hold**, and neither restates the other.
+
+| # | criterion | verdict | reading |
+|---|---|---|---|
+| 1 | `fit` warm-starts exactly the cells `x0_valid` marks | **MET** | `theta`, `loglik`, `n_iter` per cell |
+| 2 | The stride moves `fit_hash`; the audit's settings do not | **MET** | the `fit_hash`, both directions |
+| 3 | A decimated pass 1 fits exactly the `isel` points and resumes | **MET** | the bitmap and the fitted index set |
+| 4 | The source map is identical at two tile sides | **MET** | element by element, not summary statistics |
+| 5 | A coarse point's source is itself at radius 0 | **MET** | the recorded source index |
+| 6 | An incomplete or mismatched pass-1 store refuses pass 2 | **MET** | the refusal message |
+| 7 | A two-pass run is bitwise identical across two budgets | **MET** | `/signal/` bytes |
+| 8 | A killed-and-resumed pass 2 is bitwise identical | **MET** | `/signal/` bytes |
+| 9 | `N2` is matched per cell and reproduces under its seed | **MET** | the per-cell magnitude, and the fingerprint |
+| 10 | The audit emits no pooled figure and withholds visibly | **MET** | the report's own contents |
+| 11 | `κ` bins by the cold arm | **REDUCED SCOPE** | binning unchanged under a warm-arm perturbation |
+| 12 | The warm-start saving at production length ≥ 30% | **REDUCED SCOPE** | iterations and wall clock, both named |
+
+> **AND 2b's CRITERIA 6 AND 7 STAY FAILED.** 2c did not reopen the residency model and **must not
+> be read as having done so.** The check is not a sentence here: `test_the_two_inherited_criteria
+> _are_read_out_of_2bs_record_and_still_failed` **reads the verdicts out of
+> `PHASE_2B_EXIT_CRITERIA` by number**, so 2c cannot be credited with a repair it did not make and
+> a renumbering fails loudly. `PUBLISHED_TILE_SIDE`, `HEADROOM_FRACTION`,
+> `resident_bytes_per_series`, `output_slot_bytes` and `SVD_CHUNK_SERIES` are all untouched.
+
+#### THE TWO REDUCED-SCOPE VERDICTS, AND WHAT WOULD CLOSE EACH
+
+**CRITERION 11 — the binning is met and the AXIS is degenerate on the population it stratifies.**
+`optimize.HESSIAN_COND_LIMIT` is `float(EPS) ** -0.5`, which **is** D9's first `κ` boundary, and a
+fit above it reports `DEGENERATE_HESSIAN` and leaves the both-OK intersection. So bins
+`[2²⁶, 2⁵²)` and `≥ 2⁵²` are **unreachable by construction**, and `undefined` was **empty in
+fact** — 8 live cells, all in the first bin, measured 2026-08-29. **CLOSER: none is needed and
+none is proposed.** The report ships `unreachable_kappa_bins` beside the boundaries so the
+emptiness reads as selection rather than as a finding about the field, which is what (a2b)'s
+zero-count register asks for. **Re-cutting D9's boundaries to make the axis discriminate would be
+choosing a stratification with the audit's answer in view** — the one thing D9's fixed-constant
+rule forbids.
+
+**CRITERION 12 — met at production length ON THE SPIKE HARNESS, not on the shipped mechanism.**
+42.28% ± 0.94% of iterations and 45.90% of wall clock at `N = 630`, 2026-08-23. **The harness chose
+its own warm source; the shipped path goes through `source_map`'s nearest-valid spiral, and which
+neighbour a point starts from is what sets its iteration count.** Three obstacles, each
+independently sufficient, all measured or named at Task 8's pre-flight rather than estimated:
+
+1. **21 s per point per arm at `N = 630`** (measured, B = 8 and B = 16; one candidate is no
+   cheaper at 23.9 s). The smallest non-degenerate `k = 8` lattice is 12 × 12 → **1.7 hours**;
+   a credible 16 × 16 is 3.0 and a 3 × 3 coarse lattice is 6.7. **The whole suite is 39 minutes.**
+2. **No spatially coherent production-length fixture exists.** Every two-pass fixture in `tests/`
+   is `standard_normal` over the grid, and **(h)** says a field of independent draws would measure
+   nothing. The spike's coherent field was in a harness that is not in the tree.
+3. **The saving is 7.80 / 31.73 / 42.28% at `N = 96 / 384 / 630`**, so an affordable length
+   measures a **different** number rather than a weaker one.
+
+**WHAT IS ESTABLISHED HERE IS THE SIGN**, on a coherent field at short record length, through the
+whole shipped path — `test_criterion_12_the_shipped_mechanism_saves_iterations_on_a_coherent_field`.
+**That is the difference between *"not measured"* and *"inert"***, which the table would otherwise
+render identically, and it catches the (a2c) failure at the level of the whole mechanism: warm
+starts computed, stored, read back and **not passed to `fit`** leaves every report count saying
+`warm_started`, because those counts come from the source map and not from the optimizer.
+**Measured as a mutant, and caught.** **One premise of the harness figure's transfer is checked
+rather than assumed:** the store's `theta_unconstrained` is **float64** — alone among the theta
+arrays — so the warm start round-trips bitwise.
+
+**CLOSER: 2d, the simulated-field benchmark.** It owns the coherent field, which is the one thing
+criterion 12 needs and which no 2c task had a reason to build.
+
+#### WHAT 2c DID NOT DO, EACH WITH ITS CONDITION
+
+Unchanged from the plan's own list and **not re-argued**: the modelling sub-phase (closed
+2026-08-22, re-taken 2026-08-23 on closed facts), `--explain`'s printing (Phase 5), the Whittle
+screening pass (Phase 4, refused at layer 3 with a message naming the missing engine),
+nested-model chaining within a point (same hysteresis pathology in a different axis, needs its own
+audit), a multi-level V-cycle (§11.1 allows it if one level proves insufficient; one level has
+not), and **anything on real altimetry — the condition D1 is authorized under, not a task 2c
+declined.**
+
+**AND ONE THING 2c ADDED TO THAT LIST: the audit's point selector.** Open question 21. §11.2's
+stratified subsample is **not constructible** for the population Task 6 moved the audit to, because
+every difficulty proxy it names is post-fit. **No selector ships**, `audit.subsample` and
+`audit.stratify` still have no consumer, and that is a decision rather than an omission — a
+plausible-looking uniform sampler behind a `stratify` flag would be (a2) exactly.
+
+#### THE OPEN QUESTIONS AT THE CLOSE, WITH THEIR CLOSERS
+
+| # | question | closer |
+|---|---|---|
+| **20** | What else is uniform across all sixteen input fixtures and unconstrained by the contract? | **coordinate monotonic direction first** — a decreasing latitude axis is the ordinary case in real altimetry and yields a *plausible* answer rather than an error. The durable fix is the **first differently-shaped fixture**, not the corrected call site |
+| **21** | How does the audit select its points? | **measure whether a PRE-FIT proxy predicts the post-fit ones.** Every 2c fixture can answer it now that `FitResult` publishes both sides. If it does, route (a) is buildable; if not, the question closes as *"not constructible, and here is the measurement that says so"* |
+| **19** | Does a HIGH stall reading invalidate an RSS measurement? | inherited from 2b, unchanged; the counter is per-cgroup and cannot tell a measurement that allocates hard from one being squeezed |
+
+**AND THE UNOWNED DEFECT IS STILL UNOWNED, AND STILL NOT 2c's.** `tiling.py` requires the spatial
+dims to be literally `y` and `x` in **four** places while stage 4a requires only that `time` is
+first — so a `latitude`/`longitude` input **passes the contract and dies in assembly without exit
+code 4**, and **stage 4a's own message already calls the contract positional**, so the message and
+the implementation disagree today. Two closers, both scope decisions. **It is named at the close
+rather than carried silently into 2d**, because it is the same class of fault as open question 20
+and the two will be cheapest to fix together.
+
+#### WHAT 2d INHERITS
+
+**THE HYSTERESIS AUDIT EXISTS NOW, SO 2d IS THE THING THAT MAKES ITS NUMBERS MEAN SOMETHING.**
+2c built the arms, the strata and the report; **every one of them has been run only on fixtures
+whose coherence is a construction parameter, at record lengths that do not describe production.**
+
+| what 2d owns | why it lands there and not in 2c |
+|---|---|
+| **The coherent simulated field, at production length** | criterion 12's closer, and the audit's own. Both need one artifact and neither task had a reason to build it alone |
+| **Criterion 12's magnitude, on the shipped mechanism** | 1.7–6.7 hours of compute against a 39-minute suite. It is a benchmark, not a test |
+| **The audit's first real numbers** | Task 7's report has been run on 8 live cells. **Every stratum was under the 30-member floor, so every rate was withheld** — the machinery is exercised and has measured nothing yet |
+| **Open question 21's measurement** | the pre-fit-proxy correlation, which needs the same field |
+
+> **AND THE STANDING LIMITATION SURVIVES 2c UNCHANGED, WHICH IS THE MOST IMPORTANT LINE HERE.**
+> **NO 2c NUMBER COMES FROM REAL DATA.** Warm-starting was authorized on a simulated field whose
+> spatial coherence is a **construction parameter**; the spatial coherence of real altimetry optima
+> has **never been measured**; weaker coherence gives a **smaller** saving, and **§11.2's 30%
+> threshold could fail on real data.** **2d does not close this** — a simulated benchmark is a
+> better simulation, not a measurement of the ocean. **The named closer is still a spike on a real
+> gridded product**, same three arms, same record-length lever. **And since 2026-08-24 every 2c
+> saving is a CEILING rather than an estimate**, because the instrument searched with no effective
+> spiral bound.
+
 ### What plan Task 7 established (done 2026-08-29 — read before quoting any audit number, or the `κ` axis)
 
 **`batch/audit_report.py` turns four arms into per-stratum numbers and nothing quotable without
@@ -8784,9 +8981,16 @@ question; compute/bandwidth roofline pair for cross-machine prediction) are in d
   **THE ARTIFACT IS INTRINSIC AND WAS NOT REMOVED, DELIBERATELY.** Sourcing coarse points from
   the nearest *other* coarse point puts their source `k` cells away against a fine-point mean
   radius of 2.556 — **the "fix" inverts the artifact and makes the coarse points the
-  worst-sourced in the field.** *A repair that relocates rather than removes.* **The source
+  worst-sourced in the field.** *A repair that relocates rather than removes.* ~~**The source
   coarse index is stored per point** precisely so this is **testable** — filter to self-sourced
-  points and the lattice is identifiable directly. See
+  points and the lattice is identifiable directly.~~ **STRUCK 2026-08-29 AT TASK 8: IT IS NOT
+  STORED.** Task 5 refused to carry it — 160 MB at 10⁷ points with two candidates, against the
+  invariant that peak RAM is derivable from the memory budget alone — and the correction was
+  recorded at D12 and **not swept to here**, which is (a6) at a gotcha. **The replacement
+  instrument is exact rather than approximate**: a point is coarse iff `y % k == 0 and x % k == 0`,
+  which is arithmetic on the stride, and it sources itself exactly when pass 1's own
+  `/status/outcome` is `OK` there. `test_criterion_5_a_coarse_points_recorded_source_on_disk_is_itself`
+  is that instrument. See
   [D12](#d12--every-pass-2-point-warm-starts-from-its-nearest-valid-coarse-source-coarse-points-included-the-lattice-artifact-is-intrinsic-bounded-and-recorded).
 
 - **FULL-LOG RETENTION PAID ONE TASK AFTER IT WAS WIRED, AND CI IS WHERE IT PAID.** There are now
