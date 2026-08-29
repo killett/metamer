@@ -1720,3 +1720,168 @@ measured them. `AuditReport` is the same construction and reads as one.
 - **A hand-built decimal-year axis.** Task 6's fixture fact, unchanged: `2000 + i * 31/365.25` moves
   `θ̂` by **6.7e-05 relative** against `to_decimal_years`, and the conversion is under
   `ALGORITHM_VERSION`. **Every fixture takes its axis from the input.**
+
+---
+
+## Plan Task 8 — the 2c exit-criteria suite, audited before any code
+
+**THE BRIEF** is the plan's Task 8: one suite, twelve criteria, **each naming its reading**;
+**an independent check and not a roll-up** — driven from outside wherever an outside exists;
+2b's criteria 6 and 7 stay **FAILED** and stay visible; and then 2c closes with every criterion's
+verdict, the deferred ones' closers, the open questions, the unowned defect, and what 2d inherits.
+
+### CRITERION 12 CANNOT BE MEASURED IN THIS TASK, AND THE PRICE IS MEASURED RATHER THAN ESTIMATED
+
+**This is the finding that decides what Task 8 can honestly close 2c on**, and it has **three
+independently sufficient** obstacles. Any one of them would be enough.
+
+**1. THE COST, MEASURED TODAY (2026-08-29).** A cold `fit` at `N = 630` over the shipped candidate
+set `["white", "white + matern12"]`:
+
+| batch | wall clock | per point | mean `n_iter` |
+|---|---|---|---|
+| 8 | 184.6 s | **23.1 s** | 23.2 |
+| 16 | 336.1 s | **21.0 s** | 20.2 |
+
+**Dropping to one candidate does not help**: `white + matern12` alone measured **23.9 s/point**
+(the `white` candidate is nearly free at 1.2 s/point, and removing it *raised* `n_iter` from 20.2
+to 44.5 on a white-noise fixture). So **~21 s per point per arm** is the floor.
+
+Criterion 12 needs a warm arm and a cold arm over one point set, at `k = 8`, on a lattice with
+more than one coarse point — or every fine point sources the same optimum and the nearest-valid
+search is not exercised. **The smallest such grid is 12 × 12** (coarse at `{0, 8}²`, four sources):
+`144 × 21 s × 2 arms ≈` **1.7 hours**. A credible 16 × 16 is **3.0 hours**; a 3 × 3 coarse lattice
+needs 24 × 24 and is **6.7 hours**. **The whole suite's budget today is 39 minutes.**
+
+**2. THE FIXTURE DOES NOT EXIST, AND (h) NAMES EXACTLY THIS.** *"A field of independent draws
+would measure nothing."* Warm-starting pays only where neighbouring optima are close, so the
+measurement needs a **spatially coherent** field. **Every two-pass fixture in `tests/` is
+`np.random.default_rng(3).standard_normal((24, n_y, n_x))`** — independent draws, zero coherence,
+at `N = 24`. The warm-start spike's coherent field lived in a harness that **is not in the tree**
+(recorded at the 2c brainstorm's own pre-flight as *"the mechanism is implemented in the harness
+and nowhere else"*). **A saving measured on any existing fixture would be a measurement of the
+store round-trip.**
+
+**3. ANY AFFORDABLE RECORD LENGTH MEASURES THE WRONG REGIME.** The saving runs **7.80 / 31.73 /
+42.28%** at `N = 96 / 384 / 630`. §11.2's threshold is 30%, cleared only at 630 and barely at 384.
+**The primary fixture measured the wrong regime once already and said *drop it*.** A cheap run at
+short `N` does not produce a weaker version of criterion 12's number; it produces a different
+number.
+
+> **SO THE VERDICT IS `MET_WITH_REDUCED_SCOPE`, AND THE SCOPE NAMES THE GAP EXACTLY:** met at
+> production length **on the spike harness** — 42.28% ± 0.94% of iterations and 45.90% of wall
+> clock, 2026-08-23 — and **not re-measured on the shipped mechanism**. The two differ in the one
+> place that matters: **the harness chose its own warm source**, while the shipped path goes
+> through `source_map`'s nearest-valid spiral, and *which* neighbour a point starts from is
+> exactly what sets its iteration count.
+>
+> **ONE PREMISE OF THE TRANSFER IS CHECKED RATHER THAN ASSUMED:** the store's
+> `theta_unconstrained` is **float64** — alone among the theta arrays, which are float32 — so the
+> warm start round-trips bitwise and the shipped path hands the optimizer the same `x0` a harness
+> would. That closes the *representation* question and leaves the *choice of neighbour* open.
+>
+> **THE CLOSER IS 2d AND IT IS NAMED RATHER THAN LEFT OPEN**: the simulated-field benchmark. It
+> owns the coherent field, which is the one thing criterion 12 needs and no task in 2c had a
+> reason to build.
+
+### (i2) AND CRITERION 12's POSITIVE CONTROL IS CHEAP, OWED, AND SEPARATE FROM ITS MAGNITUDE
+
+**A reduced-scope verdict on a magnitude is indistinguishable from an inert mechanism unless the
+direction is checked.** *"We could not measure the saving"* and *"the mechanism does nothing"*
+produce the same table row.
+
+**So the direction is measured here, on a coherent field, at a short record length** — where the
+spike measured **+7.80%** and where §11.2's threshold explicitly does **not** apply. The fixture is
+a smoothly varying parameter field rather than independent draws, which is the thing (h) says every
+existing fixture lacks. **It asserts a sign and never a magnitude**, and the criterion's own scope
+says so, so no reader can quote it as the 30% figure.
+
+### THE SUITE MUST NOT BE A ROLL-UP, AND FIVE CRITERIA TODAY HAVE AN OUTSIDE NOBODY HAS DRIVEN
+
+**A criterion satisfied by calling the same helper the implementing task's test called verifies
+nothing new.** Audited against the collected suite:
+
+| # | today's evidence | is it outside? | the outside it gains |
+|---|---|---|---|
+| 1 | `test_x0_valid_selects_...`, `test_an_invalid_cell_is_bit_identical_...` | **no** — both call `fit` directly | a real two-pass run's stored `theta`/`n_iter` at the cells the source map marked invalid, against a plain cold run |
+| 2 | `test_the_warm_start_coarse_stride_moves_fit_hash`, `test_every_audit_setting_moves_run_hash_and_neither_gate` | **no** — both call `Config`'s own helpers | the `fit_hash` attr read **off written stores** |
+| 3 | `test_a_decimated_run_fits_exactly_the_points_isel_selects`, `test_a_kill_during_pass_one_resumes_pass_one` | **yes** — real runs, bitmap off disk | — |
+| 4 | `test_the_map_is_identical_however_the_grid_is_divided_into_regions` | **no** — calls `source_map` with regions | the **recorded source index arrays** from two runs at two memory budgets |
+| 5 | `test_a_coarse_points_own_source_is_itself_at_radius_zero` | **no** — direct call | the recorded source index on disk after a real run |
+| 6 | `test_barrier.py`'s ten, `test_an_incomplete_pass_one_store_refuses_pass_two` | **partly** — `run_two_pass`, but no CLI | `python -m metamer` in a subprocess: the exit code and stderr, which is what a user gets |
+| 7, 8 | `test_two_budgets_give_the_same_signal_bit_for_bit`, `test_a_killed_and_resumed_pass_two_is_bitwise_identical` | **yes** — real runs, `/signal/` bytes | — |
+| 9, 10, 11 | `tests/test_audit.py`, `tests/test_audit_report.py` | **no outside EXISTS** | the audit has no CLI — Phase 5's `--explain` is where one lands, and *"a flag that parses and does nothing reads as supported"* |
+
+**Five new outside-driven tests are owed** (1, 2, 4, 5, 6) and **three criteria have no outside at
+all**, which is a claim this record states rather than a gap it hides — 2b's `NO_OUTSIDE` constant
+covers a different case (a claim about code shape), so 2c needs its own wording.
+
+**ONE TWO-PASS STORE SERVES SEVERAL.** Task 6 cut its suite 4× by making the store module-scoped;
+building one per criterion is the same defect with a different number.
+
+### THE RECORD'S SHAPE IS 2b's AND ITS VOCABULARY IS NOT
+
+`exit_criteria_2b.ExitCriterion` and `Verdict` are the right shape and **a second spelling of them
+is what (j) warns about**. But `ExitCriterion.reading`'s docstring says *"drawn from `READINGS`"*
+meaning **2b's RSS vocabulary** — *"working set at end of run"*, *"peak"* — and none of 2c's
+readings is an RSS reading. **The shape is imported; the vocabulary is 2c's own**, and 2b's
+docstring is generalized to *"the sub-phase's own `READINGS`"*, which changes no behaviour because
+2b's test binds against 2b's tuple explicitly.
+
+**AND 2c's RULE IS STRICTLY STRONGER THAN 2b's.** 2b asserts *"a reading, or a statement that it
+has none"*, and only **4 of 16** criteria were about a measured quantity. **Every one of 2c's
+twelve names a reading** — that is the plan's stated first requirement — so 2c's binder asserts
+`reading is not None` for **all twelve**, with no exempt list. An exempt list would be (c5) again:
+a gate written as an enumeration of the members that happened to exist.
+
+### (c5) THE TWO INHERITED FAILED CRITERIA ARE BOUND TO 2b's RECORD, NEVER COPIED
+
+*"2b's criteria 6 and 7 stay FAILED"* has an obvious wrong implementation: two booleans in 2c's
+record. **A copy drifts, and the drift is silent in exactly the direction that matters** — 2c would
+go on asserting they failed after somebody fixed them, or stop asserting it after somebody
+renumbered them.
+
+**The check imports `PHASE_2B_EXIT_CRITERIA` and reads the verdicts out of it.** That is the same
+construction 2b used to stop its own criterion 6 going stale, applied one sub-phase later: the
+sentence is attached to something. **And it looks them up BY NUMBER and requires both to be
+found**, so a renumbering fails loudly rather than silently selecting a different criterion.
+
+### (a4) RECOMPUTE THE COUNT: TWELVE, AND THE INHERITED TWO ARE NOT 13 AND 14
+
+The plan's table is **twelve rows, numbered 1–12.** The two inherited criteria are **2b's**, keep
+**2b's numbers 6 and 7**, and are referenced rather than re-listed. **Numbering them 13 and 14
+inside 2c's record would give two criteria two numbers each**, and a later reader reconciling the
+two sub-phases' tables would find four criteria where there are two. Recorded because a count wrong
+by two is not visible in any output either record produces.
+
+### (c6) THE BINDER IS WRITTEN AGAINST THE RECORD AND THE SCAN IS 2b's
+
+`test_every_criterion_names_evidence_that_exists` already parses every `tests/test_*.py` with `ast`
+— **a static scan and not the session's item list**, deliberately, so `pytest -k` cannot make the
+binding fail for an unrelated reason. **Reused, not rewritten**: a second scanner is a second
+definition of *"the evidence exists"*, and the two would disagree the first time either grew a
+case.
+
+### WHAT WOULD MAKE THIS TASK'S TESTS VACUOUS, NAMED IN ADVANCE
+
+- **A record whose `established_by` names tests that exist but do not establish the criterion.**
+  The binder checks **existence**, which is all a static scan can check. **It is a guard against
+  drift, not a proof of relevance**, and saying so here is the honest bound on what the suite
+  claims. The relevance is carried by each criterion's `statement` sitting beside its names.
+- **An "outside" that is the same derivation in a second interpreter.** A subprocess around the
+  same call is not an outside; 2b's `NO_OUTSIDE` says so in as many words. **Every outside claimed
+  here is a read of BYTES ON DISK or a process exit code**, neither of which shares a call path
+  with the thing under test.
+- **A criterion-1 fixture where the source map marks nothing invalid.** The comparison is then over
+  an empty set and passes vacuously. **The fixture forces exhaustion** — a spiral bound of 1 with a
+  block of land — and asserts that at least one cell is invalid before comparing.
+- **A criterion-4 fixture at one tile side.** Two budgets that derive the same side make the
+  comparison a statement about two identical traversals. `test_twopass.py` already derives two
+  budgets giving sides 6 and 10 **and asserts both halves**; reuse those, do not re-derive them.
+- **A criterion-2 fixture where the two stores differ in more than the stride.** The `fit_hash`
+  would move for a reason the criterion is not about. **One config, one field changed.**
+- **A saving measured on independent draws.** (h), and it is why criterion 12's positive control
+  gets a coherent field of its own rather than reusing any fixture in the tree.
+- **A hand-built decimal-year axis.** Unchanged from Tasks 6 and 7: `2000 + i * 31/365.25` moves
+  `θ̂` by **6.7e-05 relative** against `to_decimal_years`, and the conversion is under
+  `ALGORITHM_VERSION`.
