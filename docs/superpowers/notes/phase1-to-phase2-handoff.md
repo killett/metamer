@@ -448,6 +448,30 @@ at `4` coarse steps and a run at `4` fine cells share a `fit_hash`, resume into 
 silence ambiguous, which is (a0)'s third register. The unit is fixed by the specification and the
 conversion (`max_fine_radius = spiral_bound * stride`) happens once, where it is named.
 
+#### (a2d) AT A STORED ARTIFACT: THE PRODUCING CONFIGURATION IS PART OF THE ARTIFACT'S IDENTITY
+
+> **When a measurement is too expensive to re-run, its RECORDED OUTPUT becomes the thing later
+> checks assert against — and a recorded output is only a current claim while the configuration
+> that produced it is still current.** Store the producing configuration **in** the artifact, and
+> make the check that reads it **fail** when a named default has since moved.
+
+The register above is about a value whose unit is not recorded. This is the same defect one level
+out: **a whole artifact whose producing conditions are not recorded**, where the number is right
+and the question it answers has changed underneath it. **A stale report and a current one are the
+same bytes**, exactly as `4` coarse steps and `4` fine cells were.
+
+**IT ARRIVES WHENEVER A MEASUREMENT CANNOT BE A TEST.** Phase 2d's benchmark is 27 hours against a
+47-minute suite, so its exit criteria assert against **committed rung reports** rather than
+against runs. That is the only affordable structure, and it is sound **only** because each report
+carries its instrument block — the estimator's name, `coarse_stride`, `spiral_bound`, the reach in
+fine cells, the candidate set with its `spec_hash`es, `ALGORITHM_VERSION`, the record length and
+the geometry — **and the suite fails if any of them no longer matches the current default.**
+
+**WITHOUT THAT CHECK THE PATTERN IS STRICTLY WORSE THAN HAVING NO CRITERION**, because a report
+that outlives its configuration goes on passing: the criterion keeps reporting green about a
+question nobody is asking any more. **The expensive measurement is what makes the artifact
+necessary; the instrument block is what makes it honest.**
+
 #### AND (a2) AT THE INSTRUMENT: A GATE CAN BE BLIND BY CONSTRUCTION AND PASS EVERY TEST
 
 > **A gate must be validated against a KNOWN-BAD reading, not merely against a known-good one

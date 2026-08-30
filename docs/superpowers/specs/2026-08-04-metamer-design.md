@@ -2830,8 +2830,36 @@ recorded in Phase 2; `--explain` only prints them.
 
 ### Phase 6 — validation suites
 
-Simulation-recovery benchmark including the spatial-field hysteresis measurement and the
+Simulation-recovery benchmark ~~including the spatial-field hysteresis measurement~~ and the
 ML/REML sweep; external cross-validation against Hector / CATS / `est_noise`; README figures.
+
+**Amended 2026-08-30, at Phase 2d's plan review. This sentence held a retired claim and it was
+found only when 2d went looking for §16.2 item 4's owner** — (a6), and the fourth route to the
+same shape.
+
+> **§16.2 ITEM 6 — the spatial-field hysteresis measurement — IS PHASE 2d's, NOT PHASE 6's.** The
+> sub-phase split decided that on 2026-08-11 (PROGRESS.md's Q11) and **this line was never
+> amended**, so the design doc and the sub-phase table have disagreed for nineteen days. **The
+> design doc is authoritative on intent and the intent is not in dispute**; what moved is *when*,
+> and a dated decision supersedes an unamended plan line.
+>
+> **THE SPLIT, STATED SO IT CANNOT DRIFT AGAIN:**
+>
+> | | Phase 2d | Phase 6 |
+> |---|---|---|
+> | §16.2 items **1–5** | — | selection accuracy, parameter recovery, trend-uncertainty calibration, **misspecification (item 4, and its README figure)**, ML vs REML |
+> | §16.2 item **6** | **the fields, the arms, the smear width, and its README figure** | — |
+>
+> **ITEM 6's FIGURE SHIPS WITH ITEM 6's MEASUREMENT, and that follows from Phase 5's own rule
+> rather than from convenience:** *measure in the phase that can, print in the phase that
+> shows* exists because a measurement built twice produces two versions that disagree. **A figure
+> is a measurement with a caption**, so deferring item 6's figure to Phase 6 would either defer
+> the number with it or duplicate the derivation. **Item 6 attaches the figure to the measurement
+> in its own text**, which is the same argument arriving from the other side.
+>
+> **Phase 6 keeps items 1–5, their figures, and the cross-validation.** 2d **reserves** item 4's
+> position in the README beside its own figure and **states the absence**, so a reserved position
+> is not read as a completed one.
 
 ---
 

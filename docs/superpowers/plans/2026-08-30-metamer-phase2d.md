@@ -30,6 +30,11 @@ else in §16.2.** Items 1–5 (selection accuracy, parameter recovery, trend-unc
 misspecification, ML vs REML) **are a sub-phase in themselves and are not 2d's.** Stated here
 because without the sentence 2d absorbs a selection-accuracy sweep.
 
+**Items 1–5 belong to PHASE 6 (validation suites), and §17's Phase 6 line claimed item 6 as well
+until 2026-08-30.** Q11 assigned item 6 to 2d on 2026-08-11 and the line was never amended; it is
+corrected in the design doc with the split stated as a table. **Found by asking who owns item 4**,
+which is why Task 8's reservation has to name an owner rather than merely a gap.
+
 **§16.2's own framing settles a question this plan would otherwise have had to:** the
 simulation-recovery benchmark is *"slow, stochastic, tolerance-banded… run on demand; in CI only at
 small N. Emits a reproducible report."* **So 2d's measurements are a benchmark, not a test.** They
@@ -574,6 +579,12 @@ that makes the smoothness claim credible."*
 - **§16.2 says the figure goes next to the misspecification figure. That figure is §16.2 item 4 and
   is not 2d's.** The smear figure ships; **the position is reserved and the absence is stated**
   rather than silently dropped, so a later reader does not conclude item 4 was done.
+- **THE RESERVATION NAMES WHAT WOULD FILL IT AND WHO OWNS IT: §16.2 item 4, the misspecification
+  figure, owned by PHASE 6 (validation suites).** **A reserved position with a named owner is a
+  plan; one without is a gap wearing a plan's clothing.** **And naming the owner found a defect:**
+  §17's Phase 6 line claimed the spatial-field hysteresis measurement for Phase 6 while Q11 had
+  assigned it to 2d on 2026-08-11, and **the line was never amended.** Corrected in the design doc
+  at its source, with the item 1–5 / item 6 split stated as a table so it cannot drift again.
 - **Plotting follows the project's colormap conventions.**
 - **The README's existing two-pass section is swept for claims this task falsifies**, per (a6) — 2c
   Task 7 found a false sentence in that exact section by sweeping for a phrase, and this task adds
@@ -621,7 +632,7 @@ roll-up** — driven from outside wherever an outside exists.
 | 12 | Every audit point stratum at the plausibility rung reports a rate, or its member count with the reason | the report's own `withheld` list |
 | 13 | A number without a rung cannot be constructed | the construction, **both directions** |
 | 14 | OQ21 closes: a **named** pre-fit proxy's correlation with each post-fit proxy | the coefficient, and the name recorded **before** it |
-| 15 | The README carries the smear width with its rung, its floor, and the standing limitation in the caption | the README's own text |
+| 15 | The README carries the smear width with its rung, its floor, and the standing limitation in the caption, **and names §16.2 item 4 and Phase 6 as the reserved position's content and owner** | the README's own text |
 | 16 | The committed reports name an instrument matching the current defaults | the report's instrument block against `Config`'s defaults |
 
 **Criterion 12 can fail, and it is written so that it can.** 384 points across 6 point strata is
@@ -657,7 +668,11 @@ than a broken one.
 - **`tiling.py`'s four name-based dimension sites**, where the contract is positional and **stage
   4a's own message already contradicts the implementation**. Still unowned, still not 2d's — and
   still cheapest to fix alongside open question 20.
-- **Open question 20's uniformity sweep**, coordinate monotonic direction first. **Note that 2d
-  builds the first fixture in this project with a deliberately anisotropic grid**, which is
-  adjacent to OQ20 and does not close it; a decreasing coordinate axis is still untested.
+- **Open question 20's uniformity sweep**, coordinate monotonic direction first. **2d builds the
+  first deliberately anisotropic grid in this project and that closes no part of it: grid SHAPE
+  and coordinate DIRECTION are different degrees of freedom**, so taking it would mean a fixture
+  2d has no other use for, against machinery 2d is not touching — **scope on a shared word rather
+  than a shared mechanism.** And **closing half of it while `tiling.py`'s scope decision is open
+  gives a suite that covers a case the code still gets wrong**, which is worse than the gap. The
+  full reasoning is at the question, decided 2026-08-30.
 - **Any change to the residency model or to a prior sub-phase's exit-criterion verdict.**
