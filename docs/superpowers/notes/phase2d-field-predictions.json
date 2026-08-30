@@ -1,0 +1,119 @@
+{
+  "task": "Phase 2d plan Task 1 -- the field's own iteration count, and the l lever's sign",
+  "written": "2026-08-30",
+  "committed_before_the_harness_ran": true,
+  "why_this_is_a_measurement_and_not_a_test": [
+    "Both readings need real fits over the benchmark geometry at production or",
+    "near-production record length, which is tens of minutes. E7 already settles the shape:",
+    "2d's measurements are a benchmark, not a test, and the exit-criteria suite asserts",
+    "against the COMMITTED ARTIFACT. (a2d)'s artifact register is what makes that sound --",
+    "the artifact carries its instrument block and the check fails when a named default moves."
+  ],
+  "instrument": {
+    "field": "metamer.bench.fields, 32 x 12, boundary at index 16, step w = 0",
+    "candidates": ["white", "white + matern12"],
+    "M": 2,
+    "signal_terms": ["constant", "trend"],
+    "coarse_stride": 8,
+    "spiral_bound": 4,
+    "threads": 1,
+    "host_quiet_check": "gates, on load average < physical_cores - 1; stall recorded, not a gate (open question 19)"
+  },
+  "readings": [
+    {
+      "id": "A",
+      "name": "iterations per point, per rung, at N = 630 -- exit criterion 17",
+      "method": [
+        "A systematic subgrid, every 2nd point on each axis: 16 x 6 = 96 of 384, which covers",
+        "both regimes evenly and includes every coarse index. Fitted through core.fit rather",
+        "than through a full run, because THE ITERATION COUNT IS A PROPERTY OF THE SERIES AND",
+        "THE CANDIDATE SET, NOT OF THE TRAVERSAL -- Task 0 measured the whole non-fit cost of a",
+        "run at under 1%. This is a SAMPLE and is reported as one, with its spread."
+      ],
+      "prediction": [
+        "Iterations per point lands between the two fixtures already measured: 25.3 (Task 0's",
+        "smooth batch) and 40.4 (2c's). The field is matern12 + white like Task 0's, but it",
+        "carries a real model-selection question, which costs iterations."
+      ],
+      "predicted_band_iterations_per_point": [25.3, 40.4],
+      "refuted_from_below": {
+        "when": "iterations per point < 25.3 on both rungs",
+        "reading": [
+          "The field is EASIER than a plain smooth batch despite carrying more structure. The",
+          "budget is comfortable, and the same fact raises the concern the slow test",
+          "test_both_candidates_win_somewhere_on_the_field exists for: a field that converges",
+          "instantly may not be leaving a selection question to answer."
+        ]
+      },
+      "refuted_from_above": {
+        "when": "iterations per point > 55 on the more expensive rung",
+        "reading": [
+          "THE BUDGET CROSSES THE 30 h CEILING. Under Task 0's cost model, per point per arm",
+          "is 2.43 + 0.3236 x iterations; at 55 that is 20.23 s, and 20.23 x 384 x 14.047 =",
+          "30.3 h. THE PRE-DECIDED CUT FIRES: N1 drops to one rung, factor 13.047, giving",
+          "28.2 h. The cut is taken as already decided rather than under time pressure."
+        ]
+      },
+      "how_the_budget_uses_it": [
+        "The LARGER of the two rungs' counts, never the mean and never the convenient one.",
+        "A budget built on the cheaper rung is a budget that overruns on the other."
+      ]
+    },
+    {
+      "id": "B",
+      "name": "the coherence lever's sign, isolated from the contrast",
+      "method": [
+        "TWO FIELDS DIFFERING IN `l` ONLY, with `contrast` held at the easy rung's value. The",
+        "shipped rungs move BOTH levers together (E5's accepted confound), so comparing them",
+        "would measure the composite dial and not `l`. The plan's test asks about `l`, so `l`",
+        "is what varies. Each field is run cold and through run_two_pass at N = 96, and the",
+        "saving is the iteration reduction of pass 2 against its own cold reference.",
+        "N = 96 is where the 2c spike measured a real positive saving of +7.80%."
+      ],
+      "prediction": [
+        "saving(long l) > saving(short l), and saving(long l) > 0. A SIGN AND AN ORDERING,",
+        "never a magnitude: N = 96 measures a different number from N = 630 rather than a",
+        "weaker one, which is obstacle 3 of criterion 12's reduced scope."
+      ],
+      "no_noise_clause_is_needed_and_here_is_why": [
+        "`fit` has no stochastic component -- D7's own reason a cold-versus-cold arm cannot",
+        "exist -- so iteration counts are DETERMINISTIC and the comparison is exact. Task 0",
+        "measured the same fixture returning 405 iterations in every one of five repeats.",
+        "This is the property that let reading 2 of Task 0 survive four instrument defects."
+      ],
+      "refuted_from_below": {
+        "when": "saving(long l) <= saving(short l)",
+        "reading": [
+          "THE LEVER IS A LABEL. E6's first prediction -- the saving rises monotonically with",
+          "`l` -- is dead before the sweep runs, and Task 1's rung design has to change rather",
+          "than the sweep's. This is the premise the whole of 2d rests on."
+        ]
+      },
+      "refuted_from_above": {
+        "when": "saving(long l) >= the self ceiling, 94.53%",
+        "reading": [
+          "The warm arm is reading its own answer back: the source map is handing points their",
+          "own optimum. A source-map defect that would otherwise look like a spectacular",
+          "result -- the sharpest of E6's six clauses."
+        ]
+      },
+      "void_when": {
+        "when": "either field's pass 2 reports zero warm-started cells",
+        "reading": [
+          "The mechanism did not run, so the saving is a measurement of the store round-trip.",
+          "(a2c) at the whole mechanism, which criterion 12's positive control already catches",
+          "in the suite."
+        ]
+      }
+    }
+  ],
+  "what_this_does_not_establish": [
+    "Any magnitude. 2d quotes none -- there is no plausibility rung, because `l` cannot be",
+    "sourced and the obvious proxy is contradicted by 2c's ceiling arm.",
+    "Anything about real altimetry. The standing limitation is unchanged.",
+    "The saving at N = 630. Reading B is at N = 96 and measures a different number.",
+    "Whether the two levers can be separated in the SWEEP. Reading B isolates `l` for this",
+    "one measurement; the sweep still moves both together, and E5 records that confound with",
+    "its follow-up trigger."
+  ]
+}
