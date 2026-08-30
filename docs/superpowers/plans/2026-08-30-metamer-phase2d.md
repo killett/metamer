@@ -246,7 +246,13 @@ before any run**.
   parameters' transition occupies **exactly one cell** (E3).
 - **Geometry is derived from `k`, and the derivation ships with the numbers.** `n_normal = 32` is
   **`4k`**, so an interior line sits **≥ 8 cells from the boundary and outside the coupling
-  range**; `n_parallel = 12` is the **minimum giving two coarse points per axis** at `k = 8`,
+  range**, and **the boundary sits at the midpoint, index 16** — the placement the claim depends
+  on, which was not stated until Task 1's pre-flight. ~~`n_parallel = 12` is the **minimum giving
+  two coarse points per axis** at `k = 8`~~ — **FALSE: the minimum is 9**, verified by
+  enumeration, and the claim went through four documents unmultiplied. **12 is a CHOICE**, for
+  `32 × 12 = 384` points (D9's 6 point strata at 64 each rather than 48) and for **points beyond
+  the last coarse index** — indices 9–11 source from **one side only**, the ordinary case at a
+  real field's edge, which `n = 9` barely exercises. Struck rather than deleted,
   coarse at `{0, 8}`. **A later reader who finds only the numbers will round them.**
 - **`N = 630`** — production length, and the only length at which §11.2's threshold applies. **An
   affordable length measures a different number rather than a weaker one.**

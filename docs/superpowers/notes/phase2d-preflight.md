@@ -214,3 +214,114 @@ seconds and it is stated rather than left for someone to rediscover as a discrep
 not on the warm array's contents — so the two arms that *do* depend on it produce numbers about a
 source map that does not exist. **They are not quoted, and the harness records why** rather than
 emitting them for a reader to find.
+
+---
+
+## Plan Task 1 — the field builder and its sources, audited before any code (2026-08-30)
+
+**THE BRIEF** is the plan's Task 1 plus the five points carried into it at review: the plausibility
+values sourced and cited **before any run** and doubling as the middle rung; `w = 0` recorded as
+the design; the `32 × 12` **derivation** rather than the numbers; criterion 17's iteration count;
+and the axis built by `to_decimal_years`. **Five findings, and the first one narrows a claim E1
+makes.**
+
+### (a2) AND THE STANDING LIMITATION — `ℓ` CANNOT BE SOURCED, AND IT IS THE LEVER THAT MATTERS MOST
+
+**E1's constraint 1 says the plausibility field's parameters are sourced and cited before any run.
+Checked against what a source can actually supply, it is only PARTLY satisfiable, and the
+unsatisfiable part is `ℓ`.**
+
+| the rung's parameter | can it be sourced? |
+|---|---|
+| **`σ_white`, and its geographic contrast** | **partly.** A published, geographically varying gridded noise field exists — Copernicus `SEALEVEL_GLO_PHY_NOISE_L4_STATIC_008_033` — and the along-track 1 Hz measurement-error literature gives levels. **But its VALUES need the product downloaded**, which is real data and outside 2d entirely |
+| **Matérn `ρ` of the residual correlated noise** | **weakly.** SSH wavenumber-spectrum results constrain the *data*; nothing publishes the fitted **noise-model** timescale per point |
+| **`ℓ`, the spatial coherence of the FITTED OPTIMA** | **NO. By the standing limitation, this exact quantity has never been measured** |
+
+**AND THE OBVIOUS PROXY IS ALREADY REFUTED IN THIS PROJECT'S OWN RECORD.** SSH is spatially
+coherent at the mesoscale and DUACS' own covariance model uses prescribed, geographically varying
+decorrelation scales — so "use the data's coherence for `ℓ`" is the natural move. **(i2b)'s worked
+case says exactly why it fails:** the ceiling arm's whole finding was *"the optimum is far less
+spatially coherent than the data is."* **A data-coherence proxy for `ℓ` is not unsupported, it is
+contradicted by the measurement 2c already took.**
+
+> **SO THE PLAUSIBILITY RUNG IS PLAUSIBLE IN `Δ` AND IN PARAMETER MAGNITUDES, AND ITS `ℓ` IS
+> CHOSEN.** That is a **narrowing of E1's constraint 2**, not a violation of it: a magnitude from
+> that rung is *"measured on a field whose noise levels resemble altimetry and whose optimum
+> coherence is a construction parameter"* — which is the standing limitation, arriving one level
+> further in than it was written.
+>
+> **IT MUST BE RECORDED AT THE RUNG AND CARRIED INTO EVERY NUMBER QUOTED FROM IT**, or the
+> magnitude reads as *"measured on a realistic field"* while its most load-bearing parameter was
+> picked. **`Rung.source` becomes a per-parameter field rather than one string**, so an unsourced
+> parameter is visible as unsourced instead of being covered by a citation that applies to a
+> different parameter.
+
+**THE DECISION THIS FORCES IS NOT TASK 1's TO TAKE SILENTLY** and is flagged at the report.
+
+### (a5b) TWO CONSTRAINTS BIND THE RUNG'S PARAMETERS, AND THEY ARE SOLVED TOGETHER
+
+**The rule promoted one task ago, applied at its first opportunity.** The rung's `σ` and `ρ` are
+bound by **E1 constraint 1** (sourced) and by **E2** (the field must populate 6 point strata to 30
+members each). **They are not independent:** if the sourced values make every point
+white-noise-dominated, **every point selects the same candidate**, the winning-candidate axis
+collapses from `M = 2` to 1, and the point strata halve before any margin bin is considered.
+
+**So Task 1 checks both at once, before the values are fixed:** the field must produce **both
+candidates winning somewhere**, and a selection margin that is **not concentrated in one bin**.
+**Which is also criterion 17's neighbour** — the same field property drives the iteration count.
+
+### (j) THE `ℓ`-RECOVERY TEST MUST NOT SHARE THE GENERATOR'S PARAMETERISATION
+
+The plan's test says *"`coherence_length` is measured back out of the truth and matches its
+parameter within a stated tolerance."* **Fitting the same functional form the field was generated
+from makes the oracle a re-derivation of the generator** — (j), and it would pass for a builder
+whose `ℓ` scales the wrong axis.
+
+**The test becomes comparative rather than absolute:** at a **fixed lag**, the truth's spatial
+autocorrelation is **strictly greater** for a larger `ℓ`, across the three rungs. **A monotonicity
+assertion needs no shared functional form, cannot be satisfied by a mislabelled parameter, and is
+the property the sweep actually relies on.** The absolute value is reported and not asserted.
+
+### `Δ` IS NOT WELL DEFINED UNTIL IT IS RELATIVE TO THE WITHIN-REGIME VARIATION
+
+**The field carries smooth variation everywhere AND a step across one boundary.** If the smooth
+variation's range is comparable to the step, **the "sharp boundary" is not sharp in any sense the
+smear estimator can use** — the profile's transition is buried in the profile's own slope.
+
+**Nothing in E3 or E5 states the ratio**, so `Δ` names a contrast whose scale is undefined.
+**`Δ` is therefore defined as a MULTIPLE of the within-regime range of the same parameter**, and
+the ratio is recorded with the rung. **This is (a2d)'s shape at a lever: a magnitude whose unit is
+implicit**, and two rungs could otherwise agree on `Δ = 2` and disagree on what it means.
+
+### (a4) THE `32 × 12` DERIVATION RECOMPUTED — AND HALF OF IT IS FALSE AS STATED
+
+**THE NORMAL AXIS SURVIVES AND IS RESTATED MORE PRECISELY.** `k = 8`, `32 = 4k`. With the boundary
+at the **midpoint, index 16**, the field has **16 cells either side**, so an interior null line can
+be placed **up to 16 cells — two full coarse spacings — from the boundary**, and any line in the
+outer half of either side clears the one-spacing coupling range. **The claim "an interior line
+sits at least 8 cells from the boundary" holds, and the placement it depends on — the boundary at
+the midpoint — was never stated.** It is now.
+
+> ## **AND THE PARALLEL AXIS'S DERIVATION IS WRONG. 12 IS NOT THE MINIMUM; 9 IS.**
+>
+> At `k = 8` the coarse indices on an axis of length `n` are `0, 8, 16, …< n`. **`n = 9` already
+> gives `{0, 8}` — two coarse points.** So do 10 and 11. **The smallest `n` giving two coarse
+> points per axis at `k = 8` is 9, not 12**, and "12 is the minimum giving two coarse points" is
+> false as arithmetic. It was carried through E2, the plan, the harness and the verdict **without
+> anyone multiplying it out** — including me, four times.
+>
+> **12 IS A CHOICE AND IT IS A GOOD ONE, SO THE REPAIR IS THE REASON, NOT THE NUMBER:**
+>
+> 1. **`32 × 12 = 384` points**, which is the count E2 needs to give D9's **6 point strata** a
+>    chance at **30 members** each. At `32 × 9 = 288` the same six strata get 48 apiece at uniform
+>    occupancy instead of 64, against a floor of 30 — **thinner where the design has least
+>    margin.**
+> 2. **Points exist BEYOND the last coarse index.** At `n = 12`, indices 9, 10 and 11 lie past the
+>    coarse point at 8, so their nearest valid source is **behind them on one side only** — a
+>    **one-sided source neighbourhood**, which `n = 9` barely exercises and which is the ordinary
+>    case at any real field's edge.
+>
+> **So the honest statement is: the parallel axis needs at least 9 for the spiral to choose at
+> all, and 12 is chosen for the point count and for the one-sided neighbourhood.** Corrected in
+> E2, in the plan and at the constant, **struck rather than deleted**, because three documents
+> asserted it as a derivation and a reader who finds only the fix cannot tell what was fixed.

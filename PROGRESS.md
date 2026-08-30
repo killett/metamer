@@ -6433,12 +6433,31 @@ from quantiles** (D9), and it is what makes a quoted magnitude quotable.
 
 ### E2 — THE CEILING IS 30 h, THE FIELD IS 32 × 12 AT `N = 630`, AND THE AUDIT RUNS THE WHOLE FIELD AT ONE RUNG
 
-**THE GEOMETRY IS DERIVED FROM `k`, NOT CHOSEN.** **32 along the boundary normal is `4k`**, so an
-interior profile line sits **≥ 8 cells from the boundary and outside the warm start's coupling
-range** — which is what makes E6's free negative control real rather than assumed. **12 across is
-the minimum giving two coarse points per axis at `k = 8`**, coarse at `{0, 8}`; below it every
-fine point sources the same optimum and the nearest-valid spiral is not exercised. **Both numbers
-are `k`.** A later reader will otherwise read `32 × 12` as arbitrary and round it.
+**THE GEOMETRY IS DERIVED FROM `k` — AND ONE HALF OF THE DERIVATION WAS FALSE UNTIL 2026-08-30.**
+**32 along the boundary normal is `4k`**, and **the boundary sits at the midpoint, index 16** —
+a placement this paragraph did not state and which the rest of it depends on — so there are **16
+cells either side** and an interior profile line can sit **up to two full coarse spacings from the
+boundary**, comfortably outside the warm start's coupling range. That is what makes E6's free
+negative control real rather than assumed.
+
+> **~~12 across is the minimum giving two coarse points per axis at `k = 8`.~~ FALSE, AND
+> CORRECTED AT TASK 1's PRE-FLIGHT.** The coarse indices on an axis of length `n` at `k = 8` are
+> `0, 8, 16, …`, so **`n = 9` already gives `{0, 8}`. The minimum is 9, not 12** — verified by
+> enumeration. The claim was carried through E2, the plan, the harness and Task 0's verdict
+> **without anyone multiplying it out.** (a4), on a worked example this project asserted as a
+> derivation.
+>
+> **12 IS A CHOICE AND THE REASON REPLACES THE FALSE ONE.** (i) **`32 × 12 = 384` points**, which
+> is what gives D9's **6 point strata** a chance at **30 members** each — at `32 × 9 = 288` they
+> get 48 apiece rather than 64, thinner exactly where the design has least margin. (ii) **Points
+> exist beyond the last coarse index**: at `n = 12`, indices 9–11 lie past the coarse point at 8,
+> so their nearest valid source is **behind them on one side only** — a **one-sided source
+> neighbourhood**, which `n = 9` barely exercises and which is the ordinary case at any real
+> field's edge.
+>
+> **So: the parallel axis needs ≥ 9 for the spiral to choose at all; 12 is chosen for the point
+> count and the one-sided neighbourhood.** Struck rather than deleted — three documents asserted
+> the false version, and a reader who finds only the fix cannot tell what was fixed.
 
 **THE AUDIT'S FOUR ARMS WERE BEING MULTIPLIED BY THE SWEEP FOR NO REASON, AND THAT IS THE WHOLE
 BUDGET.** The three deliverables consume different things:

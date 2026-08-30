@@ -20,7 +20,7 @@ gate on Task 1 survives the move.
 | # | reading | why |
 |---|---|---|
 | 1 | per-point-per-arm cost through `fit`, `M = 2`, `N = 630`, with repeats | the budget's unit. The inherited figure is two single runs with no spread |
-| 2 | N1's cost against cold's, with `self` as the positive control | N1 is not in the 12.048 factor. If it costs a full arm it needs a rung allocation |
+| 2 | N1's cost against cold's, with `self` as the positive control | N1 is not in the 12.047 factor. If it costs a full arm it needs a rung allocation |
 | 3 | the `run`-to-`fit` per-point ratio at short `N`, on 2d's own geometry | **bounds** the gap between the unit measured and the unit spent -- (j6) |
 
 **READING 2 IS A NULL AND ITS CEILING ARM IS LOAD-BEARING.** "N1 costs what
@@ -122,8 +122,12 @@ FIXTURE_SEED = 20_260_830
 QUIET_SECONDS = 20.0
 
 #: Reading 3's grid is **2d's own geometry** -- 32 along the boundary normal
-#: (4k, so an interior null line clears the coupling range) by 12 across (the
-#: minimum giving two coarse points per axis at k = 8). The per-RUN overhead --
+#: (4k, so an interior null line clears the coupling range, with the boundary
+#: at the midpoint) by 12 across. **12 is a CHOICE, not a minimum -- the minimum
+#: giving two coarse points per axis at k = 8 is 9, and this comment said 12
+#: until Task 1's pre-flight multiplied it out.** 12 buys 384 points, which is
+#: what D9's six point strata need, and points beyond the last coarse index,
+#: which source from one side only. The per-RUN overhead --
 #: validation, opening, store creation, provenance -- amortizes over the point
 #: count, so measuring it at 384 points measures it at 2d's own amortization.
 OVERHEAD_NORMAL = 32
