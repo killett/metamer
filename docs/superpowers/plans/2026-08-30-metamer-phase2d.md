@@ -126,26 +126,49 @@ rests on that nobody has measured. **2c's Task 0 was a whole task and it nearly 
 sub-phase; that is the template.** A verdict whose *"no"* is expensive is a formality only if it is
 taken after the money is spent.
 
+> **THE PRE-FLIGHT MOVED A READING OUT OF THIS TASK, 2026-08-30, BEFORE ANY CODE.** *"Does `ℓ`
+> move the saving?"* needs a field with a coherence parameter, **Task 1 owns the builder, and Task
+> 0 runs first** — so measuring it here means building the field **in the harness**, which is
+> **exactly the fault that made 2c's criterion 12 unmeasurable** and which 2d's entire budget
+> exists to repair. **The check moves to Task 1, on the shipped builder.** The gate survives: the
+> two remaining readings need **no field at all**, so they still gate Task 1 on cost.
+
 **Three readings, and predictions committed before the harness runs.**
 
-- **The per-point-per-arm cost**, at 2d's candidate set, at `N = 630`, on this machine, today. The
-  inherited `21 s` is dated 2026-08-29 and is **a claim to re-measure**, not a constant.
-- **N1's cost against cold's.** **Prediction: equal within the machine's own repeat spread**,
-  because `N1_EPSILON` is a displacement the optimizer cannot distinguish from zero, so N1 starts
-  where cold starts and converges in cold's iteration count.
-- **Does `ℓ` move the saving at all?** At **short** `N` on a **small** lattice — cheap, and a
-  **sign** rather than a magnitude — two `ℓ` settings against one cold reference. **This is the
-  cheapest available check that E5's primary lever is a lever and not a label**, and it is the
-  premise the entire sweep rests on.
+- **The per-point-per-arm cost through `fit`**, at 2d's candidate set (`M = 2`), at `N = 630`, on
+  this machine, today, **with repeats**. The inherited `21 s` is dated 2026-08-29 and is **a claim
+  to re-measure**. **It is also two single runs with no spread**, so the refutation clauses below
+  are stated against the **measured** spread rather than against round numbers — (i9): a band
+  narrower than the machine's own jitter cannot express its condition.
+- **N1's cost against cold's.** **Prediction: equal within the measured repeat spread**, because
+  `N1_EPSILON` is a displacement the optimizer cannot distinguish from zero, so N1 starts where
+  cold starts and converges in cold's iteration count. **This is a NULL, and it carries the
+  ceiling arm as its positive control** — see the invariants.
+- **The `run`-to-`fit` per-point ratio at short `N`, forced to ≥ 2 tiles.** **The budget's unit is
+  measured on `fit` and spent on `run`:** E2's 12.048 factor counts three full-field `run` passes
+  and a `run_two_pass`, and only `run_arms` is `fit`-shaped. **`run` adds tiling, store writes,
+  assembly and the per-tile barrier.** The overhead is per point and per tile rather than per
+  iteration, so it is a **larger** fraction of a **cheaper** fit — **measuring the ratio at short
+  `N` bounds it from above at `N = 630`** at a fraction of the cost. **(j6): bound the unmeasured
+  region before measuring it.** **The memory budget is forced low enough to produce more than one
+  tile**, or the reading covers store I/O and misses the barrier — a complete-looking table with a
+  row missing.
 
 **Invariants.**
 
 - **All arms in one session, interleaved.** The stride sweep's spurious 15% came from re-running a
   cold arm across sessions; the cost of getting it wrong here is comparability, not drift.
-- **A ceiling arm exists** — `self`, each point from its own `θ̂` — so a null on the third reading
-  is **located** rather than ambiguous between a weak lever, a broken builder and an optimizer that
-  does not respond to its start. **(i2b), and the ceiling arm is the cheapest arm in the design
-  because its input is the cold arm's own output.**
+- **A ceiling arm exists** — `self`, each cell started from its own converged `θ̂`. **It is now
+  reading 2's positive control and it is load-bearing:** *"N1 costs what cold costs"* is
+  byte-identical in the output to *"the iteration counter is not moving"*, to *"both arms silently
+  ran cold"*, and to *"the perturbation never reached the optimizer"*. **If `self` does not
+  collapse iterations, no cost number in this spike may be quoted.** (i2), and (i2b)'s note that
+  the ceiling arm is the cheapest in the design because its input is the cold arm's own output.
+- **The WARM and N2 arms' costs are NOT quoted, and the harness records why.** Reading 2 hands
+  `run_arms` a **fabricated** warm array — N1's start depends on the cold start and the epsilon
+  alone, so a synthetic warm serves it — which means the two arms that *do* depend on the warm
+  array are numbers about a source map that does not exist. **Recorded as unquotable rather than
+  emitted for a reader to find.**
 - **The host quiet check runs first**, and its reading is in the verdict.
 - **The predictions file is committed before the harness runs**, with refutation clauses in **both**
   directions for each of the three. **(i11), which 2c paid for: a one-sided clause could not fire
@@ -156,22 +179,28 @@ taken after the money is spent.
 
 **What refutes each reading, and what each refutation costs.**
 
-- *Cost above ~26 s/point/arm.* The 27.0 h budget becomes 33 h and **the plan is re-costed before
-  Task 1** — by dropping the hard rung's N2 map, not by shrinking the field, because the field is
-  derived from `k` and the audit's floor.
-- *Cost below ~16 s/point/arm.* Also a finding: it means the machine or the candidate set differs
-  from the one the 2c close priced, and **every inherited figure in the saving table is suspect for
-  the same reason.**
+- *Cost above the inherited figure by more than the measured spread, and high enough to put the
+  budget over 30 h.* **The plan is re-costed before Task 1** — by dropping the hard rung's N2 map,
+  **not by shrinking the field**, because the field is derived from `k` and from the audit's floor
+  and neither is negotiable against a machine.
+- *Cost below the inherited figure by more than the measured spread.* **Also a finding**: the
+  machine or the candidate set differs from the one the 2c close priced, and **every inherited
+  figure in the saving table is suspect for the same reason** — they were measured on that machine
+  too.
+- *`self` does not collapse iterations.* **The spike is void.** No cost reading is quotable,
+  because the instrument has not been shown able to tell two arms apart by cost.
 - *N1 costs materially less than cold.* The prediction is wrong and **the reason matters** — it
   would mean the optimizer's first step is not scale-invariant the way `fd_step` assumes, which is
   a finding about `optimize_series` and not about the budget.
 - *N1 costs materially more than cold.* The perturbation is doing something other than displacing
-  the start, and **the N1 arm's whole reading is in question**, including in 2c's four-reading
-  table.
-- *The saving does not move with `ℓ`, and the `self` ceiling is high.* **The builder does not
-  control coherence** — Task 1's problem, caught before Task 1 is written.
-- *The saving does not move with `ℓ`, and the `self` ceiling is also low.* **The plumbing is
-  wrong**, not the field, and no amount of field design fixes it.
+  the start, and **the N1 arm's whole reading is in question** — including in 2c's four-reading
+  table, where N1 non-zero is read as *"the surface is deciding"*.
+- *The `run`-to-`fit` ratio bound comes back above ~1.15.* **The 27.0 h figure is not an upper
+  bound**, E2 is re-costed before Task 1 rather than discovered at Task 5, and the overhead's
+  source — per point or per tile — is the next thing to separate.
+- *The ratio comes back below 1.0.* **The bound is not a bound** and the comparison is measuring
+  something other than the same work twice; the reading is refused rather than reported as a
+  speed-up.
 
 ---
 
@@ -251,6 +280,14 @@ before any run**.
 - *The field opens through the shipped opener and passes stage-4a validation, and a run over it
   fits every point.* Catches a benchmark fixture that is legal only to the benchmark, which is the
   defect that made 2c's spike unable to say anything about the shipped path.
+- *At **short `N`** on a small lattice, a long-`ℓ` field's warm run takes **strictly fewer**
+  iterations than a short-`ℓ` field's, against one cold reference each.* **Moved here from Task 0
+  by its pre-flight**, because measuring it there would have built the field in a harness — 2c's
+  own defect. **A SIGN, never a magnitude**: short `N` measures a different number, not a weaker
+  one. **This is the cheapest check that E5's primary lever is a lever and not a label**, and it is
+  the premise the entire sweep rests on. **It is distinct from the truth-side check above**: that
+  one says the builder controls the *field*, this one says the field moves the *optimizer*, and
+  **conflating them is exactly how a lever becomes a label.**
 - *The time axis is the shipped converter's output.* Catches the 6.7e-05 relative move that reads
   as a floating-point detail.
 - *The plausibility rung's `source` is non-empty, and constructing a rung without one raises.*

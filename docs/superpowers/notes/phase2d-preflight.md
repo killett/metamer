@@ -113,3 +113,104 @@ real but comes from running N1 at **fewer rungs**, not from N1 being individuall
 **And the `21 s` itself is dated 2026-08-29 and is a claim to re-measure**, which is the other half
 of Task 0. A cost 2× the assumed one re-plans the sub-phase rather than delaying it, which is why
 Task 0 gates Task 1.
+
+---
+
+## Plan Task 0 — the pricing and lever spike, audited before any code (2026-08-30)
+
+**THE BRIEF** is the plan's Task 0: three readings — the per-point-per-arm cost, N1's cost against
+cold's, and whether `ℓ` moves the saving — with predictions committed first, a ceiling arm, and
+the host quiet check. **Four findings, and the first one moves a reading out of the task.**
+
+### (a2c) THE THIRD READING NEEDS TASK 1's BUILDER, AND MEASURING IT HERE REBUILDS 2c's OWN DEFECT
+
+*"Does `ℓ` move the saving?"* needs a field with a coherence parameter. **Task 1 owns the builder
+and Task 0 runs before it**, so Task 0 would have to build the field **in the harness** — which is
+**exactly the fault that made 2c's criterion 12 unmeasurable.** The warm-start spike's coherent
+field lived in a script that is not in the tree, so nothing it established transferred to the
+shipped path, and the whole of 2d's compute budget exists to repair that.
+
+**Worse, the verification would be duplicated and the two copies could disagree.** Task 1 ships a
+builder; a harness-side `ℓ` check says nothing about it. **Task 1 would have to re-verify the same
+property on the real builder**, and *"it worked in the spike"* is precisely the sentence 2c's
+close spent a paragraph refusing.
+
+> **THE READING MOVES TO TASK 1 AND THE GATE SURVIVES.** Task 0's remaining two readings **need no
+> field at all** — any batch at `N = 630` prices them — so they still gate Task 1 on cost, which
+> is the gate's whole purpose. **The `ℓ`-versus-saving sign check becomes a Task 1 test on the
+> shipped builder**, at short `N`, asserting a **sign** and never a magnitude. Task 1 already
+> carries the truth-side check that `ℓ` is recoverable from the generated parameters; **these are
+> two different claims** — that the builder controls the field, and that the field moves the
+> optimizer — and conflating them is how a lever becomes a label.
+
+**AND THE RISK THIS DEFERS IS ONE TASK, NOT THE SUB-PHASE.** Discovering at Task 1 that `ℓ` does
+not move the saving costs Task 1; discovering it in a harness would cost Task 1 anyway, and buy a
+number nobody could quote.
+
+### (i2) READING 2 IS A NULL, AND ITS CEILING ARM IS NOW LOAD-BEARING FOR A DIFFERENT REASON
+
+**The prediction is that N1 costs the SAME as cold.** That is an assertion of no difference, and
+*"N1 costs what cold costs"* is byte-identical in the output to **"the iteration counter is not
+moving"**, to **"both arms silently ran cold"**, and to **"the perturbation never reached the
+optimizer"**. The plan attached the `self` ceiling arm to the third reading; **the third reading
+has left and the ceiling arm must stay**, now as **reading 2's positive control**.
+
+`self` — each cell started from its own converged `θ̂` — collapsed iterations by **93.97–94.53%**
+across three record lengths in 2c. **If `self` does not collapse here, no cost number in this
+spike may be quoted**, because the instrument cannot distinguish two arms by cost at all. **(i2b):
+the ceiling arm is the cheapest arm in the design, because its input is the cold arm's own
+output.**
+
+### (j2) THE BUDGET'S UNIT IS MEASURED ON `fit` AND SPENT ON `run`, AND NOTHING HAS CHECKED THE GAP
+
+**The `21 s` was measured through `core.fit` on one batch.** E2's 12.048 factor counts **three
+full-field `run` passes, a two-pass `run_two_pass`, and one `run_arms`.** Only the last is
+`fit`-shaped. **`run` adds tiling, store writes, assembly and the per-tile barrier**, and *"the
+overhead is probably negligible at 21 s a point"* is exactly the sentence a pre-flight exists to
+delete. **A measurement validates the code path the instrument exercises, not the one the formula
+describes.**
+
+**IT IS BOUNDED RATHER THAN MEASURED, WHICH IS CHEAPER AND SUFFICIENT — (j6).** The overhead is
+**per point and per tile**, not per iteration, so it is a **larger** fraction of a **cheaper** fit.
+**Measuring the `run`-to-`fit` per-point ratio at short `N` therefore bounds it from above at
+`N = 630`**, at a fraction of the cost. **The memory budget is set low enough to force more than
+one tile**, or the reading covers store I/O and misses the barrier entirely — which would be a
+complete-looking table with a row missing.
+
+**If the bound comes back above ~1.15, the 27.0 h figure is not an upper bound and E2 is
+re-costed** before Task 1 rather than discovered at Task 5.
+
+### (i10) AND (a9) — THE INHERITED COST HAS NO SPREAD, SO THE REFUTATION CLAUSES HAVE NO SCALE
+
+The plan's clauses are *"above ~26 s"* and *"below ~16 s"*. **The inherited figure is two single
+runs — 23.1 s at `B = 8` and 21.0 s at `B = 16` — with no repeat and therefore no spread**, so
+both thresholds are guesses against an unmeasured quantity, and a reading between them would be
+called agreement on no evidence. **2c's own protocol used three independent repeats per cell.**
+
+**So reading 1 takes repeats and the clauses are restated against the measured spread**, not
+against round numbers. **A band narrower than the machine's own jitter cannot express its
+condition** — (i9), and this project has paid for it once already.
+
+### (a4) THE BUDGET ARITHMETIC, RECOMPUTED BEFORE IT IS DEFENDED
+
+`2.015625 = 1 + 1/64 + 1` for cold plus two-pass; `3 × 2.015625 + 2 × 1 + 1 × 4 = 12.046875`,
+which the plan rounds to **12.048**. `21 × 384 × 12.046875 = 97 146 s = 26.99 h`. **The figure
+stands and the rounding is upward, which is the safe direction for an upper bound.** Recorded
+because the plan quotes `12.048` and the exact value is `12.046875`; **the discrepancy is 9
+seconds and it is stated rather than left for someone to rediscover as a discrepancy.**
+
+### WHAT THIS TASK MEASURES, AFTER THE AUDIT
+
+| # | reading | why it is here |
+|---|---|---|
+| **1** | per-point-per-arm cost through `fit`, at `M = 2`, `N = 630`, **with repeats** | the 27.0 h budget's unit, dated 2026-08-29 and a claim to re-measure |
+| **2** | **N1's cost against cold's**, with **`self` as the positive control** | N1 is not in the 12.048 factor; if it costs a full arm it needs a rung allocation |
+| **3** | the **`run`-to-`fit` per-point ratio at short `N`**, forced to ≥ 2 tiles | **bounds** the gap between the unit measured and the unit spent — (j6) |
+
+**Moved out:** the `ℓ`-versus-saving sign check, to Task 1, on the shipped builder.
+
+**Not measured and stated so:** the WARM and N2 arms' costs. Reading 2 hands `run_arms` a
+**fabricated** warm array, because N1's start depends on the cold start and the epsilon alone and
+not on the warm array's contents — so the two arms that *do* depend on it produce numbers about a
+source map that does not exist. **They are not quoted, and the harness records why** rather than
+emitting them for a reader to find.

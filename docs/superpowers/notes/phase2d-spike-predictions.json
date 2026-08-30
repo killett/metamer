@@ -1,0 +1,164 @@
+{
+  "task": "Phase 2d plan Task 0 -- the pricing spike",
+  "written": "2026-08-30",
+  "committed_before_the_harness_ran": true,
+  "why_this_file_exists": [
+    "(i11): every measurement commits its predictions first, with refutation clauses in BOTH",
+    "directions. 2c paid for this: S2 held harder than predicted and its one-sided clause could",
+    "not fire, so a result that should have been informative was recorded as agreement.",
+    "A prediction written after the number is a description."
+  ],
+  "what_moved_out_of_this_task": {
+    "reading": "does the coherence length move the warm-start saving",
+    "moved_to": "plan Task 1, as a test on the shipped builder",
+    "why": [
+      "It needs a field with a coherence parameter and Task 1 owns the builder. Measuring it",
+      "here means building the field in the harness, which is exactly the fault that made 2c's",
+      "criterion 12 unmeasurable -- the warm-start spike's coherent field lived in a script that",
+      "is not in the tree. 2d's whole budget exists to repair that."
+    ]
+  },
+  "inherited_figures_being_re_measured": {
+    "per_point_per_arm_seconds": 21.0,
+    "measured_on": "2026-08-29, core.fit, candidates [white, white + matern12] (M = 2), N = 630",
+    "batch_16_seconds_per_point": 21.0,
+    "batch_8_seconds_per_point": 23.1,
+    "caveat": [
+      "Two single runs, no repeat, therefore NO SPREAD. The refutation bands below are stated",
+      "against the spread this spike measures, not against these two points, because a band",
+      "narrower than the machine's own jitter cannot express its condition -- (i9)."
+    ],
+    "self_arm_saving_percent_at_n630": 94.53,
+    "self_arm_source": "2c warm-start spike, the ceiling arm"
+  },
+  "protocol": {
+    "repeats": 3,
+    "arms_in_one_session_interleaved": true,
+    "host_quiet_check_first": true,
+    "threads": 1,
+    "note_on_fabricated_warm": [
+      "Reading 2 hands run_arms a synthetic warm array. N1's start is the cold start displaced",
+      "by N1_EPSILON and does not depend on the warm array's contents, so this is sound for N1",
+      "and for cold. The WARM and N2 arms therefore describe a source map that does not exist",
+      "and ARE NOT QUOTED. Recorded here rather than left for a reader to find."
+    ]
+  },
+  "readings": [
+    {
+      "id": 1,
+      "name": "per-point-per-arm cost through core.fit",
+      "conditions": "M = 2, N = 630, B = 16, 3 repeats, 1 thread",
+      "prediction": "mean cold cost per point is consistent with 21.0 s/point/arm",
+      "predicted_band_seconds": [16.0, 26.0],
+      "predicted_repeat_spread_fraction_below": 0.15,
+      "refuted_from_below": {
+        "when": "mean cold cost per point < 16.0 s",
+        "reading": [
+          "The machine or the candidate set differs from the one the 2c close priced. This is a",
+          "finding and not a windfall: EVERY inherited figure in the saving table was measured on",
+          "that machine, so all of them become suspect by the same argument."
+        ]
+      },
+      "refuted_from_above": {
+        "when": "mean cold cost per point > 26.0 s",
+        "reading": [
+          "The 27.0 h budget is understated. E2 is re-costed BEFORE Task 1, by dropping the hard",
+          "rung's N2 map -- not by shrinking the field, which is derived from k and from the",
+          "audit's 30-member floor and is not negotiable against a machine."
+        ]
+      },
+      "void_when": {
+        "when": "repeat spread (max - min) / mean >= 0.15",
+        "reading": "The host is not quiet enough to price anything. No reading here is quotable."
+      }
+    },
+    {
+      "id": 2,
+      "name": "N1's cost against cold's, with self as the positive control",
+      "conditions": "same batch, same session, same repeats as reading 1",
+      "prediction": [
+        "N1 costs what cold costs. N1_EPSILON = fd_step(1.0) = 6.055e-06 was chosen because it",
+        "is a displacement the optimizer cannot distinguish from zero, so N1 starts where cold",
+        "starts and converges in cold's iteration count. N1 is cheap in INTERPRETATION and full",
+        "price in COMPUTE."
+      ],
+      "predicted_n1_over_cold_iterations": [0.90, 1.10],
+      "positive_control": {
+        "arm": "self",
+        "prediction": "self's mean iterations <= 0.25 x cold's",
+        "why_it_is_load_bearing": [
+          "Reading 2 is a NULL. 'N1 costs what cold costs' is byte-identical in the output to",
+          "'the iteration counter is not moving', to 'both arms silently ran cold', and to 'the",
+          "perturbation never reached the optimizer'. Without a demonstrated cost difference",
+          "through the same wiring, the null is a claim about the instrument. (i2)."
+        ]
+      },
+      "refuted_from_below": {
+        "when": "N1 / cold iterations < 0.90",
+        "reading": [
+          "The prediction is wrong and the reason matters: the optimizer's first step would not",
+          "be scale-invariant the way fd_step assumes. That is a finding about optimize_series,",
+          "not about the budget."
+        ]
+      },
+      "refuted_from_above": {
+        "when": "N1 / cold iterations > 1.10",
+        "reading": [
+          "The perturbation is doing something other than displacing the start. N1's whole",
+          "reading is then in question, including in 2c's four-reading table where N1 non-zero",
+          "is read as 'the surface is deciding'."
+        ]
+      },
+      "void_when": {
+        "when": "self / cold iterations > 0.25",
+        "reading": [
+          "THE SPIKE IS VOID. The instrument has not been shown able to tell two arms apart by",
+          "cost, so no cost number here may be quoted -- including reading 1's."
+        ]
+      }
+    },
+    {
+      "id": 3,
+      "name": "the run-to-fit per-point ratio, bounded at short N",
+      "conditions": "N = 96, same candidate set, memory budget forced low enough for >= 2 tiles",
+      "why_a_bound_and_not_a_measurement": [
+        "The budget's unit is measured on core.fit and spent on batch.run. E2's 12.048 factor",
+        "counts three full-field run passes and a run_two_pass; only run_arms is fit-shaped.",
+        "run adds tiling, store writes, assembly and the per-tile barrier. That overhead is per",
+        "point and per tile rather than per iteration, so it is a LARGER fraction of a CHEAPER",
+        "fit -- measuring the ratio at short N therefore bounds it from above at N = 630, at a",
+        "fraction of the cost. (j6): bound the unmeasured region before measuring it."
+      ],
+      "prediction": "ratio of run's per-point wall clock to fit's is in [1.00, 1.15]",
+      "predicted_band": [1.0, 1.15],
+      "refuted_from_above": {
+        "when": "ratio > 1.15",
+        "reading": [
+          "The 27.0 h figure is not an upper bound. E2 is re-costed before Task 1 rather than",
+          "discovered at Task 5, and the overhead's source -- per point or per tile -- is the",
+          "next thing to separate."
+        ]
+      },
+      "refuted_from_below": {
+        "when": "ratio < 1.00",
+        "reading": [
+          "The bound is not a bound and the comparison is measuring something other than the",
+          "same work twice. The reading is REFUSED rather than reported as a speed-up."
+        ]
+      },
+      "void_when": {
+        "when": "the run produced fewer than 2 tiles",
+        "reading": [
+          "The reading covers store I/O and misses the per-tile barrier entirely -- a",
+          "complete-looking table with a row missing."
+        ]
+      }
+    }
+  ],
+  "what_this_spike_does_not_establish": [
+    "Anything about real altimetry. The standing limitation is unchanged and 2d cannot lift it.",
+    "The WARM and N2 arms' costs -- the warm array is fabricated, and they are not quoted.",
+    "Whether the coherence length moves the saving. That moved to Task 1, on the shipped builder.",
+    "The per-tile overhead at N = 630. Reading 3 bounds it from above; it does not measure it."
+  ]
+}
