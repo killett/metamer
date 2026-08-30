@@ -238,9 +238,19 @@ before any run**.
   the benchmark a first-class component. **2c's lesson is the reason this is not a harness: the
   warm-start spike's coherent field lived in a script that is not in the tree, and it is why
   criterion 12 could not be re-measured on the shipped mechanism.**
-- **Three rungs as named constants**, not as call-site literals: `easy`, `plausibility`, `hard`.
-  Each carries `ℓ`, `Δ`, and — for the plausibility rung — **`source`, a citation string recorded
-  before the first fit.**
+- ~~**Three rungs as named constants**: `easy`, `plausibility`, `hard`.~~ **TWO RUNGS ARE BUILT —
+  `easy` and `hard`, both ours to choose by E4 — AND `plausibility` RAISES.** Amended 2026-08-30
+  at this task's pre-flight: **`ℓ` is the coherence of the fitted OPTIMA, published altimetry
+  values describe the coherence of the DATA, and 2c's ceiling arm measured that these differ**
+  (*"the optimum is far less spatially coherent than the data is"*), so the obvious source is
+  **contradicted, not merely absent**. A request for the middle rung raises with a message naming
+  what it would need. **A provisional number in that slot is a claim about the ocean and it would
+  stick** — (a2b) at the one slot where that is a scientific error rather than a placeholder.
+- **`source` is PER PARAMETER, not one string per rung**, so an unsourced parameter reads as
+  unsourced instead of being covered by a citation that applies to a different parameter.
+- **`Δ` is a MULTIPLE of the within-regime range of the same parameter**, and the ratio is
+  recorded with the rung. Otherwise `Δ` names a contrast whose scale is undefined and two rungs
+  agree on `Δ = 2` while disagreeing on what it means — (a2d)'s shape at a lever.
 - **The true parameter field varies smoothly at coherence length `ℓ`**, plus **a step of size `Δ`
   across one boundary at a fixed index along the normal axis.** The step is **a step**: the true
   parameters' transition occupies **exactly one cell** (E3).

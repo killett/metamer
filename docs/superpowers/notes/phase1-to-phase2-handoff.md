@@ -1869,6 +1869,26 @@ and is by construction independent of the mechanism.
 because the treated arm's value is usually the more convenient one to hand. **The question to ask
 is not "which value is better" but "can the treatment move it".**
 
+#### A PREMISE TEST BELONGS WITH THE ARTIFACT WHOSE PREMISE IT IS, NOT WITH THE TASK THAT FIRST DEPENDS ON IT
+
+> **When an early task wants to check a premise about an artifact a later task builds, the check
+> belongs to the LATER task.** Testing it early means building a second implementation of the
+> thing under test — and then the property has been established of the copy.
+
+**Worked instance, Phase 2d, 2026-08-30.** Task 0 was written to answer *"does the coherence
+length move the warm-start saving?"* — the premise the whole sweep rests on, and exactly the kind
+of thing a de-risking spike should front-load. **But the field with a coherence parameter is Task
+1's builder**, so Task 0 would have had to build one in its harness. **That is the fault that made
+2c's criterion 12 unmeasurable**: the warm-start spike's coherent field lived in a script that is
+not in the tree, so nothing it established transferred, and Task 1 would have had to re-verify the
+same property on the real builder anyway — **two implementations, and the reassuring result
+attaches to the wrong one.**
+
+**THE TEST MOVED AND THE GATE SURVIVED**, which is the shape to look for: Task 0's remaining
+readings needed **no field at all**, so it still gated Task 1 on cost. **Check whether the early
+task's other readings stand alone; if they do, moving the premise test costs nothing but a task's
+delay, and buys one implementation instead of two.**
+
 #### (j7)'s BUDGET-LEVEL COUSIN: A QUANTITY THE EXPERIMENT CAN MOVE MUST BE REPORTED, NOT ONLY USED
 
 > **When a number the experiment DEPENDS ON is also a number the experiment CHOOSES, make it a

@@ -6431,6 +6431,43 @@ constrained — someone else picked them for reasons unrelated to whether this a
 discipline as taking `κ` bins from float64 and margin bins from Burnham & Anderson rather than
 from quantiles** (D9), and it is what makes a quoted magnitude quotable.
 
+> ## E1 AND E4 ARE AMENDED, 2026-08-30, AT TASK 1's PRE-FLIGHT — THE PLAUSIBILITY RUNG IS NOT CONSTRUCTIBLE
+>
+> **STATED PLAINLY: `ℓ` IS THE COHERENCE OF THE FITTED OPTIMA; PUBLISHED ALTIMETRY VALUES
+> DESCRIBE THE COHERENCE OF THE DATA; AND 2c ALREADY MEASURED THAT THESE DIFFER.** The ceiling
+> arm's finding, in its own words, is *"the optimum is far less spatially coherent than the data
+> is"* — so **the obvious source is not merely absent, it is contradicted.** `σ_white`'s
+> geographic contrast is published as a gridded product whose values need the product
+> **downloaded**, which is real data and outside 2d entirely.
+>
+> **SO E1's CONSTRAINT 1 CANNOT BE MET FOR THE ONE PARAMETER THE SAVING DEPENDS ON, AND THE
+> MIDDLE RUNG IS NOT BUILT.** `RUNGS["plausibility"]` is **absent and raises**, naming what it
+> would need. **A provisional number in that slot is a claim about the ocean and it would stick**
+> — (a2b), and the one slot where a stuck number is a scientific error rather than a placeholder.
+>
+> **AND E4's JUSTIFICATION FALLS WITH IT, WHICH IS THE PART NOT TO LOSE.** The diagonal was
+> chosen **because the plausibility point sat ON the sweep**, making constraint 2's pairing exact
+> rather than interpolated — (a4)'s *"a point between two measured points is not measured"*.
+> **With no plausibility point there is nothing to pass through, and the diagonal is now simply a
+> one-dimensional sweep of a composite lever.** The confound E5 accepted is unchanged; what is
+> gone is the reason it was worth accepting.
+>
+> **THIS IS A SCOPE CHANGE AND IT IS NAMED AS ONE: 2d QUOTES NO MAGNITUDE.** It establishes that
+> the instrument works and reports a resolution floor. **Criterion 12's closer is therefore NOT
+> discharged by 2d** — the shipped mechanism's saving can be measured on a constructed field, and
+> a magnitude from a field whose coherence we chose is not the number §11.2's threshold is about.
+>
+> > **AND THE REAL-DATA SPIKE NOW BLOCKS TWO THINGS RATHER THAN ONE.** It was D1's named closer.
+> > It is now also the **only** route to a plausibility rung, because sourcing `ℓ` means
+> > **measuring optimum coherence on a real gridded product** — which is the spike itself. **The
+> > honest long answer to "what would make 2d's magnitude quotable" is "the thing 2d was built to
+> > stand in for."** Recorded rather than left to be rediscovered.
+>
+> **OPEN, AND TASK 1's ITERATION COUNT INFORMS IT: two rungs or three?** Both quote no magnitude
+> and have identical epistemic status; the only question is whether a third setting buys enough
+> floor resolution to be worth its hours. **Decided with the budget attached, after criterion 17
+> reports** — not pre-empted here.
+
 ### E2 — THE CEILING IS 30 h, THE FIELD IS 32 × 12 AT `N = 630`, AND THE AUDIT RUNS THE WHOLE FIELD AT ONE RUNG
 
 **THE GEOMETRY IS DERIVED FROM `k` — AND ONE HALF OF THE DERIVATION WAS FALSE UNTIL 2026-08-30.**
