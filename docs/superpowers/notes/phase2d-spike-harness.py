@@ -74,6 +74,7 @@ from threadpoolctl import threadpool_limits
 from metamer.batch.audit import N1_EPSILON, arm_starts, cold_starts
 from metamer.batch.run import run
 from metamer.batch.store import ITERATIONS_UNSET
+from metamer.batch.timeaxis import to_decimal_years
 from metamer.core import machine
 from metamer.core.capability import Objective
 from metamer.core.criteria import Criterion
@@ -103,9 +104,18 @@ N_TIME_SHORT = 96
 #: number and the 2026-08-29 number describe the same shape.
 BATCH = 16
 
-#: 2c's protocol. Two points cannot separate a reading from the machine's own
-#: jitter, and the inherited figure has one point per batch size.
-REPEATS = 3
+#: **REPEATS REPEAT ONE FIXTURE, AND THAT IS A CORRECTION.** The first two
+#: runs drew a NEW batch per repeat, so the spread conflated machine jitter
+#: with fixture variability and the void clause -- which attributes spread to
+#: the host -- was reading a quantity it did not name. Measured: seconds
+#: ranged 23.7% across those repeats while iterations ranged 5.9%, so the
+#: spread is the machine. One fixture, repeated, prices the machine; the
+#: BENCHMARK FIELD's own iteration count is Task 1's to report, and the budget
+#: multiplies the two.
+REPEATS = 5
+
+#: The one fixture every repeat re-measures.
+FIXTURE_SEED = 20_260_830
 
 #: Seconds of idle used to establish the host is quiet before anything is
 #: timed. Matches the 20 s idle reading 2b used.
@@ -254,7 +264,7 @@ def quiet_check() -> dict[str, Any]:
 # --------------------------------------------------------------------------
 
 
-def cost_repeat(repeat: int, handle: TextIO) -> None:
+def cost_repeat(repeat: int, handle: TextIO, *, with_n1: bool = True) -> None:
     """One interleaved cold / N1 / self triple over one batch.
 
     **ALL THREE ARMS IN ONE SESSION, INTERLEAVED.** The stride sweep's spurious
@@ -264,7 +274,7 @@ def cost_repeat(repeat: int, handle: TextIO) -> None:
     candidates = candidate_set()
     signal = signal_spec()
     engine = KalmanEngine()
-    y, t = draw_batch(BATCH, N_TIME_PRODUCTION, seed=20_260_830 + 1000 * repeat)
+    y, t = draw_batch(BATCH, N_TIME_PRODUCTION, seed=FIXTURE_SEED)
     mask = np.ones(y.shape, dtype=bool)
 
     # -- cold ------------------------------------------------------------
@@ -290,20 +300,27 @@ def cost_repeat(repeat: int, handle: TextIO) -> None:
         epsilon=N1_EPSILON,
     )
 
-    # -- N1 ---------------------------------------------------------------
-    start = time.perf_counter()
-    n1 = fit(
-        y,
-        t,
-        signal,
-        candidates,
-        Criterion.AIC,
-        mask=mask,
-        engine=engine,
-        x0=starts.n1,
-        x0_valid=starts.n1_valid,
-    )
-    n1_seconds = time.perf_counter() - start
+    # -- N1, on the first repeat only ---------------------------------------
+    # **READING 2's VERDICT IS CLOSED ON SIX REPEATS ACROSS TWO RUNS** -- the
+    # ratio came back 1.0000, 1.0025 and 1.0026 twice over, against a [0.90,
+    # 1.10] band. Paying 200 s a repeat to confirm it a seventh time buys
+    # nothing, and the repeats here exist to price the MACHINE on one fixture.
+    n1 = None
+    n1_seconds = None
+    if with_n1:
+        start = time.perf_counter()
+        n1 = fit(
+            y,
+            t,
+            signal,
+            candidates,
+            Criterion.AIC,
+            mask=mask,
+            engine=engine,
+            x0=starts.n1,
+            x0_valid=starts.n1_valid,
+        )
+        n1_seconds = time.perf_counter() - start
 
     # -- self, the ceiling arm and reading 2's positive control -------------
     start = time.perf_counter()
@@ -329,18 +346,17 @@ def cost_repeat(repeat: int, handle: TextIO) -> None:
     # and was discarded" one observation. The common mask is the only honest
     # denominator, and the per-arm totals are emitted beside it so the gap is
     # visible rather than absorbed.
-    common = (
-        starts.n1_valid
-        & ok
-        & (n1.outcome == Outcome.OK.code)
-        & (selfarm.outcome == Outcome.OK.code)
-    )
-    cells = int(BATCH * len(candidates))
-    for name, result, seconds, valid in (
+    common = starts.n1_valid & ok & (selfarm.outcome == Outcome.OK.code)
+    if n1 is not None:
+        common = common & (n1.outcome == Outcome.OK.code)
+    arms = [
         ("cold", cold, cold_seconds, np.ones_like(ok)),
-        ("n1", n1, n1_seconds, starts.n1_valid),
         ("self", selfarm, self_seconds, ok),
-    ):
+    ]
+    if n1 is not None and n1_seconds is not None:
+        arms.insert(1, ("n1", n1, n1_seconds, starts.n1_valid))
+    cells = int(BATCH * len(candidates))
+    for name, result, seconds, valid in arms:
         arm_ok = result.outcome == Outcome.OK.code
         emit(
             handle,
@@ -512,6 +528,14 @@ def overhead_reading(handle: TextIO, directory: Path, production_side: int) -> N
     # recorded rather than assumed equal: the first run of this harness
     # measured 1.178 with this defect present and the number was not quotable.
     values = values.astype("float32").astype("float64")
+    # **AND THE AXIS COMES FROM THE INPUT, NEVER HAND-BUILT.** 2c Task 6's
+    # fixture fact: `2000 + i * 31/365.25` over the same monthly coordinate
+    # moved `theta_hat` by 6.7e-05 relative against `to_decimal_years`, which
+    # is under `ALGORITHM_VERSION`. The first quiet run of this harness still
+    # reported `same_workload: false` -- 6490 iterations against 6376 -- with
+    # the float32 defect already fixed, and this was the remaining cause.
+    stamps = xr.open_zarr(uri)["time"].values
+    t = to_decimal_years(stamps)
     config_path = write_config(directory, "overhead.toml", uri)
 
     # -- the run side -----------------------------------------------------
@@ -643,7 +667,7 @@ def main() -> None:
         with threadpool_limits(limits=1):
             if mode in {"cost", "all"}:
                 for repeat in range(REPEATS):
-                    cost_repeat(repeat, handle)
+                    cost_repeat(repeat, handle, with_n1=repeat == 0)
             if mode in {"overhead", "all"}:
                 with tempfile.TemporaryDirectory() as raw:
                     directory = Path(raw)
