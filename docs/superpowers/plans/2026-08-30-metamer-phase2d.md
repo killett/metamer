@@ -1,6 +1,7 @@
 # Phase 2d — the simulated-field benchmark, and the audit's first real numbers
 
-**Status: WRITTEN 2026-08-30, AWAITING REVIEW. NO CODE YET.** Ten tasks, sixteen exit criteria
+**Status: APPROVED 2026-08-30. TASK 0 IS DONE; TASKS 1–9 REMAIN AND NO PRODUCTION CODE EXISTS
+YET.** Ten tasks, seventeen exit criteria
 **each naming its reading**, plus 2b's criteria 6 and 7 which **stay FAILED** and 2c's criterion 11
 which **stays REDUCED SCOPE**. The single source for this plan's status is this line.
 **What each task finds beyond its brief goes in [`PROGRESS.md`](../../../PROGRESS.md)'s *What plan
@@ -66,9 +67,9 @@ withheld. **2d is where the audit becomes evidence rather than machinery.**
 | **§16.2 item 6, not §11.2**, is the two-field spec | the section boundary above, and the corrections to D4 and Q11 |
 | **the four-arm audit is an extension of item 6's two arms** | the plan says which arms run at which rung, because **N2's floor is what makes a width interpretable** |
 | **the audit's four arms were being multiplied by the sweep for no reason** | E2's re-factorisation. The audit is **one rung's** cost, and at one rung it affords the whole field — which is what the 30-member floor needs |
-| **`21 s/point/arm` was measured at `M = 2` and the record did not say so** | the candidate set is named in this plan (Task 1), because `M` sets **both** the price and the stratum count |
+| **`21 s/point/arm` was measured at `M = 2` and the record did not say so** | the candidate set is named in this plan (Task 1), because `M` sets **both** the price and the stratum count. **Task 0 then found the record also omits the SIGNAL SPEC and the FIXTURE, so the figure is not re-measurable at all** — it is refuted from below at `10.62 s` and the gap cannot be attributed. **(j8) at a cost model** |
 | **the 1.7 / 3.0 / 6.7 h lattice figures are TWO-ARM figures** | recomputed and confirmed; the four-arm audit doubles each. Corrected at its source in the 2c close |
-| **N1 is cheap in interpretation and full price in compute** | Task 0 measures it before the budget is committed; it is **not** in the 12.048 factor |
+| **N1 is cheap in interpretation and full price in compute** | **Measured 2026-08-30: it does** — `N1/cold` iterations `1.0017`, six repeats, two runs. It is **not** in the 12.047 factor, and its two rungs are what the ceiling is sensitive to |
 
 **And one arithmetic failure inside the brainstorm itself, promoted as (a5b).** The audit's
 subsample was sized against the compute ceiling and never against the 30-member floor discussed
@@ -121,6 +122,18 @@ test alone on constructed maps with no field and no run. **Task 0 gates Task 1 b
 
 ## Task 0 — the pricing and lever spike
 
+> **DONE 2026-08-30. THE VERDICT IS
+> [`phase2d-spike-verdict.md`](../notes/phase2d-spike-verdict.md)** and the magnitudes are in
+> [what 2d's tasks inherit](../../../PROGRESS.md). **Reading 1 refuted from below — `10.62 s` per
+> point per arm, not 21 — and the inherited figure is not re-measurable because it never recorded
+> its signal spec or its fixture. Reading 2 confirmed: N1 costs a full cold arm. Reading 3
+> refused three times and replaced by the run's own phase accounting, which puts everything
+> outside the fit phase under 1%.**
+>
+> **THE BUDGET IS NOW BUILT IN ITERATIONS**, because iterations are deterministic and this box's
+> wall clock is not, and **Task 1 carries the gate that finalises it** — see Task 1's last test.
+> **Four defects were found and all four were in the instrument; nothing in `src` was wrong.**
+
 **Goal.** Price 2d before it is planned into existence, and measure the two premises the budget
 rests on that nobody has measured. **2c's Task 0 was a whole task and it nearly collapsed the
 sub-phase; that is the template.** A verdict whose *"no"* is expensive is a formality only if it is
@@ -145,7 +158,7 @@ taken after the money is spent.
   cold starts and converges in cold's iteration count. **This is a NULL, and it carries the
   ceiling arm as its positive control** — see the invariants.
 - **The `run`-to-`fit` per-point ratio at short `N`, forced to ≥ 2 tiles.** **The budget's unit is
-  measured on `fit` and spent on `run`:** E2's 12.048 factor counts three full-field `run` passes
+  measured on `fit` and spent on `run`:** E2's 12.047 factor counts three full-field `run` passes
   and a `run_two_pass`, and only `run_arms` is `fit`-shaped. **`run` adds tiling, store writes,
   assembly and the per-tile barrier.** The overhead is per point and per tile rather than per
   iteration, so it is a **larger** fraction of a **cheaper** fit — **measuring the ratio at short
@@ -280,6 +293,16 @@ before any run**.
 - *The field opens through the shipped opener and passes stage-4a validation, and a run over it
   fits every point.* Catches a benchmark fixture that is legal only to the benchmark, which is the
   defect that made 2c's spike unable to say anything about the shipped path.
+- *The field's own iteration count per point is measured and recorded, at `N = 630`, on the
+  plausibility rung.* **THE GATE TASK 0 PUT ON THIS TASK.** The budget is `cost(iterations) ×
+  points × factor`, and Task 0 measured the cost model and **not** the field: the two fixtures
+  actually measured differ by 2× in iterations per point (**25.3** here, **40.4** in 2c), which is
+  the difference between a **15.9 h** run and a **31.5 h** one — the second over the 30 h ceiling.
+  **E2's budget is finalised against this number before Task 5 spends anything**, and if the field
+  lands at the expensive end **N1 drops to one rung.** Catches a benchmark that discovers its own
+  cost after paying it. **And it must be recorded rather than merely acted on**: the iteration
+  count is partly a fact 2d *builds*, through `ℓ` and `Δ`, so **a field quietly tuned until it is
+  affordable is a field tuned with the audit's answer in view.**
 - *At **short `N`** on a small lattice, a long-`ℓ` field's warm run takes **strictly fewer**
   iterations than a short-`ℓ` field's, against one cold reference each.* **Moved here from Task 0
   by its pre-flight**, because measuring it there would have built the field in a harness — 2c's
@@ -671,6 +694,7 @@ roll-up** — driven from outside wherever an outside exists.
 | 14 | OQ21 closes: a **named** pre-fit proxy's correlation with each post-fit proxy | the coefficient, and the name recorded **before** it |
 | 15 | The README carries the smear width with its rung, its floor, and the standing limitation in the caption, **and names §16.2 item 4 and Phase 6 as the reserved position's content and owner** | the README's own text |
 | 16 | The committed reports name an instrument matching the current defaults | the report's instrument block against `Config`'s defaults |
+| 17 | The benchmark field's iteration count per point is recorded, and E2's budget was finalised against it before any rung ran | the recorded count, and the factor it selected |
 
 **Criterion 12 can fail, and it is written so that it can.** 384 points across 6 point strata is
 64 each at uniform occupancy and margin bins are not uniform. **A criterion that cannot fail is not

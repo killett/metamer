@@ -4,7 +4,7 @@
 
 1. **Branch `main`, everything on it, every commit pushed by a hook** — https://github.com/killett/metamer. **A SHA here is stale the moment the next commit lands, so nothing here names one:** `git log --oneline -8` is the authority.
 2. **DONE:** Phase 1 (0–18), Phase 2 preliminaries P0–P4, **Phase 2a (0–13)**, **Phase 2b (COMPLETE 2026-08-19 — 10 met / 4 reduced scope / 2 FAILED)**, **Phase 2c's brainstorm (D1–D12)**, and **Phase 2c (COMPLETE 2026-08-29 — 10 met / 2 reduced scope / 0 failed; Tasks 0–4 on 2026-08-24, Task 5 on 2026-08-27, Task 6 on 2026-08-28, Tasks 7–8 on 2026-08-29)**. The modelling sub-phase was decided against 2026-08-22 and **re-decided on closed facts 2026-08-23: it does not open.** Sections below carry each; **none is restated here.**
-3. **NEXT ACTION: PHASE 2d — the simulated-field benchmark, which is what makes the audit's numbers mean something.** **PHASE 2c IS CLOSED (2026-08-29): 10 met / 2 met with reduced scope / 0 failed**, plus 2b's criteria 6 and 7 which **stay FAILED** — see [the close](#phase-2c-is-closed-2026-08-29--10-met--2-met-with-reduced-scope--0-failed-plus-2bs-two-inherited-failures) for the table, both closers, and **what 2d inherits**. **2d's BRAINSTORM IS SETTLED (E1–E8, 2026-08-30) AND ITS PLAN IS WRITTEN AND AWAITING REVIEW — 10 tasks, 16 exit criteria, NO CODE YET.** **§16.2 item 6 is 2d's home, not §11.2** — the citation was wrong in D4's constraint 3 and absent from Q11's row, both corrected 2026-08-30. **Every task's FIRST step is the pre-flight** — the method is item 7 below, and 2d's pre-plan entry is already in [`phase2d-preflight.md`](docs/superpowers/notes/phase2d-preflight.md). **THE TWO REDUCED-SCOPE VERDICTS ARE 2d's INPUT:** criterion 12's magnitude was measured **on the spike harness and never on the shipped mechanism** (21 s/point/arm at `N = 630` puts the smallest honest lattice at 1.7 hours), and criterion 11's `κ` axis is **degenerate on the population it stratifies** because `HESSIAN_COND_LIMIT` **is** D9's first boundary. **`ALGORITHM_VERSION` IS `"2"` SINCE 2026-08-27** and every store written before it holds cold fits — see [how to read a store written before 2c Task 5](#how-to-read-a-store-written-before-2c-task-5-recorded-2026-08-24-and-it-cannot-be-reconstructed-later), which is not re-derivable from the stores.
+3. **NEXT ACTION: PHASE 2d — the simulated-field benchmark, which is what makes the audit's numbers mean something.** **PHASE 2c IS CLOSED (2026-08-29): 10 met / 2 met with reduced scope / 0 failed**, plus 2b's criteria 6 and 7 which **stay FAILED** — see [the close](#phase-2c-is-closed-2026-08-29--10-met--2-met-with-reduced-scope--0-failed-plus-2bs-two-inherited-failures) for the table, both closers, and **what 2d inherits**. **2d's BRAINSTORM IS SETTLED (E1–E8) AND ITS PLAN IS APPROVED, 2026-08-30 — 10 tasks, 17 exit criteria. TASK 0 IS DONE; NO PRODUCTION CODE YET.** **Task 0 refuted the inherited `21 s/point/arm` from below — it is `10.62 s` on this box, and the inherited figure is NOT re-measurable because it never recorded its signal spec or its fixture — so 2d's budget is built in ITERATIONS and Task 1 carries the gate that finalises it.** **§16.2 item 6 is 2d's home, not §11.2** — the citation was wrong in D4's constraint 3 and absent from Q11's row, both corrected 2026-08-30. **Every task's FIRST step is the pre-flight** — the method is item 7 below, and 2d's pre-plan entry is already in [`phase2d-preflight.md`](docs/superpowers/notes/phase2d-preflight.md). **THE TWO REDUCED-SCOPE VERDICTS ARE 2d's INPUT:** criterion 12's magnitude was measured **on the spike harness and never on the shipped mechanism** (21 s/point/arm at `N = 630` puts the smallest honest lattice at 1.7 hours), and criterion 11's `κ` axis is **degenerate on the population it stratifies** because `HESSIAN_COND_LIMIT` **is** D9's first boundary. **`ALGORITHM_VERSION` IS `"2"` SINCE 2026-08-27** and every store written before it holds cold fits — see [how to read a store written before 2c Task 5](#how-to-read-a-store-written-before-2c-task-5-recorded-2026-08-24-and-it-cannot-be-reconstructed-later), which is not re-derivable from the stores.
 4. ## THE STANDING LIMITATION ON EVERYTHING 2c DECIDED: **NO 2c NUMBER COMES FROM REAL DATA.** Warm-starting was authorized — and every decision after D1 inherits this — on a **simulated field whose spatial coherence is a construction parameter**. **The spatial coherence of real altimetry optima has never been measured.** Weaker coherence gives a **smaller** saving, and **§11.2's 30% threshold could fail on real data.** **THE NAMED CLOSER, not an open worry: a spike on a real gridded product — same three arms, same record-length lever.** **AND SINCE 2026-08-24 THERE IS A SECOND REGISTER OF IT: every 2c saving is a CEILING, not an estimate**, because the instrument searched with no effective spiral bound — see [what 2c's tasks inherit](#what-2cs-tasks-inherit-2026-08-24).
 5. **Tests: 1226 passed, 0 failed, 0 INDETERMINATE — 2026-08-29, 2840.69 s (sweeps that week ran 1698–2841 s, which is the machine and not the suite).** **`pixi run test` is the full sweep and every end-of-task verification must run it; `test-fast` and `test-ci` are NOT evidence** — the full sweep has caught **seven** things a fast run could not. **Every run prints `RSS measurement validity`, including at zero**; a nonzero count is INDETERMINATE, neither pass nor fail.
 6. **Verify a fresh checkout with `pixi run test && pixi run typecheck && pixi run lint`**, plus `pixi run pre-commit run --all-files` before every commit. **AND `git add` A NEW FILE BEFORE THAT SWEEP, NEVER AT COMMIT TIME** — `--all-files` covers **tracked** files only, so an untracked new module makes every hook print `Passed` without being read. Measured 2026-08-24; it cost two full twenty-minute sweeps before it was noticed.
@@ -3547,7 +3547,7 @@ was the actual defect the leak exposed.
 | **Phase 2b pre-flight, per task** | [`docs/superpowers/notes/phase2b-preflight.md`](docs/superpowers/notes/phase2b-preflight.md) — carries the pre-plan audit and Task 0's; per-task entries are appended **before** each task |
 | **Phase 2c pre-flight, per task** | [`docs/superpowers/notes/phase2c-preflight.md`](docs/superpowers/notes/phase2c-preflight.md) — Task 0's entry changed the measurement three times before any code was written |
 | **Phase 2c Task 0 — the warm-start spike** | verdict [`warmstart-spike-verdict.md`](docs/superpowers/notes/warmstart-spike-verdict.md); predictions committed first in [`warmstart-spike-predictions.json`](docs/superpowers/notes/warmstart-spike-predictions.json); instrument [`warmstart-spike-harness.py`](docs/superpowers/notes/warmstart-spike-harness.py) and [`warmstart-spike-analyse.py`](docs/superpowers/notes/warmstart-spike-analyse.py); points at three record lengths in `warmstart-spike{,-n384,-n630}-measured.jsonl`. **DONE 2026-08-23 — read the verdict before any 2c design work** |
-| **Phase 2d implementation plan** | [`docs/superpowers/plans/2026-08-30-metamer-phase2d.md`](docs/superpowers/plans/2026-08-30-metamer-phase2d.md) — 10 tasks, 16 exit criteria **each naming its reading**, **WRITTEN 2026-08-30, AWAITING REVIEW, NO CODE YET.** Implements E1–E8; it re-argues none of them. **Its home is design doc §16.2 item 6 and items 1–5 are explicitly not 2d's.** Task 0 is a pricing-and-lever spike that **gates** Task 1, because a cost 2× the assumed one re-plans the sub-phase rather than delaying it |
+| **Phase 2d implementation plan** | [`docs/superpowers/plans/2026-08-30-metamer-phase2d.md`](docs/superpowers/plans/2026-08-30-metamer-phase2d.md) — 10 tasks, 17 exit criteria **each naming its reading**, **APPROVED 2026-08-30. Task 0 DONE; Tasks 1–9 remain and no production code exists yet.** Implements E1–E8; it re-argues none of them. **Its home is design doc §16.2 item 6 and items 1–5 are explicitly not 2d's.** Task 0 is a pricing-and-lever spike that **gates** Task 1, because a cost 2× the assumed one re-plans the sub-phase rather than delaying it |
 | **Phase 2d pre-flight, per task** | [`docs/superpowers/notes/phase2d-preflight.md`](docs/superpowers/notes/phase2d-preflight.md) — the pre-plan entry is written; per-task entries are appended **before** each task. It carries the §16.2 mis-citation, the (a5b) self-catch, and the recompute that found the lattice figures are two-arm figures |
 | **Phase 2c implementation plan** | [`docs/superpowers/plans/2026-08-24-metamer-phase2c.md`](docs/superpowers/plans/2026-08-24-metamer-phase2c.md) — 9 tasks, 12 exit criteria **each naming its reading**, **APPROVED 2026-08-24; NO CODE YET.** Implements D1–D12; it re-argues none of them and points at the record instead. Its head carries what 2c found before it started, including the two measurements that were taken **ahead** of the brainstorm because §11.2 makes the mechanism's survival conditional on one of them |
 
@@ -6585,26 +6585,51 @@ to re-measure the first two before the budget is committed.
 
 ### The cost model, and the budget it produced
 
-**`21 s per point per arm` at `N = 630`, `M = 2`, B = 16 — measured 2026-08-29 and a claim to
-re-measure.** The budget is priced at the **cold** rate throughout, so it is an **upper bound**:
+> ## RE-MEASURED AT TASK 0, 2026-08-30, AND THE UNIT MOVED. READ THE VERDICT BEFORE QUOTING EITHER FIGURE
+>
+> **`10.62 s per point per arm`**, five true repeats of one fixture on a quiet host, `M = 2`,
+> `N = 630`, `B = 16`, signal `constant + trend`; standard deviation **0.467 (4.4%)**, spread
+> **11.0%**. **The inherited `21 s` is refuted from below and CANNOT BE RECONCILED**, because it
+> records its candidate set, batch and record length and **not its signal spec or its fixture** —
+> so it is not re-measurable. Iterations explain about three quarters of the gap and not all of
+> it. **(j8) at a cost model: the verdict was adopted and half its instrument was written down.**
+>
+> **SO THE BUDGET IS BUILT IN ITERATIONS, NOT SECONDS.** Iterations are deterministic — the same
+> fixture gave 405 every repeat — and this box's wall clock is not. The full statement, the
+> two-point cost decomposition and why no budget rests on it, and the gate this puts on Task 1
+> are in [`phase2d-spike-verdict.md`](docs/superpowers/notes/phase2d-spike-verdict.md).
+>
+> | cost per point per arm | factor 12.047 | **factor 14.047, N1 at two rungs** |
+> |---|---|---|
+> | **10.62 s**, measured | 13.6 h | **15.9 h** |
+> | **21.0 s**, inherited | 27.0 h | **31.5 h** |
+>
+> **The plan's 27.0 h survives as an upper bound and the likely cost is about half — but the
+> pessimistic rate WITH N1 at two rungs gives 31.5 h, over the 30 h ceiling.** That is the only
+> combination that breaks it, and **Task 1's iteration count decides which column applies.**
+
+The budget is priced at the **cold** rate throughout, so it is an **upper bound**:
 the warm and N2 arms come in under it by an amount the spike put at 42.28%, itself a ceiling.
 **A run finishing early is the bound behaving, not an error.**
 
     21 s × 384 points × [ 3 rungs × 2.016  (cold + two-pass, pass 1 at 1/64)
                         + 2 rungs × 1.0    (the N2 full-field map)
                         + 1 rung  × 4.0    (the four arms, whole field) ]
-    = 21 × 384 × 12.048 = 97 155 s = 27.0 h
+    = 21 × 384 × 12.047 = 97 146 s = 27.0 h   <- the INHERITED rate; see the box above
 
 **Against a 30 h ceiling** — roughly one weekend with margin for one re-run, and **every long
 measurement in this project has needed at least one re-run. A design that fits only if nothing
 goes wrong does not fit.**
 
-**N1 IS NOT IN THE 12.048 FACTOR AND ITS COST IS STILL A PREDICTION.** `N1_EPSILON = 6.055e-06` is
-*"a displacement the optimizer cannot distinguish from zero"*, so **N1 should cost a full cold
-arm** rather than a discount — cheap in interpretation, full price in compute. **Task 0 checks it
-on one small batch before the budget is committed.** If it holds, N1 is allocated to **the
-plausibility rung and the easy rung only**: its job is to separate *"the surface decides"* from
-*"the start distance decides"*, and that separation does not need every rung.
+**N1 IS NOT IN THE 12.047 FACTOR AND ITS COST IS NO LONGER A PREDICTION — MEASURED 2026-08-30.**
+`N1_EPSILON = 6.055e-06` is *"a displacement the optimizer cannot distinguish from zero"*, so
+**N1 costs a full cold arm**: `N1 / cold` iterations came back **1.0017** on average and never
+outside **`[1.0000, 1.0026]`**, over **six repeats across two runs**, with `self` collapsing to
+**4–6%** of cold as the positive control that the instrument sees cost differences at all.
+**Cheap in interpretation, full price in compute.** So N1 is allocated to **the plausibility rung
+and the easy rung only**: its job is to separate *"the surface decides"* from *"the start distance
+decides"*, and that separation does not need every rung. **That allocation is what puts the factor
+at 14.047 and is the thing the ceiling is sensitive to.**
 
 ### The figures 2d reads its predictions against
 
@@ -6616,6 +6641,60 @@ plausibility rung and the easy rung only**: its job is to separate *"the surface
 | the **spiral reach** | **32 fine cells** = `spiral_bound(4) × coarse_stride(8)` | the shipped defaults, verified 2026-08-30. E6's upper bound on any width |
 | the audit's stratum floor | **30 members** | D8/D10, binomial SE ~9% at `p = 0.5` |
 | point strata at `M = 2` | **6** = `3 margin × M` | D9 |
+
+### The geometry facts Task 0 measured, which nothing else in the tree records
+
+| reading | value | why it matters |
+|---|---|---|
+| process floor before a tile exists | **~229 MB** | a budget leaving nothing for a tile is refused at **layer 3**, so the tile side has a **lower bound set by the process**, not by the config |
+| smallest legal tile side, `N = 96` | **176** | |
+| smallest legal tile side, `N = 630` | **80** | |
+| tile side, `N = 630`, default budget (**4.134 GB**) | **736** | |
+| tiles for 2d's `32 × 12` field | **1** | **the per-tile barrier is not part of 2d's cost at all** |
+| a run's cost outside its fit phase | **under 1%** — 1.01 / 0.57 / 0.63% over three runs; `assemble` alone is **0.013 s** | validation, opening, store creation, assembly, writes and provenance together |
+
+> **AND `tests/test_twopass.py` REACHES MULTIPLE TILES ONLY AGAINST A STUBBED FLOOR**, at budgets
+> around **0.001 GB** that a real run refuses at layer 3. **Those budgets are not evidence that a
+> real multi-tile run is affordable**, and they read as though they were.
+
+---
+
+### What plan Task 0 established (done 2026-08-30 — read before quoting any 2d cost figure)
+
+**THE FULL VERDICT IS [`phase2d-spike-verdict.md`](docs/superpowers/notes/phase2d-spike-verdict.md)
+and the magnitudes live in the section above.** Neither is restated here. What belongs here is the
+part that is not a number.
+
+**FOUR DEFECTS WERE FOUND AND ALL FOUR WERE IN THE INSTRUMENT. NOTHING IN `src` WAS WRONG.** The
+harness fitted **float32 on one side and float64 on the other**; it **hand-built a decimal-year
+axis** on one side and took `to_decimal_years` on the other — the fixture fact 2c Task 6 had
+already recorded, and measured here the two differ by **origin 2000.0 against 0.0 and spacing
+0.0847 against 0.0833**, not by 2c's 6.7e-05; its **"repeats" drew a new fixture each time**, so a
+spread the void clause attributes to the host was partly the data; and its **quiet check recorded
+a loud host and then measured anyway** — (a2b) inside the instrument written to enforce (a2b).
+
+> **THIS IS THE PRE-FLIGHT ARRIVING LATE AND IT IS RECORDED AS THAT, NOT AS A THREE-RUN PROTOCOL.**
+> Each defect was cheap because a harness is not production code. **None would have been cheap at
+> Task 5 with twenty hours spent**, which is the entire argument for the task existing.
+
+**THE READING THAT SURVIVED EVERY DEFECT IS THE ONE MADE OF ITERATIONS.** N1's verdict is a ratio
+of iteration counts and came back identical through all three runs; every wall-clock reading moved.
+**Iterations are deterministic — the same fixture returned 405 in every repeat — and this box's
+wall clock is not.** That is why the budget was rebuilt in iterations rather than re-measured in
+seconds, and it is the transferable finding.
+
+**A REFUSED COMPARISON IS NOT A GAP IF THE QUANTITY HAS A SECOND INSTRUMENT.** The `run`-versus-`fit`
+ratio was refused three times — `same_workload` false in every run that checked — and the quantity
+it was reaching for was then measured from **the run's own phase accounting**, which needs no
+second path and is immune to the mismatch. **(j3): an existing feature is an instrument for a
+property its own purpose does not concern.** **What is still open is whether `run`'s fit PHASE
+costs more per unit work than a bare `fit`; Task 4 owns it**, because the driver has both paths in
+front of it and this harness could not be made to compare them in three attempts.
+
+**AND THE ONE THING A READER MUST NOT DO WITH THE 2c SAVING TABLE.** Its figures were **not**
+edited on the strength of this spike and must not be. They are **ratios of iteration counts**,
+which is the one quantity this spike found stable; only the *seconds* were refuted, and only for
+the cost model.
 
 ---
 
