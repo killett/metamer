@@ -98,6 +98,15 @@ the section where it was discussed.** The repair was not a compromise but a re-f
   stratum boundary.
 - **Every emitted number carries its rung** (E1 constraint 2), enforced by construction and not by
   convention.
+- **Every spike carries Task 0's four**, because all four of its defects were this list's absence:
+  **dtype identical on both sides of any comparison · the axis built by `to_decimal_years`, never
+  by hand · fixture identity held FIXED across repeats, so a spread measures the machine and not
+  the data · the quiet check GATING rather than annotating.**
+- **THE PRE-DECIDED CUT, TAKEN 2026-08-30 SO IT IS NOT TAKEN UNDER TIME PRESSURE:** N1 is **held**
+  at two rungs. **If the realised rate lands near the inherited 21 s/point/arm, the second N1 rung
+  is what gets cut, and it is cut from the EASY rung** — N1's question is live where a magnitude
+  is quoted and merely confirmatory where the artifact was built to be large. **Nothing else is
+  cut and the field is not shrunk**; its geometry is derived from `k` and from the 30-member floor.
 
 ## Task index and dependencies
 

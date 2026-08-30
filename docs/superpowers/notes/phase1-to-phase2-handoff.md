@@ -804,6 +804,29 @@ discarded the one thing that could have caught it.
 > not done is that the first one already agreed. **An agreeing first check is where to be most
 > suspicious, not least** — it is the moment the search stops.
 
+> ## AND THE WORKED INSTANCE THAT SHOWS THE ERROR CAN POINT AT THE EXPECTED ANSWER (2026-08-30)
+>
+> **The abstract rule reads as though contamination adds noise. It can add BIAS, and the bias can
+> run toward the number you are checking against — which is the case the rule cannot afford to
+> leave implicit.**
+>
+> Phase 2d Task 0, first run. The inherited cost was **21.0 s/point/arm** and the spike measured
+> **12.71**, so the per-point figures disagreed; dividing each by its iteration count gave
+> **1.004** against **1.040**, a **0.3%** match, and that agreement was reported as the finding —
+> *"the per-iteration cost is a machine constant and the difference is all fixture."*
+>
+> **The host was not quiet.** Load average 3.46 on four cores, decaying out of the spike's own
+> preceding probes. **Contention inflates seconds and only seconds**, so it pushed the measured
+> per-iteration cost **upward, toward the inherited figure it was being compared against.** On a
+> quiet host the same quantity is **0.839** against **1.040** — **19% apart**, and the "machine
+> constant" is not one.
+>
+> **THE AGREEMENT WAS MANUFACTURED BY THE CONTAMINATION, AND IT ENDED THE SEARCH.** Had the loud
+> host produced a *disagreement*, the loudness would have been investigated. It produced a match,
+> so it was not. **An agreeing check taken under conditions you have already recorded as invalid
+> is not weak evidence — it is evidence pointing the wrong way**, and the direction is set by
+> whichever way the contamination pushes.
+
 **AND IT APPLIES TO YOUR OWN HAND-COUNTS, WHICH IS WHERE IT KEEPS BITING.** Phase 2b Task 2:
 re-deriving four modules' fixture budgets needed `p_max`, and I counted `white + matern12` as
 two free parameters by reading the candidate list. It is **three** — both sigmas and the
@@ -1846,6 +1869,29 @@ and is by construction independent of the mechanism.
 because the treated arm's value is usually the more convenient one to hand. **The question to ask
 is not "which value is better" but "can the treatment move it".**
 
+#### (j7)'s BUDGET-LEVEL COUSIN: A QUANTITY THE EXPERIMENT CAN MOVE MUST BE REPORTED, NOT ONLY USED
+
+> **When a number the experiment DEPENDS ON is also a number the experiment CHOOSES, make it a
+> reported output.** Used silently, it becomes an adjustable that gets adjusted — and the
+> adjustment happens for a reason that has nothing to do with the question, so it never looks
+> like tuning.
+
+(j7) says do not *stratify* by a quantity the treatment can move. This says do not *rely* on one
+without publishing it. Same mechanism, one level up from the metric.
+
+**WORKED INSTANCE, PHASE 2d, 2026-08-30.** The benchmark's compute budget is
+`cost(iterations) × points × factor`, and **the iteration count is partly a fact the benchmark
+BUILDS** — it follows from the coherence length and the regime contrast, which the sub-phase
+chooses. So *"the run is too expensive"* has an available fix that is indistinguishable, in the
+output, from a design decision: **soften the field until it converges faster.** **A field quietly
+tuned until it is affordable is a field tuned with the audit's answer in view**, which is what
+D9's fixed-boundary rule forbids one level down.
+
+**The repair is that the count is an EXIT CRITERION rather than an input to arithmetic** — it is
+recorded per point, with the rung's parameters beside it, before any rung runs. **The same
+discipline as sourcing the plausibility values before the first fit**: in both cases the guard is
+not "do not tune", which is unenforceable, but "publish the thing that tuning would move".
+
 ### (h3) CHECK EVERY STRATUM BOUNDARY AGAINST THE FILTERS THE POPULATION HAS ALREADY PASSED THROUGH
 
 > **Before stratifying, check every boundary against the filters the population has already
@@ -2498,6 +2544,37 @@ is worse than a wrong answer, because it is a guarantee that mostly holds.
 **None of that is a bug in the instrument.** It was a correct instrument; the specification was
 silent, and silence in a document that a shipped rule is written from is a decision made by
 whoever writes the code next.
+
+#### (j8)'s SECOND REGISTER: A RATE IS A MEASUREMENT OF A WORKLOAD, AND THE WORKLOAD IS A PRECONDITION
+
+> **A cost figure recorded without the fixture that produced it can be QUOTED and cannot be
+> REPRODUCED — which makes every budget built on it unfalsifiable.** Record the workload beside
+> the rate, or the rate is a number with no experiment behind it.
+
+The register above is about an instrument's *rules* going unrecorded. This is about its *input*.
+A rate has a numerator and a denominator and **both** belong to the workload: seconds per point
+is seconds per point **of some particular data, at some particular model, on some particular
+box**, and changing any of the three changes the rate without changing its name.
+
+**WORKED INSTANCE, PHASE 2d TASK 0, 2026-08-30.** The inherited figure was **21 s per point per
+arm**, recorded with its **candidate set, batch size and record length** — and **not its signal
+spec and not its fixture.** Re-measured on the same box it came back **10.62 s**, and the gap
+**cannot be attributed**: iterations explain about three quarters of it, and the rest could be a
+wider design, a harder fixture or a busier host, with **no way to tell, ever, because the
+experiment cannot be reconstructed.** A whole sub-phase's budget rested on it.
+
+**THE REPAIR IS NOT "RECORD MORE" — IT IS TO BUDGET IN THE QUANTITY THAT SURVIVES.**
+
+> **Where a DETERMINISTIC proxy for a cost exists, budget in the proxy and convert to time
+> late.** Iterations are deterministic: the same fixture returned **405** in every one of five
+> repeats, while its wall clock spread **11%** on a quiet host and **21%** on a loud one. **So a
+> ratio of iteration counts is immune to every instrument defect that moved the seconds** —
+> Task 0's N1 verdict came back identical through four such defects, and every wall-clock reading
+> in the same runs moved.
+
+The conversion still has to happen, and it is where the unrecorded workload bites — but it
+happens **once, late, against a fixture that is by then in the tree**, instead of being baked into
+a plan as a constant nobody can re-derive.
 
 ### (j3) AN EXISTING FEATURE CAN BE AN INSTRUMENT FOR A PROPERTY ITS OWN PURPOSE DOES NOT CONCERN
 
