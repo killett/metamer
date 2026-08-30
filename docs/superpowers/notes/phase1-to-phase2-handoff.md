@@ -1043,6 +1043,42 @@ in the record, under a heading about a lattice artifact.**
 > that moves four decisions and costs nothing is the shape to expect here: the reading was never
 > load-bearing, it was just never checked.
 
+#### (a5b) WHEN TWO CONSTRAINTS BIND THE SAME QUANTITY, SOLVE THEM TOGETHER AND STATE WHICH BINDS
+
+> **A quantity sized against one constraint and checked against neither is the common case,
+> because each constraint is satisfied in the section where it is discussed.** Solve them
+> together, and name the one that binds.
+
+This is the register above narrowed to one quantity and made actionable. The across-decisions
+rule says the refuting evidence may sit under another heading; **this says it may sit two
+paragraphs up, in the same message, under your own hand** — and that is harder to catch, not
+easier, because proximity reads as having been considered.
+
+**Worked instance, Phase 2d's brainstorm, 2026-08-30, self-caught inside one message.** The
+quantity was **the audit's subsample size**. Two constraints bound it:
+
+| constraint | where it was satisfied | what it implied |
+|---|---|---|
+| **the compute ceiling** — 30 h | the pricing table | a **quarter-audit**: 96 of 384 points |
+| **D8/D10's 30-member floor** | the occupancy paragraph, four paragraphs earlier | **≥ 180 points**, and realistically 300+ |
+
+**The recommendation took the first and never returned to the second**, in a message whose own
+occupancy table put D9's point strata at `3 margin × M` — **six strata at `M = 2`** — so 96
+points gives **16 per stratum at uniform occupancy** and every one is withheld. **That is 2c's
+outcome exactly**, arrived at by choice rather than by consequence.
+
+**AND THE SENTENCE THAT REFUTED IT WAS ALREADY IN THE CONVERSATION, UNAPPLIED:** *"the stratum
+occupancy question is about absolute members, not fractions."* A fraction of a field is the
+wrong parameterisation for a constraint stated in counts, and choosing the parameterisation is
+where the two constraints stopped being comparable.
+
+**THE REPAIR WAS NOT A COMPROMISE BETWEEN THEM — IT WAS A RE-FACTORISATION.** The four-arm audit
+was being multiplied by the sweep for no reason: the smear width consumes full-field **maps** at
+every rung, and the audit consumes **arms** at one rung. Separated, the audit affords **every
+point in the field** at the rung that needs it. **Two constraints that look like a trade-off
+often share a term that does not belong to both**, and finding it beats splitting the
+difference.
+
 #### AN ENUMERATION OVER STATES BEATS A CONDITION INFERRED FROM TWO
 
 > **Where a brief states a CONDITION, enumerate the state space it partitions and check the

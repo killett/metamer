@@ -4,11 +4,11 @@
 
 1. **Branch `main`, everything on it, every commit pushed by a hook** — https://github.com/killett/metamer. **A SHA here is stale the moment the next commit lands, so nothing here names one:** `git log --oneline -8` is the authority.
 2. **DONE:** Phase 1 (0–18), Phase 2 preliminaries P0–P4, **Phase 2a (0–13)**, **Phase 2b (COMPLETE 2026-08-19 — 10 met / 4 reduced scope / 2 FAILED)**, **Phase 2c's brainstorm (D1–D12)**, and **Phase 2c (COMPLETE 2026-08-29 — 10 met / 2 reduced scope / 0 failed; Tasks 0–4 on 2026-08-24, Task 5 on 2026-08-27, Task 6 on 2026-08-28, Tasks 7–8 on 2026-08-29)**. The modelling sub-phase was decided against 2026-08-22 and **re-decided on closed facts 2026-08-23: it does not open.** Sections below carry each; **none is restated here.**
-3. **NEXT ACTION: PHASE 2d — the simulated-field benchmark, which is what makes the audit's numbers mean something.** **PHASE 2c IS CLOSED (2026-08-29): 10 met / 2 met with reduced scope / 0 failed**, plus 2b's criteria 6 and 7 which **stay FAILED** — see [the close](#phase-2c-is-closed-2026-08-29--10-met--2-met-with-reduced-scope--0-failed-plus-2bs-two-inherited-failures) for the table, both closers, and **what 2d inherits**. **2d has no plan and no brainstorm yet**; its first act is the brainstorm, and **every task's FIRST step is the pre-flight** — the method is item 7 below. **THE TWO REDUCED-SCOPE VERDICTS ARE 2d's INPUT:** criterion 12's magnitude was measured **on the spike harness and never on the shipped mechanism** (21 s/point/arm at `N = 630` puts the smallest honest lattice at 1.7 hours), and criterion 11's `κ` axis is **degenerate on the population it stratifies** because `HESSIAN_COND_LIMIT` **is** D9's first boundary. **`ALGORITHM_VERSION` IS `"2"` SINCE 2026-08-27** and every store written before it holds cold fits — see [how to read a store written before 2c Task 5](#how-to-read-a-store-written-before-2c-task-5-recorded-2026-08-24-and-it-cannot-be-reconstructed-later), which is not re-derivable from the stores.
+3. **NEXT ACTION: PHASE 2d — the simulated-field benchmark, which is what makes the audit's numbers mean something.** **PHASE 2c IS CLOSED (2026-08-29): 10 met / 2 met with reduced scope / 0 failed**, plus 2b's criteria 6 and 7 which **stay FAILED** — see [the close](#phase-2c-is-closed-2026-08-29--10-met--2-met-with-reduced-scope--0-failed-plus-2bs-two-inherited-failures) for the table, both closers, and **what 2d inherits**. **2d's BRAINSTORM IS SETTLED (E1–E8, 2026-08-30) AND ITS PLAN IS WRITTEN AND AWAITING REVIEW — 10 tasks, 16 exit criteria, NO CODE YET.** **§16.2 item 6 is 2d's home, not §11.2** — the citation was wrong in D4's constraint 3 and absent from Q11's row, both corrected 2026-08-30. **Every task's FIRST step is the pre-flight** — the method is item 7 below, and 2d's pre-plan entry is already in [`phase2d-preflight.md`](docs/superpowers/notes/phase2d-preflight.md). **THE TWO REDUCED-SCOPE VERDICTS ARE 2d's INPUT:** criterion 12's magnitude was measured **on the spike harness and never on the shipped mechanism** (21 s/point/arm at `N = 630` puts the smallest honest lattice at 1.7 hours), and criterion 11's `κ` axis is **degenerate on the population it stratifies** because `HESSIAN_COND_LIMIT` **is** D9's first boundary. **`ALGORITHM_VERSION` IS `"2"` SINCE 2026-08-27** and every store written before it holds cold fits — see [how to read a store written before 2c Task 5](#how-to-read-a-store-written-before-2c-task-5-recorded-2026-08-24-and-it-cannot-be-reconstructed-later), which is not re-derivable from the stores.
 4. ## THE STANDING LIMITATION ON EVERYTHING 2c DECIDED: **NO 2c NUMBER COMES FROM REAL DATA.** Warm-starting was authorized — and every decision after D1 inherits this — on a **simulated field whose spatial coherence is a construction parameter**. **The spatial coherence of real altimetry optima has never been measured.** Weaker coherence gives a **smaller** saving, and **§11.2's 30% threshold could fail on real data.** **THE NAMED CLOSER, not an open worry: a spike on a real gridded product — same three arms, same record-length lever.** **AND SINCE 2026-08-24 THERE IS A SECOND REGISTER OF IT: every 2c saving is a CEILING, not an estimate**, because the instrument searched with no effective spiral bound — see [what 2c's tasks inherit](#what-2cs-tasks-inherit-2026-08-24).
 5. **Tests: 1226 passed, 0 failed, 0 INDETERMINATE — 2026-08-29, 2840.69 s (sweeps that week ran 1698–2841 s, which is the machine and not the suite).** **`pixi run test` is the full sweep and every end-of-task verification must run it; `test-fast` and `test-ci` are NOT evidence** — the full sweep has caught **seven** things a fast run could not. **Every run prints `RSS measurement validity`, including at zero**; a nonzero count is INDETERMINATE, neither pass nor fail.
 6. **Verify a fresh checkout with `pixi run test && pixi run typecheck && pixi run lint`**, plus `pixi run pre-commit run --all-files` before every commit. **AND `git add` A NEW FILE BEFORE THAT SWEEP, NEVER AT COMMIT TIME** — `--all-files` covers **tracked** files only, so an untracked new module makes every hook print `Passed` without being read. Measured 2026-08-24; it cost two full twenty-minute sweeps before it was noticed.
-7. **THE METHOD IS THE PRE-FLIGHT AND IT LIVES IN EXACTLY ONE PLACE:** [`phase1-to-phase2-handoff.md`](docs/superpowers/notes/phase1-to-phase2-handoff.md) §1 — (a0)–(a9), (a)–(k), the standing rules, the fixture facts, **and the ones 2c added:** (i2b) a high-ceiling control converts a null into a **located** null · (i2c) a sign-unstable benefit is worse than a small one · (j5) a second instrument is a cross-check only if it measures the same quantity under the same conditions · (j6) bound the unmeasured region before measuring it · (i11) refutation clauses in **both** directions · (a2b) make an invalid value **unavailable** rather than caveated · (h2) stratify only by axes at the metric's **own** granularity · (j7) never stratify by a quantity the treatment can move · **(h3) check every stratum boundary against the filters the population already passed — an eps-derived boundary and an eps-derived GATE arrive at the same number by the same argument, and the empty strata read as a finding about the data** · **(h4) a rule stated over "the metrics" must be checked against each KIND of metric — 2c hit this three times** · **(a2b) at a count: "zero cases" is a claim about the INSTRUMENT until proven otherwise** · (c4) a validator must be specified in the **coordinates and extent** the validated object actually has · **(c5) a gate over a set that can GROW must be written against the set, not an enumeration of its members** · **(c6) a practice enforced by a MECHANISM must be checked to reach every instance — a partially-installed guard prints a complete-looking green** · (e2) prove a mutant differs before recording a surviving mutation — **(e) now has six causes** · (e3) its opposite colour, a **red** suite hiding a dead assertion · (a2c) populated but nothing **acts** on it · (a2d) a hashed value's **unit** is part of its identity · (a2e) encode a classification as a **construction** · (i12) a **uniform fixture set** cannot test a freedom the contract leaves open · (j8) an adopted verdict makes the **instrument** part of the specification · plus (a0)'s sixth register (**a check that never read the file prints the same word as one that did**) and (a4)'s two (**"checked" in your own pre-flight is a claim**, and **a decision's own EXAMPLE can be the case that refutes it — and a retired argument stays visible**), and (a5)'s across-DECISIONS register (**check a decision against the measurements taken for the OTHERS; a term of art repeated across decisions acquires a reading nobody chose**). **Do not restate them here** — the two copies drifted once already.
+7. **THE METHOD IS THE PRE-FLIGHT AND IT LIVES IN EXACTLY ONE PLACE:** [`phase1-to-phase2-handoff.md`](docs/superpowers/notes/phase1-to-phase2-handoff.md) §1 — (a0)–(a9), (a)–(k), the standing rules, the fixture facts, **and the ones 2c added:** (i2b) a high-ceiling control converts a null into a **located** null · (i2c) a sign-unstable benefit is worse than a small one · (j5) a second instrument is a cross-check only if it measures the same quantity under the same conditions · (j6) bound the unmeasured region before measuring it · (i11) refutation clauses in **both** directions · (a2b) make an invalid value **unavailable** rather than caveated · (h2) stratify only by axes at the metric's **own** granularity · (j7) never stratify by a quantity the treatment can move · **(h3) check every stratum boundary against the filters the population already passed — an eps-derived boundary and an eps-derived GATE arrive at the same number by the same argument, and the empty strata read as a finding about the data** · **(h4) a rule stated over "the metrics" must be checked against each KIND of metric — 2c hit this three times** · **(a2b) at a count: "zero cases" is a claim about the INSTRUMENT until proven otherwise** · (c4) a validator must be specified in the **coordinates and extent** the validated object actually has · **(c5) a gate over a set that can GROW must be written against the set, not an enumeration of its members** · **(c6) a practice enforced by a MECHANISM must be checked to reach every instance — a partially-installed guard prints a complete-looking green** · (e2) prove a mutant differs before recording a surviving mutation — **(e) now has six causes** · (e3) its opposite colour, a **red** suite hiding a dead assertion · (a2c) populated but nothing **acts** on it · (a2d) a hashed value's **unit** is part of its identity · (a2e) encode a classification as a **construction** · (i12) a **uniform fixture set** cannot test a freedom the contract leaves open · (j8) an adopted verdict makes the **instrument** part of the specification · plus (a0)'s sixth register (**a check that never read the file prints the same word as one that did**) and (a4)'s two (**"checked" in your own pre-flight is a claim**, and **a decision's own EXAMPLE can be the case that refutes it — and a retired argument stays visible**), and (a5)'s across-DECISIONS register (**check a decision against the measurements taken for the OTHERS; a term of art repeated across decisions acquires a reading nobody chose**), **plus the one 2d added: (a5b) when two constraints bind the same quantity, solve them together and state which binds — a quantity sized against one and checked against neither is the common case, because each constraint is satisfied in the section where it is discussed**. **Do not restate them here** — the two copies drifted once already.
 8. **CI IS GREEN and the deliberate red is CLOSED** (2026-08-22, by the repair its own criterion chose: the fixture was **enlarged**, the bound was **not** widened and the test was **not** marked). **CI runs `-m "not machine"` and therefore executes exactly ONE of the nine RSS assertions**, so it is not a substitute for the local sweep. See [THE CI FIXTURE DECISION](#the-ci-fixture-decision--taken-measured-and-verified-2026-08-22).
 9. **TWO DEFECTS ARE OPEN AND UNOWNED, AND NEITHER IS 2c's TO FIX.** (a) **`tiling.py` requires the spatial dims to be literally `y` and `x` in four places** while stage 4a requires only that `time` is first — so a `latitude`/`longitude` input **passes the contract and dies in assembly without exit code 4**, and **stage 4a's own message already calls the contract positional**, so the message and the implementation disagree today. Two closers, both scope decisions — see [What plan Task 2 established](#what-plan-task-2-established-done-2026-08-24--read-before-touching-the-decimation-the-two-stores-identities-or-any-spatial-dimension-name). (b) **Open question 20**: what else is uniform across all sixteen input fixtures and unconstrained by the contract — **coordinate monotonic direction first**, because a decreasing latitude axis is the ordinary case in real altimetry and yields a *plausible* answer rather than an error.
 10. **Precedence: the design doc is authoritative on INTENT; a measured, dated number supersedes an unmeasured one wherever it lives, including in the design doc. Any measurement stated twice has one copy DELETED, never reconciled.**
@@ -3547,6 +3547,8 @@ was the actual defect the leak exposed.
 | **Phase 2b pre-flight, per task** | [`docs/superpowers/notes/phase2b-preflight.md`](docs/superpowers/notes/phase2b-preflight.md) — carries the pre-plan audit and Task 0's; per-task entries are appended **before** each task |
 | **Phase 2c pre-flight, per task** | [`docs/superpowers/notes/phase2c-preflight.md`](docs/superpowers/notes/phase2c-preflight.md) — Task 0's entry changed the measurement three times before any code was written |
 | **Phase 2c Task 0 — the warm-start spike** | verdict [`warmstart-spike-verdict.md`](docs/superpowers/notes/warmstart-spike-verdict.md); predictions committed first in [`warmstart-spike-predictions.json`](docs/superpowers/notes/warmstart-spike-predictions.json); instrument [`warmstart-spike-harness.py`](docs/superpowers/notes/warmstart-spike-harness.py) and [`warmstart-spike-analyse.py`](docs/superpowers/notes/warmstart-spike-analyse.py); points at three record lengths in `warmstart-spike{,-n384,-n630}-measured.jsonl`. **DONE 2026-08-23 — read the verdict before any 2c design work** |
+| **Phase 2d implementation plan** | [`docs/superpowers/plans/2026-08-30-metamer-phase2d.md`](docs/superpowers/plans/2026-08-30-metamer-phase2d.md) — 10 tasks, 16 exit criteria **each naming its reading**, **WRITTEN 2026-08-30, AWAITING REVIEW, NO CODE YET.** Implements E1–E8; it re-argues none of them. **Its home is design doc §16.2 item 6 and items 1–5 are explicitly not 2d's.** Task 0 is a pricing-and-lever spike that **gates** Task 1, because a cost 2× the assumed one re-plans the sub-phase rather than delaying it |
+| **Phase 2d pre-flight, per task** | [`docs/superpowers/notes/phase2d-preflight.md`](docs/superpowers/notes/phase2d-preflight.md) — the pre-plan entry is written; per-task entries are appended **before** each task. It carries the §16.2 mis-citation, the (a5b) self-catch, and the recompute that found the lattice figures are two-arm figures |
 | **Phase 2c implementation plan** | [`docs/superpowers/plans/2026-08-24-metamer-phase2c.md`](docs/superpowers/plans/2026-08-24-metamer-phase2c.md) — 9 tasks, 12 exit criteria **each naming its reading**, **APPROVED 2026-08-24; NO CODE YET.** Implements D1–D12; it re-argues none of them and points at the record instead. Its head carries what 2c found before it started, including the two measurements that were taken **ahead** of the brainstorm because §11.2 makes the mechanism's survival conditional on one of them |
 
 ### What Task 9 inherited, and what was decided (2026-08-16, resolved 2026-08-17)
@@ -5149,9 +5151,18 @@ its own warm source; the shipped path goes through `source_map`'s nearest-valid 
 neighbour a point starts from is what sets its iteration count.** Three obstacles, each
 independently sufficient, all measured or named at Task 8's pre-flight rather than estimated:
 
-1. **21 s per point per arm at `N = 630`** (measured, B = 8 and B = 16; one candidate is no
-   cheaper at 23.9 s). The smallest non-degenerate `k = 8` lattice is 12 × 12 → **1.7 hours**;
-   a credible 16 × 16 is 3.0 and a 3 × 3 coarse lattice is 6.7. **The whole suite is 39 minutes.**
+1. **21 s per point per arm at `N = 630`**, measured over the candidate set
+   **`["white", "white + matern12"]` — `M = 2`** at B = 8 and B = 16; one candidate is no cheaper
+   at 23.9 s. **The candidate count sets the price AND the stratum count** (D9's `3 × M` point
+   strata and `M × 4` cell strata), so it is named here rather than left in the pre-flight.
+   The smallest non-degenerate `k = 8` lattice is 12 × 12 → **1.7 hours**; a credible 16 × 16 is
+   3.0 and a 3 × 3 coarse lattice is 6.7. **All three are TWO-ARM figures** — cold and warm, the
+   two criterion 12 needs — recomputed and confirmed at 2d's brainstorm, 2026-08-30:
+   `144 × 21 × 2 = 1.68 h`, `256 × 21 × 2 = 2.99 h`, `576 × 21 × 2 = 6.72 h`. **The four-arm
+   audit doubles every one of them**, which this list did not say. ~~The whole suite is 39
+   minutes.~~ **Deleted rather than reconciled, 2026-08-30**: item 5 carries the suite's
+   duration with its range (**2840.69 s**, sweeps 1698–2841 s), and 2340 s is one sample from
+   inside that range stated as a constant. **The copy that carries its range survives.**
 2. **No spatially coherent production-length fixture exists.** Every two-pass fixture in `tests/`
    is `standard_normal` over the grid, and **(h)** says a field of independent draws would measure
    nothing. The spike's coherent field was in a harness that is not in the tree.
@@ -6369,6 +6380,245 @@ fingerprint recording the decimated rollup, and the candidate comparison dropped
 
 ---
 
+## Phase 2d brainstorm — settled decisions (2026-08-30)
+
+**E1–E8 below are what 2d's plan implements. The plan re-argues none of them and points here.**
+Every magnitude 2d rests on lives once, in
+[what 2d's tasks inherit](#what-2ds-tasks-inherit-2026-08-30); nothing there is restated here and
+nothing here is restated in the plan.
+
+> ## THE STANDING LIMITATION SURVIVES 2d AND 2d CANNOT LIFT IT — FIRST, BECAUSE EVERY DECISION BELOW INHERITS IT
+>
+> **A simulated field measures the audit's ability to detect an artifact whose magnitude is a
+> CONSTRUCTION PARAMETER.** It does not measure whether warm-starting contaminates real altimetry,
+> because the field's coherence is chosen. **2d can establish that the instrument works and what
+> it can resolve; it cannot close D1.** The named closer is still **a spike on a real gridded
+> product** — same arms, same record-length lever. **No 2d result may be written up as having
+> closed it**, and the README caption is where that is enforced rather than hoped for (E7).
+
+### E1 — TWO FIELDS WITH DIFFERENT JOBS, AND NEITHER MAY DO THE OTHER'S
+
+**THE FIRST QUESTION IS DETECTABLE VERSUS REALISTIC AND THE ANSWER IS BOTH, SEPARATELY NAMED.**
+A field tuned so the audit fires is a **positive control**: it establishes the instrument works
+and, swept, what it can resolve. A field whose parameters resemble altimetry is a
+**measurement**. **Conflating them is (i2) at the level of an entire sub-phase** — an audit that
+has only ever run on a field built to make it fire has not been shown to measure anything about
+fields that were not.
+
+**FOUR CONSTRAINTS.**
+
+1. **THE PLAUSIBILITY FIELD'S PARAMETERS ARE SOURCED AND CITED BEFORE ANY RUN.** Whatever
+   published values are used are recorded with their provenance **before** the first fit, so the
+   field cannot be retuned after a null. **That is the one edit that would destroy its value and
+   it is the tempting one.** E4 raises the stakes further: the plausibility field is also the
+   sweep's middle rung, so retuning it retunes the sweep's geometry.
+2. **EVERY 2d NUMBER CARRIES ITS RUNG, AND ONE WITHOUT A RUNG CANNOT BE CONSTRUCTED.** A
+   resolution floor from the control is not a statement about the plausibility field; a magnitude
+   from the plausibility field is not evidence the instrument works. **The pairing rule: a null on
+   the plausibility field is readable only against the control's floor at comparable contrast** —
+   which E4 makes exact rather than interpolated. Enforced by `Quantity`'s non-empty-scope
+   construction, reused from `audit_report.py` rather than re-invented.
+3. **THE SWEEP IS INSIDE THE CONTROL AND ITS LEVER IS NAMED WITH REFUTATION CLAUSES IN BOTH
+   DIRECTIONS.** D2's template: a lever across three fixtures, because two points determine a line
+   and cannot distinguish a rising curve from a saturating one. **A control that reports a single
+   yes has not reported a resolution floor.**
+4. **THE COMPUTE IS A DESIGN INPUT, NOT A DISCOVERY.** It decides the lattice, the record length
+   and which arms run at which rung. E2 carries it.
+
+**WHY NOT A SWEPT SYNTHETIC CURVE ALONE.** The realism end of a swept curve is **a chosen point,
+and choosing it is what makes it not a measurement.** Literature-sourced values are independently
+constrained — someone else picked them for reasons unrelated to whether this audit fires. **Same
+discipline as taking `κ` bins from float64 and margin bins from Burnham & Anderson rather than
+from quantiles** (D9), and it is what makes a quoted magnitude quotable.
+
+### E2 — THE CEILING IS 30 h, THE FIELD IS 32 × 12 AT `N = 630`, AND THE AUDIT RUNS THE WHOLE FIELD AT ONE RUNG
+
+**THE GEOMETRY IS DERIVED FROM `k`, NOT CHOSEN.** **32 along the boundary normal is `4k`**, so an
+interior profile line sits **≥ 8 cells from the boundary and outside the warm start's coupling
+range** — which is what makes E6's free negative control real rather than assumed. **12 across is
+the minimum giving two coarse points per axis at `k = 8`**, coarse at `{0, 8}`; below it every
+fine point sources the same optimum and the nearest-valid spiral is not exercised. **Both numbers
+are `k`.** A later reader will otherwise read `32 × 12` as arbitrary and round it.
+
+**THE AUDIT'S FOUR ARMS WERE BEING MULTIPLIED BY THE SWEEP FOR NO REASON, AND THAT IS THE WHOLE
+BUDGET.** The three deliverables consume different things:
+
+| deliverable | consumes | at how many rungs |
+|---|---|---|
+| **the smear width and its floor** | full-field **maps** — cold, warm, N2 | **every rung** |
+| **criterion 12's magnitude** | the same cold and warm full-field runs | **the plausibility rung** |
+| **the audit's first real numbers** | `run_arms`' four arms, one batch one session | **one rung** — and it must be the plausibility one |
+
+**Separated, the audit affords EVERY point in the field at the rung that needs it**, which is what
+D8/D10's 30-member floor requires and what no fraction of the field could deliver. **A
+quarter-audit of 384 points is 96 points across `3 margin × M = 6` point strata at `M = 2` — 16
+each at uniform occupancy, every one withheld, and 2c's outcome repeated by choice.** The
+arithmetic and its self-caught failure are promoted as **(a5b)**.
+
+**WHETHER THE STRATA FILL IS A REPORTED OUTCOME, NOT A GUARANTEE.** 384 points over 6 point strata
+is 64 each at uniform occupancy and margin bins are not uniform. **The member count ships beside
+every rate regardless** — D10's (a2b) handling, unchanged.
+
+### E3 — BOUNDARY SHARPNESS IS NOT A LEVER. THE BOUNDARY IS A STEP, AND THAT IS THE DESIGN
+
+**AT `w > 0` THE MEASURED WIDTH IS A TRUE WIDTH PLUS AN ARTIFACT WIDTH**, so reading the artifact
+means **subtracting a known quantity from a measured one** — the cancellation shape, and **where
+an artifact hides**. **At `w = 0` the entire measured width IS artifact and the reading is
+direct.** §16.2 says *"vary sharply"*; **a step is the sharp limit, not an approximation to it.**
+
+**RECORDED AS THE DESIGN RATHER THAN AS A PARAMETER CHOICE**, because someone will otherwise
+propose sweeping `w` to make the benchmark *"more realistic"* and destroy the measurement's
+directness. **The realism axis is E1's plausibility field, not the boundary's width.**
+
+**AND THE STEP HAS A FLOOR THE INSTRUMENT MUST STATE.** On a grid the finest resolvable width is
+**one fine cell**, so a measured width at the floor means *"unresolved"*, not *"zero"*. It is
+emitted as **`≤ 1 cell`**, never as a number — (a2b), and (i9)'s shape: a fixture whose window is
+narrower than the instrument's resolution cannot express its condition.
+
+### E4 — THE SWEEP IS A DIAGONAL THROUGH THE PLAUSIBILITY POINT, AND THE PLAUSIBILITY FIELD **IS** THE MIDDLE RUNG
+
+**THE PAIRING ARGUMENT DECIDES THIS, NOT THE BUDGET.** A crossed design measures floors at four
+corners and **the plausibility point sits at none of them**, so E1's constraint 2 becomes an
+**interpolation** — and (a4)'s register says *"a point between two measured points is not
+measured."* **Putting the literature values ON the sweep makes the pairing exact.** That it also
+costs one rung fewer than a crossed design **is a coincidence and is stated as one**, so the
+decision does not read as budget-driven.
+
+| rung | `ℓ`, `Δ` chosen by | its job |
+|---|---|---|
+| **easy** | **us, for detectability** — long `ℓ`, stark `Δ` | the positive control. **The artifact must appear here or the instrument is not an instrument** |
+| **plausibility** | **published altimetry noise-model values**, cited before any run | **the only rung a magnitude is quoted from** |
+| **hard** | **us, harder than the literature rung** | probes the floor from below; where a null is expected and needs a measured floor beside it |
+
+**The rungs are not a geometric ladder.** The easy rung is designed to fire and the hard rung is
+designed to be hard; only the middle one is sourced. **If the literature rung returns a null and
+the easy rung fires, the floor is located; if neither fires, 2d's finding is that the instrument
+cannot resolve the artifact at any contrast** — which is a finding and not a failure.
+
+### E5 — THE TWO LEVERS ARE `ℓ` AND `Δ`, SWEPT TOGETHER, AND THE CONFOUND IS ACCEPTED WITH ITS FOLLOW-UP NAMED
+
+- **`ℓ`, coherence length** — the spatial scale over which the true parameters vary smoothly. It
+  sets whether a coarse source 8 fine cells away is a good start, so **it is the lever on the
+  saving and on the hysteresis magnitude.**
+- **`Δ`, regime contrast** — the size of the parameter jump across the step. **It is the lever on
+  whether the boundary is visible at all**, hence on the smear's measurability. **Orthogonal to
+  `ℓ`:** a field can be highly coherent with a faint boundary, or incoherent with a stark one.
+
+**THE CONFOUND IS STATED RATHER THAN DESIGNED AWAY.** The floor E4's sweep reports is a floor
+**along that line**, and it says nothing about `(short ℓ, stark Δ)`. **Separating them needs a
+crossed rung and 2d does not buy one.** The follow-up is named with a **falsifiable trigger**:
+worth buying **only if the plausibility rung returns a null AND the two levers are suspected of
+pulling opposite ways.**
+
+### E6 — THE PREDICTIONS, COMMITTED BEFORE THE RUNS, WITH REFUTATION IN BOTH DIRECTIONS
+
+| prediction | refuted from below | refuted from above |
+|---|---|---|
+| **The saving rises monotonically with `ℓ`** across the three rungs | saving at the **easy** rung ≤ saving at the plausibility rung → **the lever is not the lever**, or the builder does not control `ℓ` | saving at **any** rung ≥ the `self` ceiling → **the warm arm is reading its own answer back**; the source map is handing points their own optimum |
+| **The smear width lands between the 1-cell floor and the coupling range** | smear at the **easy** rung sits **at the floor** → the instrument cannot resolve the artifact at any contrast, the plausibility rung's null is uninterpretable, and **that is 2d's finding** | smear **above the spiral reach** → the profile is measuring the true field's own structure, because **no point can be biased by a source the spiral never reached** |
+| **The interior null line returns the 1-cell floor** | — | it returns a **width** → the profile estimator is measuring the field's smoothness rather than the smear, and **every smear number on every rung is contaminated** |
+
+> ## THE THIRD IS THE ONE TO WATCH AND IT GATES THE SUB-PHASE
+>
+> **It costs no compute — the same fits, a different line — it would contaminate every smear
+> number on every rung, and it is the one most expected to fire.** So it is **computed first, as
+> soon as the easy rung lands, before any smear number is read at all.** *If the null line returns
+> a width, stop and diagnose the estimator rather than proceeding to the plausibility rung.*
+>
+> **AND THE SECOND ROW'S UPPER CLAUSE IS THE SHARPEST OF THE SIX**, because it catches a
+> source-map defect that would otherwise look like a spectacular result.
+
+### E7 — §16.2 ITEM 6 IS 2d's HOME, AND ITEMS 1–5 ARE NOT 2d's
+
+**STATED EXPLICITLY OR 2d ABSORBS A SELECTION-ACCURACY SWEEP.** §16.2's items 1–3 — confusion
+matrices across families, parameter recovery, trend-uncertainty calibration — **are a sub-phase in
+themselves.** 2d opens **item 6 only**.
+
+**AND ITEM 6's FRAMING ANSWERS A QUESTION THE PLAN WOULD OTHERWISE HAVE HAD TO SETTLE:** §16.2 is
+*"slow, stochastic, tolerance-banded… run on demand; in CI only at small N. Emits a reproducible
+report."* **So 2d's measurements are a benchmark and not a test**, which is what criterion 12's
+1.7–6.7 hours against a 39-minute suite was already saying. **The exit-criteria suite asserts
+against the committed rung REPORTS**, because a 27-hour measurement cannot be a test and its
+recorded output can.
+
+**ONE THING ITEM 6 ASKS FOR THAT 2d CANNOT DELIVER, NAMED RATHER THAN DROPPED:** *"That figure
+goes in the README next to the misspecification figure."* **The misspecification figure is item
+4** and is not 2d's. The smear figure ships; **the position is reserved and the absence is
+stated.**
+
+**THE FOUR-ARM EXTENSION IS AN EXTENSION AND NOT A CONFLICT.** §16.2 item 6 predates the audit and
+specifies **warm and cold**; the shipped audit has **four**. **The plan says which arms run on
+which field**, because **N2's floor is what makes a smear width interpretable at all** — a smear
+measured against zero is a different claim from a smear measured against the width an
+equal-distance random start produces.
+
+### E8 — THE SUBSAMPLE IS STRATIFIED FROM THE FULL-FIELD FITS, AND OPEN QUESTION 21 CLOSES AS A BY-PRODUCT
+
+**THIS IS THE DESIGN, NOT AN OPTIMIZATION.** Criterion 12's own full-field **cold and warm** runs
+happen first and **publish the post-fit proxies for every point**. So the audit's population is
+stratified from real measurements rather than guessed. **That is open question 21's
+fits-everything-and-stratifies-after horn, arriving as a by-product rather than as a cost.**
+
+**TWO CONSEQUENCES.**
+
+1. **OQ21 GETS ITS MEASUREMENT FREE.** Both the pre-fit and post-fit sides exist over the same
+   field, so *"does a pre-fit proxy predict the post-fit ones"* is **a correlation over 384
+   points, not a new run.** If a pre-fit proxy predicts well, production can stratify its
+   subsample; if not, **that is the answer and it is recorded.** Either way **OQ21 closes.**
+   **The pre-fit proxy is NAMED before the correlation is computed**, or the measurement selects
+   its own winner — the warm-up-split trap one level up.
+2. **THE SELECTION RULE IS FIT-RELEVANT IN THE AUDIT'S SENSE.** Which points are audited
+   determines which strata reach 30 members, **so the rule is fixed and recorded before the
+   numbers arrive** — otherwise it becomes tunable against the occupancy result, which is (i5) at
+   the level of a sampling design.
+
+---
+
+## What 2d's tasks inherit (2026-08-30)
+
+**THE ONE HOME FOR EVERY NUMBER 2d's PLAN RESTS ON.** The plan states the tasks and points here.
+**Every number is dated and is a claim to RE-MEASURE, not a result to transcribe** — Task 0 exists
+to re-measure the first two before the budget is committed.
+
+> **AND THE LIMITATION COMES FIRST.** Every figure 2d will produce is from a field whose coherence
+> and contrast are **construction parameters**. **2d does not close D1.**
+
+### The cost model, and the budget it produced
+
+**`21 s per point per arm` at `N = 630`, `M = 2`, B = 16 — measured 2026-08-29 and a claim to
+re-measure.** The budget is priced at the **cold** rate throughout, so it is an **upper bound**:
+the warm and N2 arms come in under it by an amount the spike put at 42.28%, itself a ceiling.
+**A run finishing early is the bound behaving, not an error.**
+
+    21 s × 384 points × [ 3 rungs × 2.016  (cold + two-pass, pass 1 at 1/64)
+                        + 2 rungs × 1.0    (the N2 full-field map)
+                        + 1 rung  × 4.0    (the four arms, whole field) ]
+    = 21 × 384 × 12.048 = 97 155 s = 27.0 h
+
+**Against a 30 h ceiling** — roughly one weekend with margin for one re-run, and **every long
+measurement in this project has needed at least one re-run. A design that fits only if nothing
+goes wrong does not fit.**
+
+**N1 IS NOT IN THE 12.048 FACTOR AND ITS COST IS STILL A PREDICTION.** `N1_EPSILON = 6.055e-06` is
+*"a displacement the optimizer cannot distinguish from zero"*, so **N1 should cost a full cold
+arm** rather than a discount — cheap in interpretation, full price in compute. **Task 0 checks it
+on one small batch before the budget is committed.** If it holds, N1 is allocated to **the
+plausibility rung and the easy rung only**: its job is to separate *"the surface decides"* from
+*"the start distance decides"*, and that separation does not need every rung.
+
+### The figures 2d reads its predictions against
+
+| reading | value | where it comes from |
+|---|---|---|
+| the `self` ceiling at `N = 630` | **94.53% ± 0.14%** | 2c's saving table. E6's upper refutation clause |
+| the warm saving at `N = 630` | **42.28% ± 0.94%** | same table, and **a ceiling** — the instrument searched with no effective spiral bound |
+| fine-point **mean source radius** at `k = 8` | **2.556 fine cells** | the self-arm section. The scale the smear is expected near |
+| the **spiral reach** | **32 fine cells** = `spiral_bound(4) × coarse_stride(8)` | the shipped defaults, verified 2026-08-30. E6's upper bound on any width |
+| the audit's stratum floor | **30 members** | D8/D10, binomial SE ~9% at `p = 0.5` |
+| point strata at `M = 2` | **6** = `3 margin × M` | D9 |
+
+---
+
 ## What 2c's tasks inherit (2026-08-24)
 
 **THE ONE HOME FOR EVERY NUMBER 2c's IMPLEMENTATION RESTS ON.** The plan states the tasks and
@@ -6687,9 +6937,20 @@ empty.**
 3. **PRODUCTION CANNOT CONSTRUCT THIS STRATUM, AND THAT IS STATED WHERE IT IS DEFINED.** Real data
    carries no regime label, so the geographic axis exists **on simulated fields and not on real
    ones** — or someone looks for the column on an altimetry run and finds it missing.
-   **Consequence worth having:** §11.2's simulated benchmark, smoothly varying with a sharp
-   boundary, is **the only place this stratum can ever be read**, which raises its value rather
-   than lowering it.
+   **Consequence worth having:** ~~§11.2's~~ **§16.2 item 6's** simulated benchmark, smoothly
+   varying with a sharp boundary, is **the only place this stratum can ever be read**, which
+   raises its value rather than lowering it.
+
+   > **THE SECTION NUMBER WAS WRONG AND IS CORRECTED IN PLACE, 2026-08-30, AT 2d's BRAINSTORM.**
+   > §11.2 is the audit itself — the four metrics, the stratified subsample, the 30% threshold,
+   > the label-switching confound and the fit-relevant split. **It specifies no fields, says
+   > nothing about a sharp boundary, and names no smear width.** All three live in **§16.2 item
+   > 6**, *"Warm-start hysteresis, on simulated fields"*, which also states that the figure goes
+   > in the README. **The argument this constraint makes is untouched**; only its citation moves.
+   > **Three sites carried it and they failed differently:** this one cited the wrong section,
+   > Q11's 2d row named the deliverable with **no section at all**, and only §16.2 itself was
+   > right. **A deliverable named with no section is how the wrong section gets supplied by the
+   > next reader** — which is exactly what happened here.
 
 **AND CANDIDATE STRATIFICATION IS THE MORE ACTIONABLE HALF OF D3a.** All 11 large-`|Δℓ|`
 disagreements landing in the stiffest candidate says the risk is a property of **the likelihood
@@ -7589,7 +7850,7 @@ and the calibration tile both behave differently under it.
 | **2a** | config → input contract → tiling → fit → store → resume, `--reuse-fits-from`, exit codes | the store and the bitmap cannot change after data exists |
 | **2b** | calibration tile, `--memory-budget` default, RSS validated at 2–3 tile sizes | **gated by open question 12** — it measures in a child process |
 | **2c** | two-pass warm start, nearest-valid spiral, `/warmstart/` read, determinism | **inherits exit criterion 2 and must keep it green** |
-| **2d** | hysteresis audit, simulated fields, boundary-smearing width | needs 2c to audit |
+| **2d** | **design doc §16.2 item 6** — hysteresis on simulated *fields*, and the boundary-smearing width. **The section number is part of the row, added 2026-08-30**: this row named the deliverable with no section for nineteen days, and D4's constraint 3 supplied the wrong one (§11.2) in the meantime | needs 2c to audit |
 | **2e** | reporting, `metamer report`, clustering, early abort, the mechanism producing `CANDIDATE_DROPPED` | needs every branch to exist |
 
 - **MEASURE IN THE PHASE THAT CAN, PRINT IN THE PHASE THAT SHOWS — a rule, in design doc
