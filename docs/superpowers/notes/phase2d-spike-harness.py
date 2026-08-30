@@ -67,11 +67,13 @@ from typing import Any, TextIO
 
 import numpy as np
 import xarray as xr
+import zarr
 from numpy.typing import NDArray
 from threadpoolctl import threadpool_limits
 
 from metamer.batch.audit import N1_EPSILON, arm_starts, cold_starts
 from metamer.batch.run import run
+from metamer.batch.store import ITERATIONS_UNSET
 from metamer.core import machine
 from metamer.core.capability import Objective
 from metamer.core.criteria import Criterion
@@ -218,6 +220,14 @@ def quiet_check() -> dict[str, Any]:
     if before is not None and after is not None:
         source = after[1]
         rate_ms_per_s = (after[0] - before[0]) / 1000.0 / elapsed
+    cores = machine.physical_cores()
+    # **THE RULE IS DERIVED, NOT PICKED.** The timed readings run under
+    # `threadpool_limits(limits=1)`, so they need exactly ONE core. A one
+    # minute load average at or above `cores - 1` means no core is free, and a
+    # wall clock taken there prices the contention. The boundary comes from the
+    # machine's core count and this harness's own thread budget -- nothing in
+    # it was chosen with a reading in view.
+    quiet = load_after[0] < (cores - 1)
     return {
         "record": "quiet_check",
         "idle_seconds": elapsed,
@@ -227,7 +237,15 @@ def quiet_check() -> dict[str, Any]:
         "loadavg_after": list(load_after),
         "machine": machine.fingerprint(),
         "cpu": machine.cpu_model(),
-        "physical_cores": machine.physical_cores(),
+        "physical_cores": cores,
+        "load_limit": cores - 1,
+        "quiet": quiet,
+        # **THE STALL RATE IS RECORDED AND IS NOT A GATE.** Open question 19,
+        # inherited from 2b and still open: the counter is per-cgroup and
+        # cannot tell a measurement that allocates hard from one being
+        # squeezed. Gating on it would refuse valid readings and admit
+        # invalid ones, in proportions nobody can state.
+        "stall_is_not_a_gate": "open question 19",
     }
 
 
@@ -487,6 +505,13 @@ def overhead_reading(handle: TextIO, directory: Path, production_side: int) -> N
         n_x=OVERHEAD_PARALLEL,
         seed=770_000,
     )
+    # **THE STORE HOLDS float32 AND `run` READS IT BACK.** Handing `fit` the
+    # float64 array the field was drawn in would fit DIFFERENT DATA -- a
+    # different iteration count, so the ratio would price a different workload
+    # rather than the machinery. (j2), and it is why `iterations_run` below is
+    # recorded rather than assumed equal: the first run of this harness
+    # measured 1.178 with this defect present and the number was not quotable.
+    values = values.astype("float32").astype("float64")
     config_path = write_config(directory, "overhead.toml", uri)
 
     # -- the run side -----------------------------------------------------
@@ -500,6 +525,7 @@ def overhead_reading(handle: TextIO, directory: Path, production_side: int) -> N
     signal = signal_spec()
     engine = KalmanEngine()
     fit_seconds = 0.0
+    iterations_fit = 0
     tiles = 0
     for y0 in range(0, OVERHEAD_NORMAL, tile_side):
         for x0 in range(0, OVERHEAD_PARALLEL, tile_side):
@@ -507,15 +533,31 @@ def overhead_reading(handle: TextIO, directory: Path, production_side: int) -> N
             rows = block.reshape(block.shape[0], -1).T
             mask = np.ones(rows.shape, dtype=bool)
             start = time.perf_counter()
-            fit(rows, t, signal, candidates, Criterion.AIC, mask=mask, engine=engine)
+            result = fit(
+                rows, t, signal, candidates, Criterion.AIC, mask=mask, engine=engine
+            )
             fit_seconds += time.perf_counter() - start
+            iterations_fit += int(
+                result.n_iter[result.outcome == Outcome.OK.code].sum()
+            )
             tiles += 1
+
+    store = zarr.open_group(str(directory / "overhead.out.zarr"), mode="r")
+    written = store["primitives/iterations"]
+    if not isinstance(written, zarr.Array):  # pragma: no cover - store shape
+        raise TypeError("primitives/iterations is not an array")
+    iterations = np.asarray(written[:])
+    iterations_run = int(iterations[iterations != ITERATIONS_UNSET].sum())
 
     points = OVERHEAD_NORMAL * OVERHEAD_PARALLEL
     emit(
         handle,
         {
             "record": "overhead",
+            "iterations_run": iterations_run,
+            "iterations_fit": iterations_fit,
+            # The ratio prices MACHINERY only if both sides did the same work.
+            "same_workload": iterations_run == iterations_fit,
             "n_time": N_TIME_SHORT,
             "field": [OVERHEAD_NORMAL, OVERHEAD_PARALLEL],
             "points": points,
@@ -575,8 +617,29 @@ def main() -> None:
                 ).stdout.strip(),
             },
         )
-        if mode in {"quiet", "all"}:
-            emit(handle, quiet_check())
+        quiet = True
+        if mode in {"quiet", "all", "cost", "overhead"}:
+            reading = quiet_check()
+            emit(handle, reading)
+            quiet = bool(reading["quiet"])
+        if not quiet:
+            # (a2b): a value invalid under a DETECTABLE condition is made
+            # unavailable, not emitted with a caveat. A wall clock taken on a
+            # contended box is a price for the contention, and a caveat on it
+            # will be dropped by the first reader who quotes the number.
+            emit(
+                handle,
+                {
+                    "record": "refused",
+                    "why": (
+                        "the host was not quiet: the one minute load average "
+                        "after the idle is at or above physical_cores - 1, so "
+                        "no core was free for a single-threaded measurement. "
+                        "No timed reading was taken."
+                    ),
+                },
+            )
+            return
         with threadpool_limits(limits=1):
             if mode in {"cost", "all"}:
                 for repeat in range(REPEATS):
