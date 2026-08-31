@@ -1,7 +1,10 @@
 # Phase 2d — the simulated-field benchmark, and the audit's first real numbers
 
-**Status: APPROVED 2026-08-30. TASK 0 IS DONE; TASKS 1–9 REMAIN AND NO PRODUCTION CODE EXISTS
-YET.** Ten tasks, seventeen exit criteria
+**Status: APPROVED 2026-08-30. TASKS 0, 1 AND 2 ARE DONE; TASKS 3–9 REMAIN.** Production code is
+`src/metamer/bench/fields.py` (the field, its rungs and its geometry) and `src/metamer/bench/smear.py`
+(the misclassification profile, the width and the interior null). **A third rung is owed back to
+Task 1 before Task 4** — see [THE THIRD RUNG IS OWED](../../../PROGRESS.md).
+Ten tasks, seventeen exit criteria
 **each naming its reading**, plus 2b's criteria 6 and 7 which **stay FAILED** and 2c's criterion 11
 which **stays REDUCED SCOPE**. The single source for this plan's status is this line.
 **What each task finds beyond its brief goes in [`PROGRESS.md`](../../../PROGRESS.md)'s *What plan
