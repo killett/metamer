@@ -71,14 +71,24 @@ def test_the_truth_jumps_at_the_boundary_and_the_jump_dominates_every_other(tmp_
     would see it: the field would still be coherent, still have a transition,
     and still fit.
     """
-    truth = _build(tmp_path, fields.RUNGS["easy"], seed=11).parameters
+    built = _build(tmp_path, fields.RUNGS["easy"], seed=11)
 
-    # Profile the truth along the normal, averaged across the parallel axis:
-    # the same reduction the smear estimator will take.
-    # **THE PROFILE IS OF ONE NAMED PARAMETER.** Averaging over the parameter
-    # axis would mix a sigma with a timescale, and 'the smear width' would be a
-    # width of nothing in particular -- D8's argument at the truth.
-    profile = truth[:, :, fields.PRIMARY].mean(axis=1)
+    # **THE THING THAT STEPS IS THE FAMILY, NOT A PARAMETER.** Across a change
+    # of family the parameter that jumps is not the same parameter on both
+    # sides, so a width "of sigma" is a width of different things either side
+    # of the boundary. The family index is categorical, is defined everywhere,
+    # and is what the smear estimator's subject -- the SELECTED CANDIDATE --
+    # responds to.
+    family = built.family
+    transitions = np.flatnonzero(np.diff(family, axis=0).any(axis=1))
+    assert transitions.tolist() == [fields.BOUNDARY_INDEX - 1], (
+        "the true family changes at more or fewer than one place along the "
+        f"normal: transitions at {transitions.tolist()}, expected only "
+        f"{fields.BOUNDARY_INDEX - 1}"
+    )
+
+    truth = built.parameters
+    profile = truth[:, :, fields.SIGMA].mean(axis=1)
     steps = np.abs(np.diff(profile))
     boundary = fields.BOUNDARY_INDEX
 
@@ -116,9 +126,17 @@ def test_an_interior_line_away_from_the_boundary_has_no_transition(tmp_path):
     is worse than no alarm**, because the first response is to widen its
     threshold until it stops.
     """
-    truth = _build(tmp_path, fields.RUNGS["easy"], seed=11).parameters
-    profile = truth[:, :, fields.PRIMARY].mean(axis=1)
+    built = _build(tmp_path, fields.RUNGS["easy"], seed=11)
+    truth = built.parameters
+    profile = truth[:, :, fields.SIGMA].mean(axis=1)
     steps = np.abs(np.diff(profile))
+
+    # The family must also be constant there, or the null line straddles a
+    # regime and is not a control at all.
+    null_family = built.family[fields.NULL_LINE_INDEX]
+    assert len(set(null_family.tolist())) == 1, (
+        "the null line crosses a family boundary, so it is not a control"
+    )
 
     # A window entirely inside one regime, at least one coarse spacing from
     # the boundary. `NULL_LINE_INDEX` is where the estimator will look.
@@ -132,6 +150,79 @@ def test_an_interior_line_away_from_the_boundary_has_no_transition(tmp_path):
     assert window.max() <= largest_within, (
         "the smooth variation is steepest at the null line, so the negative "
         "control would fire on a healthy field"
+    )
+
+
+def test_the_boundary_is_a_change_of_family_and_each_region_is_one_family(tmp_path):
+    """Both regimes exist, each is homogeneous, and they differ.
+
+    Behaviour: the regime boundary is a **change of family** -- the repair
+    taken 2026-08-30 after both of Task 1's field readings were refuted from
+    below. 2c's field changed family across its boundary and ran at 40.79 cold
+    iterations per point; this field changed magnitude inside one family and
+    ran at 14.31, and at that cost a warm start has nothing to improve.
+
+    Expected value determined independently: two distinct family indices, one
+    per region, with every point in a region carrying its region's index. Read
+    off the truth array, which the builder controls.
+
+    Bug this catches: a rebuild that keeps one family and merely widens the
+    magnitude step. Every other test here would still pass -- the step would
+    still be a step, the null line would still be clean, `l` would still order
+    the autocorrelation -- and the field would still be unable to show the
+    effect, which is the failure this whole rebuild exists to remove.
+    """
+    built = _build(tmp_path, fields.RUNGS["easy"], seed=13)
+    before = built.family[: fields.BOUNDARY_INDEX]
+    after = built.family[fields.BOUNDARY_INDEX :]
+
+    assert len(set(before.ravel().tolist())) == 1, "region A is not one family"
+    assert len(set(after.ravel().tolist())) == 1, "region B is not one family"
+    assert before[0, 0] != after[0, 0], (
+        "both regions carry the same family, so the boundary is a magnitude "
+        "change and not a change of family"
+    )
+    assert set(fields.FAMILY_KINDS) == {"matern12", "matern32"}
+
+
+def test_the_contrast_still_scales_a_magnitude_across_the_family_change(tmp_path):
+    """`Delta` keeps its unit: a multiple of the within-regime range of sigma.
+
+    Behaviour: the family change is unconditional; `contrast` scales an
+    ADDITIONAL magnitude step on top of it. `contrast = 0` is a family change
+    alone, and a larger contrast is a larger sigma step.
+
+    Expected value determined independently: two rungs at the same `l` and
+    different `contrast`, compared by their sigma step at the boundary. The
+    ordering follows from `Delta`'s definition, not from the builder.
+
+    Bug this catches: `contrast` surviving the rebuild as a field that is
+    carried and no longer read -- (a2), and exactly the shape the pre-flight
+    warned about when it said a family change has no natural multiple. The
+    second lever would silently become a no-op while `Rung` still advertised
+    it, and E5's two-lever design would be one lever wearing two names.
+    """
+    quiet = fields.Rung(
+        name="quiet",
+        coherence_length=16.0,
+        contrast=0.0,
+        sources={"coherence_length": "test", "contrast": "test"},
+    )
+    loud = fields.Rung(
+        name="loud",
+        coherence_length=16.0,
+        contrast=4.0,
+        sources={"coherence_length": "test", "contrast": "test"},
+    )
+
+    def sigma_step(rung):
+        truth = _build(tmp_path / rung.name, rung, seed=13).parameters
+        profile = truth[:, :, fields.SIGMA].mean(axis=1)
+        return abs(profile[fields.BOUNDARY_INDEX] - profile[fields.BOUNDARY_INDEX - 1])
+
+    assert sigma_step(loud) > sigma_step(quiet), (
+        "a larger contrast did not produce a larger sigma step: the second "
+        "lever is carried and not read"
     )
 
 
@@ -194,7 +285,7 @@ def test_the_coherence_length_orders_the_spatial_autocorrelation(tmp_path):
     def correlation_at(truth, lag):
         """Lag-`lag` correlation along the PARALLEL axis, within one regime."""
         # Parallel to the boundary, so the step never enters the statistic.
-        block = truth[: fields.BOUNDARY_INDEX, :, fields.PRIMARY]
+        block = truth[: fields.BOUNDARY_INDEX, :, fields.SIGMA]
         left, right = block[:, :-lag], block[:, lag:]
         left = left - left.mean()
         right = right - right.mean()
@@ -322,6 +413,45 @@ def test_the_axis_is_to_decimal_years_and_not_a_hand_built_one(tmp_path):
 
 
 # --------------------------------------------------------------------------
+# (j9): one authoritative spelling, asserted rather than asked for
+# --------------------------------------------------------------------------
+
+
+def test_the_config_text_is_built_from_the_named_sources(tmp_path):
+    """Every quantity the config states is the module's own, not a second copy.
+
+    Behaviour: `config_text` renders `CANDIDATES`, `SIGNAL_TERMS` and
+    `CRITERIA`; `candidate_specs` and `signal_spec` parse the same tuples
+    through the shipped parsers. **A run reading the config and a caller
+    building a batch by hand cannot disagree.**
+
+    Expected value determined independently: the tuples themselves, compared
+    against what the rendered TOML contains and against what the parsers
+    return. Nothing is recomputed by the same logic the functions use.
+
+    Bug this catches: **the fifth instrument defect of this sub-phase,** and
+    the reason (j9) exists. A harness held `["white", "white + matern12"]`
+    inline while `CANDIDATES` went to three members, so the rebuilt field --
+    built with a `matern32` region -- was measured against a candidate set that
+    could not express one of its regimes, at `M = 2`, and reported an
+    unchanged iteration count that meant nothing. `write_config`'s own
+    docstring forbids exactly that and the offending function was twenty lines
+    below it. **A rule stated in a docstring constrains nobody; this line
+    does.** `M` sets the price AND D9's stratum count, so a second `M` is a
+    second budget and a second stratification.
+    """
+    text = fields.config_text("memory://x")
+    for candidate in fields.CANDIDATES:
+        assert f'"{candidate}"' in text
+    for term in fields.SIGNAL_TERMS:
+        assert f'"{term}"' in text
+    assert len(fields.candidate_specs()) == len(fields.CANDIDATES)
+    assert len(fields.signal_spec().terms) == len(fields.SIGNAL_TERMS)
+    # M is load-bearing twice over, so it is pinned rather than implied.
+    assert len(fields.CANDIDATES) == 3
+
+
+# --------------------------------------------------------------------------
 # The rung that is not constructible
 # --------------------------------------------------------------------------
 
@@ -384,10 +514,13 @@ def test_a_rung_parameter_without_a_source_cannot_be_constructed():
 def test_both_candidates_win_somewhere_on_the_field(tmp_path):
     """The winning-candidate axis must not collapse from `M = 2` to 1.
 
-    Behaviour: D9's point strata are `3 margin x M winning candidates`. If the
-    field is white-noise-dominated everywhere, every point selects the same
-    candidate, `M` collapses to 1, and **six point strata become three** before
-    a single margin bin is considered.
+    Behaviour: D9's point strata are `3 margin x M winning candidates`. At
+    `M = 3` that is nine strata and 42.67 members each at uniform occupancy,
+    against the 30 floor. If one candidate sweeps the field the axis collapses
+    and the strata collapse with it -- **and since the family-change rebuild
+    the stakes are higher than occupancy**: the selected candidate is the smear
+    estimator's subject, so a field whose regimes are indistinguishable to
+    selection cannot show a boundary at all.
 
     Expected value determined independently: a count over the store's own
     `/selection/selected`, requiring at least one point for each candidate
@@ -413,12 +546,18 @@ def test_both_candidates_win_somewhere_on_the_field(tmp_path):
     root = zarr.open_group(str(tmp_path / "out.zarr"), mode="r")
     selected = root["selection/selected"]
     assert isinstance(selected, zarr.Array)
-    winners = np.asarray(selected[:])
-    live = winners[winners >= 0]
+    selected_per_point = np.asarray(selected[:])
+    live = selected_per_point[selected_per_point >= 0]
 
     assert live.size > 0, "no point was ranked, so the check is vacuous"
-    assert set(np.unique(live).tolist()) == {0, 1}, (
-        "only one candidate ever wins on this field, so D9's winning-candidate "
-        f"axis collapses from M = 2 to 1; winners seen: "
-        f"{sorted(set(np.unique(live).tolist()))}"
+    winners = set(np.unique(live).tolist())
+    # Indices 1 and 2 are the two CORRELATED candidates, one per true regime.
+    # `white` at index 0 may legitimately never win; what must not happen is
+    # one correlated candidate sweeping the field, because then the regimes are
+    # indistinguishable to selection -- and selection is the smear estimator's
+    # subject since the family-change rebuild.
+    assert {1, 2} <= winners, (
+        "the two regimes' own families do not both win anywhere, so selection "
+        "cannot see the boundary and D9's winning-candidate axis collapses; "
+        f"winners seen: {sorted(winners)}"
     )

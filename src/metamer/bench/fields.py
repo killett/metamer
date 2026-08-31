@@ -62,6 +62,7 @@ It establishes that the instrument works and reports a resolution floor.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -71,7 +72,11 @@ import xarray as xr
 from numpy.typing import NDArray
 
 from metamer.batch.timeaxis import to_decimal_years
+from metamer.config.candidates import parse_candidate
 from metamer.config.model import WarmStart
+from metamer.config.signal_terms import parse_signal_terms
+from metamer.core.signal import SignalSpec
+from metamer.core.terms import ProcessSpec
 
 #: Pass 1's stride, read from the config default rather than written again.
 #: The geometry below is derived from it, so a stride change must move the
@@ -94,10 +99,27 @@ BOUNDARY_INDEX: int = N_NORMAL // 2
 #: so no point on it can have been warm-started across the step.
 NULL_LINE_INDEX: int = 4
 
-#: Which parameter the boundary steps in, and which the smear width is a width
-#: OF. **"The smear width" is a family of numbers**, so the one being measured
-#: is named rather than left to a reduction over an axis that mixes units.
-PRIMARY: int = 0
+#: Index of `sigma` in `BASE` and in `FieldTruth.parameters`.
+SIGMA: int = 0
+
+#: The two regimes' families, in `FieldTruth.family` index order. **THE
+#: BOUNDARY IS A CHANGE OF FAMILY, NOT A CHANGE OF MAGNITUDE**, taken
+#: 2026-08-30 after both of Task 1's field readings were refuted from below.
+#: 2c's field changed family across its boundary and its cold arm ran at
+#: **40.79 iterations per point** at `N = 630`; the first 2d field changed
+#: magnitude inside one family and ran at **14.31**, and at that cost a warm
+#: start has nothing to improve. **The constraint is the LIKELIHOOD, not the
+#: truth's coherence**: the saving is bounded above by what the cold start
+#: leaves on the table.
+FAMILY_KINDS: tuple[str, str] = ("matern12", "matern32")
+
+#: **THE SMEAR ESTIMATOR'S SUBJECT IS THE SELECTED CANDIDATE**, not a
+#: parameter. Across a change of family the parameter that steps is not the
+#: same parameter on both sides, so a width "of sigma" would be a width of
+#: different things either side of the boundary. Selection disagreement is
+#: §11.2's most interpretable metric, it is per point, and it is the axis D3a
+#: and S4 both identified as where the effect lives.
+SMEAR_SUBJECT: str = "selected candidate"
 
 #: Peak-to-peak of the smooth within-regime variation, as a fraction of each
 #: parameter's base value. `Rung.contrast` is a MULTIPLE of this, which is what
@@ -105,20 +127,70 @@ PRIMARY: int = 0
 #: `contrast = 3` and disagree about what it means.
 WITHIN_REGIME_RANGE: float = 0.5
 
-#: Base values, in the order `(matern12 sigma, matern12 rho, white sigma)`.
-#: `PRIMARY` indexes the first.
+#: Base values, in the order `(sigma, rho, white sigma)`, shared by both
+#: families so that the step across the boundary is a change of FAMILY plus
+#: whatever magnitude step `Rung.contrast` asks for, and nothing else.
 BASE: tuple[float, float, float] = (1.0, 0.8, 0.4)
 
 #: Production record length -- §11.2's threshold applies at no other.
 N_TIME: int = 630
 
-_CONFIG = """\
+#: **`M = 3`, AND BOTH TRUE FAMILIES ARE IN THE SET.** A candidate set that
+#: cannot express one of the regimes would make the boundary undetectable by
+#: selection, which is now the smear estimator's subject. `M` sets the price
+#: AND D9's stratum count -- `3 x M` point strata and `M x 4` cell strata --
+#: so it is stated here and recomputed wherever it is used. **Checked at the
+#: rebuild: 384 points over 9 point strata is 42.67 members each at uniform
+#: occupancy, against the 30 floor**, and 64 if `white` never wins.
+CANDIDATES: tuple[str, ...] = ("white", "white + matern12", "white + matern32")
+
+#: The signal, named once. **A second spelling is a second design matrix** --
+#: `k_beta` enters the memory formula, the penalty counts and every fit -- and
+#: (j9) says a rule against duplication does not prevent duplication. Both the
+#: config text and any `SignalSpec` a caller needs are BUILT from this tuple.
+SIGNAL_TERMS: tuple[str, ...] = ("constant", "trend")
+
+#: The criteria, named once for the same reason.
+CRITERIA: tuple[str, ...] = ("aic",)
+
+_CONFIG_TEMPLATE = """\
 data_uri = "{uri}"
 variable = "sla"
-signal_terms = ["constant", "trend"]
-candidates = ["white", "white + matern12"]
-criteria = ["aic"]
+signal_terms = {signal_terms}
+candidates = {candidates}
+criteria = {criteria}
 """
+
+
+def config_text(uri: str) -> str:
+    """The benchmark's config, rendered from the single sources above.
+
+    **EVERY QUANTITY HERE HAS EXACTLY ONE SPELLING IN THE TREE** -- (j9),
+    promoted after five instances in one sub-phase of two derivations agreeing
+    until one moved. The most recent was a harness naming its own candidate
+    set while `CANDIDATES` went from two members to three, which measured a
+    field at `M = 2` that had been built for `M = 3`.
+    """
+    return _CONFIG_TEMPLATE.format(
+        uri=uri,
+        signal_terms=json.dumps(list(SIGNAL_TERMS)),
+        candidates=json.dumps(list(CANDIDATES)),
+        criteria=json.dumps(list(CRITERIA)),
+    )
+
+
+def signal_spec() -> SignalSpec:
+    """The benchmark's `SignalSpec`, parsed from `SIGNAL_TERMS`.
+
+    **Through the shipped parser**, so a caller building a batch by hand and a
+    run reading the config cannot disagree about the design matrix.
+    """
+    return parse_signal_terms(list(SIGNAL_TERMS))
+
+
+def candidate_specs() -> list[ProcessSpec]:
+    """The benchmark's candidate set, parsed from `CANDIDATES`."""
+    return [parse_candidate(c) for c in CANDIDATES]
 
 
 class RungNotConstructible(Exception):
@@ -135,9 +207,13 @@ class Rung:
         coherence_length: The spatial scale, in cells, over which the true
             parameters vary. E5's primary lever: it sets whether a coarse
             source `COARSE_STRIDE` cells away is a good start.
-        contrast: The step across the boundary, as a **multiple of
-            `WITHIN_REGIME_RANGE`**. E5's second lever: it sets whether the
-            boundary is visible at all.
+        contrast: The **additional magnitude** step across the boundary, as a
+            multiple of `WITHIN_REGIME_RANGE`. **The family change is
+            unconditional**, so `contrast = 0` is a family change alone and a
+            larger value adds a larger sigma step on top. E5's second lever,
+            and it keeps the unit it had before the family change: a family
+            change has no natural multiple, so `Delta` scales the one quantity
+            that still has one.
         sources: Provenance **per parameter**, not one string per rung. A
             single rung-level citation covering `contrast` would silently
             appear to cover `coherence_length` too -- and that is the one
@@ -250,6 +326,12 @@ class FieldTruth:
             controls the truth, while the fits are what the benchmark is trying
             to move, so asserting on fits would make the oracle a function of
             the thing under test.
+        family: The TRUE family index per point, shape `(N_NORMAL,
+            N_PARALLEL)`, indexing `FAMILY_KINDS`. **This is what steps.**
+            Across a change of family the parameter that jumps is not the same
+            parameter on both sides, so the categorical index is the only
+            quantity defined either side of the boundary -- and it is what the
+            selected candidate responds to.
         boundary_index: Where the step is, along the normal axis. **A property
             of the field rather than a constant the estimator re-derives** --
             the oracle must not share a derivation path with what it checks.
@@ -259,6 +341,7 @@ class FieldTruth:
 
     uri: str
     parameters: NDArray[np.float64]
+    family: NDArray[np.int8]
     boundary_index: int
     t: NDArray[np.float64]
     rung: Rung
@@ -287,20 +370,42 @@ def _factor(rung_: Rung) -> NDArray[np.float64]:
     return 1.0 + smooth + step
 
 
-def _covariance(
-    t: NDArray[np.float64], sigma: float, rho: float, white: float
-) -> NDArray[np.float64]:
-    """Textbook Matern nu = 1/2 covariance plus a white floor.
+def _family() -> NDArray[np.int8]:
+    """Return the true family index per point, with one transition.
 
-    Rasmussen & Williams eq. 4.9 at nu = 1/2, **written here rather than
-    imported**: the fixture's only source of truth about the family shares no
-    code with `metamer.core.statespace`, so a slip in the family's construction
-    cannot cancel between the data and the fit.
+    Region A is `FAMILY_KINDS[1]` and region B is `FAMILY_KINDS[0]`: the
+    stiffer family first, matching 2c's field, where all eleven of its
+    large-`|dl|` disagreements landed in the stiffest candidate.
+    """
+    index = np.zeros((N_NORMAL, N_PARALLEL), dtype=np.int8)
+    index[:BOUNDARY_INDEX, :] = 1
+    return index
+
+
+_SQRT3 = np.sqrt(3.0)
+
+
+def _covariance(
+    t: NDArray[np.float64], kind: str, sigma: float, rho: float, white: float
+) -> NDArray[np.float64]:
+    """Textbook Matern covariance plus a white floor, for either family.
+
+    Rasmussen & Williams eq. 4.9 at nu = 1/2 and nu = 3/2, **written here
+    rather than imported**: the fixture's only source of truth about the
+    families shares no code with `metamer.core.statespace`, so a slip in a
+    family's construction cannot cancel between the data and the fit.
+
+    Raises:
+        ValueError: If `kind` is not one of `FAMILY_KINDS`.
     """
     d = np.abs(t[:, None] - t[None, :])
-    return np.asarray(
-        sigma**2 * np.exp(-d / rho) + white**2 * np.eye(t.size), dtype=np.float64
-    )
+    if kind == "matern12":
+        correlated = sigma**2 * np.exp(-d / rho)
+    elif kind == "matern32":
+        correlated = sigma**2 * (1.0 + _SQRT3 * d / rho) * np.exp(-_SQRT3 * d / rho)
+    else:
+        raise ValueError(f"unknown family {kind!r}; expected one of {FAMILY_KINDS}")
+    return np.asarray(correlated + white**2 * np.eye(t.size), dtype=np.float64)
 
 
 def build_field(
@@ -321,6 +426,7 @@ def build_field(
     """
     factor = _factor(rung_)
     parameters = factor[:, :, None] * np.asarray(BASE, dtype=np.float64)[None, None, :]
+    family = _family()
 
     origin = np.datetime64("2000-01-01")
     stamps = np.array([origin + np.timedelta64(31 * i, "D") for i in range(n_time)])
@@ -335,10 +441,24 @@ def build_field(
     for iy in range(N_NORMAL):
         for ix in range(N_PARALLEL):
             sigma, rho, white = parameters[iy, ix]
-            covariance = _covariance(t - t[0], sigma, rho, white)
+            kind = FAMILY_KINDS[int(family[iy, ix])]
+            covariance = _covariance(t - t[0], kind, sigma, rho, white)
             generator = np.random.default_rng([seed, iy, ix])
+            # **`method="cholesky"` IS NOT A MICRO-OPTIMISATION.** NumPy's
+            # default is SVD, measured at **1.85 s per draw** at `N = 630`
+            # against **0.209 s** for Cholesky -- 709 s against 80 s to build
+            # one 384-point field, and the build was dominating the benchmark
+            # rather than the fits. The covariance is positive definite by
+            # construction, a Matern kernel plus a white floor, so Cholesky is
+            # the correct decomposition and not merely the fast one.
+            #
+            # **IT CHANGES THE DRAWN BYTES FOR A GIVEN SEED**, because the two
+            # decompositions map the standard normals differently. Taken
+            # 2026-08-30, while no committed measurement depended on the old
+            # bytes; a later change here would invalidate every committed rung
+            # report and must be treated as such.
             values[:, iy, ix] = generator.multivariate_normal(
-                np.zeros(n_time), covariance
+                np.zeros(n_time), covariance, method="cholesky"
             )
 
     dataset = xr.Dataset(
@@ -353,6 +473,7 @@ def build_field(
     return FieldTruth(
         uri=str(path),
         parameters=parameters,
+        family=family,
         boundary_index=BOUNDARY_INDEX,
         t=t,
         rung=rung_,
@@ -367,7 +488,7 @@ def write_config(directory: Path, name: str, uri: str) -> Path:
     both the price and D9's stratum count.
     """
     path = directory / name
-    path.write_text(_CONFIG.format(uri=uri))
+    path.write_text(config_text(uri))
     return path
 
 

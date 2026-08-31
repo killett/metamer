@@ -49,7 +49,6 @@ import subprocess
 import sys
 import tempfile
 import time
-from dataclasses import replace
 from pathlib import Path
 from typing import Any, TextIO
 
@@ -65,9 +64,6 @@ from metamer.core.criteria import Criterion
 from metamer.core.engines.kalman import KalmanEngine
 from metamer.core.fit import fit
 from metamer.core.outcomes import Outcome
-from metamer.core.registry import kernel_registry
-from metamer.core.signal import Constant, SignalSpec, Trend
-from metamer.core.terms import ProcessSpec, TermSpec
 
 #: Reading A's subgrid stride on each axis. Every 2nd point: 16 x 6 = 96 of
 #: 384, both regimes evenly, every coarse index included.
@@ -136,8 +132,8 @@ def reading_a(handle: TextIO, directory: Path) -> None:
         result = fit(
             rows,
             built.t,
-            _signal_spec(),
-            _candidates(),
+            fields.signal_spec(),
+            fields.candidate_specs(),
             Criterion.AIC,
             mask=mask,
             engine=KalmanEngine(),
@@ -171,32 +167,6 @@ def reading_a(handle: TextIO, directory: Path) -> None:
                 "is_a_sample": True,
             },
         )
-
-
-def _candidates() -> list[ProcessSpec]:
-    """The shipped set, built through the same registry the config resolves."""
-
-    def term(kind: str) -> TermSpec:
-        family = kernel_registry[kind]()
-        specs = {
-            name: replace(spec, default=spec.default)
-            for name, spec in family.param_specs().items()
-        }
-        return TermSpec(
-            kind=kind,
-            params=specs,
-            ordering_param=getattr(family, "ordering_param", None),
-        )
-
-    return [
-        ProcessSpec((term("white"),)),
-        ProcessSpec((term("matern12"), term("white"))),
-    ]
-
-
-def _signal_spec() -> SignalSpec:
-    """Constant plus trend -- the same two terms the benchmark config names."""
-    return SignalSpec((Constant(), Trend()))
 
 
 # --------------------------------------------------------------------------
@@ -306,7 +276,10 @@ def main() -> None:
                     "geometry": [fields.N_NORMAL, fields.N_PARALLEL],
                     "boundary_index": fields.BOUNDARY_INDEX,
                     "coarse_stride": fields.COARSE_STRIDE,
-                    "candidates": ["white", "white + matern12"],
+                    "candidates": list(fields.CANDIDATES),
+                    "signal_terms": list(fields.SIGNAL_TERMS),
+                    "n_time_criterion_17": fields.N_TIME,
+                    "n_time_lever": N_TIME_LEVER,
                 },
             },
         )

@@ -6913,6 +6913,60 @@ top. **So the question was genuinely open, and it is not answered by the 12 poin
 > bitwise identical *regardless of memory budget, tile size, thread count and traversal order*,
 > and this puts three of those four inside the answer.
 
+#### D1 IS AMENDED, 2026-08-30: THE 42.28% IS REATTRIBUTED, AND THE DECISION SURVIVES THE REATTRIBUTION
+
+**D1 STANDS. The mechanism clears §11.2's 30% threshold and the wall clock agrees.** What moves is
+**what the number is a measurement OF**, and a later reader asking *"why the coarse grid"* has to
+find this.
+
+**THE RECORD-LENGTH LEVER MOVED TWO THINGS AT ONCE AND THE RISE WAS READ AS ONE.** 2c swept `N`
+and watched the saving climb, and attributed the climb to **coherence** — *"what record length
+changes is how good a neighbour is"*. But `N` also moves **how hard the cold fit is**, and 2c's
+own `random` arm separates them. Recomputed 2026-08-30 from the spike's own JSONL:
+
+| `N` | cold iterations **per point** | `warm` saving | **`random` saving** |
+|---|---|---|---|
+| 96 | **28.27** ± 5.70 | +7.80% | **−2.25%** |
+| 384 | **35.32** ± 2.94 | +31.73% | **+18.27%** |
+| 630 | **40.79** ± 3.73 | **+42.28%** | **+30.28%** |
+
+**`random` starts from a DISTANT converged optimum and carries no proximity information at all**,
+and it tracks the cold iteration count just as `warm` does. **So the ~30 points are what a
+converged starting point is worth when the moment ladder is poor, and only the 12.00 points are
+proximity.** Both numbers were already recorded; the reattribution is that **the 30 is a statement
+about cold-start difficulty rather than about the ocean's spatial coherence.**
+
+> **WHAT THIS MEANS FOR THE MACHINERY, STATED WHERE SOMEONE WILL LOOK FOR IT.** The coarse grid,
+> the barrier, the spiral, the stride inside `fit_hash` and the `/warmstart/` group **all exist to
+> deliver PROXIMITY — and proximity is the 12 points.** The other 30 would be available from *any*
+> converged optimum, which is the cheap variant D1 declined.
+>
+> **THE DECISION'S REASONING IS UNAFFECTED**, because D1 never rested on the 12 points: it rested
+> on the cheap variant putting **tile geometry, and therefore `--memory-budget`, inside `θ̂`**,
+> which trades an unpriced guarantee for a percentage. *"The expensive half buys the smaller half
+> of the benefit"* was already in the record. **What is new is that the 12 points are now
+> understood to be the WHOLE of what the geometry buys**, rather than a share of an effect that
+> was otherwise coherence.
+>
+> **AND IT SHARPENS THE STANDING LIMITATION RATHER THAN LIFTING IT.** If real altimetry's cold
+> fits converge in ~15 iterations, **the saving is bounded near zero regardless of coherence**,
+> and 42.28% would be largely a fact about the moment-init start on that fixture at that record
+> length. **Measured on 2d's first field: 14.31 cold iterations per point at `N = 630`, against
+> 2c's 40.79 — easier at production length than 2c's field was at its SHORTEST**, where the saving
+> was only +7.80%. A near-zero saving there is what this curve predicts.
+
+> **AND THE REAL-DATA SPIKE'S REQUIREMENT DOUBLES, WITH THE CHEAPER HALF FIRST.** It must measure
+> **the cold iteration count of real fits** as well as the coherence of real optima — and **the
+> iteration count needs no warm start, no coarse grid and no spiral.** **Measure cold difficulty
+> FIRST: if real fits converge in ~15 iterations the saving is bounded near zero and the coherence
+> question is moot.** That ordering is part of the closer, not a note on it.
+
+> **ONE CITATION CORRECTED WHILE WRITING THIS.** The reattribution was raised as bearing on
+> **D2**; the argument it bears on — *"(b) traded away an unpriced guarantee"*, the two-pass
+> geometry, the coarse grid, the spiral and the stride — is **D1's**. **D2 is *"Task 0's method is
+> the template for every remaining 2c premise that is unmeasured"*** and says nothing about the
+> mechanism choice. The amendment is filed here, where the reasoning lives.
+
 **RECORDED AS ANSWERED, WITH THE REASON, SO IT IS NOT RE-OPENED ON THE 12 POINTS ALONE:** the
 geometry buys 12 points **and preserves a guarantee whose loss is unpriced.**
 

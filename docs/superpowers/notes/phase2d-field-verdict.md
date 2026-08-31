@@ -7,13 +7,20 @@
 
 > ## BOTH READINGS ARE REFUTED FROM BELOW, AND THEY ARE THE SAME FINDING
 >
-> **THE BENCHMARK FIELD IS TOO EASY.** It converges in **14 iterations per point** where the two
-> fixtures the budget was priced against took **25.3** and **40.4** — and at that cost there is
-> almost nothing for a warm start to save, so **`ℓ` cannot express itself and the sweep's primary
-> lever is untestable on this field.**
+> ~~**THE BENCHMARK FIELD IS TOO EASY.**~~ **THE COLD START IS TOO GOOD** — the subject is
+> renamed in the addendum below, 2026-08-30, and the rename is the useful part: *"too easy"*
+> points at the field's coherence, and the actual constraint is the **likelihood**. **The saving
+> is bounded above by what the cold start leaves on the table**, so no amount of coherence in the
+> truth can produce one here. **The struck version is kept because the repair was proposed under
+> it and the reasoning has to stay legible.**
+>
+> The field converges in **14 iterations per point** where the two fixtures the budget was priced
+> against took **25.3** and **40.4** — and at that cost there is almost nothing for a warm start
+> to save, so **`ℓ` cannot express itself and the sweep's primary lever is untestable here.**
 >
 > **The lever is not shown to be a label. It is shown to have no room to act.** Those are
-> different findings with different repairs, and the measurement cannot yet separate them.
+> different findings with different repairs. **The addendum's recovery of 2c's own cold iteration
+> counts separates them**, and it needed no new run.
 
 ---
 
@@ -153,3 +160,153 @@ the null line is clean, `ℓ` orders the truth's autocorrelation, the rungs diff
 through the shipped path. **What is wrong is that a field whose TRUTH is coherent does not, at
 these settings, produce OPTIMA whose coherence the mechanism can exploit** — which is (i2b)'s
 finding arriving from the other direction, on a field we built rather than one we measured.
+
+---
+
+# ADDENDUM, 2026-08-30 — the subject was misnamed, and 2c's own data settles it
+
+## THE FIELD IS NOT TOO EASY. THE COLD START IS TOO GOOD
+
+**"Too easy" names the wrong subject.** At 16.4 cold iterations per point the moment-init ladder
+is already landing close enough that a warm start has nothing to improve. **That is a property of
+the LIKELIHOOD, not of the field's coherence** — and it means **no amount of coherence in the
+truth can produce a saving here, because the saving is bounded above by what the cold start leaves
+on the table.**
+
+**The repair is therefore right for a different reason than the one it was proposed under.** A
+family change is the right repair because it makes the **likelihood harder**, not because it makes
+the truth less smooth.
+
+## 2c's FIELD'S COLD ITERATION COUNT, RECOVERED FROM ITS OWN JSONL — THE GAP IS THE DIAGNOSIS
+
+**Recomputed from `warmstart-spike{,-n384,-n630}-measured.jsonl`, cold arm, OK cells only.** No
+re-run was needed; the numbers were already in the tree.
+
+| field | `N` | cold iterations **per point** | **per cell** | candidates |
+|---|---|---|---|---|
+| 2c's | 96 | **28.27** ± 5.70 | 9.49 | 3 |
+| 2c's | 384 | **35.32** ± 2.94 | 11.77 | 3 |
+| 2c's | 630 | **40.79** ± 3.73 | 13.60 | 3 |
+| **2d's** | **630** | **14.31** ± 1.34 | **7.16** | **2** |
+
+**2.85× harder per point; 1.90× harder per cell.** The per-point gap is larger because of the
+third candidate, so **the repair's two legs are separately supported**: `M = 2 → 3` buys roughly
+the 1.5×, and a harder per-cell likelihood buys the rest.
+
+> **AND THE SHARPEST FORM OF IT: 2d's FIELD AT PRODUCTION LENGTH IS EASIER THAN 2c's FIELD AT ITS
+> SHORTEST.** 14.31 against 28.27 — and at 28.27, **2c's saving was only +7.80%.** A saving of
+> ≈0% on 2d's field is not an anomaly; **it is what 2c's own curve predicts.**
+
+## AND THE SAME DATA GENERALIZES THE STANDING LIMITATION IN A DIRECTION NOBODY HAS STATED
+
+2c's record-length lever moved coherence **and** cold-start difficulty together. Its own arms
+separate them, and the separation was never read this way:
+
+| cold iterations/point | `warm` saving | **`random` saving** |
+|---|---|---|
+| 28.27 (`N = 96`) | +7.80% | **−2.25%** |
+| 35.32 (`N = 384`) | +31.73% | **+18.27%** |
+| 40.79 (`N = 630`) | +42.28% | **+30.28%** |
+| **14.31 (2d's field)** | **≈ 0%** | — |
+
+**`random` starts from a DISTANT converged optimum and carries no proximity information at all.**
+It gains **30.28 points** at `N = 630`. So of the headline **42.28%**, roughly **72% is
+attributable to starting at a converged optimum rather than at the moment ladder**, and only the
+**12.00 points** 2c already recorded come from the neighbour being near.
+
+> ## THE CONSEQUENCE FOR D1, STATED PLAINLY
+>
+> **If production altimetry's cold fits converge in ~15 iterations, warm-starting buys little
+> there REGARDLESS of spatial coherence** — and 2c's 42.28% would then be largely a statement
+> about how poor the moment-init start is on **that fixture at that record length**, rather than
+> about the ocean's spatial coherence.
+>
+> **This is a sharper form of "the real-data spike is the closer".** The spike must measure **two**
+> things, not one: the coherence of real optima **and the cold iteration count of real fits.** The
+> second is cheaper, needs no warm start at all, and **bounds the saving before any coherence
+> question is asked.** Recorded as a requirement on that spike.
+
+---
+
+# THE REBUILD'S THREE OUTCOMES, PRE-DECIDED BEFORE THE RE-RUN (2026-08-30)
+
+**Two branches were obvious and the third is the awkward one, so it is named before the number
+arrives rather than after.**
+
+| outcome | reading | what 2d does |
+|---|---|---|
+| **iterations rise AND the saving appears, ordered by `ℓ`** | the diagnosis holds: difficulty was the constraint | proceed. Reading B's clause is satisfied and the sweep has a field that can answer |
+| **iterations stay near 14** | the family change is not what makes a likelihood hard | **NOT another rebuild.** It would mean the moment-init start is simply good on any well-posed field of this shape, and 2d cannot construct one that shows the effect — a finding about warm-starting, not about the builder |
+| **iterations rise to 2c's range AND the saving stays near zero** | **difficulty is NECESSARY AND NOT SUFFICIENT** | **report it and stop rebuilding.** Something else about 2c's field — its coherence, its boundary placement, its three candidates in a different arrangement — carries the effect, and 2d reports that a field can be made as hard as 2c's without showing the lever |
+
+> **THE THIRD IS PRE-DECIDED BECAUSE IT IS WHERE THE TEMPTATION TO REBUILD AGAIN IS STRONGEST.**
+> It neither confirms nor kills the hypothesis, and a third build would be chosen with the
+> answer in view. **It is recorded against D1**, and it is a more interesting finding than a
+> successful third build: it would say the 42.28% needs something 2d has not identified, on a
+> mechanism whose production value already rests on a reattributed number.
+
+---
+
+# THE REBUILT FIELD'S NUMBERS (2026-08-30, family change, `M = 3`, Cholesky draw)
+
+**Quiet host — load 2.88 against a limit of 3, stall 5.0e-05 ms/s. The gate passed but not
+comfortably**, so the wall-clock figures carry that; **the iteration counts do not, being
+deterministic.**
+
+## Reading A — iterations per point. STILL REFUTED FROM BELOW, BUT AT THE EDGE
+
+| rung | `ℓ` | `Δ` | iterations/point | sd | min–max | per cell | cells OK | s/point |
+|---|---|---|---|---|---|---|---|---|
+| **easy** | 16.0 | 3.0 | **24.38** | 1.63 | 21–28 | 8.12 | 287/288 | 13.15 |
+| **hard** | 6.0 | 0.75 | **24.40** | 1.94 | 19–28 | 8.13 | 287/288 | 13.04 |
+
+**Against the committed band `[25.3, 40.4]`: 24.4 is below it by 0.9 iterations — 3.6%.** The
+clause fires **from below and only just**, and it is reported that way rather than rounded into
+the band. **The field is now level with Task 0's smooth batch (25.31) and still well under 2c's
+40.79.**
+
+| | `M = 2`, magnitude step | **`M = 3`, family change** |
+|---|---|---|
+| iterations/point | 14.31 | **24.38** — **1.70×** |
+| per cell | 7.16 | **8.12** |
+
+**Most of the gain is the third candidate and some is the stiffer family**, exactly as the
+decomposition predicted.
+
+## Reading B — the `ℓ` lever's sign. **CONFIRMED**
+
+| arm | `ℓ` | cold iterations | warm iterations | **saving** | warm-started cells |
+|---|---|---|---|---|---|
+| **long** | 16.0 | 10245 | 9850 | **+3.86%** | 1152 |
+| **short** | 6.0 | 10298 | 10030 | **+2.60%** | 1152 |
+
+**`saving(long ℓ) = +3.86% > saving(short ℓ) = +2.60%`, both positive, both far below the 94.53%
+`self` ceiling, and 1152 of 1152 cells warm-started on both fields.** Every clause on this
+reading is satisfied and none of the three void or refutation branches fired.
+
+> **THE DIAGNOSIS HOLDS, AND IT WAS THE LIKELIHOOD RATHER THAN THE COHERENCE.** The same builder,
+> the same `ℓ` values and the same contrast produced **−0.57% against +0.50%** before the family
+> change and **+3.86% against +2.60%** after. **What changed was how hard the cold fit is** —
+> nothing about the truth's smoothness moved.
+>
+> **AND THE FIELD IS NOW COMPARABLE TO 2c's WHERE IT MATTERS.** At `N = 96` this field's cold arm
+> runs at **26.7 iterations per point** against 2c's **28.27**, and shows **+3.86%** against 2c's
+> **+7.80%** — the same regime, about half the saving.
+
+## Outcome, against the branches pre-decided before the run
+
+**Outcome 1: iterations rose AND the saving appeared, ordered by `ℓ`.** Neither the
+stay-near-14 branch nor the awkward third branch applies. **2d proceeds, and it does not rebuild
+again.**
+
+## The budget, re-derived on the field that will actually run
+
+**Directly measured, never modelled** — the cost model stayed retired.
+
+| shape | factor | s/point | budget |
+|---|---|---|---|
+| **two rungs**, N1 at both | 12.032 | 13.15 | **16.9 h** |
+| **three rungs**, N1 at two | 14.047 | 13.15 | **19.7 h** |
+
+Using the **larger** rung's rate, as committed. **Both clear the 30 h ceiling; the difference is
+2.8 hours.** The pre-decided N1 cut does not fire.

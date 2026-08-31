@@ -1869,6 +1869,35 @@ and is by construction independent of the mechanism.
 because the treated arm's value is usually the more convenient one to hand. **The question to ask
 is not "which value is better" but "can the treatment move it".**
 
+#### (j9) A RULE STATED IN A DOCSTRING CONSTRAINS NOBODY — THE SECOND SPELLING MUST BE IMPOSSIBLE OR TESTED
+
+> **Where a quantity has one authoritative source, a second spelling must be made impossible or
+> asserted against the first.** A prose rule against duplication does not prevent duplication;
+> **the test is cheap exactly where the rule is not.**
+
+**FIVE INSTANCES ACROSS TWO HARNESSES IN ONE SUB-PHASE, AND THE SPECIES IS ONE:** two derivations
+of a quantity that agree until one of them moves.
+
+| # | the two spellings | how long they agreed |
+|---|---|---|
+| 1 | `float32` in the store against `float64` in the comparison | until the comparison was believed |
+| 2 | a hand-built decimal-year axis against `to_decimal_years` | until iteration counts were compared |
+| 3 | "repeats" redrawing their fixture against repeats of one fixture | until a spread was attributed to the host |
+| 4 | a quiet check that **recorded** against one that **gates** | until a loud host was measured on |
+| 5 | a candidate set written inline against `fields.CANDIDATES` | until `M` moved from 2 to 3 |
+
+**THE FIFTH IS THE ONE THAT PROVES THE RULE ISN'T ENOUGH.** `write_config`'s own docstring says
+*"one template, so the run and any comparison agree by construction — a second spelling of the
+candidate set would be a second `M`, and `M` sets both the price and D9's stratum count."* **The
+offending function sat twenty lines below it and was written by the same hand in the same
+sitting.** The rule was present, understood, and freshly argued. **What was missing was not care.
+It was enforcement.**
+
+**THE REPAIR IS ONE LINE OF TEST**, and it closes the species in that file: *assert the harness's
+candidate set IS the module's*. Then **enumerate every other quantity the harness names** — record
+length, geometry, stride, batch size — and ask which of them has a second spelling. **A species
+with five instances and no structural barrier has no reason to stop at five.**
+
 #### A PREMISE TEST BELONGS WITH THE ARTIFACT WHOSE PREMISE IT IS, NOT WITH THE TASK THAT FIRST DEPENDS ON IT
 
 > **When an early task wants to check a premise about an artifact a later task builds, the check
