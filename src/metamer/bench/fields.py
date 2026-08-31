@@ -84,6 +84,7 @@ import json
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Literal
 
 import numpy as np
 import xarray as xr
@@ -161,6 +162,16 @@ BASE: tuple[float, float, float] = (1.0, 0.8, 0.4)
 
 #: Production record length -- §11.2's threshold applies at no other.
 N_TIME: int = 630
+
+#: How `multivariate_normal` maps standard normals onto the covariance.
+#: **PART OF THE FIXTURE'S IDENTITY, NOT A PERFORMANCE SETTING**, because the
+#: two decompositions map them differently and a change here changes the DRAWN
+#: BYTES for a given seed. **A constant rather than a literal at the call site**
+#: so a report's instrument block can name it without transcribing it -- an
+#: instrument block that is itself a copy is (j9)'s worst instance in this
+#: sub-phase, and a block carrying the seed alone describes a field it cannot
+#: reproduce.
+DRAW_METHOD: Literal["svd", "eigh", "cholesky"] = "cholesky"
 
 #: **`M = 3`, AND BOTH TRUE FAMILIES ARE IN THE SET.** A candidate set that
 #: cannot express one of the regimes would make the boundary undetectable by
@@ -412,7 +423,7 @@ class FieldTruth:
     rung: Rung
 
 
-def _factor(rung_: Rung) -> NDArray[np.float64]:
+def _factor(rung_: Rung, n_normal: int, n_parallel: int) -> NDArray[np.float64]:
     """The dimensionless truth: smooth everywhere, one step at the boundary.
 
     Smooth in **both** axes, with a term in `y` that survives averaging over
@@ -424,26 +435,27 @@ def _factor(rung_: Rung) -> NDArray[np.float64]:
     transition occupies exactly one cell. Adding it before any smoothing is the
     `w > 0` design this module refuses.
     """
-    y = np.arange(N_NORMAL, dtype=np.float64)[:, None]
-    x = np.arange(N_PARALLEL, dtype=np.float64)[None, :]
+    boundary = n_normal // 2
+    y = np.arange(n_normal, dtype=np.float64)[:, None]
+    x = np.arange(n_parallel, dtype=np.float64)[None, :]
     amplitude = WITHIN_REGIME_RANGE / 2.0
     smooth = amplitude * np.sin(2.0 * np.pi * y / rung_.coherence_length) + (
         amplitude * np.cos(2.0 * np.pi * x / rung_.coherence_length)
     )
-    step = np.zeros((N_NORMAL, N_PARALLEL), dtype=np.float64)
-    step[BOUNDARY_INDEX:, :] = rung_.contrast * WITHIN_REGIME_RANGE
+    step = np.zeros((n_normal, n_parallel), dtype=np.float64)
+    step[boundary:, :] = rung_.contrast * WITHIN_REGIME_RANGE
     return 1.0 + smooth + step
 
 
-def _family() -> NDArray[np.int8]:
+def _family(n_normal: int, n_parallel: int) -> NDArray[np.int8]:
     """Return the true family index per point, with one transition.
 
     Region A is `FAMILY_KINDS[1]` and region B is `FAMILY_KINDS[0]`: the
     stiffer family first, matching 2c's field, where all eleven of its
     large-`|dl|` disagreements landed in the stiffest candidate.
     """
-    index = np.zeros((N_NORMAL, N_PARALLEL), dtype=np.int8)
-    index[:BOUNDARY_INDEX, :] = 1
+    index = np.zeros((n_normal, n_parallel), dtype=np.int8)
+    index[: n_normal // 2, :] = 1
     return index
 
 
@@ -474,7 +486,13 @@ def _covariance(
 
 
 def build_field(
-    rung_: Rung, *, path: Path, n_time: int = N_TIME, seed: int
+    rung_: Rung,
+    *,
+    path: Path,
+    n_time: int = N_TIME,
+    seed: int,
+    n_normal: int = N_NORMAL,
+    n_parallel: int = N_PARALLEL,
 ) -> FieldTruth:
     """Draw the field, write it, and return it with its truth.
 
@@ -485,13 +503,19 @@ def build_field(
         n_time: Record length. Defaults to production.
         seed: Base seed. Each point draws from its own generator keyed on its
             grid position, so the field does not depend on traversal order.
+        n_normal: Cells across the boundary. **Defaults to the shipped
+            geometry**; a smaller value exists so the driver can be exercised
+            end to end without an hour of fits, and **a run at a non-shipped
+            geometry is marked in its report's instrument block**, which is what
+            stops its numbers being quoted as the benchmark's.
+        n_parallel: Cells along the boundary, on the same terms.
 
     Returns:
         The field and its truth.
     """
-    factor = _factor(rung_)
+    factor = _factor(rung_, n_normal, n_parallel)
     parameters = factor[:, :, None] * np.asarray(BASE, dtype=np.float64)[None, None, :]
-    family = _family()
+    family = _family(n_normal, n_parallel)
 
     origin = np.datetime64("2000-01-01")
     stamps = np.array([origin + np.timedelta64(31 * i, "D") for i in range(n_time)])
@@ -502,9 +526,9 @@ def build_field(
     # harness shipped this defect and it took two runs to find.
     t = to_decimal_years(stamps)
 
-    values = np.empty((n_time, N_NORMAL, N_PARALLEL), dtype=np.float64)
-    for iy in range(N_NORMAL):
-        for ix in range(N_PARALLEL):
+    values = np.empty((n_time, n_normal, n_parallel), dtype=np.float64)
+    for iy in range(n_normal):
+        for ix in range(n_parallel):
             sigma, rho, white = parameters[iy, ix]
             kind = FAMILY_KINDS[int(family[iy, ix])]
             covariance = _covariance(t - t[0], kind, sigma, rho, white)
@@ -523,15 +547,15 @@ def build_field(
             # bytes; a later change here would invalidate every committed rung
             # report and must be treated as such.
             values[:, iy, ix] = generator.multivariate_normal(
-                np.zeros(n_time), covariance, method="cholesky"
+                np.zeros(n_time), covariance, method=DRAW_METHOD
             )
 
     dataset = xr.Dataset(
         {"sla": (("time", "y", "x"), values.astype("float32"))},
         coords={
             "time": stamps,
-            "y": np.arange(N_NORMAL, dtype=np.float64),
-            "x": np.arange(N_PARALLEL, dtype=np.float64),
+            "y": np.arange(n_normal, dtype=np.float64),
+            "x": np.arange(n_parallel, dtype=np.float64),
         },
     )
     dataset.to_zarr(path)
@@ -539,7 +563,7 @@ def build_field(
         uri=str(path),
         parameters=parameters,
         family=family,
-        boundary_index=BOUNDARY_INDEX,
+        boundary_index=n_normal // 2,
         t=t,
         rung=rung_,
     )

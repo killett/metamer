@@ -1574,6 +1574,36 @@ written. Where no such single comparison exists, iterate the authoritative set i
 absent from the thing being checked is **a comparison that silently does not happen** — the same
 defect one level in, and (a0)'s excluded-versus-missing register at a diff.
 
+> ## WHICH INSTANCES TO HUNT: AN ENUMERATION FAILS LOUDLY IN AN ASSERTION AND SILENTLY IN A LOOP
+>
+> **The consequence of the same defect is opposite in the two places it appears**, and that
+> asymmetry is the search strategy.
+>
+> | where the enumeration is | what happens when the set grows | who finds it |
+> |---|---|---|
+> | **in an assertion** — `assert set(RUNGS) == {"easy", "hard"}` | **it BREAKS.** A true statement about the members has become a false statement about the property | the suite, immediately, on the commit that grows the set |
+> | **in a loop** — `for name in ("easy", "hard")` | **it NARROWS the work.** Two of three get done, no error is raised, and **the output still looks whole** | nobody, until a number is quoted from a table with a row missing |
+>
+> **SO HUNT THE LOOPS, NOT THE ASSERTIONS.** A broken assertion is self-reporting and gets fixed
+> by whoever grew the set; a narrowed loop produces a complete-looking artifact and is the one
+> that needs looking for. **Grep for iteration over literal tuples of names before grepping for
+> equality against them.**
+>
+> Worked instance, 2d's third rung, 2026-08-31: **both forms were in one file's blast radius.**
+> `assert set(fields.RUNGS) == {"easy", "hard"}` failed the moment a third rung landed — the good
+> failure, and the one that made the second visible. The measurement harness's
+> `for name in ("easy", "hard")` would have **measured two rungs of three and emitted a table with
+> every column populated**; nothing in the record would have shown a rung missing, and the budget
+> rests on the largest of the three. **The loud one is what led to the silent one**, which is the
+> only reason to be glad of it.
+>
+> **AND ONE LEVEL FURTHER OUT, THE COMPARISON CANNOT BE MECHANIZED AT ALL.** `RUNGS`' membership
+> and the budget's **three-rung factor** live in different files and **one of them is prose**, so
+> no check can compare them; the gap was found by **reading the budget's arithmetic while looking
+> for something else.** That is the only way a prose-versus-code disagreement gets found, and it
+> is an argument for moving such a quantity into code where one exists to move it to — 2d's is
+> owed to the exit-criteria suite.
+
 #### (c5) AT A SET OF CI RUNS: ENUMERATE THE COMMITS, DO NOT INFER FROM ADJACENCY
 
 > **When verifying that a set of runs is green, enumerate the COMMITS and check that each has a

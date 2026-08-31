@@ -30,6 +30,14 @@ errors**. Neither refutation clause fires.
 >
 > **The committed clause was `< 23.8`, not "lowest of the three"**, and that is why it was written
 > as a band rather than as an ordering — there was no ordering in the two shipped rungs to extend.
+>
+> **THE CLAUSE'S FORM ANTICIPATED THIS, AND THAT IS THE PART WORTH RECORDING.** Nothing surprising
+> happened here: the prediction was a null and the null held. **The discipline still paid** — had
+> the clause been written as *"the middle rung lands between the two"*, this result would have
+> **refuted** it, on a 0.062 spread against a 0.18 standard error, and the refutation would have
+> been of the prediction's shape rather than of anything about the field. **A prediction committed
+> in the wrong form manufactures a finding**, and the only place to get the form right is before
+> the run, where there is nothing to fit it to.
 
 **What it means, and it is the difficulty condition rather than the lever.** The three rungs span a
 factor of **2.67 in `ℓ`** and **4 in `Δ`** and produce the same iteration count. **On this field

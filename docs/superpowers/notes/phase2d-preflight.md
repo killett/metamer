@@ -795,3 +795,137 @@ same refutation of monotonicity, **but only the upper one re-prices the sub-phas
 budget is built on the largest rung. The lower clause carries an explicit *"do not re-place the
 rung to make the curve monotone"*, which is the repair a reader would reach for and is tuning the
 sweep against its own result.
+
+---
+
+## Plan Task 4 — the driver and its reproducible report, audited before any code (2026-08-31)
+
+**THE BRIEF** is the plan's Task 4 — build the field, run the cold pass, run the shipped two-pass,
+take the N2 map and the widths, emit one report — **plus the four points carried in with it: the
+instrument block DERIVED rather than transcribed; Task 9 asserting against committed reports and
+failing when a default has moved; the Cholesky note making the draw method part of the block; and
+a floor reading distinguished from a measured width, with the profile carried either way.**
+**Seven findings. The first is where the gate lives, and the second is that the report cannot be
+built out of `Quantity` alone.**
+
+### WHERE THE NULL GATE LIVES: THE DRIVER, AND THE STRONGER FORM IS *NOT COMPUTED* RATHER THAN *WITHHELD*
+
+The question was driver or report. **The driver** — and the reason the alternative is bad is
+sharper than *"a marked reading invites proceeding"*: **a reading that exists can be read.** A
+report carrying a smear width beside a `contaminated: true` flag has the number in it, and the
+number is what travels.
+
+> **SO THE ORDERING IS THE MECHANISM, NOT THE FLAG.** `run_rung` computes the interior null
+> **before any smear width is taken**, and on contamination **the widths are never computed at
+> all.** The report's smear entries are then withheld objects carrying the reason — which is what
+> the plan asks for — **and there is no hidden value behind them**, because none was produced.
+> (a2b) at its strongest: not *"made unavailable"* but *"never made"*.
+
+**THE GATE HAS TWO HALVES AND THEY SIT AT DIFFERENT LEVELS**, which the plan does not separate:
+
+| half | where | what it does |
+|---|---|---|
+| **within a rung** | `run_rung` | the null is ordered first; widths are not computed; their quantities are withheld with the reason |
+| **across rungs** | `require_clean(report)`, called by Tasks 5–7 | **raises.** The sub-phase stops rather than proceeding to the next rung |
+
+**`run_rung` STILL RETURNS THE REPORT ON A CONTAMINATED RUNG, AND THAT IS DELIBERATE.** E6 says
+*"stop and diagnose"*, and **a diagnosis needs the null's profile**, which only the report carries.
+Refusing to return would destroy the evidence the gate exists to surface. **What is refused is
+proceeding, and it is refused by a separate callable rather than by a flag someone must remember
+to read.**
+
+### THE REPORT CANNOT BE BUILT OUT OF `Quantity` ALONE: IT HAS TWO STATES AND THE SMEAR HAS THREE
+
+`Quantity` carries `value: float | None` with `withheld` present exactly when the value is None —
+**two states, and they are the right two for a rate.** A smear reading has **three**:
+
+| state | means | `Quantity` would say |
+|---|---|---|
+| **a measured width** | `cells = 5.0` | value present |
+| **at the floor** | **a valid reading with no number** — `≤ 1 cell`, the resolution limit | value None + a reason |
+| **refused or withheld** | **no reading at all** — past the reach, or the rung is contaminated | value None + a reason |
+
+**The second and third would be indistinguishable**, and they are opposite claims: *"the instrument
+looked and resolved nothing"* against *"the instrument did not look"*. **That is (a0)'s
+excluded-versus-missing register arriving at a report field.**
+
+> **SO THE REPORT CARRIES THE `WidthReading` ITSELF BESIDE THE `Quantity`**, and the reading's own
+> `at_floor` / `refused` / `cells` triple is what distinguishes them. The `Quantity` exists for the
+> uniform reporting surface Task 9 asserts over; **the reading is what makes the row
+> interpretable, and Task 2 already settled that a floor result is uninterpretable until its
+> profile has been seen.** **A report recording `≤ 1 cell` without the profile has recorded
+> nothing**, and that sentence is in `WidthReading`'s docstring rather than only here.
+
+### `Quantity` WITHOUT A RUNG: A SUBCLASS WITH A KEYWORD-ONLY FIELD, SO THE CHECK IS REUSED AND NOT RE-WRITTEN
+
+The plan says the non-empty-scope construction is **reused, not re-invented**. **Re-implementing
+the scope refusal in a 2d type would be (j9) at a validator** — two spellings of one rule, drifting
+the first time one is edited. `RungQuantity` therefore **subclasses `Quantity`** and adds
+`rung: Rung` as a **keyword-only** field, so `Quantity.__post_init__`'s scope and half-stated
+checks run unchanged and every 2d number is a `Quantity` to everything downstream.
+
+**A factory returning a plain `Quantity` was considered and rejected**: it puts the rung in the
+scope string by convention, and *"cannot be constructed without a rung"* becomes *"is not usually
+constructed without a rung"*. **D8's whole argument is that labelling a number does not stop it
+being quoted.**
+
+### THE DRAW METHOD IS PART OF THE FIXTURE'S IDENTITY AND IS CURRENTLY A LITERAL AT THE CALL SITE
+
+`build_field` passes `method="cholesky"` inline, with a comment saying a later change there
+**invalidates every committed rung report**. **The instrument block cannot name it without
+transcribing it**, which is precisely the defect the block exists to prevent — and (j9)'s worst 2d
+instance was an instrument block that was itself a copy.
+
+> **`DRAW_METHOD` becomes a module constant in `fields.py` and the call site reads it.** Then the
+> block names the constant, a change moves both, and the artifact check has something to compare.
+> **The drawn bytes are keyed by seed AND method**, so a block carrying the seed alone describes a
+> field it cannot reproduce.
+
+### THE FIELD'S GEOMETRY IS MODULE CONSTANTS, SO NOTHING CAN RUN THE DRIVER AT A TESTABLE SIZE
+
+`N_NORMAL` and `N_PARALLEL` are constants and `build_field` takes no geometry, so **every driver
+run is 384 points × `M = 3`**. At the measured 11–13 s per point that is over an hour for one
+rung's cold arm alone. **A test cannot call `run_rung` at all**, and a task whose only test is the
+benchmark it is not allowed to run in the suite has no tests.
+
+**AND SHRINKING THE FIELD DOES NOT RESCUE IT, WHICH IS THE PART WORTH KNOWING BEFORE TRYING.** The
+interior null needs `n_normal // 2 - NULL_LINE_OFFSET_CELLS ≥ 1`, and the shipped offset is
+**12** — not the coarse stride's 8 — so **`n_normal ≥ 26`** before a legal null line exists at all.
+**A field small enough to be fast cannot carry the control**, and one that carries it is not fast.
+
+> **THE FIRST VERSION OF THIS PARAGRAPH SAID 18, AND IT WAS WRONG BY THE SAME MOVE (a4) EXISTS
+> FOR.** 18 comes from the offset having to exceed one **coarse spacing**, which is the constraint
+> on where the null line may be PLACED; the binding constraint is the offset actually shipped,
+> which is 12. **The two are different numbers for different reasons and the smaller one was the
+> one already in mind.** Corrected before it sized anything.
+
+> **SO THE DRIVER IS DECOMPOSED SO THAT EVERYTHING ASSERTABLE IS A PURE FUNCTION OF THE READINGS.**
+> The report assembly — the gate's decision, the instrument block, the quantities, the withholding,
+> the reproducible/timing split — takes readings and timings as **arguments** and is tested on
+> **constructed** ones, exactly as Tasks 2 and 3 were. `run_rung` is then the thin part that
+> produces those readings from a real field, and it is the benchmark rather than a test.
+>
+> **`build_field` gains optional `n_normal` / `n_parallel`**, defaulting to the constants, so one
+> end-to-end test can run at the smallest legal geometry. **The risk is a run at a non-shipped
+> geometry whose numbers get quoted**, and the mitigation is the instrument block: **the geometry
+> is in it, and Task 9 asserts a committed report's geometry equals the shipped constants.**
+> **That is the block earning its keep rather than decorating the file.**
+
+### TWO RUNS BYTE-IDENTICAL OUTSIDE THE TIMING BLOCK — AND ITERATIONS BELONG ON THE REPRODUCIBLE SIDE
+
+The plan segregates timings so a bitwise comparison is possible in principle. **The third rung's
+measurement makes the split sharper than "timings are not reproducible":** the same fixture
+reproduced its **iteration counts to every digit** a day later while its **seconds moved 15%**.
+
+> **SO ITERATIONS GO ON THE REPRODUCIBLE SIDE OF THE LINE AND SECONDS DO NOT.** That strengthens
+> the byte-identity test from *"the numbers that happen not to be timings"* to *"everything the
+> run determines"*, and it gives the cost block a component that a later reader can actually check
+> a committed report against. **The seconds are reported and never compared** — the phrase pass 2's
+> own report already uses for wall clock.
+
+### THE COST BLOCK IS DERIVED FROM THIS RUN, AND THE UPPER-BOUND SENTENCE TRAVELS WITH IT
+
+Measured per arm and per point by this run, never transcribed from `13.15`. **And the report says
+what the figure is:** the budget is priced at the **cold** rate, so **a run finishing early is the
+bound behaving and not an error** — the sentence is in the report because that is the artifact a
+reader meets, and *"why is this 30% under budget"* is otherwise a question someone answers wrongly.

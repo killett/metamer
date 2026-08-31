@@ -1,10 +1,10 @@
 # Phase 2d — the simulated-field benchmark, and the audit's first real numbers
 
-**Status: APPROVED 2026-08-30. TASKS 0, 1, 2 AND 3 ARE DONE; TASKS 4–9 REMAIN.** Production code is
+**Status: APPROVED 2026-08-30. TASKS 0–4 ARE DONE; TASKS 5–9 REMAIN.** Production code is
 `src/metamer/bench/fields.py` (the field, its rungs and its geometry), `src/metamer/bench/smear.py`
-(the misclassification profile, the width and the interior null) and `src/metamer/bench/n2map.py`
-(the N2 full-field map and its exclusions). **A third rung is owed back to Task 1 and BLOCKS
-Task 4** — see [THE THIRD RUNG IS OWED](../../../PROGRESS.md).
+(the misclassification profile, the width and the interior null) `src/metamer/bench/n2map.py`
+(the N2 full-field map and its exclusions) and `src/metamer/bench/report.py` (the driver, the
+report and E6's gate). **The third rung shipped and was measured 2026-08-31.**
 Ten tasks, seventeen exit criteria
 **each naming its reading**, plus 2b's criteria 6 and 7 which **stay FAILED** and 2c's criterion 11
 which **stays REDUCED SCOPE**. The single source for this plan's status is this line.
