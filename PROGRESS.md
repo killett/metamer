@@ -4,7 +4,7 @@
 
 1. **Branch `main`, everything on it, every commit pushed by a hook** — https://github.com/killett/metamer. **A SHA here is stale the moment the next commit lands, so nothing here names one:** `git log --oneline -8` is the authority.
 2. **DONE:** Phase 1 (0–18), Phase 2 preliminaries P0–P4, **Phase 2a (0–13)**, **Phase 2b (COMPLETE 2026-08-19 — 10 met / 4 reduced scope / 2 FAILED)**, **Phase 2c's brainstorm (D1–D12)**, and **Phase 2c (COMPLETE 2026-08-29 — 10 met / 2 reduced scope / 0 failed; Tasks 0–4 on 2026-08-24, Task 5 on 2026-08-27, Task 6 on 2026-08-28, Tasks 7–8 on 2026-08-29)**. The modelling sub-phase was decided against 2026-08-22 and **re-decided on closed facts 2026-08-23: it does not open.** Sections below carry each; **none is restated here.**
-3. **NEXT ACTION: THE THIRD RUNG, WHICH IS OWED AND BLOCKS TASK 4** — decided 2026-08-30, not shipped, and it is a **Task 1 amendment** rather than new work; see [THE THIRD RUNG IS OWED](#the-third-rung-is-owed--decided-2026-08-30-not-shipped-and-task-4-cannot-run-without-it). **Then PHASE 2d TASK 4 — the benchmark driver and its reproducible report**, which is the first task needing a field, a run and the whole budget. **2d's brainstorm is settled (E1–E8), its plan is approved — 10 tasks, 17 exit criteria — and TASKS 0, 1, 2 AND 3 ARE DONE.** **§16.2 item 6 is 2d's home, not §11.2.** **Every task's FIRST step is the pre-flight** (method at item 7); 2d's entries are in [`phase2d-preflight.md`](docs/superpowers/notes/phase2d-preflight.md). **Phase 2c is CLOSED (10 met / 2 reduced scope / 0 failed)** plus 2b's criteria 6 and 7 which **stay FAILED** — see [the close](#phase-2c-is-closed-2026-08-29--10-met--2-met-with-reduced-scope--0-failed-plus-2bs-two-inherited-failures). **`ALGORITHM_VERSION` IS `"2"` SINCE 2026-08-27** and every store written before it holds cold fits — see [how to read a store written before 2c Task 5](#how-to-read-a-store-written-before-2c-task-5-recorded-2026-08-24-and-it-cannot-be-reconstructed-later), which is not re-derivable from the stores. **No rate or budget figure is quoted here: they live once, in [what 2d's tasks inherit](#what-2ds-tasks-inherit-2026-08-30).**
+3. **NEXT ACTION: PHASE 2d TASK 4 — the benchmark driver and its reproducible report**, the first task needing a field, a run and the whole budget. **THE THIRD RUNG IS SHIPPED AND MEASURED (2026-08-31)**, so nothing blocks it: `middle`, `ℓ = 9.798`, `Δ = 1.5`, **ours to choose and it says so in both of its sources**, criterion 17 re-measured at **24.333** rather than interpolated. **2d's brainstorm is settled (E1–E8), its plan is approved — 10 tasks, 17 exit criteria — and TASKS 0, 1, 2 AND 3 ARE DONE.** **§16.2 item 6 is 2d's home, not §11.2.** **Every task's FIRST step is the pre-flight** (method at item 7); 2d's entries are in [`phase2d-preflight.md`](docs/superpowers/notes/phase2d-preflight.md). **Phase 2c is CLOSED (10 met / 2 reduced scope / 0 failed)** plus 2b's criteria 6 and 7 which **stay FAILED** — see [the close](#phase-2c-is-closed-2026-08-29--10-met--2-met-with-reduced-scope--0-failed-plus-2bs-two-inherited-failures). **`ALGORITHM_VERSION` IS `"2"` SINCE 2026-08-27** and every store written before it holds cold fits — see [how to read a store written before 2c Task 5](#how-to-read-a-store-written-before-2c-task-5-recorded-2026-08-24-and-it-cannot-be-reconstructed-later), which is not re-derivable from the stores. **No rate or budget figure is quoted here: they live once, in [what 2d's tasks inherit](#what-2ds-tasks-inherit-2026-08-30).**
 4. ## THE STANDING LIMITATION ON EVERYTHING 2c DECIDED: **NO 2c NUMBER COMES FROM REAL DATA.** Warm-starting was authorized — and every decision after D1 inherits this — on a **simulated field whose spatial coherence is a construction parameter**. **The spatial coherence of real altimetry optima has never been measured.** Weaker coherence gives a **smaller** saving, and **§11.2's 30% threshold could fail on real data.** **THE NAMED CLOSER, not an open worry: a spike on a real gridded product — same three arms, same record-length lever.** **AND SINCE 2026-08-24 THERE IS A SECOND REGISTER OF IT: every 2c saving is a CEILING, not an estimate**, because the instrument searched with no effective spiral bound — see [what 2c's tasks inherit](#what-2cs-tasks-inherit-2026-08-24).
 5. **Tests: 1287 passed, 0 failed, 0 INDETERMINATE — 2026-08-31, 3552.28 s (sweeps have run 1698–3552 s, which is the machine and not the suite; 2d Task 3 added ~3.5 min of real-filter fixtures, deliberately unmarked — the reason is at `tests/test_bench_n2map.py`).** **`pixi run test` is the full sweep and every end-of-task verification must run it; `test-fast` and `test-ci` are NOT evidence** — the full sweep has caught **seven** things a fast run could not. **Every run prints `RSS measurement validity`, including at zero**; a nonzero count is INDETERMINATE, neither pass nor fail.
 6. **Verify a fresh checkout with `pixi run test && pixi run typecheck && pixi run lint`**, plus `pixi run pre-commit run --all-files` before every commit. **AND `git add` A NEW FILE BEFORE THAT SWEEP, NEVER AT COMMIT TIME** — `--all-files` covers **tracked** files only, so an untracked new module makes every hook print `Passed` without being read. Measured 2026-08-24; it cost two full twenty-minute sweeps before it was noticed. **AND THE RULE HAS A SECOND FORM, PROMOTED 2026-08-31: STAGE ANYTHING A TOOL MAY RESTORE, NOT ONLY ANYTHING A HOOK MAY SKIP** — `git checkout -- <file>` restores **from the index**, so an unstaged edit in a file any tool touches is **silently reset to `HEAD`, with no error**. One changes what is CHECKED, the other changes what SURVIVES; the pair is in [the handoff](docs/superpowers/notes/phase1-to-phase2-handoff.md) and is not restated here.
@@ -6685,6 +6685,16 @@ to re-measure the first two before the budget is committed.
 > fixture**; **(j8)'s second register.** ~~`10.62 s` measured at Task 0~~ — correct for Task 0's
 > own fixture and **not for 2d's field.**
 >
+> **RE-MEASURED A THIRD TIME 2026-08-31 AND THE RATE DOES NOT MOVE, DELIBERATELY.** The same
+> fixture on the same quiet host came back at **11.20 / 11.38 s per point** against the
+> **13.15 / 13.04** used here — **−15% and −13% across one day** — while the **iteration counts
+> reproduced BIT-EXACTLY**, every digit including the spreads and the extrema. **`13.15` stands:
+> the budget is an upper bound and is priced at the larger reading on purpose**, and lowering it
+> would buy 2.7 h of headroom out of the one quantity this box has now been shown three times not
+> to hold still. **What improved is the confidence, not the number** — the figure is now known to
+> sit at the high end of a measured range rather than being a single sample. **19.7 h against the
+> 30 h ceiling is unchanged.**
+>
 > **AND THE COST MODEL IS RETIRED, NOT CORRECTED.** Task 0's two-point decomposition
 > `2.43 + 0.324 x iterations` predicted 7.06 s where the first field measured 5.62; a third point
 > put the slope at **0.214** between the `self` arm and that field and **0.455** between it and
@@ -6755,11 +6765,15 @@ width, **stop and diagnose the estimator** rather than proceeding.
 is why the plan placed them independent of everything. **Keep it that way** — a categorical
 estimator is *easier* to construct adversarial inputs for than a continuous one.
 
-**4. TASK 1's THREE NUMBERS, AND THE CONDITION THEY PUT ON EVERY LATER ONE.** Iterations per
-point **24.38 / 24.40** at `N = 630` — refuted from below by **3.6%** and reported at the edge —
-and the lever **CONFIRMED** at **+3.86% against +2.60%**. **The difficulty condition sits beside
-the standing limitation**: 2d's field runs at 24.4 against 2c's **40.79**, so **every 2d saving
-is a saving at lower difficulty than D1's headline came from.**
+**4. CRITERION 17's THREE POINTS, AND THE CONDITION THEY PUT ON EVERY LATER NUMBER.** Iterations
+per point at `N = 630`, all three rungs, **one session, 2026-08-31**: **easy 24.375 · middle
+24.333 · hard 24.396**, standard errors 0.17–0.20. **The three span a factor of 2.67 in `ℓ` and 4
+in `Δ` and are indistinguishable** — every pairwise difference is under a third of one standard
+error, so **there is no ordering here and none is reported.** **The budget rests on the largest,
+24.396.** Task 1's lever reading is separate and **CONFIRMED** at **+3.86% against +2.60%**. **The
+difficulty condition sits beside the standing limitation**: 2d's field runs at 24.4 against 2c's
+**40.79**, so **every 2d saving is a saving at lower difficulty than D1's headline came from.**
+Full table and both controls at [`phase2d-middle-rung-verdict.md`](docs/superpowers/notes/phase2d-middle-rung-verdict.md).
 
 **5. E4 IS DECIDED: THREE RUNGS.** The middle rung is **ours to choose and must say so** in its
 `sources` and **in every figure drawn from it** — the slot it occupies used to be plausibility,
@@ -6930,13 +6944,28 @@ recorded at the test module.
 
 ---
 
-### THE THIRD RUNG IS OWED — decided 2026-08-30, not shipped, and Task 4 cannot run without it
+### THE THIRD RUNG — owed 2026-08-30, SHIPPED AND MEASURED 2026-08-31. Closed
 
-**E4 was re-decided to THREE RUNGS on 2026-08-30 and the budget above counts three** — the
-`14.047` factor and the `19.7 h` figure are both three-rung numbers. **`fields.RUNGS` holds two**,
+> **CLOSED 2026-08-31. `RUNGS` holds `easy`, `middle` and `hard`; the middle rung's `ℓ` and `Δ`
+> are the GEOMETRIC midpoints of the other two, COMPUTED from them rather than written as
+> literals, so the three sit on one line by construction. `ℓ = √96 = 9.798` fine cells
+> (`1.22 × COARSE_STRIDE`), `Δ = √2.25 = 1.5` exactly, making the three a factor-of-two ladder.
+> Criterion 17 re-measured at `24.333`, inside its committed band. The record of what was
+> chosen and why is [`phase2d-middle-rung-verdict.md`](docs/superpowers/notes/phase2d-middle-rung-verdict.md);
+> the paragraphs below are kept because they say how the gap arose.**
+
+**E4 was re-decided to THREE RUNGS on 2026-08-30 and the budget counts three** — the
+`14.047` factor and the `19.7 h` figure are both three-rung numbers. **`fields.RUNGS` held two**,
 `easy` and `hard`. **The docs commit that took the decision (`a8b1efd`) landed AFTER the code
 commit that would have carried it (`ed8f39b`)**, which is the whole mechanism: a decision taken in
 the document that records decisions, about a module that had already shipped.
+
+> **AND THE THING THAT MADE IT VISIBLE WAS NOT A TEST.** No check compared `RUNGS`' membership
+> against the budget's factor, and none does now — the two live in different files and one of them
+> is prose. **It was found by reading the budget's arithmetic while looking for something else.**
+> Task 9 owns the exit-criteria suite; **an assertion that the number of rungs matches the factor
+> the budget was priced at belongs there**, and it is the only mechanical thing that would have
+> caught this.
 
 | | |
 |---|---|
