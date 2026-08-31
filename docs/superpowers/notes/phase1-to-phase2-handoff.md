@@ -1589,6 +1589,22 @@ around rather than read — the green runs on either side were quoted as evidenc
 clean. **It was a docs-only commit, which is the case a reader skips twice over**: once because
 docs cannot break tests, and once because its neighbours are green.
 
+> **AND ON ITS FIRST USE THE ENUMERATION FOUND AN ABSENCE RATHER THAN A RED, WHICH IS THE HARDER
+> CASE.** One commit of fifteen had **no run at all** — not cancelled, not failed, **absent**, and
+> `gh run list` cannot show that because **absence has no row.** A window answers *"what ran"*;
+> only the enumeration asks *"did each commit run"*.
+>
+> **THE MECHANISM IS STRUCTURAL AND NOT AN ANOMALY, WHICH MAKES THE RULE SHARPER.** The workflow
+> triggers on `push` with **no path filter**, so every commit ought to get a run — but **a push
+> carrying two commits produces ONE run, for the tip only.** The absent commit was made while the
+> post-commit hook's push was still running; the next commit's push then carried both, and only
+> the tip was verified.
+>
+> **SO THE RULE GAINS A CLAUSE: where a commit has no run, establish whether it was the TIP of its
+> push.** A non-tip commit's tree was never independently verified — **harmless when it is
+> docs-only and the tip is green, and a silent gap the moment an intermediate commit touches
+> `src`.** Here the absent commit was docs-only and its tip was green, so nothing is unverified.
+
 **AND THE DEFECT IT HID IS WORTH ITS OWN LINE, BECAUSE THE PRESENTATION IS THE TRAP.**
 `test_a_preempted_command_exits_aborted_early_and_resumes` polls **120 s** for a child to create
 a store and finish a tile, then signals regardless. On a runner taking **33m21s** where another
