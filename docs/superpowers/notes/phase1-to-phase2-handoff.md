@@ -455,6 +455,14 @@ conversion (`max_fine_radius = spiral_bound * stride`) happens once, where it is
 > that produced it is still current.** Store the producing configuration **in** the artifact, and
 > make the check that reads it **fail** when a named default has since moved.
 
+> **AND ITS WORKED FAILURE, 2026-08-30: THE INSTRUMENT BLOCK WAS ITSELF A COPY.** Phase 2d's
+> field harness emitted an instrument block naming `["white", "white + matern12"]` **inline**,
+> while the module's `CANDIDATES` had moved to three members. **So a committed report could have
+> recorded the wrong `M` while claiming to record the instrument** — and the block exists for no
+> other purpose than to stop a stale report reading as a current one. **The guard was defeated by
+> the exact defect it guards against**, which is the sharpest form this species has taken, and it
+> is why the repair is a *test* rather than a rule: see (j9).
+
 The register above is about a value whose unit is not recorded. This is the same defect one level
 out: **a whole artifact whose producing conditions are not recorded**, where the number is right
 and the question it answers has changed underneath it. **A stale report and a current one are the
@@ -1869,6 +1877,19 @@ and is by construction independent of the mechanism.
 because the treated arm's value is usually the more convenient one to hand. **The question to ask
 is not "which value is better" but "can the treatment move it".**
 
+#### A TARGETED CHECK IS NOT A SUBSET OF THE FULL ONE, WHICH IS WHY `--all-files` KEEPS PAYING
+
+> **`pre-commit run --files X` and `pre-commit run --all-files` are not the same check narrowed.**
+> A whole-tree type check sees relationships a per-file one cannot, and a fast test selection
+> exercises different code from the full sweep. **Neither targeted form is evidence about the
+> other.**
+
+**Twice in one day, 2026-08-30**, `--all-files` caught a mypy error that a green targeted run and
+a green fast-test selection had both passed — once an untyped call across modules, once a
+variable rebound to a different type inside a `slow` test that the fast selection never ran.
+**Both were in files the targeted run had just checked.** The full sweep has now caught **seven**
+things a fast run could not, and this is the type-check half of the same fact.
+
 #### (j9) A RULE STATED IN A DOCSTRING CONSTRAINS NOBODY — THE SECOND SPELLING MUST BE IMPOSSIBLE OR TESTED
 
 > **Where a quantity has one authoritative source, a second spelling must be made impossible or
@@ -1897,6 +1918,27 @@ It was enforcement.**
 candidate set IS the module's*. Then **enumerate every other quantity the harness names** — record
 length, geometry, stride, batch size — and ask which of them has a second spelling. **A species
 with five instances and no structural barrier has no reason to stop at five.**
+
+#### AND A BENCHMARK CAN BE DOMINATED BY DRAWING ITS OWN FIXTURE, WHICH NOTHING REVEALS UNLESS THE TWO HALVES ARE TIMED APART
+
+> **In simulation work, time the FIXTURE BUILD and the MEASUREMENT separately before believing
+> either.** A benchmark that spends most of its wall clock generating the data it is about to
+> measure looks, from the outside, exactly like a slow measurement.
+
+**Worked instance, Phase 2d Task 1, 2026-08-30.** `np.random.multivariate_normal` defaults to
+**SVD**: measured at `N = 630`, **1.847 s per draw against 0.209 s for Cholesky** — **709 s
+against 80 s** to build one 384-point field. **The benchmark was 9:1 dominated by drawing its own
+fixture**, so roughly twelve of every fifteen minutes measured nothing.
+
+**Nobody had a reason to look until a timeout forced it.** The per-point *fit* cost was being
+reported and was plausible; the build was untimed and invisible. **The covariance is positive
+definite by construction, so Cholesky was the correct decomposition all along and not merely the
+fast one** — this was not a trade.
+
+**AND THE CHANGE MOVES THE DRAWN BYTES FOR A GIVEN SEED**, because the two decompositions map the
+standard normals differently. **Taken while no committed measurement depended on the old bytes,
+which is the only cheap window**, and recorded at the call site as (a2d) pointed at the fixture:
+a later change there invalidates every committed report drawn from it.
 
 #### A PREMISE TEST BELONGS WITH THE ARTIFACT WHOSE PREMISE IT IS, NOT WITH THE TASK THAT FIRST DEPENDS ON IT
 
