@@ -246,6 +246,11 @@ before any run**.
   **contradicted, not merely absent**. A request for the middle rung raises with a message naming
   what it would need. **A provisional number in that slot is a claim about the ocean and it would
   stick** — (a2b) at the one slot where that is a scientific error rather than a placeholder.
+- **AND A THIRD RUNG IS OWED BACK TO THIS TASK.** E4 was re-decided to **three** rungs on
+  2026-08-30 — after this module shipped two — and the middle one is **ours to choose**, not the
+  retired `plausibility`. **It is a Task 1 amendment with a Task 4 deadline**; the ownership, the
+  reason it is not Task 3's, and what the amendment must satisfy are recorded once, in
+  [THE THIRD RUNG IS OWED](../../../PROGRESS.md), and are not restated here.
 - **`source` is PER PARAMETER, not one string per rung**, so an unsourced parameter reads as
   unsourced instead of being covered by a citation that applies to a different parameter.
 - **`Δ` is a MULTIPLE of the within-regime range of the same parameter**, and the ratio is

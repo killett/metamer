@@ -378,24 +378,59 @@ estimator that estimates its own baseline from data the artifact may have touche
 estimator hides its own bias**, and 2c has already paid once for an instrument that measured
 partly itself. **The majority rule needs no baseline**, which is the whole of its case.
 
-**WHAT THE MAJORITY RULE FORFEITS, RECORDED RATHER THAN DISCOVERED LATER.** A smear that lifts the
-disagreement rate to 30% across six cells **reads at the floor**. That is under-reporting, and it
-is under-reporting **in the reassuring direction** — the direction this project has been bitten by
-three times. **Two things are done about it rather than one.** The **profile travels on the
-reading**, so a raised-but-sub-majority band is visible in the committed artifact even when the
-width is at the floor; and this paragraph names the follow-up — **a second, baseline-referenced
-estimator is worth buying only if the committed profiles show such a band**, which is a
-falsifiable trigger rather than an open worry.
+> ## WHAT THE MAJORITY RULE IS BLIND TO, WITH THE NUMBER ATTACHED
+>
+> **A smear that lifts the disagreement rate to 30% across six cells reads at the floor.** Not
+> *"may under-report"* — **`0.30 < 0.5` at every one of the six cells, so no cell is smeared, so
+> the width is 0 and the reading is `≤ 1 cell`.**
+>
+> **AND THAT IS THE SHAPE A REAL ARTIFACT IS LIKELIEST TO TAKE.** A smear should **decay with
+> distance** from the boundary rather than stop at an edge, so its profile is a slope and not a
+> plateau; a slope crosses a half at **one** place and the majority rule converts everything below
+> that crossing to nothing. **The estimator is blind to the gradual case by construction, and the
+> blindness is worst exactly where the artifact is most physical.**
 
-**AND THE FLOOR ABSORBS THE ESTIMATOR'S OWN SAMPLING NOISE, WHICH IS ARITHMETIC AND NOT A HOPE.**
-A line is 12 points, so at a baseline disagreement rate `b` a cell fires spuriously with
-probability `P(Binom(12, b) ≥ 7)`: **0.39% at `b = 0.2`, 3.86% at `b = 0.3`, 15.8% at `b = 0.4`,
-and 38.7% even at `b = 0.5`** — below a half at the coin-flip baseline **because the tie does not
-count**, which is what makes the strict inequality worth having. A spurious width is only
-*reportable* if it reaches two cells, which needs two adjacent spurious fires: **0.0015 at
-`b = 0.3` and 0.025 at `b = 0.4`.** **So the floor is doing real work at any baseline the easy
-rung is likely to show, and the reading is only trustworthy while the profile shows `b` well under
-a half — which is why the profile is on the reading and not merely in a log.**
+**SO THE PROFILE ON THE READING IS NOT *A* MITIGATION, IT IS *THE* MITIGATION**, and it only works
+if someone looks at it: **a floor result is uninterpretable until its profile has been seen to be
+flat rather than sloped.** That sentence goes in `WidthReading`'s docstring and not only here,
+because the reading is what travels into Task 4's report and the pre-flight is not.
+
+**THE SECOND ESTIMATOR'S TRIGGER, WRITTEN NOW; THE ESTIMATOR ITSELF IS NOT.** **If any rung's
+committed profile shows a sustained elevation above its own baseline that the majority rule does
+not convert to a width, that is the trigger** — buy a baseline-referenced estimator. *"Sustained"*
+and *"elevated"* are read off the committed profile by eye at that point and are deliberately not
+thresholds here: **a threshold written before any profile exists would be tuned against the first
+profile that missed it.** What is fixed now is the **condition**, so the follow-up is falsifiable
+rather than a standing worry.
+
+> ## THE FLOOR IS A DERIVED THRESHOLD, NOT A CHOSEN ONE — AND THE RUN REQUIREMENT IS ITS OTHER HALF
+>
+> A line is **12 points**, so at a baseline disagreement rate `b` a single cell fires spuriously
+> with probability `P(Binom(12, b) ≥ 7)`:
+>
+> | `b` | one cell fires | two adjacent cells fire |
+> |---|---|---|
+> | 0.2 | **0.39%** | 0.0000 |
+> | 0.3 | **3.86%** | **0.0015** |
+> | 0.4 | **15.8%** | **0.025** |
+> | 0.5 | **38.7%** | 0.150 |
+>
+> **Below a half even at the coin-flip baseline, because the tie does not count** — which is the
+> whole return on the strict inequality.
+>
+> **READ THE 15.8% AS A COUNT AND IT CHANGES WHAT THE FLOOR IS FOR.** At `b = 0.4` a 32-cell
+> profile carries **about five spurious majority cells scattered through it**. **The floor does not
+> handle five cells; it handles the isolated one.** What handles the other four is the **run
+> requirement** — a spurious cell only enters the width if it is **contiguous with the boundary**,
+> so five scattered fires contribute nothing unless one of them lands on a seed cell, and a
+> *reportable* width needs two adjacent fires at **0.025**.
+>
+> **THE TWO WORK TOGETHER AND EITHER LOOKS LOCALLY SAFE TO DROP.** Drop the floor and every
+> isolated seed-cell fire becomes a reported `1.0`; drop the run requirement and the width becomes
+> a count of scattered noise anywhere on the axis. **Neither is defensive and neither is a style
+> choice.** **This table goes in the module**, because it is the arithmetic a later reader needs
+> when they propose lowering the threshold to catch a subtler smear — and by the paragraph above,
+> **they will**, and they will be right about the smear and wrong about the cost.
 
 ### (j5) THE TRUTH-READING IS QUARANTINED, SO THE PLAN'S INVARIANT STAYS LITERALLY TRUE
 
@@ -451,10 +486,20 @@ merely unphysical — **it is arithmetically impossible for a correct run-length
 **So the refusal is a self-check on the estimator, not a physics filter, and it is recorded as
 that.** If it ever fires on a real rung the estimator has returned a run longer than the axis it
 ran on. **It is still built, still read from config and still tested**, because the plan's ceiling
-is written against `reach_cells` as a **parameter** and a later field with a longer normal axis —
-or a lowered `spiral_bound` — makes it a physics filter again. **What must not happen is the
-ceiling being quietly dropped as unreachable**, which is the reading a maintainer arrives at from
-the geometry alone without this paragraph.
+is written against `reach_cells` as a **parameter**. **What must not happen is the ceiling being
+quietly dropped as unreachable**, which is the reading a maintainer arrives at from the geometry
+alone without this paragraph.
+
+> **AND THE CONDITION THAT MAKES IT REACHABLE IS NAMED, WITH THE TEST THAT ALREADY COVERS IT** —
+> the criterion-12 treatment, because *"unreachable"* is a claim about a configuration and not
+> about the code. **Either of two changes restores it to a physics filter: a `spiral_bound` below
+> 4, or a normal axis longer than `spiral_bound × coarse_stride`.** **C2 exercises the first
+> today** — it halves `spiral_bound` and asserts the refusal boundary moves with it — so the
+> reachable case is under test even though the shipped geometry cannot produce it. **The second
+> has no test and needs none while `N_NORMAL` is derived as `4 × COARSE_STRIDE`**, which pins the
+> axis to the reach by construction; **a later field that sets the normal axis independently is
+> the change that makes it live**, and that is a field-builder decision rather than an estimator
+> one.
 
 ### (j9) THE REACH GETS ONE SPELLING, AND HALF OF IT IS ALREADY WRITTEN
 
@@ -466,6 +511,16 @@ fields.COARSE_STRIDE`, taking the `WarmStart` as an argument** so that a test ca
 `spiral_bound` without monkeypatching a module constant — a constant read once at import is
 exactly the *"config change moves the physics but not the check"* bug the plan's sixth test line
 names.
+
+**A SOURCE-SCAN TEST FORBIDDING A SECOND `WarmStart().coarse_stride` WAS CONSIDERED AND DROPPED,
+AND THE DROP IS RECORDED AS A LATENT INSTANCE RATHER THAN AN ABSENCE.** Two spellings that both
+read the same **default** cannot disagree, so today there is no bug for such a test to catch and
+C1/C2 cover everything that can move. **It becomes live the moment anything constructs a
+`WarmStart` with a non-default `coarse_stride`** — a benchmark at a different stride, or a config
+that sets one — because then `fields.COARSE_STRIDE` is still the default while the reach is
+computed from the caller's object, and the two describe different fields. **That condition is
+named in the module docstring**, so the next person to set a non-default stride meets it rather
+than discovering it.
 
 ### THE `NaN` IN THE PLAN'S TEST LINE IS A SENTINEL IN THE STORE, AND IT IS THE COMMONER CASE
 
@@ -484,6 +539,15 @@ normal row at the growing edge of the band** must **refuse**, because a `NaN` th
 run behaves exactly like a non-majority cell and **narrows the width, always in the reassuring
 direction.** A `NaN` row far from the band refuses nothing, or a partially fitted field becomes
 unreadable and Task 5 reports nothing at all.
+
+> **THE ASYMMETRY IS WHAT STOPS THE REFUSAL BEING EITHER USELESS OR TOTAL, AND ITS BOUNDARY IS A
+> JUDGEMENT, SO IT IS STATED AT THE CHECK AND NOT ONLY HERE.** **A `NaN` row refuses exactly when
+> it is a cell the run had to decide about** — a seed cell, or the first cell beyond either end of
+> the run — **and is ignored everywhere else.** That is the smallest set with the property that
+> matters: **every `NaN` capable of changing the width refuses, and no `NaN` incapable of changing
+> it does.** Refusing on any `NaN` anywhere makes a partially fitted field unreadable; refusing on
+> none lets missing data narrow the width. **Written beside the check, because a year from now the
+> rule reads as an arbitrary radius unless the property it was chosen for is next to it.**
 
 ### DEVIATIONS FROM THE BRIEF, STATED RATHER THAN ABSORBED
 

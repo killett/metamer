@@ -94,10 +94,19 @@ N_PARALLEL: int = 12
 #: either side.
 BOUNDARY_INDEX: int = N_NORMAL // 2
 
-#: Where the smear estimator's negative control is taken -- a line parallel to
-#: the boundary and `12` cells from it, which is more than one coarse spacing,
-#: so no point on it can have been warm-started across the step.
-NULL_LINE_INDEX: int = 4
+#: How far the smear estimator's negative control sits from the boundary, in
+#: fine cells. **MORE THAN ONE COARSE SPACING**, so no point on the null line
+#: can have been warm-started across the step. **THIS IS THE PARAMETER**:
+#: `smear.interior_null` takes an offset, because the control is defined by its
+#: distance from the boundary and not by where that lands.
+NULL_LINE_OFFSET_CELLS: int = 12
+
+#: The index the offset lands on. **DERIVED, NEVER WRITTEN BESIDE THE OFFSET.**
+#: Until 2026-08-31 this was the literal `4` with a docstring saying *"12 cells
+#: from it"* -- one location spelled as an index and as a distance, which is
+#: (j9)'s exact shape and which moving `BOUNDARY_INDEX` would have broken in
+#: only one of the two places.
+NULL_LINE_INDEX: int = BOUNDARY_INDEX - NULL_LINE_OFFSET_CELLS
 
 #: Index of `sigma` in `BASE` and in `FieldTruth.parameters`.
 SIGMA: int = 0

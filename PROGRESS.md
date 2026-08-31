@@ -4,12 +4,12 @@
 
 1. **Branch `main`, everything on it, every commit pushed by a hook** — https://github.com/killett/metamer. **A SHA here is stale the moment the next commit lands, so nothing here names one:** `git log --oneline -8` is the authority.
 2. **DONE:** Phase 1 (0–18), Phase 2 preliminaries P0–P4, **Phase 2a (0–13)**, **Phase 2b (COMPLETE 2026-08-19 — 10 met / 4 reduced scope / 2 FAILED)**, **Phase 2c's brainstorm (D1–D12)**, and **Phase 2c (COMPLETE 2026-08-29 — 10 met / 2 reduced scope / 0 failed; Tasks 0–4 on 2026-08-24, Task 5 on 2026-08-27, Task 6 on 2026-08-28, Tasks 7–8 on 2026-08-29)**. The modelling sub-phase was decided against 2026-08-22 and **re-decided on closed facts 2026-08-23: it does not open.** Sections below carry each; **none is restated here.**
-3. **NEXT ACTION: PHASE 2d TASK 2 — the smear estimator and its interior null. ITS PRE-FLIGHT IS THE NEXT THING WRITTEN AND IT NEEDS A FULL WINDOW**, because Task 2's SUBJECT CHANGED under Task 1's rebuild and the pre-flight is where the estimator gets specified. **Read [what Task 2 inherits](#what-task-2-inherits-2026-08-30) before anything else.** **2d's brainstorm is settled (E1–E8), its plan is approved — 10 tasks, 17 exit criteria — and TASKS 0 AND 1 ARE DONE.** **§16.2 item 6 is 2d's home, not §11.2.** **Every task's FIRST step is the pre-flight** (method at item 7); 2d's entries are in [`phase2d-preflight.md`](docs/superpowers/notes/phase2d-preflight.md). **Phase 2c is CLOSED (10 met / 2 reduced scope / 0 failed)** plus 2b's criteria 6 and 7 which **stay FAILED** — see [the close](#phase-2c-is-closed-2026-08-29--10-met--2-met-with-reduced-scope--0-failed-plus-2bs-two-inherited-failures). **`ALGORITHM_VERSION` IS `"2"` SINCE 2026-08-27** and every store written before it holds cold fits — see [how to read a store written before 2c Task 5](#how-to-read-a-store-written-before-2c-task-5-recorded-2026-08-24-and-it-cannot-be-reconstructed-later), which is not re-derivable from the stores. **No rate or budget figure is quoted here: they live once, in [what 2d's tasks inherit](#what-2ds-tasks-inherit-2026-08-30).**
+3. **NEXT ACTION: PHASE 2d TASK 3 — the N2 full-field map**, which is independent of everything and unit-testable on constructed inputs with no field and no run. **AND BEFORE TASK 4, THE THIRD RUNG IS OWED** — decided, not shipped, a Task 1 amendment; see [THE THIRD RUNG IS OWED](#the-third-rung-is-owed--decided-2026-08-30-not-shipped-and-task-4-cannot-run-without-it). **2d's brainstorm is settled (E1–E8), its plan is approved — 10 tasks, 17 exit criteria — and TASKS 0, 1 AND 2 ARE DONE.** **§16.2 item 6 is 2d's home, not §11.2.** **Every task's FIRST step is the pre-flight** (method at item 7); 2d's entries are in [`phase2d-preflight.md`](docs/superpowers/notes/phase2d-preflight.md). **Phase 2c is CLOSED (10 met / 2 reduced scope / 0 failed)** plus 2b's criteria 6 and 7 which **stay FAILED** — see [the close](#phase-2c-is-closed-2026-08-29--10-met--2-met-with-reduced-scope--0-failed-plus-2bs-two-inherited-failures). **`ALGORITHM_VERSION` IS `"2"` SINCE 2026-08-27** and every store written before it holds cold fits — see [how to read a store written before 2c Task 5](#how-to-read-a-store-written-before-2c-task-5-recorded-2026-08-24-and-it-cannot-be-reconstructed-later), which is not re-derivable from the stores. **No rate or budget figure is quoted here: they live once, in [what 2d's tasks inherit](#what-2ds-tasks-inherit-2026-08-30).**
 4. ## THE STANDING LIMITATION ON EVERYTHING 2c DECIDED: **NO 2c NUMBER COMES FROM REAL DATA.** Warm-starting was authorized — and every decision after D1 inherits this — on a **simulated field whose spatial coherence is a construction parameter**. **The spatial coherence of real altimetry optima has never been measured.** Weaker coherence gives a **smaller** saving, and **§11.2's 30% threshold could fail on real data.** **THE NAMED CLOSER, not an open worry: a spike on a real gridded product — same three arms, same record-length lever.** **AND SINCE 2026-08-24 THERE IS A SECOND REGISTER OF IT: every 2c saving is a CEILING, not an estimate**, because the instrument searched with no effective spiral bound — see [what 2c's tasks inherit](#what-2cs-tasks-inherit-2026-08-24).
-5. **Tests: 1239 passed, 0 failed, 0 INDETERMINATE — 2026-08-30, 3278.28 s (sweeps have run 1698–3278 s, which is the machine and not the suite).** **`pixi run test` is the full sweep and every end-of-task verification must run it; `test-fast` and `test-ci` are NOT evidence** — the full sweep has caught **seven** things a fast run could not. **Every run prints `RSS measurement validity`, including at zero**; a nonzero count is INDETERMINATE, neither pass nor fail.
+5. **Tests: 1274 passed, 0 failed, 0 INDETERMINATE — 2026-08-31, 3257.64 s (sweeps have run 1698–3452 s, which is the machine and not the suite).** **`pixi run test` is the full sweep and every end-of-task verification must run it; `test-fast` and `test-ci` are NOT evidence** — the full sweep has caught **seven** things a fast run could not. **Every run prints `RSS measurement validity`, including at zero**; a nonzero count is INDETERMINATE, neither pass nor fail.
 6. **Verify a fresh checkout with `pixi run test && pixi run typecheck && pixi run lint`**, plus `pixi run pre-commit run --all-files` before every commit. **AND `git add` A NEW FILE BEFORE THAT SWEEP, NEVER AT COMMIT TIME** — `--all-files` covers **tracked** files only, so an untracked new module makes every hook print `Passed` without being read. Measured 2026-08-24; it cost two full twenty-minute sweeps before it was noticed.
 7. **THE METHOD IS THE PRE-FLIGHT AND IT LIVES IN EXACTLY ONE PLACE:** [`phase1-to-phase2-handoff.md`](docs/superpowers/notes/phase1-to-phase2-handoff.md) §1 — (a0)–(a9), (a)–(k), the standing rules, the fixture facts, **and the ones 2c added:** (i2b) a high-ceiling control converts a null into a **located** null · (i2c) a sign-unstable benefit is worse than a small one · (j5) a second instrument is a cross-check only if it measures the same quantity under the same conditions · (j6) bound the unmeasured region before measuring it · (i11) refutation clauses in **both** directions · (a2b) make an invalid value **unavailable** rather than caveated · (h2) stratify only by axes at the metric's **own** granularity · (j7) never stratify by a quantity the treatment can move · **(h3) check every stratum boundary against the filters the population already passed — an eps-derived boundary and an eps-derived GATE arrive at the same number by the same argument, and the empty strata read as a finding about the data** · **(h4) a rule stated over "the metrics" must be checked against each KIND of metric — 2c hit this three times** · **(a2b) at a count: "zero cases" is a claim about the INSTRUMENT until proven otherwise** · (c4) a validator must be specified in the **coordinates and extent** the validated object actually has · **(c5) a gate over a set that can GROW must be written against the set, not an enumeration of its members** · **(c6) a practice enforced by a MECHANISM must be checked to reach every instance — a partially-installed guard prints a complete-looking green** · (e2) prove a mutant differs before recording a surviving mutation — **(e) now has six causes** · (e3) its opposite colour, a **red** suite hiding a dead assertion · (a2c) populated but nothing **acts** on it · (a2d) a hashed value's **unit** is part of its identity — **and 2d added its artifact register: when a measurement is too expensive to be a test, its recorded output is a current claim only while the configuration that produced it is, so the artifact carries its instrument block and the check FAILS when a named default has moved** · (a2e) encode a classification as a **construction** · (i12) a **uniform fixture set** cannot test a freedom the contract leaves open · (j8) an adopted verdict makes the **instrument** part of the specification · plus (a0)'s sixth register (**a check that never read the file prints the same word as one that did**) and (a4)'s two (**"checked" in your own pre-flight is a claim**, and **a decision's own EXAMPLE can be the case that refutes it — and a retired argument stays visible**), and (a5)'s across-DECISIONS register (**check a decision against the measurements taken for the OTHERS; a term of art repeated across decisions acquires a reading nobody chose**), **plus the four 2d added: (a5b) when two constraints bind the same quantity, solve them together and state which binds — a quantity sized against one and checked against neither is the common case, because each constraint is satisfied in the section where it is discussed · (j8)'s second register: a rate is a measurement of a WORKLOAD and the workload is a precondition, so a cost figure recorded without its fixture can be quoted and cannot be reproduced — and where a DETERMINISTIC proxy for a cost exists, budget in the proxy and convert late · (j7)'s budget-level cousin: a quantity the experiment can MOVE must be reported, not only used · and (a4)'s agreeing-first-check rule gained the worked instance showing the error can point AT the expected answer — contention inflates seconds only, so a loud host pushed a per-iteration cost upward into a 0.3% "match" that is 19% apart when quiet**. **Do not restate them here** — the two copies drifted once already.
-8. **CI IS VERIFIED BY ENUMERATING COMMITS, NOT BY READING `gh run list`** — a run between two green runs is not thereby green, and **a commit that is not the TIP of its push gets no run of its own**, because one push produces one run. Where a commit has no run, check whether it was the tip; a non-tip `src` commit is a silently unverified tree. **Enumerated 2026-08-30 over fifteen commits: every `src`-touching commit green; the rest docs-only.** **CI IS GREEN and the deliberate red is CLOSED** (2026-08-22, by the repair its own criterion chose: the fixture was **enlarged**, the bound was **not** widened and the test was **not** marked). **CI runs `-m "not machine"` and therefore executes exactly ONE of the nine RSS assertions**, so it is not a substitute for the local sweep. See [THE CI FIXTURE DECISION](#the-ci-fixture-decision--taken-measured-and-verified-2026-08-22).
+8. **CI IS VERIFIED BY ENUMERATING COMMITS, NOT BY READING `gh run list`** — a run between two green runs is not thereby green, and **a commit that is not the TIP of its push gets no run of its own**, because one push produces one run. Where a commit has no run, check whether it was the tip; a non-tip `src` commit is a silently unverified tree. **WHAT THE ENUMERATION VERIFIED, STATED SO IT CANNOT BE READ AS MORE:** over the fifteen commits to 2026-08-30 and the eight since, re-enumerated 2026-08-31, **every `src`-touching commit has a completed run with conclusion `success`** — `be0938e` and `ed8f39b` are 2d's two. **The rest are docs-only and they are NOT all green:** `7ff7763` is `failure` (run `33338155827`, `test (ubuntu-latest, 3.12)`, `1 failed, 1211 passed … 1965.46 s`, and the failure is **item 9(c)'s recorded flake**), and `a8b1efd` and `9ce3152` are `cancelled` by the next push and are evidence of nothing. **The earlier wording gave a colour for the `src` subset and named the other subset without one, which reads as "and the rest were green"** — the exact supply-the-missing-value move the enumeration exists to prevent. **CI IS GREEN AT THE TIP and the deliberate red is CLOSED** (2026-08-22, by the repair its own criterion chose: the fixture was **enlarged**, the bound was **not** widened and the test was **not** marked). **CI runs `-m "not machine"` and therefore executes exactly ONE of the nine RSS assertions**, so it is not a substitute for the local sweep. See [THE CI FIXTURE DECISION](#the-ci-fixture-decision--taken-measured-and-verified-2026-08-22).
 9. **THREE DEFECTS ARE OPEN AND UNOWNED, AND NONE IS 2d's TO FIX.** (a) **`tiling.py` requires the spatial dims to be literally `y` and `x` in four places** while stage 4a requires only that `time` is first — so a `latitude`/`longitude` input **passes the contract and dies in assembly without exit code 4**, and **stage 4a's own message already calls the contract positional**, so the message and the implementation disagree today. Two closers, both scope decisions — see [What plan Task 2 established](#what-plan-task-2-established-done-2026-08-24--read-before-touching-the-decimation-the-two-stores-identities-or-any-spatial-dimension-name). (b) **Open question 20**: what else is uniform across all sixteen input fixtures and unconstrained by the contract — **coordinate monotonic direction first**, because a decreasing latitude axis is the ordinary case in real altimetry and yields a *plausible* answer rather than an error. **2d WAS OFFERED THIS AND DECLINED IT, 2026-08-30** — grid shape and coordinate direction are different degrees of freedom, and closing half of it while (a)'s scope decision is open would give a suite covering a case the code still gets wrong. The reasoning is at the question. (c) **A FLAKY TEST, found 2026-08-30**: `test_completion.py::test_a_preempted_command_exits_aborted_early_and_resumes` polls **120 s** for the child to create a store, then signals regardless; on a 3.12 runner taking **33m21s** where 3.13 took **18m29s** the deadline expired and it surfaced as `GroupNotFoundError` — **a store-layer error for a scheduling failure**, (i9) across runners, and the presentation sends the next reader at zarr. Repair: record WHY the loop exited and fail with that.
 
 10. **Precedence: the design doc is authoritative on INTENT; a measured, dated number supersedes an unmeasured one wherever it lives, including in the design doc. Any measurement stated twice has one copy DELETED, never reconciled.**
@@ -6785,6 +6785,96 @@ committed rung report**, and the call site says so.
 
 **9. THE THREE UNOWNED DEFECTS** are at cold-start item 9: `tiling.py`'s four name-based sites,
 open question 20's uniformity sweep, and the 120 s poll deadline in `test_completion.py`.
+
+---
+
+### What plan Task 2 established (done 2026-08-31 — read before quoting any smear width, or lowering the threshold)
+
+**THE ESTIMATOR IS SPECIFIED IN `smear.py`'s DOCSTRING AND AUDITED IN
+[`phase2d-preflight.md`](docs/superpowers/notes/phase2d-preflight.md); NEITHER IS RESTATED HERE.**
+What belongs here is the part that is not in either.
+
+**THE PLAN'S ESTIMATOR HAD NO MEANING UNDER ITS OWN SUBJECT, AND THAT IS THE FINDING.** *"The
+profile is the map averaged parallel to the boundary… the width is that profile's transition
+width"* was written against a continuous subject; since Task 1 the subject is the **selected
+candidate** and **a candidate index has no mean.** What ships is a **misclassification profile**
+and a **majority-run** width. **This is the fourth task in 2d to contradict its brief**, and the
+contradiction was visible in the plan's own first behaviour line the whole time — it needed the
+subject held next to it, which is what a pre-flight is.
+
+**A CHOICE THE SUB-PHASE IS NOW COMMITTED TO, STATED AS A CHOICE.** The majority rule was taken
+because **every alternative needs a baseline and the reach covers the whole field**, so there is
+nowhere uncontaminated to take one. **The price is that the estimator is blind to a gradual
+smear** — 30% over six cells reads at the floor — **and a real artifact should decay with distance
+rather than stop, so the blindness is worst where the artifact is most physical.** The mitigation
+is that `WidthReading.profile` travels with every reading and **a floor result is uninterpretable
+until its profile has been seen to be flat rather than sloped**; the trigger for buying a second,
+baseline-referenced estimator is written at the module, before any profile exists.
+
+**THE FLOOR IS DERIVED AND THE RUN REQUIREMENT IS ITS OTHER HALF.** `P(Binom(12, b) ≥ 7)` is
+**0.39 / 3.86 / 15.8 / 38.7%** at `b = 0.2 / 0.3 / 0.4 / 0.5` — under a half even at the coin flip,
+**because the tie does not count.** At `b = 0.4` a 32-cell profile carries **about five** spurious
+majority cells; **the floor handles the isolated one and the run requirement handles the rest**,
+and a *reportable* spurious width needs two adjacent fires at **0.025**. **Dropping either looks
+locally safe and is not.** The table is in the module because that is where a later reader
+proposing a lower threshold will be.
+
+**THE INTERIOR NULL'S PREDICTION IS COMMITTED AND UNRUN: IT DOES NOT FIRE.** The earlier
+expectation that it would was formed against a continuous subject and **does not transfer** —
+`_family()` is a pure indicator, so the true family is constant within a regime and a
+misclassification profile has no slope to find. **If it fires, the profile separates two causes**:
+the estimator reading the field's structure (E6's third row, stop), or a baseline disagreement rate
+above a half, which is a statement about **selection between two Matérn families at `N = 630`** and
+invalidates the subject rather than the estimator.
+
+**23 MUTATIONS, 23 KILLED — AND ONE OF THEM WAS NOT A MUTANT.** Every test was verified to bite by
+breaking the implementation at the point it names. **The first attempt at the estimator-name
+mutation appended an unused variable instead of changing the name**, so the test passed and would
+have been recorded as a surviving mutation; (e2) says prove the mutant differs before recording
+one, and it fired on its first opportunity here. Re-run as a real mutant, it was killed.
+
+**AND THE `git add`-FIRST RULE HAS A SECOND FORM THAT COST A REVERT.** The mutation harness
+restored each file with `git checkout -- <file>`, **which restores from the INDEX** — so an
+unstaged edit to `fields.py` was silently reverted to `HEAD` mid-run and had to be reapplied.
+**The rule is not *"stage new files"*, it is *"stage anything a tool may restore"***, and
+`git status` was the only thing that showed it.
+
+**THE CEILING CANNOT FIRE ON 2d's GEOMETRY** — the reach is 32 fine cells and `N_NORMAL` is 32 —
+**so on the shipped field the refusal is a self-check on the estimator, not a physics filter.** It
+is built, config-read and tested anyway; the two changes that restore it are a `spiral_bound` below
+4, which a test exercises, and a normal axis longer than the reach, which cannot happen while
+`N_NORMAL = 4 × COARSE_STRIDE`.
+
+---
+
+### THE THIRD RUNG IS OWED — decided 2026-08-30, not shipped, and Task 4 cannot run without it
+
+**E4 was re-decided to THREE RUNGS on 2026-08-30 and the budget above counts three** — the
+`14.047` factor and the `19.7 h` figure are both three-rung numbers. **`fields.RUNGS` holds two**,
+`easy` and `hard`. **The docs commit that took the decision (`a8b1efd`) landed AFTER the code
+commit that would have carried it (`ed8f39b`)**, which is the whole mechanism: a decision taken in
+the document that records decisions, about a module that had already shipped.
+
+| | |
+|---|---|
+| **owner** | **a Task 1 amendment**, and not a Task 3 preliminary |
+| **deadline** | **before Task 4**, which sweeps the rungs and has no third one to sweep |
+| **blocking** | **Task 4. Not Tasks 2 or 3**, both of which are unit-testable with no field and no rung |
+
+**WHY TASK 1 AND NOT TASK 3.** A rung is a field-builder object: it carries `coherence_length`,
+`contrast` and per-parameter `sources`, and **adding one re-opens Task 1's own monotonicity
+test** — the truth's spatial autocorrelation at a fixed lag must be strictly ordered across the
+rungs, which is an assertion over the **set** and not over a pair, so it is rewritten and re-run,
+not extended. **Task 3 owns the N2 map and constructs no field**; putting a builder change there
+would put field construction in the task that was placed independent of the field.
+
+**WHAT THE AMENDMENT MUST SATISFY, so it is not re-derived under Task 4's time pressure:** the
+middle rung's `ℓ` and `Δ` **sit between `easy` (16.0, 3.0) and `hard` (6.0, 0.75) on the same
+diagonal**, or the three stop being one lever's curve; and **its `sources` say it is ours to
+choose**, because it occupies the slot that used to be plausibility and **a middle rung is exactly
+where a reader supplies *"plausible"* for free.** `Rung.__post_init__` already refuses a rung
+without a source per parameter, so the second half is enforced by construction and the first is
+not.
 
 ---
 
