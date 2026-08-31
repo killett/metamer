@@ -4,14 +4,13 @@
 
 1. **Branch `main`, everything on it, every commit pushed by a hook** — https://github.com/killett/metamer. **A SHA here is stale the moment the next commit lands, so nothing here names one:** `git log --oneline -8` is the authority.
 2. **DONE:** Phase 1 (0–18), Phase 2 preliminaries P0–P4, **Phase 2a (0–13)**, **Phase 2b (COMPLETE 2026-08-19 — 10 met / 4 reduced scope / 2 FAILED)**, **Phase 2c's brainstorm (D1–D12)**, and **Phase 2c (COMPLETE 2026-08-29 — 10 met / 2 reduced scope / 0 failed; Tasks 0–4 on 2026-08-24, Task 5 on 2026-08-27, Task 6 on 2026-08-28, Tasks 7–8 on 2026-08-29)**. The modelling sub-phase was decided against 2026-08-22 and **re-decided on closed facts 2026-08-23: it does not open.** Sections below carry each; **none is restated here.**
-3. **NEXT ACTION: PHASE 2d — the simulated-field benchmark, which is what makes the audit's numbers mean something.** **PHASE 2c IS CLOSED (2026-08-29): 10 met / 2 met with reduced scope / 0 failed**, plus 2b's criteria 6 and 7 which **stay FAILED** — see [the close](#phase-2c-is-closed-2026-08-29--10-met--2-met-with-reduced-scope--0-failed-plus-2bs-two-inherited-failures) for the table, both closers, and **what 2d inherits**. **2d's BRAINSTORM IS SETTLED (E1–E8) AND ITS PLAN IS APPROVED, 2026-08-30 — 10 tasks, 17 exit criteria. TASK 0 IS DONE; NO PRODUCTION CODE YET.** **Task 0 refuted the inherited `21 s/point/arm` from below — it is `10.62 s` on this box, and the inherited figure is NOT re-measurable because it never recorded its signal spec or its fixture — so 2d's budget is built in ITERATIONS and Task 1 carries the gate that finalises it.** **§16.2 item 6 is 2d's home, not §11.2** — the citation was wrong in D4's constraint 3 and absent from Q11's row, both corrected 2026-08-30. **Every task's FIRST step is the pre-flight** — the method is item 7 below, and 2d's pre-plan entry is already in [`phase2d-preflight.md`](docs/superpowers/notes/phase2d-preflight.md). **THE TWO REDUCED-SCOPE VERDICTS ARE 2d's INPUT:** criterion 12's magnitude was measured **on the spike harness and never on the shipped mechanism** (21 s/point/arm at `N = 630` puts the smallest honest lattice at 1.7 hours), and criterion 11's `κ` axis is **degenerate on the population it stratifies** because `HESSIAN_COND_LIMIT` **is** D9's first boundary. **`ALGORITHM_VERSION` IS `"2"` SINCE 2026-08-27** and every store written before it holds cold fits — see [how to read a store written before 2c Task 5](#how-to-read-a-store-written-before-2c-task-5-recorded-2026-08-24-and-it-cannot-be-reconstructed-later), which is not re-derivable from the stores.
+3. **NEXT ACTION: PHASE 2d TASK 2 — the smear estimator and its interior null. ITS PRE-FLIGHT IS THE NEXT THING WRITTEN AND IT NEEDS A FULL WINDOW**, because Task 2's SUBJECT CHANGED under Task 1's rebuild and the pre-flight is where the estimator gets specified. **Read [what Task 2 inherits](#what-task-2-inherits-2026-08-30) before anything else.** **2d's brainstorm is settled (E1–E8), its plan is approved — 10 tasks, 17 exit criteria — and TASKS 0 AND 1 ARE DONE.** **§16.2 item 6 is 2d's home, not §11.2.** **Every task's FIRST step is the pre-flight** (method at item 7); 2d's entries are in [`phase2d-preflight.md`](docs/superpowers/notes/phase2d-preflight.md). **Phase 2c is CLOSED (10 met / 2 reduced scope / 0 failed)** plus 2b's criteria 6 and 7 which **stay FAILED** — see [the close](#phase-2c-is-closed-2026-08-29--10-met--2-met-with-reduced-scope--0-failed-plus-2bs-two-inherited-failures). **`ALGORITHM_VERSION` IS `"2"` SINCE 2026-08-27** and every store written before it holds cold fits — see [how to read a store written before 2c Task 5](#how-to-read-a-store-written-before-2c-task-5-recorded-2026-08-24-and-it-cannot-be-reconstructed-later), which is not re-derivable from the stores. **No rate or budget figure is quoted here: they live once, in [what 2d's tasks inherit](#what-2ds-tasks-inherit-2026-08-30).**
 4. ## THE STANDING LIMITATION ON EVERYTHING 2c DECIDED: **NO 2c NUMBER COMES FROM REAL DATA.** Warm-starting was authorized — and every decision after D1 inherits this — on a **simulated field whose spatial coherence is a construction parameter**. **The spatial coherence of real altimetry optima has never been measured.** Weaker coherence gives a **smaller** saving, and **§11.2's 30% threshold could fail on real data.** **THE NAMED CLOSER, not an open worry: a spike on a real gridded product — same three arms, same record-length lever.** **AND SINCE 2026-08-24 THERE IS A SECOND REGISTER OF IT: every 2c saving is a CEILING, not an estimate**, because the instrument searched with no effective spiral bound — see [what 2c's tasks inherit](#what-2cs-tasks-inherit-2026-08-24).
 5. **Tests: 1239 passed, 0 failed, 0 INDETERMINATE — 2026-08-30, 3278.28 s (sweeps have run 1698–3278 s, which is the machine and not the suite).** **`pixi run test` is the full sweep and every end-of-task verification must run it; `test-fast` and `test-ci` are NOT evidence** — the full sweep has caught **seven** things a fast run could not. **Every run prints `RSS measurement validity`, including at zero**; a nonzero count is INDETERMINATE, neither pass nor fail.
 6. **Verify a fresh checkout with `pixi run test && pixi run typecheck && pixi run lint`**, plus `pixi run pre-commit run --all-files` before every commit. **AND `git add` A NEW FILE BEFORE THAT SWEEP, NEVER AT COMMIT TIME** — `--all-files` covers **tracked** files only, so an untracked new module makes every hook print `Passed` without being read. Measured 2026-08-24; it cost two full twenty-minute sweeps before it was noticed.
 7. **THE METHOD IS THE PRE-FLIGHT AND IT LIVES IN EXACTLY ONE PLACE:** [`phase1-to-phase2-handoff.md`](docs/superpowers/notes/phase1-to-phase2-handoff.md) §1 — (a0)–(a9), (a)–(k), the standing rules, the fixture facts, **and the ones 2c added:** (i2b) a high-ceiling control converts a null into a **located** null · (i2c) a sign-unstable benefit is worse than a small one · (j5) a second instrument is a cross-check only if it measures the same quantity under the same conditions · (j6) bound the unmeasured region before measuring it · (i11) refutation clauses in **both** directions · (a2b) make an invalid value **unavailable** rather than caveated · (h2) stratify only by axes at the metric's **own** granularity · (j7) never stratify by a quantity the treatment can move · **(h3) check every stratum boundary against the filters the population already passed — an eps-derived boundary and an eps-derived GATE arrive at the same number by the same argument, and the empty strata read as a finding about the data** · **(h4) a rule stated over "the metrics" must be checked against each KIND of metric — 2c hit this three times** · **(a2b) at a count: "zero cases" is a claim about the INSTRUMENT until proven otherwise** · (c4) a validator must be specified in the **coordinates and extent** the validated object actually has · **(c5) a gate over a set that can GROW must be written against the set, not an enumeration of its members** · **(c6) a practice enforced by a MECHANISM must be checked to reach every instance — a partially-installed guard prints a complete-looking green** · (e2) prove a mutant differs before recording a surviving mutation — **(e) now has six causes** · (e3) its opposite colour, a **red** suite hiding a dead assertion · (a2c) populated but nothing **acts** on it · (a2d) a hashed value's **unit** is part of its identity — **and 2d added its artifact register: when a measurement is too expensive to be a test, its recorded output is a current claim only while the configuration that produced it is, so the artifact carries its instrument block and the check FAILS when a named default has moved** · (a2e) encode a classification as a **construction** · (i12) a **uniform fixture set** cannot test a freedom the contract leaves open · (j8) an adopted verdict makes the **instrument** part of the specification · plus (a0)'s sixth register (**a check that never read the file prints the same word as one that did**) and (a4)'s two (**"checked" in your own pre-flight is a claim**, and **a decision's own EXAMPLE can be the case that refutes it — and a retired argument stays visible**), and (a5)'s across-DECISIONS register (**check a decision against the measurements taken for the OTHERS; a term of art repeated across decisions acquires a reading nobody chose**), **plus the four 2d added: (a5b) when two constraints bind the same quantity, solve them together and state which binds — a quantity sized against one and checked against neither is the common case, because each constraint is satisfied in the section where it is discussed · (j8)'s second register: a rate is a measurement of a WORKLOAD and the workload is a precondition, so a cost figure recorded without its fixture can be quoted and cannot be reproduced — and where a DETERMINISTIC proxy for a cost exists, budget in the proxy and convert late · (j7)'s budget-level cousin: a quantity the experiment can MOVE must be reported, not only used · and (a4)'s agreeing-first-check rule gained the worked instance showing the error can point AT the expected answer — contention inflates seconds only, so a loud host pushed a per-iteration cost upward into a 0.3% "match" that is 19% apart when quiet**. **Do not restate them here** — the two copies drifted once already.
 8. **CI IS GREEN and the deliberate red is CLOSED** (2026-08-22, by the repair its own criterion chose: the fixture was **enlarged**, the bound was **not** widened and the test was **not** marked). **CI runs `-m "not machine"` and therefore executes exactly ONE of the nine RSS assertions**, so it is not a substitute for the local sweep. See [THE CI FIXTURE DECISION](#the-ci-fixture-decision--taken-measured-and-verified-2026-08-22).
-9. **TWO DEFECTS ARE OPEN AND UNOWNED, AND NEITHER IS 2c's TO FIX.** (a) **`tiling.py` requires the spatial dims to be literally `y` and `x` in four places** while stage 4a requires only that `time` is first — so a `latitude`/`longitude` input **passes the contract and dies in assembly without exit code 4**, and **stage 4a's own message already calls the contract positional**, so the message and the implementation disagree today. Two closers, both scope decisions — see [What plan Task 2 established](#what-plan-task-2-established-done-2026-08-24--read-before-touching-the-decimation-the-two-stores-identities-or-any-spatial-dimension-name). (b) **Open question 20**: what else is uniform across all sixteen input fixtures and unconstrained by the contract — **coordinate monotonic direction first**, because a decreasing latitude axis is the ordinary case in real altimetry and yields a *plausible* answer rather than an error. **2d WAS OFFERED THIS AND DECLINED IT, 2026-08-30** — grid shape and coordinate direction are different degrees of freedom, and closing half of it while (a)'s scope decision is open would give a suite covering a case the code still gets wrong. The reasoning is at the question.
-9b. **A THIRD UNOWNED DEFECT, AND IT IS A FLAKY TEST RATHER THAN A PRODUCT BUG (found 2026-08-30).** `tests/test_completion.py::test_a_preempted_command_exits_aborted_early_and_resumes` **failed once on CI's Python 3.12 runner** — run `33338155827`, at a **docs-only** commit whose tree passed on 3.12 both before and after. **The mechanism is in the log and is not mysterious:** the test polls for up to **120 s** for the child to create a store and complete one tile, then sends SIGTERM regardless; on a runner that took **33m21s against 3.13's 18m29s** the deadline expired first, so `completed_tiles(store)` raised `GroupNotFoundError` on a store that had never been created. **(i9): a fixture whose window is narrower than the machine's jitter cannot express its condition** — and the failure presents as a store error rather than as *"the child never got going"*, so the next reader will debug the wrong thing. **The cheap repair is to record WHY the loop exited and fail with that**, distinguishing a expired deadline from a completed tile. **Not 2d's to fix**, and named here rather than carried silently.
+9. **THREE DEFECTS ARE OPEN AND UNOWNED, AND NONE IS 2d's TO FIX.** (a) **`tiling.py` requires the spatial dims to be literally `y` and `x` in four places** while stage 4a requires only that `time` is first — so a `latitude`/`longitude` input **passes the contract and dies in assembly without exit code 4**, and **stage 4a's own message already calls the contract positional**, so the message and the implementation disagree today. Two closers, both scope decisions — see [What plan Task 2 established](#what-plan-task-2-established-done-2026-08-24--read-before-touching-the-decimation-the-two-stores-identities-or-any-spatial-dimension-name). (b) **Open question 20**: what else is uniform across all sixteen input fixtures and unconstrained by the contract — **coordinate monotonic direction first**, because a decreasing latitude axis is the ordinary case in real altimetry and yields a *plausible* answer rather than an error. **2d WAS OFFERED THIS AND DECLINED IT, 2026-08-30** — grid shape and coordinate direction are different degrees of freedom, and closing half of it while (a)'s scope decision is open would give a suite covering a case the code still gets wrong. The reasoning is at the question. (c) **A FLAKY TEST, found 2026-08-30**: `test_completion.py::test_a_preempted_command_exits_aborted_early_and_resumes` polls **120 s** for the child to create a store, then signals regardless; on a 3.12 runner taking **33m21s** where 3.13 took **18m29s** the deadline expired and it surfaced as `GroupNotFoundError` — **a store-layer error for a scheduling failure**, (i9) across runners, and the presentation sends the next reader at zarr. Repair: record WHY the loop exited and fail with that.
 
 10. **Precedence: the design doc is authoritative on INTENT; a measured, dated number supersedes an unmeasured one wherever it lives, including in the design doc. Any measurement stated twice has one copy DELETED, never reconciled.**
 
@@ -6476,8 +6475,9 @@ from quantiles** (D9), and it is what makes a quoted magnitude quotable.
 > > stand in for."** Recorded rather than left to be rediscovered.
 >
 > ~~**OPEN, AND TASK 1's ITERATION COUNT INFORMS IT: two rungs or three?**~~ **DECIDED
-> 2026-08-30: THREE RUNGS.** Measured on the rebuilt field, two rungs cost **16.9 h** and three
-> cost **19.7 h** against a 30 h ceiling, so **cost stopped being an argument at 2.8 hours.** The
+> 2026-08-30: THREE RUNGS.** **Both shapes' budgets are in
+> [the cost box](#what-2ds-tasks-inherit-2026-08-30) and are not restated here**; the difference
+> between them is **2.8 hours** against a 30 h ceiling, so **cost stopped being an argument.** The
 > deciding reason is the deliverable's shape: **two points give a floor as a line SEGMENT, and
 > the sweep exists to report a resolution CURVE** — D2's own reason for a three-fixture lever,
 > and it now costs less than the margin a single re-run would need.
@@ -6666,44 +6666,31 @@ to re-measure the first two before the budget is committed.
 
 ### The cost model, and the budget it produced
 
-> ## RE-MEASURED AT TASK 0, 2026-08-30, AND THE UNIT MOVED. READ THE VERDICT BEFORE QUOTING EITHER FIGURE
+> ## RE-MEASURED TWICE, AND THE SINGLE HOME FOR EVERY 2d RATE AND BUDGET IS THIS BOX
 >
-> **`10.62 s per point per arm`**, five true repeats of one fixture on a quiet host, `M = 2`,
-> `N = 630`, `B = 16`, signal `constant + trend`; standard deviation **0.467 (4.4%)**, spread
-> **11.0%**. **The inherited `21 s` is refuted from below and CANNOT BE RECONCILED**, because it
-> records its candidate set, batch and record length and **not its signal spec or its fixture** —
-> so it is not re-measurable. Iterations explain about three quarters of the gap and not all of
-> it. **(j8) at a cost model: the verdict was adopted and half its instrument was written down.**
+> **THE FIGURE THE BUDGET USES IS MEASURED ON THE FIELD THAT WILL RUN: `13.15 s` per point per
+> arm**, 96 points per rung on the rebuilt `M = 3` family-change field, `N = 630`, quiet host,
+> 2026-08-30. The larger of the two rungs, as committed.
 >
-> **SO THE BUDGET IS BUILT IN ITERATIONS, NOT SECONDS.** Iterations are deterministic — the same
-> fixture gave 405 every repeat — and this box's wall clock is not. The full statement, the
-> two-point cost decomposition and why no budget rests on it, and the gate this puts on Task 1
-> are in [`phase2d-spike-verdict.md`](docs/superpowers/notes/phase2d-spike-verdict.md).
->
-> | cost per point per arm | factor 12.047 | **factor 14.047, N1 at two rungs** |
+> | shape | factor | **budget** |
 > |---|---|---|
-> | **10.62 s**, measured | 13.6 h | **15.9 h** |
-> | **21.0 s**, inherited | 27.0 h | **31.5 h** |
+> | two rungs, N1 at both | 12.032 | 16.9 h |
+> | **three rungs, N1 at two — E4's decision** | **14.047** | **19.7 h** |
 >
-> **The plan's 27.0 h survives as an upper bound and the likely cost is about half — but the
-> pessimistic rate WITH N1 at two rungs gives 31.5 h, over the 30 h ceiling.** That is the only
-> combination that breaks it, and **Task 1's iteration count decides which column applies.**
+> **Against a 30 h ceiling.** The pre-decided N1 cut does not fire.
 >
-> ### AND THE CUT IS PRE-DECIDED, 2026-08-30, SO IT IS NOT TAKEN UNDER TIME PRESSURE MID-RUN
+> **SUPERSEDED, AND STRUCK RATHER THAN DELETED BECAUSE TWO DECISIONS RESTED ON THEM:**
+> ~~`21.0 s` inherited from 2026-08-29~~ — **refuted from below and NOT re-measurable**, because
+> it recorded its candidate set, batch and record length and **not its signal spec or its
+> fixture**; **(j8)'s second register.** ~~`10.62 s` measured at Task 0~~ — correct for Task 0's
+> own fixture and **not for 2d's field.**
 >
-> **N1 is HELD at two rungs** — the plausibility rung and the easy rung — because the measured
-> rate is optimistic-to-likely rather than inherited, so the expensive column is the unlikely one.
-> **IF the realised rate lands near 21 s/point/arm, the SECOND N1 RUNG is what gets cut**, and the
-> rung it is cut from is **the easy one**: N1's job is to separate *"the surface is deciding"*
-> from *"the start distance is deciding"*, and that question is **live where a magnitude is
-> quoted** and merely confirmatory where the artifact was built to be large. **Nothing else is
-> cut, and the field is not shrunk** — the geometry is derived from `k` and from the 30-member
-> floor, neither of which is negotiable against a machine.
->
-> **AND THE PER-TILE BARRIER IS NOT PART OF ANY COLUMN.** 2d's `32 × 12` field is **one tile at
-> every legal budget**, because the tile side is bounded below by the **~229 MB process floor**:
-> 80 at `N = 630`'s smallest legal budget, 736 at the default. **A cost nobody had priced, and it
-> is zero.** The full geometry table is below.
+> **AND THE COST MODEL IS RETIRED, NOT CORRECTED.** Task 0's two-point decomposition
+> `2.43 + 0.324 x iterations` predicted 7.06 s where the first field measured 5.62; a third point
+> put the slope at **0.214** between the `self` arm and that field and **0.455** between it and
+> Task 0's cold arm. **Two points cannot tell a line from a curve** — (a4), and D2's reason for a
+> three-fixture lever. **The budget is measured, never modelled**, and it is built in
+> **iterations** because iterations are deterministic and this box's wall clock is not.
 
 The budget is priced at the **cold** rate throughout, so it is an **upper bound**:
 the warm and N2 arms come in under it by an amount the spike put at 42.28%, itself a ceiling.
@@ -6738,6 +6725,68 @@ at 14.047 and is the thing the ceiling is sensitive to.**
 | the **spiral reach** | **32 fine cells** = `spiral_bound(4) × coarse_stride(8)` | the shipped defaults, verified 2026-08-30. E6's upper bound on any width |
 | the audit's stratum floor | **30 members** | D8/D10, binomial SE ~9% at `p = 0.5` |
 | point strata at `M = 2` | **6** = `3 margin × M` | D9 |
+
+### What Task 2 inherits (2026-08-30)
+
+**READ THIS BEFORE WRITING TASK 2's PRE-FLIGHT.** The pre-flight needs a full window: **Task 2's
+SUBJECT changed under Task 1's rebuild**, and the pre-flight is where the estimator is specified.
+
+**1. THE SUBJECT IS THE SELECTED CANDIDATE, AND IT IS CATEGORICAL.** Across a change of family
+the parameter that steps is **not the same parameter on both sides**, so a width *"of sigma"*
+would be a width of different things either side of the boundary. `FieldTruth.family` is the
+categorical truth; `fields.SMEAR_SUBJECT` names the reading. **Selection disagreement is §11.2's
+most interpretable metric, it is per point, and it is the axis D3a and S4 both identified.**
+
+> **A CATEGORICAL PROFILE HAS NO GRADIENT, SO "SMEAR WIDTH" NOW NAMES A DIFFERENT QUANTITY.** The
+> width is **where the selected candidate stops agreeing with its regime's truth** — closer to a
+> **misclassification profile** than to a transition fit. **The estimator must be SPECIFIED
+> before it is written**, because the plan was drafted against a continuous subject.
+>
+> **THE 1-CELL FLOOR AND THE `≤ 1 cell` RULE ARE NOW LOAD-BEARING RATHER THAN DEFENSIVE.** A
+> categorical profile at a step either misclassifies a cell or does not, so **sub-cell resolution
+> does not exist** and a number below the floor could only be the estimator's own smoothing.
+
+**2. THE INTERIOR NULL IS THE FIRST THING COMPUTED once any rung lands**, and **its expectation
+must be PREDICTED before it runs.** The previous expectation — that it would fire — was formed
+against a **continuous** subject and **may not transfer to a categorical one.** If it returns a
+width, **stop and diagnose the estimator** rather than proceeding.
+
+**3. TASK 2 AND TASK 3 ARE UNIT-TESTABLE ON CONSTRUCTED MAPS, WITH NO FIELD AND NO RUN**, which
+is why the plan placed them independent of everything. **Keep it that way** — a categorical
+estimator is *easier* to construct adversarial inputs for than a continuous one.
+
+**4. TASK 1's THREE NUMBERS, AND THE CONDITION THEY PUT ON EVERY LATER ONE.** Iterations per
+point **24.38 / 24.40** at `N = 630` — refuted from below by **3.6%** and reported at the edge —
+and the lever **CONFIRMED** at **+3.86% against +2.60%**. **The difficulty condition sits beside
+the standing limitation**: 2d's field runs at 24.4 against 2c's **40.79**, so **every 2d saving
+is a saving at lower difficulty than D1's headline came from.**
+
+**5. E4 IS DECIDED: THREE RUNGS.** The middle rung is **ours to choose and must say so** in its
+`sources` and **in every figure drawn from it** — the slot it occupies used to be plausibility,
+and a middle rung is exactly where a reader supplies *"plausible"* for free. **Its `ℓ` and `Δ`
+sit between the two shipped rungs on the same diagonal**, or the three stop being one lever's
+curve.
+
+**6. THE `random`-ARM REATTRIBUTION IS FILED UNDER D1**, not in a task note, because it is the
+largest finding of the sub-phase so far: of 2c's **42.28%**, roughly **30.28 points** come from
+starting at *any* converged optimum and only **12.00** from proximity — which is the whole of
+what the coarse grid, the barrier, the spiral and the stride buy. **D1 stands; what moved is what
+the number measures.**
+
+**7. (j9) HAS FIVE INSTANCES AND ONE ENFORCEMENT.** `CANDIDATES`, `SIGNAL_TERMS` and `CRITERIA`
+are the only spellings; `config_text`, `signal_spec` and `candidate_specs` render and parse them,
+and **a test asserts it**. Before adding any new named quantity to a harness, check it is not a
+second spelling.
+
+**8. THE FIELD'S DRAWN BYTES MOVED, DELIBERATELY.** `build_field` draws with
+`method="cholesky"` — **1.847 s per draw against 0.209 s for SVD at `N = 630`**, so the benchmark
+had been **9:1 dominated by generating its own fixture**. **A later change there invalidates every
+committed rung report**, and the call site says so.
+
+**9. THE THREE UNOWNED DEFECTS** are at cold-start item 9: `tiling.py`'s four name-based sites,
+open question 20's uniformity sweep, and the 120 s poll deadline in `test_completion.py`.
+
+---
 
 ### The geometry facts Task 0 measured, which nothing else in the tree records
 

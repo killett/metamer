@@ -1574,6 +1574,29 @@ written. Where no such single comparison exists, iterate the authoritative set i
 absent from the thing being checked is **a comparison that silently does not happen** — the same
 defect one level in, and (a0)'s excluded-versus-missing register at a diff.
 
+#### (c5) AT A SET OF CI RUNS: ENUMERATE THE COMMITS, DO NOT INFER FROM ADJACENCY
+
+> **When verifying that a set of runs is green, enumerate the COMMITS and check that each has a
+> completed run with a conclusion.** A run sitting between two green runs is not thereby green,
+> and **a docs-only commit is exactly where nobody looks.**
+
+Same species as (c5) itself: **the instances you can see rather than the set.** `gh run list
+--limit N` shows the most recent runs and reads as a status; it is a **window**, and a window
+answers *"what happened lately"* rather than *"is every commit verified"*.
+
+**Worked instance, Phase 2d, 2026-08-30.** A red run sat between two green ones and was reported
+around rather than read — the green runs on either side were quoted as evidence the branch was
+clean. **It was a docs-only commit, which is the case a reader skips twice over**: once because
+docs cannot break tests, and once because its neighbours are green.
+
+**AND THE DEFECT IT HID IS WORTH ITS OWN LINE, BECAUSE THE PRESENTATION IS THE TRAP.**
+`test_a_preempted_command_exits_aborted_early_and_resumes` polls **120 s** for a child to create
+a store and finish a tile, then signals regardless. On a runner taking **33m21s** where another
+took **18m29s**, the deadline expired first and the assertion surfaced as
+`GroupNotFoundError: No group found in store` — **a store-layer error for a scheduling
+failure.** **(i9) across CI runners**, and the next reader is sent at zarr rather than at the
+deadline. **A timing fixture calibrated on one machine is a fixture calibrated on none.**
+
 ### (c6) A PRACTICE ENFORCED BY A MECHANISM MUST BE CHECKED TO REACH EVERY INSTANCE IT COVERS
 
 > **Where a discipline is enforced by a mechanism, enumerate every instance the discipline should
