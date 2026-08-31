@@ -1769,6 +1769,28 @@ which is how someone would actually write it — **six tests fail.**
 **The discriminator is one line: construct an input on which the two versions disagree, and print
 both. If you cannot, the mutation is not a mutation.**
 
+> ## SECOND INSTANCE, 2d TASK 2, 2026-08-31 — AND TWO INSTANCES MAKE THIS EVIDENCE RATHER THAN AN ANECDOTE
+>
+> A 23-mutation sweep verifying that each test bites. The mutation aimed at
+> *"the reading names its instrument"* was meant to change `ESTIMATOR`'s value; **as written it
+> appended an unused module-level variable and left the string untouched.** The test passed, and
+> **the honest-looking conclusion was a surviving mutation — which would have sent the next
+> reader to strengthen a test that is sound.** Re-run as a real mutant — `estimator=ESTIMATOR`
+> replaced with a different literal — it was killed.
+>
+> **BOTH INSTANCES WERE SELF-CAUGHT BY APPLYING THE RULE TO ONE'S OWN WORK**, which is the part
+> worth generalising: (e2) is not a rule about reviewing someone else's mutation sweep. **The
+> check is cheap and mechanical — "does the mutated file differ from the original in a way any
+> input can observe?" — and it must run on every mutation before any of them is recorded**, not
+> only on the ones that survive suspiciously.
+>
+> **THE TWO FAILED DIFFERENTLY AND THAT IS WHY THE SECOND IS WORTH KEEPING.** 2c's mutation
+> **changed the statement** and was neutralised by a consumer downstream — invisible without
+> tracing the value to its reader. This one **never changed the statement at all**: the anchored
+> replacement matched, applied, and produced a file that differs from the original by an unused
+> name. **The first is caught by reading the consumer; the second is caught by reading the
+> diff** — and a sweep that prints only pass/fail per mutation shows neither.
+
 #### (e3) AND ITS OPPOSITE COLOUR: A RED SUITE CAN HIDE A DEAD ASSERTION
 
 > **A mutation going red is not evidence that the test you wrote is what caught it.** Read WHICH
@@ -3053,6 +3075,21 @@ tests could not see.** `pixi run test-fast` would have shipped both.
   every hook print `Passed` without being read. Staging is what puts it inside "all". Measured at
   2c Task 4 — see (a0)'s sixth register — and it costs a repeated full test sweep, because a
   formatter touching `src/` invalidates the sweep that preceded it.
+- **AND THE SAME RULE HAS A SECOND FORM, WHICH IS ABOUT SURVIVAL RATHER THAN COVERAGE: STAGE
+  ANYTHING A TOOL MAY RESTORE, NOT ONLY ANYTHING A HOOK MAY SKIP.** `git checkout -- <file>`
+  restores **from the INDEX**, so an unstaged edit in a file any tool touches is **silently reset
+  to `HEAD` — no error, no diff, no message.** **An unstaged edit is therefore not merely
+  unverified; it is deletable by a routine operation.** Measured at 2d Task 2, 2026-08-31: a
+  mutation harness that mutated a file and restored it with `git checkout --` reverted an
+  unstaged `fields.py` edit mid-run, and only `git status` showed it. **The harness would not be
+  recognised as "a tool that restores files"** — restore-from-index is the ordinary way to undo a
+  scripted edit, so the class is far wider than it looks and includes anything written in the
+  session to undo its own work.
+
+  > **THE TWO FORMS COVER ONE SURFACE FROM OPPOSITE SIDES AND ARE FILED TOGETHER FOR THAT
+  > REASON:** in the first, **staging changes what is CHECKED**; in the second, **staging changes
+  > what SURVIVES.** Either alone reads as a quirk of one tool. Together they say the index is
+  > where work becomes real, and everything before it is provisional in both senses.
 - **Oracles must not share a derivation path** — see (j).
 - **A QUANTITY ASSUMED TO CANCEL IN A RATIO MUST BE MEASURED TO CANCEL**, because the
   assumption is precisely what a ratio cannot reveal. This is the cancellation rule (a)
