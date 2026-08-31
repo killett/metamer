@@ -712,3 +712,86 @@ width read against it silently asserts that a random start of the same magnitude
 produced none. **That sentence goes in the module docstring**, because the map is the only artifact
 that carries it into Task 5's report, and a floor whose purpose is not beside it reads as one more
 arm.
+
+---
+
+## Plan Task 1, AMENDED — the third rung, audited before it is added (2026-08-31)
+
+**THE BRIEF** is E4's re-decision of 2026-08-30: **three rungs, not two**, with the middle one
+**ours to choose**, its `ℓ` and `Δ` **between the two shipped rungs on the same diagonal**, and
+criterion 17 **re-measured** for it rather than interpolated. **It is a Task 1 amendment and not
+new work**, because a rung is a field-builder object and adding one re-opens Task 1's own
+`ℓ`-monotonicity test. **Four findings, and two of them fired inside this task's own repairs.**
+
+### THE DIAGONAL IS GEOMETRIC, AND THE REASON IS THE QUANTITIES' KIND RATHER THAN THE NUMBERS
+
+*"Between the two shipped rungs on the same diagonal"* does not by itself say **in what
+coordinates**, and arithmetic and geometric midpoints differ: `(11.0, 1.875)` against
+`(9.798, 1.5)`. **The criterion is stated before the values are computed**, or this becomes a
+choice justified by the answer it gives.
+
+**`coherence_length` is a LENGTH SCALE** — what matters about it is its **ratio** to
+`COARSE_STRIDE`, not its difference from it; that is how both shipped rungs' own sources are
+written (*"2× the coarse stride"*, *"below the coarse stride"*). **`contrast` is already defined
+as a MULTIPLE of `WITHIN_REGIME_RANGE`.** Both are ratio-scale, so **evenly spaced means evenly
+spaced in the logarithm**, and the geometric midpoint is the one that makes the three a curve.
+
+> **THE VALUES FOLLOW AND ARE NOT CHOSEN:** `ℓ = √(16 × 6) = 9.7980` fine cells, `Δ = √(3 × 0.75)
+> = 1.5` **exactly**. **Recorded as consequences rather than as reasons**, in this order
+> deliberately: `Δ` makes the three a **factor-of-two ladder** 3.0 / 1.5 / 0.75, and `ℓ` is
+> **1.22 × COARSE_STRIDE** — between the easy rung's `2k` and the hard rung's `0.75k`, so the
+> middle rung is the one whose coarse neighbour sits *just* inside one correlation length. **Both
+> are pleasing and neither was the argument.**
+>
+> **AND THE RUNG IS COMPUTED FROM ITS NEIGHBOURS IN THE CODE, NOT WRITTEN AS A LITERAL** — (a2e),
+> encode a classification as a construction. `ℓ = 10.0` is 2% off the line, looks like a tidier
+> number, and would make the spacing unequal in the coordinate the effect is expected to be
+> smooth in; a non-monotone result at the middle rung could then no longer be read as a finding
+> about the lever rather than about the placement. **A test asserts the geometric identity**, so
+> replacing the computation with a literal is caught.
+
+### THE MONOTONICITY TEST IS REWRITTEN AGAINST THE SET, AND (c5) FIRED TWICE IN ONE FILE
+
+The shipped test asserted `correlation_at(easy) > correlation_at(hard)` — **a pairwise assertion,
+which passes for a middle rung placed anywhere at all**, including off the diagonal or equal to
+one of its neighbours. It is now an ordering over **every** rung in `RUNGS`, sorted by `ℓ`, with
+each adjacent pair checked and **distinct coherence lengths asserted** so three rungs cannot
+secretly be two.
+
+> **AND THE SECOND INSTANCE IS THE INSTRUCTIVE ONE, BECAUSE IT BROKE RATHER THAN WEAKENED.**
+> `test_the_plausibility_rung_is_absent_and_asking_for_it_raises` opened with
+> `assert set(fields.RUNGS) == {"easy", "hard"}` — **an enumeration of the members standing in for
+> a property about the set** — and it failed the moment a third rung landed. **A true statement
+> about the members had become a false gate about the property.** The property is that the
+> **plausibility slot stays empty**, which is indifferent to how many rungs exist; it now reads
+> `"plausibility" not in fields.RUNGS`.
+>
+> **(c5) is normally a rule about gates that silently pass. This is its other failure mode: a
+> gate that loudly fails for the wrong reason**, and the loud one is the lucky one — the same
+> enumeration inside the **harness** (`for name in ("easy", "hard")`) would have measured two
+> rungs of three and emitted a complete-looking table. **It is now written against `RUNGS`.**
+
+### CRITERION 17 IS RE-MEASURED, AND THE REASON IS SHARPER THAN "A POINT BETWEEN TWO POINTS"
+
+(a4)'s register says a point between two measured points is not measured. **Here the temptation is
+stronger than usual and that is worth naming:** the two shipped rungs came back at **24.375 and
+24.396** — a difference of **0.021** against a standard error of about **0.19** on each mean, so
+they are **indistinguishable**. *"Both endpoints agree, so the middle must too"* is a much more
+persuasive argument than an interpolation between two different numbers, **and it is the same
+argument.** The budget rests on the **largest** of the three.
+
+**So the prediction is a NULL, and a null needs its positive control named.** *"The middle rung
+costs what the others cost"* is byte-identical in the output to *"the rung parameter never reached
+the field"*. **The control already exists as a test rather than as a reading** — the
+autocorrelation ordering, and *"one rung twice is identical and two rungs differ"* — and the
+predictions file says that if either fails, no number from this reading may be quoted.
+
+### THE BAND IS SET FROM THE MEASURED SPREAD, NOT FROM ROUND NUMBERS
+
+`24.385 ± 3 × 0.198 = [23.79, 24.98]`, rounded outward to **`[23.8, 25.0]`** — (i10) and (a9),
+after Task 0's clauses were guesses against an unmeasured quantity. **Both refutation clauses are
+written and they differ in consequence, not only in sign:** below the band and above it are the
+same refutation of monotonicity, **but only the upper one re-prices the sub-phase**, because the
+budget is built on the largest rung. The lower clause carries an explicit *"do not re-place the
+rung to make the curve monotone"*, which is the repair a reader would reach for and is tuning the
+sweep against its own result.

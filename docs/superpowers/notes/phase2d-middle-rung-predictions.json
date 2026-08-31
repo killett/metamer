@@ -1,0 +1,121 @@
+{
+  "task": "Phase 2d -- the third rung, a Task 1 amendment. Criterion 17 re-measured, not interpolated",
+  "written": "2026-08-31",
+  "committed_before_the_harness_ran": true,
+  "why_a_new_measurement_rather_than_an_interpolation": [
+    "The budget rests on the LARGEST of the three rungs' iteration counts, and (a4)'s register",
+    "says a point between two measured points is not measured. The two shipped rungs came back",
+    "indistinguishable from one another, which makes interpolation look safe and is exactly the",
+    "condition under which an interpolated value would never be questioned."
+  ],
+  "instrument": {
+    "field": "metamer.bench.fields, 32 x 12, boundary at index 16, step w = 0, family change",
+    "rung_under_test": "middle",
+    "coherence_length": 9.797958971132712,
+    "contrast": 1.5,
+    "candidates": ["white", "white + matern12", "white + matern32"],
+    "M": 3,
+    "signal_terms": ["constant", "trend"],
+    "criteria": ["aic"],
+    "coarse_stride": 8,
+    "spiral_bound": 4,
+    "n_time": 630,
+    "draw_method": "cholesky",
+    "seed": 20260830,
+    "subgrid_stride": 2,
+    "points_sampled": 96,
+    "host_quiet_check": "gates, on load average < physical_cores - 1",
+    "note_on_this_block": [
+      "It is here because a recorded measurement is a current claim only while the",
+      "configuration that produced it is. If a named default above has moved, the artifact's",
+      "check FAILS rather than the number being re-quoted."
+    ]
+  },
+  "the_two_shipped_rungs_this_is_read_against": {
+    "measured": "2026-08-30, same instrument, rebuilt family-change field",
+    "easy": {
+      "coherence_length": 16.0,
+      "contrast": 3.0,
+      "iterations_per_point_mean": 24.375,
+      "sd": 1.63,
+      "standard_error_of_the_mean": 0.166
+    },
+    "hard": {
+      "coherence_length": 6.0,
+      "contrast": 0.75,
+      "iterations_per_point_mean": 24.395833333333332,
+      "sd": 1.944,
+      "standard_error_of_the_mean": 0.198
+    },
+    "the_fact_that_drives_the_band": [
+      "The two shipped rungs differ by 0.021 iterations per point against a standard error of",
+      "about 0.19 on each mean. They are indistinguishable, so the prediction cannot be an",
+      "ordering -- there is no ordering to extend. It is a band around their common value."
+    ]
+  },
+  "readings": [
+    {
+      "id": "M",
+      "name": "iterations per point at the middle rung, N = 630 -- exit criterion 17's third point",
+      "method": [
+        "The same systematic subgrid the two shipped rungs used: every 2nd point on each axis,",
+        "16 x 6 = 96 of 384, fitted through core.fit. Identical in every respect to the",
+        "2026-08-30 run except the rung, so the three are comparable by construction and the",
+        "arms are not compared across sessions. Reported as a SAMPLE, with its spread."
+      ],
+      "prediction": [
+        "The middle rung lands indistinguishable from both shipped rungs, near 24.4 iterations",
+        "per point. The mechanism the prediction rests on: the two shipped rungs differ by a",
+        "factor of 2.67 in coherence length and 4 in contrast and produced the same number, so",
+        "on this field the iteration count is set by the LIKELIHOOD and the candidate set --",
+        "the difficulty condition -- and not by either lever. A point between two settings that",
+        "do not differ should not differ either."
+      ],
+      "predicted_band_iterations_per_point": [23.8, 25.0],
+      "how_the_band_was_set": [
+        "Three standard errors either side of the shipped pair's common value 24.385:",
+        "24.385 +- 3 x 0.198 = [23.79, 24.98], rounded outward to [23.8, 25.0]. The band is",
+        "set from the MEASURED spread rather than from round numbers -- (i10) and (a9), after",
+        "Task 0's clauses were guesses against an unmeasured quantity."
+      ],
+      "refuted_from_below": {
+        "when": "iterations per point < 23.8",
+        "reading": [
+          "The middle rung is EASIER than both of its neighbours. That is not a monotone lever",
+          "with a middle point -- it is a non-monotone response, and it means the diagonal is",
+          "not a line in the quantity that governs difficulty. E5's premise that the three are",
+          "one lever's curve would be refuted at its own middle point.",
+          "ACTION: report and stop before Task 4. Do not re-place the rung to make the curve",
+          "monotone, which would be tuning the sweep against its own result."
+        ]
+      },
+      "refuted_from_above": {
+        "when": "iterations per point > 25.0",
+        "reading": [
+          "The middle rung is HARDER than both of its neighbours. Same refutation of monotonicity",
+          "as the clause below, AND a budget consequence the lower clause does not have: the",
+          "budget is priced on the LARGEST of the three, so a middle rung above both re-prices",
+          "the sub-phase rather than merely re-reading it.",
+          "ACTION: re-cost E2's factor at the new largest value before Task 4, and report",
+          "whether 19.7 h against the 30 h ceiling still holds."
+        ]
+      },
+      "what_would_NOT_refute_anything": [
+        "Landing anywhere inside the band. The prediction is a null -- 'no difference' -- and a",
+        "null is byte-identical in the output to 'the rung parameter never reached the field'.",
+        "THE POSITIVE CONTROL IS ALREADY A TEST AND NOT A READING: ",
+        "test_the_coherence_length_orders_the_spatial_autocorrelation asserts that the three",
+        "rungs' truths are strictly ordered in spatial autocorrelation, and",
+        "test_one_rung_twice_is_identical_and_two_rungs_differ asserts that two rungs do not",
+        "produce one field. If either failed, no number from this reading could be quoted."
+      ]
+    }
+  ],
+  "what_this_reading_does_not_establish": [
+    "Nothing about the SAVING. This is the cold-arm iteration count, exit criterion 17's",
+    "reading, and it prices the budget. Whether l moves the saving is Task 1's reading B and",
+    "is not re-run here.",
+    "And the standing limitation is unchanged: every number from this rung is measured on a",
+    "field whose coherence is a construction parameter, and this rung's is CHOSEN."
+  ]
+}

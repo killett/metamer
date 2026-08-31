@@ -119,8 +119,15 @@ class N2Counts:
     reading -- a map alone cannot say whether an absence was the source map's
     fault or the perturbation's, and those send a reader to different places.
 
+    **"EXCLUDED" MEANS EXCLUDED FROM THIS MAP, NOT ABSENT FROM THE FIT.** Those
+    cells **were fitted** -- `fit` fell back to the moment ladder and produced a
+    COLD result for them, which is exactly why the map has to drop them. A
+    reader who takes `excluded` as a count of unfitted cells will look for them
+    in the store and find ordinary fits there. The count is about the ARM's
+    accounting; the fit happened.
+
     Attributes:
-        excluded: Points with no N2 value. **Equal to
+        excluded: Points with no N2 value **in this map**. **Equal to
             `exhausted_spiral + inadmissible`**, which a test asserts.
         exhausted_spiral: Excluded because some candidate had **no warm
             source**, so there is no distance to match. Named for the only
@@ -257,9 +264,17 @@ def n2_field_map(
     )
     starts = arms.starts
 
-    # **ANY, NOT ALL, AND THE REDUCTION IS THE SPECIFICATION.** `best_index`
-    # compares every candidate's score, so one candidate that fell back to the
-    # ladder decides the winner partly on a cold fit.
+    # **ANY, NOT ALL, AND THE REDUCTION IS THE SPECIFICATION RATHER THAN A
+    # DETAIL.** `best_index` compares EVERY candidate's score against every
+    # other, so one candidate that fell back to the ladder makes the winner
+    # partly a cold fit -- the point's value is then neither N2's nor cold's.
+    #
+    # **`any` READS AS THE PERMISSIVE CHOICE AND IS THE STRICT ONE HERE**, which
+    # is the whole reason this comment exists: `all` sounds conservative and
+    # keeps exactly the MIXED points, the only ones nothing downstream could
+    # identify, because a mixed winner is an ordinary candidate index. The plan
+    # was silent on the reduction; the silence is what made it worth writing
+    # down rather than the choice.
     no_source = ~np.asarray(starts.warm_valid, dtype=np.bool_).all(axis=1)
     left_the_box = np.asarray(starts.n2_inadmissible, dtype=np.bool_).any(axis=1)
     # Exhaustion takes precedence, so the two reasons are disjoint and

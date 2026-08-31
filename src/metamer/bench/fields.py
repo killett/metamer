@@ -35,10 +35,28 @@ multiplying it out.
 
 ## The rungs, and the one that does not exist
 
-**`easy` and `hard` are OURS TO CHOOSE and say so.** The easy rung is tuned so
-the artifact must appear -- it is the positive control, and its numbers are a
-floor and a demonstration, never a magnitude. The hard rung probes the floor
-from below.
+**`easy`, `middle` and `hard` are ALL OURS TO CHOOSE and all say so.** The easy
+rung is tuned so the artifact must appear -- it is the positive control, and its
+numbers are a floor and a demonstration, never a magnitude. The hard rung probes
+the floor from below.
+
+**AND THE MIDDLE RUNG IS THE ONE MOST LIKELY TO BE MISREAD, WHICH IS WHY IT SAYS
+SO TWICE.** It occupies the slot a *plausibility* rung would have held, and **a
+middle rung on a sweep is exactly where a later reader supplies "plausible" for
+free** -- it sits between two extremes, so it reads as the realistic case
+without anyone having claimed it is. It is not. Its `sources` say **CHOSEN BY
+US** for both parameters, and **every figure drawn from it must carry the same
+sentence**; `Rung.sources` is per parameter precisely so that this cannot be
+covered by a citation belonging to something else.
+
+**Its `l` and `contrast` are the GEOMETRIC MIDPOINTS of the two shipped rungs**,
+computed from them rather than written again, so the three sit on one line by
+construction and cannot drift off it. `l` is `sqrt(16 x 6) = 9.80` fine cells --
+`1.22 x COARSE_STRIDE`, between the easy rung's `2k` and the hard rung's
+`0.75k`, so it is the rung whose coarse neighbour sits *just* inside one
+correlation length. `contrast` is `sqrt(3 x 0.75) = 1.5` exactly, making the
+three a factor-of-two ladder. **Off that line the three stop being one lever's
+curve and become three unrelated settings.**
 
 **THERE IS NO `plausibility` RUNG AND ASKING FOR ONE RAISES.** Its parameters
 were to be sourced from published altimetry values, and the parameter that
@@ -251,43 +269,81 @@ class Rung:
                 )
 
 
-#: **BOTH RUNGS ARE OURS TO CHOOSE AND BOTH SAY SO.** Neither is a claim about
-#: the ocean. See the module docstring for the rung that is missing and why.
-RUNGS: Mapping[str, Rung] = {
-    "easy": Rung(
-        name="easy",
-        coherence_length=16.0,
-        contrast=3.0,
-        sources={
-            "coherence_length": (
-                "chosen for detectability: 2x the coarse stride, so a coarse "
-                "neighbour is well inside one correlation length and the warm "
-                "start has something to exploit"
-            ),
-            "contrast": (
-                "chosen for detectability: 3x the within-regime range, so the "
-                "step dominates the smooth variation and the smear estimator "
-                "has an edge it can resolve"
-            ),
-        },
+_EASY = Rung(
+    name="easy",
+    coherence_length=16.0,
+    contrast=3.0,
+    sources={
+        "coherence_length": (
+            "chosen for detectability: 2x the coarse stride, so a coarse "
+            "neighbour is well inside one correlation length and the warm "
+            "start has something to exploit"
+        ),
+        "contrast": (
+            "chosen for detectability: 3x the within-regime range, so the "
+            "step dominates the smooth variation and the smear estimator "
+            "has an edge it can resolve"
+        ),
+    },
+)
+
+_HARD = Rung(
+    name="hard",
+    coherence_length=6.0,
+    contrast=0.75,
+    sources={
+        "coherence_length": (
+            "chosen to be hard: below the coarse stride, so a coarse "
+            "neighbour lies outside one correlation length and carries "
+            "little information about its neighbours' optima"
+        ),
+        "contrast": (
+            "chosen to be hard: below the within-regime range, so the step "
+            "does not dominate the smooth variation"
+        ),
+    },
+)
+
+
+def _geometric_midpoint(low: float, high: float) -> float:
+    """The point midway between two ratio-scale values.
+
+    **GEOMETRIC AND NOT ARITHMETIC, AND THE REASON IS THE QUANTITIES' KIND**,
+    not the numbers it happens to produce. `coherence_length` is a LENGTH SCALE
+    -- what matters about it is its ratio to `COARSE_STRIDE`, not its
+    difference from it -- and `contrast` is already defined as a MULTIPLE of
+    `WITHIN_REGIME_RANGE`. Both are ratio-scale, so evenly spaced means evenly
+    spaced in the logarithm, and the three rungs are then one lever's curve
+    rather than three points that happen to be ordered.
+    """
+    return float(np.sqrt(low * high))
+
+
+_MIDDLE = Rung(
+    name="middle",
+    coherence_length=_geometric_midpoint(
+        _HARD.coherence_length, _EASY.coherence_length
     ),
-    "hard": Rung(
-        name="hard",
-        coherence_length=6.0,
-        contrast=0.75,
-        sources={
-            "coherence_length": (
-                "chosen to be hard: below the coarse stride, so a coarse "
-                "neighbour lies outside one correlation length and carries "
-                "little information about its neighbours' optima"
-            ),
-            "contrast": (
-                "chosen to be hard: below the within-regime range, so the step "
-                "does not dominate the smooth variation"
-            ),
-        },
-    ),
-}
+    contrast=_geometric_midpoint(_HARD.contrast, _EASY.contrast),
+    sources={
+        "coherence_length": (
+            "CHOSEN BY US, not sourced: the geometric midpoint of the easy and "
+            "hard rungs, 9.80 fine cells. It occupies the slot a plausibility "
+            "rung would have held and it is NOT a claim about the ocean -- see "
+            "the module docstring for why that rung is not constructible"
+        ),
+        "contrast": (
+            "CHOSEN BY US, not sourced: the geometric midpoint of the easy and "
+            "hard rungs, exactly 1.5x the within-regime range, which makes the "
+            "three contrasts a factor-of-two ladder 3.0 / 1.5 / 0.75"
+        ),
+    },
+)
+
+#: **ALL THREE RUNGS ARE OURS TO CHOOSE AND ALL THREE SAY SO.** None is a claim
+#: about the ocean. See the module docstring for the rung that is missing and
+#: why, and for what the middle one is and is not.
+RUNGS: Mapping[str, Rung] = {"easy": _EASY, "middle": _MIDDLE, "hard": _HARD}
 
 _NOT_CONSTRUCTIBLE = {
     "plausibility": (

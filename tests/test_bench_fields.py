@@ -277,10 +277,13 @@ def test_the_coherence_length_orders_the_spatial_autocorrelation(tmp_path):
     dataclass and never reaching the field. The sweep's entire lever would then
     be a label, every rung would be equally coherent, and the resolution floor
     E4 reports would be a floor for one setting reported as three.
+
+    Why this is an ordering over the SET and not over a pair: the sweep has
+    three rungs since 2026-08-31, and a pairwise assertion on the two extremes
+    passes for a middle rung placed anywhere at all -- including off the
+    diagonal, or equal to one of its neighbours. **A gate over a set that can
+    grow is written against the set** (c5), and this set grew.
     """
-    easy = _build(tmp_path / "a", fields.RUNGS["easy"], seed=7).parameters
-    hard = _build(tmp_path / "b", fields.RUNGS["hard"], seed=7).parameters
-    assert fields.RUNGS["easy"].coherence_length > fields.RUNGS["hard"].coherence_length
 
     def correlation_at(truth, lag):
         """Lag-`lag` correlation along the PARALLEL axis, within one regime."""
@@ -292,11 +295,97 @@ def test_the_coherence_length_orders_the_spatial_autocorrelation(tmp_path):
         denominator = np.sqrt((left**2).sum() * (right**2).sum())
         return float((left * right).sum() / denominator)
 
-    lag = 2
-    assert correlation_at(easy, lag) > correlation_at(hard, lag), (
-        "the long-coherence rung is no more spatially correlated than the "
-        "short one at lag 2: `coherence_length` is a label"
+    ordered = sorted(
+        fields.RUNGS.values(), key=lambda rung: rung.coherence_length, reverse=True
     )
+    assert len(ordered) == len(fields.RUNGS) >= 3, "the sweep is three rungs"
+    lengths = [rung.coherence_length for rung in ordered]
+    assert len(set(lengths)) == len(lengths), (
+        "two rungs share a coherence length: the sweep has fewer points than it reports"
+    )
+
+    lag = 2
+    correlations = [
+        correlation_at(
+            _build(tmp_path / rung.name, rung, seed=7).parameters,
+            lag,
+        )
+        for rung in ordered
+    ]
+
+    for longer, shorter, above, below in zip(
+        ordered[:-1], ordered[1:], correlations[:-1], correlations[1:], strict=True
+    ):
+        assert above > below, (
+            f"rung {longer.name!r} has coherence length "
+            f"{longer.coherence_length:.4g} against {shorter.name!r}'s "
+            f"{shorter.coherence_length:.4g}, but is no more spatially "
+            f"correlated at lag {lag} ({above:.4f} vs {below:.4f}): "
+            "`coherence_length` is a label"
+        )
+
+
+def test_the_three_rungs_sit_on_one_diagonal(tmp_path):
+    """The middle rung is the geometric midpoint of the other two, in both levers.
+
+    Behaviour: E5 sweeps `l` and `contrast` TOGETHER, so the three rungs must
+    lie on one line or they stop being one lever's curve and become three
+    unrelated settings.
+
+    Expected values determined independently, as arithmetic: the geometric
+    midpoint of 16.0 and 6.0 is `sqrt(96) = 9.79796`, and of 3.0 and 0.75 is
+    `sqrt(2.25) = 1.5` exactly. Geometric rather than arithmetic because both
+    quantities are ratio-scale -- `coherence_length` matters through its ratio
+    to `COARSE_STRIDE` and `contrast` is already defined as a multiple of
+    `WITHIN_REGIME_RANGE`.
+
+    Bug this catches: a middle rung nudged to a rounder number. `l = 10.0` is
+    2% off the line and looks harmless; it makes the spacing between the three
+    unequal in the coordinate the effect is expected to be smooth in, so a
+    non-monotone result at the middle rung could no longer be read as a
+    finding about the lever rather than about the placement. **The rung is
+    COMPUTED from its neighbours for this reason**, and this test is what
+    notices if someone replaces the computation with a literal.
+    """
+    easy, middle, hard = (fields.RUNGS[name] for name in ("easy", "middle", "hard"))
+
+    assert middle.coherence_length == pytest.approx(
+        np.sqrt(easy.coherence_length * hard.coherence_length)
+    )
+    assert middle.contrast == pytest.approx(np.sqrt(easy.contrast * hard.contrast))
+    assert hard.coherence_length < middle.coherence_length < easy.coherence_length
+    assert hard.contrast < middle.contrast < easy.contrast
+
+
+def test_the_middle_rung_records_that_it_was_chosen_rather_than_sourced(tmp_path):
+    """The slot that used to be plausibility says, twice, that it is ours.
+
+    Behaviour: E4's constraint on the middle rung. Its `sources` must state
+    that both parameters were chosen by us, because it sits between two
+    extremes and therefore reads as the realistic case without anyone having
+    claimed it is.
+
+    Expected value determined independently: `Rung.__post_init__` already
+    refuses an empty source, so the content is what is at stake -- both entries
+    must say `chosen`, and neither may claim a citation.
+
+    Bug this catches: a middle rung whose sources say something like
+    "interpolated between the shipped rungs". That is true and it is not the
+    warning: a reader quoting a magnitude from this rung would still have no
+    signal that its most load-bearing parameter was picked. **A middle rung on
+    a sweep is where a later reader supplies "plausible" for free**, and the
+    source line is the only thing in the artifact that stops them.
+    """
+    middle = fields.RUNGS["middle"]
+
+    for parameter in ("coherence_length", "contrast"):
+        source = middle.sources[parameter].lower()
+        assert "chosen by us" in source, (
+            f"the middle rung's {parameter!r} does not record that it was "
+            "chosen; it occupies the plausibility slot and will be read as "
+            "sourced"
+        )
+        assert "not sourced" in source
 
 
 # --------------------------------------------------------------------------
@@ -459,10 +548,10 @@ def test_the_config_text_is_built_from_the_named_sources(tmp_path):
 def test_the_plausibility_rung_is_absent_and_asking_for_it_raises(tmp_path):
     """E1's constraint 1 is not satisfiable for `l`, so the rung does not exist.
 
-    Behaviour: `RUNGS` carries `easy` and `hard`. Requesting the plausibility
-    rung raises, and the message names why -- that `l` is the coherence of the
-    fitted OPTIMA while published values describe the coherence of the DATA,
-    and that 2c's ceiling arm measured these to differ.
+    Behaviour: no rung named `plausibility` exists, whatever else does.
+    Requesting it raises, and the message names why -- that `l` is the
+    coherence of the fitted OPTIMA while published values describe the
+    coherence of the DATA, and that 2c's ceiling arm measured these to differ.
 
     Expected value determined independently: the exception type and the
     presence of the words that make the refusal diagnosable rather than blank.
@@ -473,8 +562,18 @@ def test_the_plausibility_rung_is_absent_and_asking_for_it_raises(tmp_path):
     because nothing downstream can tell a chosen `l` from a sourced one. (a2b)
     at the one slot where an invalid value is a scientific error rather than a
     caveat.
+
+    **Written against the SET rather than as an enumeration of its members**,
+    which is (c5) and which fired here: the earlier version asserted
+    `set(RUNGS) == {"easy", "hard"}` and failed the moment a third rung landed
+    -- a true statement about the members turned into a false gate about the
+    property. The property is that the plausibility slot stays empty, and it is
+    indifferent to how many rungs there are.
     """
-    assert set(fields.RUNGS) == {"easy", "hard"}
+    assert "plausibility" not in fields.RUNGS
+    assert all(rung.name == name for name, rung in fields.RUNGS.items()), (
+        "a rung is keyed under a name that is not its own"
+    )
     with pytest.raises(fields.RungNotConstructible) as excinfo:
         fields.rung("plausibility")
     message = str(excinfo.value)

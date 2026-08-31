@@ -114,7 +114,12 @@ def quiet_check() -> dict[str, Any]:
 
 def reading_a(handle: TextIO, directory: Path) -> None:
     """Iterations per point on a subgrid of each rung's field, at `N = 630`."""
-    for name in ("easy", "hard"):
+    # **OVER `RUNGS`, NOT OVER A LIST OF NAMES.** The sweep grew from two rungs
+    # to three on 2026-08-31 and an enumeration here would have silently
+    # measured two of them -- (c5), a gate over a set that can grow written
+    # against the set. The order is fixed so the emitted records are comparable
+    # run to run.
+    for name in sorted(fields.RUNGS, key=lambda n: -fields.RUNGS[n].coherence_length):
         rung = fields.rung(name)
         built = fields.build_field(
             rung, path=directory / f"{name}.zarr", n_time=fields.N_TIME, seed=20_260_830

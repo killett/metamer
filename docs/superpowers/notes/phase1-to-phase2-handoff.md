@@ -1682,9 +1682,9 @@ one command. Task 15's brief never mentioned `fixed`, `state_dim` or `white + wh
 Delete the guard each one protects and confirm it fails. Two of Task 9's tests replaced
 assertions that could not fail at all.
 
-**A surviving mutation has six causes and they call for different responses.** Diagnose
-which before acting; five of the six are not defects, and treating them as coverage gaps
-leads to deleting a real guard.
+**A surviving mutation has SEVEN causes and they call for different responses.** Diagnose
+which before acting; six of the seven are not defects in the code, and treating them as coverage
+gaps leads to deleting a real guard.
 
 | cause | tell | response |
 |---|---|---|
@@ -1694,6 +1694,7 @@ leads to deleting a real guard.
 | **GUARDED ONE LAYER UP** | the mutation is semantically real and the test is sound, but an **earlier layer already normalized the input**, so the mutated code cannot see the difference | **rewrite the assertion** — see below |
 | **THE MUTATION IS NOT A DEFECT** | the mutated code is **semantically identical** to the original on every reachable input | **correct the mutation, not the test** — see below |
 | **NEUTRALIZED FROM BELOW** | the mutated value really is different, and **a consumer downstream never reads the part that changed** | **correct the mutation, not the test** — see below |
+| **THE FIXTURE CANNOT EXPRESS THE DISTINCTION** | the mutation is real, the assertion is sound, and **the fixture makes the two versions produce the same output** | **change the FIXTURE** — see (e4) below |
 
 **THE FIFTH SAYS NOTHING ABOUT THE TEST AT ALL, AND THAT IS WHY IT IS LISTED.** A survivor is
 evidence about a test only once the mutation is known to be a real behaviour change, and that
@@ -1790,6 +1791,41 @@ both. If you cannot, the mutation is not a mutation.**
 > replacement matched, applied, and produced a file that differs from the original by an unused
 > name. **The first is caught by reading the consumer; the second is caught by reading the
 > diff** — and a sweep that prints only pass/fail per mutation shows neither.
+
+#### (e4) THE SEVENTH CAUSE: A SURVIVOR IS A QUESTION ABOUT THE FIXTURE AT LEAST AS OFTEN AS ABOUT THE CODE
+
+> **Before concluding a mutation survived, check whether the FIXTURE can express the mutated
+> behaviour at all.** A fixture on which two spellings coincide, on which another raise produces
+> the same message, or on which the outcome is invariant to the input under test **will report a
+> survivor for every mutation in that region.**
+
+**IT IS DISTINCT FROM THE SIX BECAUSE THE FAULT IS IN NEITHER THE ASSERTION NOR THE MUTANT.**
+(e2) says the mutant may not be a behaviour change; (e3) says the assertion may be dead. **Here
+the mutant is a real change and the assertion is sound, and the INPUT is what cannot tell them
+apart.** The tell is that the mutation is observable on *some* input you can name, just not on the
+one the test uses.
+
+**THE THREE SHAPES, LISTED BECAUSE THEY ARE NOT OBVIOUSLY THE SAME THING.** Worked instances all
+from one sweep, 2d Task 3, 2026-08-31 — **four survivors, none a surviving mutation, three of them
+this cause.**
+
+| shape | worked instance | why it hides |
+|---|---|---|
+| **COINCIDING SPELLINGS** | every exhaustion fixture withheld the warm source from **all** candidates at a point, so `~valid.all(axis=1)` and `~valid.any(axis=1)` spelled the same thing | the reduction under test is only visible on a **partially** affected row, and the natural fixture affects all or none |
+| **A SHADOWING ERROR PATH** | the grid-size check's test matched `"grid"`; on the same input `arm_starts` raises *"points must carry one grid-global index…"* — so the check could be **deleted entirely** and the test stayed green | `pytest.raises(..., match=...)` passes on **any** raise whose message matches, and a broad phrase matches a guard you did not mean |
+| **AN INVARIANT OUTCOME** | two maps compared on white noise, where every point selects `white` **whatever it started from**, so a re-keyed random direction changed nothing observable | the test's observable does not depend on the quantity under test **at all** on this fixture; it would pass with the subject removed |
+
+> ## AND THE REPAIR GENERALIZES: MAKE THE MUTATED DISTINCTION THE OBSERVABLE
+>
+> The third shape was repaired by pushing the warm start to the **wall of the diagnostic box**,
+> where whether the perturbed start remains admissible depends on the **direction drawn** — and
+> therefore on the key under test. **An expensive convergence question became a cheap geometric
+> one, and the sensitive fixture was also the FAST one.**
+>
+> **That coincidence is not usually available and is worth looking for**, because the reflex when a
+> fixture cannot see its subject is to make it bigger, longer or more converged — which is the
+> direction that makes a suite slow. **Ask instead which cheap observable the mutated distinction
+> already controls.**
 
 #### (e3) AND ITS OPPOSITE COLOUR: A RED SUITE CAN HIDE A DEAD ASSERTION
 
@@ -3357,6 +3393,17 @@ Questions 1–4 and 9 are in `PROGRESS.md`. **9 (`HESSIAN_COND_LIMIT`) was close
 
 Every one of these was discovered by building a fixture that could not fail.
 
+- **AT A LOW ITERATION CAP `matern12` NEVER REACHES `OK`, SO THE SELECTION AXIS COLLAPSES TO
+  `white` EVERYWHERE.** Measured 2026-08-31 at 2d Task 3: at `max_iter = 8` on a white-noise batch
+  every point selects candidate 0 and `delta_ic` is `NaN` for the Matérn candidate — **`n_valid`
+  is 1, so there is no selection being made at all.** **Any assertion whose subject is the
+  selected candidate is then vacuous**, and it passes for the worst reason: the axis it reads has
+  one value on every input. **This is (i12) with the candidate set as the uniform thing rather
+  than the contract**, and it is easy to walk into, because capping iterations is the obvious way
+  to make a fit-driven fixture cheap. **The resolution is two caps with NAMED purposes** — a low
+  one where the subject is the start or the accounting, a higher one on a **correlated** fixture
+  where the selection has to be live — **never one cap chosen for speed and then relied on for
+  meaning.**
 - **A VALID WARM START IS NOT A WARM START USED, AND ANY COUNT MUST SAY WHICH IT COUNTS.**
   **Validity is a property of the SOURCE** — the spiral found a coarse fit within the bound that
   is `OK` for that candidate. **Usage is a property of the FIT** — the optimizer actually started
