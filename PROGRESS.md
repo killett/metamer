@@ -4,9 +4,9 @@
 
 1. **Branch `main`, everything on it, every commit pushed by a hook** — https://github.com/killett/metamer. **A SHA here is stale the moment the next commit lands, so nothing here names one:** `git log --oneline -8` is the authority.
 2. **DONE:** Phase 1 (0–18), Phase 2 preliminaries P0–P4, **Phase 2a (0–13)**, **Phase 2b (COMPLETE 2026-08-19 — 10 met / 4 reduced scope / 2 FAILED)**, **Phase 2c's brainstorm (D1–D12)**, and **Phase 2c (COMPLETE 2026-08-29 — 10 met / 2 reduced scope / 0 failed; Tasks 0–4 on 2026-08-24, Task 5 on 2026-08-27, Task 6 on 2026-08-28, Tasks 7–8 on 2026-08-29)**. The modelling sub-phase was decided against 2026-08-22 and **re-decided on closed facts 2026-08-23: it does not open.** Sections below carry each; **none is restated here.**
-3. **NEXT ACTION: PHASE 2d TASK 3 — the N2 full-field map**, which is independent of everything and unit-testable on constructed inputs with no field and no run. **AND BEFORE TASK 4, THE THIRD RUNG IS OWED** — decided, not shipped, a Task 1 amendment; see [THE THIRD RUNG IS OWED](#the-third-rung-is-owed--decided-2026-08-30-not-shipped-and-task-4-cannot-run-without-it). **2d's brainstorm is settled (E1–E8), its plan is approved — 10 tasks, 17 exit criteria — and TASKS 0, 1 AND 2 ARE DONE.** **§16.2 item 6 is 2d's home, not §11.2.** **Every task's FIRST step is the pre-flight** (method at item 7); 2d's entries are in [`phase2d-preflight.md`](docs/superpowers/notes/phase2d-preflight.md). **Phase 2c is CLOSED (10 met / 2 reduced scope / 0 failed)** plus 2b's criteria 6 and 7 which **stay FAILED** — see [the close](#phase-2c-is-closed-2026-08-29--10-met--2-met-with-reduced-scope--0-failed-plus-2bs-two-inherited-failures). **`ALGORITHM_VERSION` IS `"2"` SINCE 2026-08-27** and every store written before it holds cold fits — see [how to read a store written before 2c Task 5](#how-to-read-a-store-written-before-2c-task-5-recorded-2026-08-24-and-it-cannot-be-reconstructed-later), which is not re-derivable from the stores. **No rate or budget figure is quoted here: they live once, in [what 2d's tasks inherit](#what-2ds-tasks-inherit-2026-08-30).**
+3. **NEXT ACTION: THE THIRD RUNG, WHICH IS OWED AND BLOCKS TASK 4** — decided 2026-08-30, not shipped, and it is a **Task 1 amendment** rather than new work; see [THE THIRD RUNG IS OWED](#the-third-rung-is-owed--decided-2026-08-30-not-shipped-and-task-4-cannot-run-without-it). **Then PHASE 2d TASK 4 — the benchmark driver and its reproducible report**, which is the first task needing a field, a run and the whole budget. **2d's brainstorm is settled (E1–E8), its plan is approved — 10 tasks, 17 exit criteria — and TASKS 0, 1, 2 AND 3 ARE DONE.** **§16.2 item 6 is 2d's home, not §11.2.** **Every task's FIRST step is the pre-flight** (method at item 7); 2d's entries are in [`phase2d-preflight.md`](docs/superpowers/notes/phase2d-preflight.md). **Phase 2c is CLOSED (10 met / 2 reduced scope / 0 failed)** plus 2b's criteria 6 and 7 which **stay FAILED** — see [the close](#phase-2c-is-closed-2026-08-29--10-met--2-met-with-reduced-scope--0-failed-plus-2bs-two-inherited-failures). **`ALGORITHM_VERSION` IS `"2"` SINCE 2026-08-27** and every store written before it holds cold fits — see [how to read a store written before 2c Task 5](#how-to-read-a-store-written-before-2c-task-5-recorded-2026-08-24-and-it-cannot-be-reconstructed-later), which is not re-derivable from the stores. **No rate or budget figure is quoted here: they live once, in [what 2d's tasks inherit](#what-2ds-tasks-inherit-2026-08-30).**
 4. ## THE STANDING LIMITATION ON EVERYTHING 2c DECIDED: **NO 2c NUMBER COMES FROM REAL DATA.** Warm-starting was authorized — and every decision after D1 inherits this — on a **simulated field whose spatial coherence is a construction parameter**. **The spatial coherence of real altimetry optima has never been measured.** Weaker coherence gives a **smaller** saving, and **§11.2's 30% threshold could fail on real data.** **THE NAMED CLOSER, not an open worry: a spike on a real gridded product — same three arms, same record-length lever.** **AND SINCE 2026-08-24 THERE IS A SECOND REGISTER OF IT: every 2c saving is a CEILING, not an estimate**, because the instrument searched with no effective spiral bound — see [what 2c's tasks inherit](#what-2cs-tasks-inherit-2026-08-24).
-5. **Tests: 1274 passed, 0 failed, 0 INDETERMINATE — 2026-08-31, 3257.64 s (sweeps have run 1698–3452 s, which is the machine and not the suite).** **`pixi run test` is the full sweep and every end-of-task verification must run it; `test-fast` and `test-ci` are NOT evidence** — the full sweep has caught **seven** things a fast run could not. **Every run prints `RSS measurement validity`, including at zero**; a nonzero count is INDETERMINATE, neither pass nor fail.
+5. **Tests: 1287 passed, 0 failed, 0 INDETERMINATE — 2026-08-31, 3552.28 s (sweeps have run 1698–3552 s, which is the machine and not the suite; 2d Task 3 added ~3.5 min of real-filter fixtures, deliberately unmarked — the reason is at `tests/test_bench_n2map.py`).** **`pixi run test` is the full sweep and every end-of-task verification must run it; `test-fast` and `test-ci` are NOT evidence** — the full sweep has caught **seven** things a fast run could not. **Every run prints `RSS measurement validity`, including at zero**; a nonzero count is INDETERMINATE, neither pass nor fail.
 6. **Verify a fresh checkout with `pixi run test && pixi run typecheck && pixi run lint`**, plus `pixi run pre-commit run --all-files` before every commit. **AND `git add` A NEW FILE BEFORE THAT SWEEP, NEVER AT COMMIT TIME** — `--all-files` covers **tracked** files only, so an untracked new module makes every hook print `Passed` without being read. Measured 2026-08-24; it cost two full twenty-minute sweeps before it was noticed. **AND THE RULE HAS A SECOND FORM, PROMOTED 2026-08-31: STAGE ANYTHING A TOOL MAY RESTORE, NOT ONLY ANYTHING A HOOK MAY SKIP** — `git checkout -- <file>` restores **from the index**, so an unstaged edit in a file any tool touches is **silently reset to `HEAD`, with no error**. One changes what is CHECKED, the other changes what SURVIVES; the pair is in [the handoff](docs/superpowers/notes/phase1-to-phase2-handoff.md) and is not restated here.
 7. **THE METHOD IS THE PRE-FLIGHT AND IT LIVES IN EXACTLY ONE PLACE:** [`phase1-to-phase2-handoff.md`](docs/superpowers/notes/phase1-to-phase2-handoff.md) §1 — (a0)–(a9), (a)–(k), the standing rules, the fixture facts, **and the ones 2c added:** (i2b) a high-ceiling control converts a null into a **located** null · (i2c) a sign-unstable benefit is worse than a small one · (j5) a second instrument is a cross-check only if it measures the same quantity under the same conditions · (j6) bound the unmeasured region before measuring it · (i11) refutation clauses in **both** directions · (a2b) make an invalid value **unavailable** rather than caveated · (h2) stratify only by axes at the metric's **own** granularity · (j7) never stratify by a quantity the treatment can move · **(h3) check every stratum boundary against the filters the population already passed — an eps-derived boundary and an eps-derived GATE arrive at the same number by the same argument, and the empty strata read as a finding about the data** · **(h4) a rule stated over "the metrics" must be checked against each KIND of metric — 2c hit this three times** · **(a2b) at a count: "zero cases" is a claim about the INSTRUMENT until proven otherwise** · (c4) a validator must be specified in the **coordinates and extent** the validated object actually has · **(c5) a gate over a set that can GROW must be written against the set, not an enumeration of its members** · **(c6) a practice enforced by a MECHANISM must be checked to reach every instance — a partially-installed guard prints a complete-looking green** · (e2) prove a mutant differs before recording a surviving mutation — **(e) now has six causes** · (e3) its opposite colour, a **red** suite hiding a dead assertion · (a2c) populated but nothing **acts** on it · (a2d) a hashed value's **unit** is part of its identity — **and 2d added its artifact register: when a measurement is too expensive to be a test, its recorded output is a current claim only while the configuration that produced it is, so the artifact carries its instrument block and the check FAILS when a named default has moved** · (a2e) encode a classification as a **construction** · (i12) a **uniform fixture set** cannot test a freedom the contract leaves open · (j8) an adopted verdict makes the **instrument** part of the specification · plus (a0)'s sixth register (**a check that never read the file prints the same word as one that did**) and (a4)'s two (**"checked" in your own pre-flight is a claim**, and **a decision's own EXAMPLE can be the case that refutes it — and a retired argument stays visible**), and (a5)'s across-DECISIONS register (**check a decision against the measurements taken for the OTHERS; a term of art repeated across decisions acquires a reading nobody chose**), **plus the four 2d added: (a5b) when two constraints bind the same quantity, solve them together and state which binds — a quantity sized against one and checked against neither is the common case, because each constraint is satisfied in the section where it is discussed · (j8)'s second register: a rate is a measurement of a WORKLOAD and the workload is a precondition, so a cost figure recorded without its fixture can be quoted and cannot be reproduced — and where a DETERMINISTIC proxy for a cost exists, budget in the proxy and convert late · (j7)'s budget-level cousin: a quantity the experiment can MOVE must be reported, not only used · and (a4)'s agreeing-first-check rule gained the worked instance showing the error can point AT the expected answer — contention inflates seconds only, so a loud host pushed a per-iteration cost upward into a 0.3% "match" that is 19% apart when quiet**. **Do not restate them here** — the two copies drifted once already.
 8. **CI IS VERIFIED BY ENUMERATING COMMITS, NOT BY READING `gh run list`** — a run between two green runs is not thereby green, and **a commit that is not the TIP of its push gets no run of its own**, because one push produces one run. Where a commit has no run, check whether it was the tip; a non-tip `src` commit is a silently unverified tree. **WHAT THE ENUMERATION VERIFIED, STATED SO IT CANNOT BE READ AS MORE:** over the fifteen commits to 2026-08-30 and the eight since, re-enumerated 2026-08-31, **every `src`-touching commit has a completed run with conclusion `success`** — `be0938e` and `ed8f39b` are 2d's two. **The rest are docs-only and they are NOT all green:** `7ff7763` is `failure` (run `33338155827`, `test (ubuntu-latest, 3.12)`, `1 failed, 1211 passed … 1965.46 s`, and the failure is **item 9(c)'s recorded flake**), and `a8b1efd` and `9ce3152` are `cancelled` by the next push and are evidence of nothing. **The earlier wording gave a colour for the `src` subset and named the other subset without one, which reads as "and the rest were green"** — the exact supply-the-missing-value move the enumeration exists to prevent. **CI IS GREEN AT THE TIP and the deliberate red is CLOSED** (2026-08-22, by the repair its own criterion chose: the fixture was **enlarged**, the bound was **not** widened and the test was **not** marked). **CI runs `-m "not machine"` and therefore executes exactly ONE of the nine RSS assertions**, so it is not a substitute for the local sweep. See [THE CI FIXTURE DECISION](#the-ci-fixture-decision--taken-measured-and-verified-2026-08-22).
@@ -6844,6 +6844,89 @@ unstaged edit to `fields.py` was silently reverted to `HEAD` mid-run and had to 
 is built, config-read and tested anyway; the two changes that restore it are a `spiral_bound` below
 4, which a test exercises, and a normal axis longer than the reach, which cannot happen while
 `N_NORMAL = 4 × COARSE_STRIDE`.
+
+---
+
+### What plan Task 3 established (done 2026-08-31 — read before touching the N2 map, its counts or its key)
+
+**THE MODULE DOCSTRING AND THE PRE-FLIGHT CARRY THE SPECIFICATION; NEITHER IS RESTATED HERE.**
+
+**TASK 3 TURNED OUT NOT TO BUILD N2, AND THAT REFRAMED THE WHOLE TASK.** The four things carried
+into it — the perturbation matched **per cell**, the direction **keyed** rather than streamed on
+`audit.seed`, an inadmissible start **excluded and counted**, and N1 and N2 **sharing** the
+direction — are **already true of the shipped `arm_starts`**. So the task is a **reduction**, and
+every test is aimed at a way the reduction could lose one of them.
+
+**THE PLAN'S SIGNATURE CARRIED CONTINUOUS-SUBJECT RESIDUE, AS TASK 2's DID.** `scalar: str` with a
+`float64` map would let a caller ask for the N2 floor of `sigma` — a number `smear_width` cannot
+read. **The map is the selection map, `int16`, and Task 2's `agreement_map` consumes it with no
+adapter**, which is a test rather than a hope.
+
+> ## `run_arms` **DOES** FIT THE EXCLUDED CELLS COLD, AND TWO DOCSTRINGS READ AS THOUGH IT DOES NOT
+>
+> `arm_starts` sets `n2_valid = warm_valid & admissible`, `run_arms` passes it as `x0_valid`, and
+> **`fit` falls back to the moment ladder wherever `x0_valid` is false** — which is cold. The
+> plan's *"never run cold"* and `ArmStarts.n2_inadmissible`'s *"EXCLUDED and counted, never run"*
+> both describe the **accounting**, not the fit. **The exclusion is the consumer's, and the N2 map
+> is the first consumer.** A test now asserts the fallback **really happens** before the map is
+> credited with removing it — (i8), and (a2b) at a count, or the exclusion path's zero would be a
+> statement about the instrument.
+
+**THE REDUCTION FROM CELLS TO POINTS IS `ANY`, AND THE PLAN DID NOT SAY.** Accounting is `(B, M)`;
+the selected candidate is `(B,)` and **compares every candidate's score against every other**, so
+one candidate that fell back to the ladder makes the winner **partly a cold fit**. **An `all()`
+keeps exactly the mixed points** — neither N2's value nor cold's — and nothing downstream could
+identify them, since a mixed winner is an ordinary candidate index.
+
+**`N2Counts` GAINED `inadmissible` AND THE FOUR NUMBERS ARE AN IDENTITY:**
+`excluded == exhausted_spiral + inadmissible`, asserted, with **exhaustion taking precedence** so
+the two are disjoint. **`zero_distance` is reported and NOT excluded**: at a matched distance of
+zero the equal-distance random start **is** the cold start, so the value is a correct floor
+reading and dropping it would discard cells for having an inconvenient answer.
+
+**THE GRID-GLOBAL KEY GUARANTEES ONE AXIS, NOT TWO.** The key is `iy * n_parallel + ix`, so
+**adding rows leaves every existing point's index untouched and adding COLUMNS moves all but the
+first row's.** The plan's *"enlarging the field does not move an existing point's direction"*
+claims more than a flat index can deliver; the alternative key is unavailable, because
+`arm_directions` takes the index `SourceMap` and pass 1's store are written against. **A test
+pins the limitation** so a later change to the key must move the docstring with it.
+
+> ## THREE OF FOUR SURVIVING MUTATIONS WERE FIXTURE GAPS AND ONE WAS A DEAD ASSERTION — THE (e2)/(e3) PAIR, BOTH IN ONE SWEEP
+>
+> **14 mutations, 4 initially survived, and applying (e2) to each showed none of them was a
+> surviving mutation.**
+>
+> - **Two were the same gap:** every exhaustion fixture withheld the source from **all** candidates
+>   at a point, so an `any`/`all` swap on that reduction spelled the same thing, and the
+>   precedence rule was unobservable because no point qualified under **both** reasons. Fixtures
+>   now withhold **one** candidate's source and put one point under both.
+> - **One was (e3), a green test passing off another guard's raise:** the grid-size check's test
+>   matched `"grid"`, and **`arm_starts` raises `"points must carry one grid-global index…"`** on
+>   the same input. The check could be deleted entirely and the test stayed green. Now matched on
+>   a phrase only this guard uses.
+> - **One was a vacuous fixture:** the grid-growth test compared two maps on **white noise**, where
+>   every point selects `white` whatever it started from — so a re-keyed direction changed nothing
+>   observable. Repaired by making the **exclusion pattern** the observable: the warm start is
+>   pushed to the **box wall** (norm 18.0, every coordinate still inside), where admissibility
+>   depends on the **direction drawn** and therefore on the key. **No converged fit is needed**,
+>   so the sensitive version is also the cheap one.
+>
+> **All 14 killed after the repairs.** The transferable part: **a mutation that survives is a
+> question about the FIXTURE at least as often as about the code**, and the four here were four
+> different ways a test can be unable to see its own subject.
+
+**AND A FIXTURE FACT THAT COST AN HOUR: `matern12` NEVER REACHES `OK` AT A LOW ITERATION CAP, SO
+THE SELECTION AXIS COLLAPSES.** At `max_iter = 8` on white noise every point selects `white`, and
+any test whose subject is the selected candidate is vacuous. **Two caps are used and both are
+named**: 8 where the subject is the start or the accounting, 20 on a **correlated** fixture where
+the selection has to be live. **A fixture that cannot express the freedom under test is (i12), and
+here it is the candidate set rather than the contract that is uniform.**
+
+**THE NEW TESTS ARE NOT MARKED `slow`, DELIBERATELY.** They cost about 3.5 minutes; the marker
+means *"drives the real filter at PRODUCTION sizes"* and these drive it at 4–12 points and 24–40
+samples. **Marking them would widen a term of art to mean "anything slow"** and would deselect
+from `test-fast` the only cover for the exclusion. The decision and its trigger for reversal are
+recorded at the test module.
 
 ---
 

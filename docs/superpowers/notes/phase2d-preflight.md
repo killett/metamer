@@ -579,3 +579,136 @@ unreadable and Task 5 reports nothing at all.
    rest docs-only"* is true and **reads as "and the rest were green"**, which they were not.
    **A colour stated for one subset silently claims nothing about the other**, and the enumeration
    exists precisely so that no run's colour is supplied by the reader.
+
+---
+
+## Plan Task 3 — the N2 full-field map, audited before any code (2026-08-31)
+
+**THE BRIEF** is the plan's Task 3 — the audit's N2 arm run over every point of the field, giving
+the floor a smear width is read against — plus the four points carried in with it: **the
+perturbation matched per cell and never on average; the seed recorded and keyed, and it is
+`audit.seed`; an inadmissible start excluded and counted, never marked `x0_valid=False`; and N1
+and N2 sharing the direction.** **All four are already true of the shipped `arm_starts`, which is
+the finding that reshapes this task: Task 3's job is not to build N2, it is to REDUCE it to a
+map without losing any of the four.** Seven findings, and the first two change the interface.
+
+### THE PLAN'S `scalar: str` IS CONTINUOUS-SUBJECT RESIDUE, AND IT REINTRODUCES WHAT TASK 2 REMOVED
+
+The plan's signature ends `..., scalar: str) -> tuple[NDArray[np.float64], N2Counts]` — a
+**float** map of a **named scalar**, which is the interface a continuous subject needs. **Task 2
+settled that the subject is `fields.SMEAR_SUBJECT`, the selected candidate, and that a width *"of
+sigma"* is a width of two different quantities across a change of family.** A free scalar name
+here would let a caller ask for the N2 floor of `sigma` — a number `smear_width` cannot read and
+`agreement_map` has no meaning for.
+
+> **THE MAP IS THE SELECTION MAP, `int16`, IN THE STORE'S OWN VOCABULARY.** `agreement_map` and
+> `smear_width` then consume it **unchanged**, which is the test that the two tasks compose: Task
+> 3 produces exactly what Task 2 consumes, with no adapter between them and therefore no third
+> place for the subject to be respelled.
+
+**AND THE ABSENT CELLS GET `-2`, NOT `-1`.** `-1` is the store's *"a fit ran and no candidate
+won"*; an excluded point **had no N2 fit at all**, which is `SELECTED_UNSET = -2`, *"nothing wrote
+here"*. Both become `NaN` in `agreement_map`, so nothing downstream can tell them apart — **which
+is exactly why the map must not spend the wrong one**: the distinction is lost at the next step
+and can only be got right here.
+
+### THE EXCLUSION IS PER CELL, THE MAP IS PER POINT, AND THE REDUCTION IS **ANY**, NOT **ALL**
+
+**The plan does not state this and it is the largest specification decision in the task.**
+`ArmStarts`' accounting is `(B, M)` — per `(point, candidate)`. The selected candidate is `(B,)` —
+per point, from `ranking.best_index`, which **compares all `M` candidates' scores against each
+other.**
+
+> **SO ONE CONTAMINATED CANDIDATE CONTAMINATES THE POINT.** If candidate 1's N2 start was
+> inadmissible and fell back to the ladder while candidates 0 and 2 ran N2, the winner was decided
+> **partly by a cold fit**, and the point's selection is not the N2 arm's selection. **A point is
+> excluded if ANY of its candidates is**, and an `all()` here would keep exactly the mixed points
+> — which are the ones whose value is neither N2's nor cold's and which no later reader could
+> identify.
+
+### `run_arms` **DOES** RUN THE EXCLUDED CELLS COLD, AND THE PLAN'S WORDING HIDES IT
+
+The plan says *"inadmissible starts are excluded and counted, never run cold"*, and
+`ArmStarts.n2_inadmissible`'s docstring says they are *"EXCLUDED and counted, never run"*. **Read
+against the code, that describes the ACCOUNTING and not the FIT.** `arm_starts` sets
+`n2_valid = valid & admissible`, `run_arms` passes it as `x0_valid`, and `fit` **falls back to the
+moment ladder wherever `x0_valid` is false** — which is the ladder, which is cold. **So
+`run_arms`' N2 `FitResult` contains cold fits at precisely the cells the accounting excludes.**
+
+**THIS IS NOT A DEFECT IN `run_arms`.** Refusing there would abort the audit over one cell, which
+is the reason `warm_start_faults` exists as a mask rather than a refusal. **It means the exclusion
+the plan demands is the CONSUMER's, and Task 3 is that consumer** — the first one. A reader who
+checks `run_arms` for the guarantee finds a docstring that appears to give it.
+
+> **AND THE MASKING MUST BE SHOWN TO BE LOAD-BEARING RATHER THAN DEFENSIVE — (i8), (a2b) AT A
+> COUNT.** A test asserts that `run_arms`' raw N2 selection at an inadmissible cell **equals the
+> cold arm's**, so the fallback is demonstrated to happen on a constructed input before the map is
+> credited with removing it. Without that test, *"the map holds no cold fit"* is a claim about a
+> fault nobody has seen occur, and the exclusion path's zero count would be a statement about the
+> instrument.
+
+### `N2Counts` GAINS `inadmissible`, AND THE FOUR NUMBERS BECOME AN IDENTITY
+
+The plan's `excluded / zero_distance / exhausted_spiral` leaves the inadmissible count as
+`excluded - exhausted_spiral` — **derivable, and a reader has to know to subtract.** The two
+exclusion reasons are two different defects and are named separately.
+
+| field | meaning |
+|---|---|
+| `excluded` | points with **no N2 value** in the map. **`== exhausted_spiral + inadmissible`, asserted** |
+| `exhausted_spiral` | excluded because some candidate had **no warm source**, so there is no distance to match |
+| `inadmissible` | excluded because some candidate's N2 start **left the diagnostic box**. Counted only where the point is not already excluded for exhaustion, **so the two are disjoint and the identity holds** |
+| `zero_distance` | **NOT excluded.** Reported |
+
+**AND `zero_distance` IS REPORTED RATHER THAN EXCLUDED, WHICH IS A DECISION.** At a matched
+distance of exactly zero the equal-distance random start **is** the cold start, so the cell's N2
+value is the floor at that cell — a correct reading, not a missing one. **Dropping it would be
+discarding cells for having an inconvenient answer**, which is the shape D8 refuses. It is counted
+because it contributes *"N2 agrees with cold"* **by construction**, and a floor built largely from
+such cells is a floor about the field's degeneracy rather than about random starts.
+
+### `exhausted_spiral` IS NAMED FOR THE ONLY THING THAT MAKES `SourceMap.valid` FALSE
+
+`SourceMap.valid` is `index >= 0` and `index` is `-1` **only** where the spiral was exhausted, so
+*"no warm source"* and *"the spiral was exhausted"* are the same cells — **today, and by
+construction rather than by coincidence.** The count is therefore honest and the contract is on
+`SourceMap`: **a caller passing a differently-derived validity array mislabels its own cells**, and
+the docstring says so rather than leaving the name to be trusted.
+
+### (k) THE GRID-GLOBAL KEY IS STABLE ONLY UNDER GROWTH IN THE SLOWEST-VARYING AXIS
+
+The plan's test is *"enlarging the field does not move an existing point's N2 direction"*, against
+the (k) finding 2c recorded. **Checked against the arithmetic, it is true of one axis and false of
+the other.** The key is the row-major flat index `iy * n_parallel + ix`. **Adding rows leaves every
+existing point's index untouched; adding COLUMNS moves all of them but the first row's.**
+
+> **THAT IS A PROPERTY OF THE KEY AND NOT A DEFECT, AND IT IS RECORDED BECAUSE THE PLAN'S SENTENCE
+> CLAIMS MORE THAN THE KEY DELIVERS.** A flat index into a 2-D grid cannot be invariant to a change
+> in the grid's stride; the alternative — keying on `(iy, ix)` — is not available, because
+> `arm_directions` takes the flat index that `SourceMap` and pass 1's store are both written
+> against, and inventing a second key here would be a second N2. **2d's field never grows in either
+> axis, so nothing is at risk today.** The test asserts the guarantee that exists — growth along
+> the normal axis — and the docstring states the one that does not.
+
+### `field: FieldTruth` IS REPLACED BY THE BATCH ARRAYS AND THE GRID SHAPE
+
+**`FieldTruth` carries no observations.** It has `uri`, `parameters`, `family`, `boundary_index`,
+`t` and `rung`; the fits need `y` and `mask`, so a `FieldTruth`-shaped signature would have to
+**re-open the store** — a second read path for data the caller already holds, and a second place
+for the point ORDER to be got wrong. **It would also make every test build a field**, at minutes
+per test, when the plan placed this task among the two that need no field and no run.
+
+**The point set has no freedom and is therefore not a parameter.** A full-field map is every point
+in row-major order, so `points` is `arange(n_normal * n_parallel)` and is **derived rather than
+accepted** — a caller cannot hand in a permuted set. **The shape check catches a wrong COUNT and
+not a wrong ORDER**, and that limitation is stated at the argument rather than implied by its
+absence: the row-major precondition is `SourceMap`'s and `assemble_tile`'s, and it is inherited.
+
+### WHY THE ARM EXISTS, WRITTEN WHERE THE MAP IS DEFINED
+
+**A smear measured against zero is a different claim from a smear measured against the width an
+equal-distance random start produces.** Zero is not a floor — it is the absence of one, and a
+width read against it silently asserts that a random start of the same magnitude would have
+produced none. **That sentence goes in the module docstring**, because the map is the only artifact
+that carries it into Task 5's report, and a floor whose purpose is not beside it reads as one more
+arm.
