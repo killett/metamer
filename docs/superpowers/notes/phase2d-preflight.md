@@ -325,3 +325,193 @@ the midpoint — was never stated.** It is now.
 > all, and 12 is chosen for the point count and for the one-sided neighbourhood.** Corrected in
 > E2, in the plan and at the constant, **struck rather than deleted**, because three documents
 > asserted it as a derivation and a reader who finds only the fix cannot tell what was fixed.
+
+---
+
+## Plan Task 2 — the smear estimator and its interior null, audited before any code (2026-08-31)
+
+**THE BRIEF** is the plan's Task 2 — a width in fine cells from a fitted map, with a floor, a
+ceiling and a non-optional interior null — read together with *[what Task 2
+inherits](../../../PROGRESS.md)*, which records that **Task 2's subject changed under Task 1's
+rebuild** and that the estimator must therefore be **specified before it is written**. **Eight
+findings. The first one rewrites what the estimator computes, and three of the plan's seven test
+lines change with it.**
+
+### THE PLAN'S ESTIMATOR IS A TRANSITION FIT AND THE SUBJECT IS NO LONGER CONTINUOUS
+
+The plan says *"the profile is the map averaged parallel to the boundary… the width is that
+profile's transition width by a named estimator."* Since Task 1 the boundary is a **change of
+family** and the subject is `fields.SMEAR_SUBJECT`, **the selected candidate**, which is
+categorical. **Averaging a candidate index is label arithmetic** — the mean of *"white"* and
+*"white + matern32"* is not a candidate — so the plan's first sentence has no meaning under its
+own subject. **This is not a detail of implementation; it is the reading.**
+
+> ## WHAT THE ESTIMATOR COMPUTES, STATED IN FULL BEFORE A LINE OF IT EXISTS
+>
+> 1. **The per-point scalar is DISAGREEMENT, not the label.** `agreement_map` reduces the selected
+>    candidate at each point to `0.0` if the winning candidate carries that point's true family,
+>    `1.0` if it carries the other one or none, and `NaN` where nothing was selected. **This is
+>    the only step that reads the truth**, and it is a separate function for that reason.
+> 2. **The profile is the parallel-axis `nanmean` of that map**, so `p[i] ∈ [0, 1]` is the
+>    **fraction of the line at normal index `i` that misclassifies its own regime**. It is a
+>    misclassification profile and it is named as one.
+> 3. **A cell is smeared when a strict majority of its line misclassifies: `p[i] > 1/2`.** Six of
+>    twelve is a tie and is **not** a majority.
+> 4. **The width is the length, in fine cells, of the maximal contiguous run of smeared cells that
+>    contains one of the two cells adjacent to the boundary** — `boundary_index - 1` and
+>    `boundary_index`. If neither is smeared the width is `0`.
+> 5. **Floor:** width `0` or `1` is emitted as `≤ 1 cell` — `at_floor=True`, `cells=None`, **never
+>    a number.** 6. **Ceiling:** width **greater than** `reach_cells` is refused, `cells=None`,
+>    with the reach in the refusal text.
+>
+> **THE INSTRUMENT'S NAME CARRIES ITS THRESHOLD:** `"majority-run (> 1/2 of the parallel line)"`,
+> one spelling, exported as a constant and stamped on every reading — (j8), because an adopted
+> verdict makes the instrument part of the specification, and *"the smear width"* with no
+> instrument is D8's pooled figure in a new place.
+
+**WHY A MAJORITY RULE AND NOT A HALF-MAXIMUM, A THRESHOLD ON EXCESS, OR AN INTEGRATED EXCESS
+MASS.** All three of those need a **baseline** — the disagreement rate the field would show with
+no warm start at all — and **there is nowhere on this field to take one.** The reach is
+`spiral_bound × coarse_stride = 32` fine cells and the normal axis **is** 32 cells, so every cell
+of the field is inside the reach and no cell is available as an uncontaminated baseline. **An
+estimator that estimates its own baseline from data the artifact may have touched is where an
+estimator hides its own bias**, and 2c has already paid once for an instrument that measured
+partly itself. **The majority rule needs no baseline**, which is the whole of its case.
+
+**WHAT THE MAJORITY RULE FORFEITS, RECORDED RATHER THAN DISCOVERED LATER.** A smear that lifts the
+disagreement rate to 30% across six cells **reads at the floor**. That is under-reporting, and it
+is under-reporting **in the reassuring direction** — the direction this project has been bitten by
+three times. **Two things are done about it rather than one.** The **profile travels on the
+reading**, so a raised-but-sub-majority band is visible in the committed artifact even when the
+width is at the floor; and this paragraph names the follow-up — **a second, baseline-referenced
+estimator is worth buying only if the committed profiles show such a band**, which is a
+falsifiable trigger rather than an open worry.
+
+**AND THE FLOOR ABSORBS THE ESTIMATOR'S OWN SAMPLING NOISE, WHICH IS ARITHMETIC AND NOT A HOPE.**
+A line is 12 points, so at a baseline disagreement rate `b` a cell fires spuriously with
+probability `P(Binom(12, b) ≥ 7)`: **0.39% at `b = 0.2`, 3.86% at `b = 0.3`, 15.8% at `b = 0.4`,
+and 38.7% even at `b = 0.5`** — below a half at the coin-flip baseline **because the tie does not
+count**, which is what makes the strict inequality worth having. A spurious width is only
+*reportable* if it reaches two cells, which needs two adjacent spurious fires: **0.0015 at
+`b = 0.3` and 0.025 at `b = 0.4`.** **So the floor is doing real work at any baseline the easy
+rung is likely to show, and the reading is only trustworthy while the profile shows `b` well under
+a half — which is why the profile is on the reading and not merely in a log.**
+
+### (j5) THE TRUTH-READING IS QUARANTINED, SO THE PLAN'S INVARIANT STAYS LITERALLY TRUE
+
+The plan's last behaviour line is *"the estimator reads the true parameter field for the boundary
+index and for nothing else."* **A categorical subject needs the truth family per point and the
+candidate-to-family mapping**, so a single function taking the raw selection map would break that
+line outright.
+
+**It is not broken, it is relocated.** `agreement_map(selected, family)` reads the truth;
+`smear_width` takes the map it returns and still reads **only** the boundary index. **The line
+survives as written and the truth dependency has one home**, which also means the mapping from a
+candidate to a family — the one piece of this that can silently collapse both Matérn candidates
+into one — is unit-testable on its own.
+
+### THE INTERIOR NULL IS THE SAME ESTIMATOR AT A FALSE BOUNDARY, AND THE LOCATION HAD TWO SPELLINGS
+
+The plan says *"same estimator, on a line parallel to the boundary at a stated offset."* Under the
+majority-run estimator that resolves exactly: **`interior_null` runs `smear_width` with the seed
+pair moved to a false boundary at `boundary_index - offset_cells`.** The profile is the same
+profile, the fits are the same fits, and the control costs no compute — which is what E6 promised.
+
+**AND THE LOCATION IS ALREADY WRITTEN TWICE.** `fields.NULL_LINE_INDEX` is `4`, an **index**; the
+plan's parameter is `offset_cells`, a **distance**. At `BOUNDARY_INDEX = 16` they are the same
+place spelled two ways, and (j9) has fired five times in this sub-phase on exactly that shape.
+**`offset_cells` is the parameter and `NULL_LINE_INDEX` is derived from it**, so the two cannot
+drift; the constant's own docstring already states the distance — *"12 cells from it"* — while the
+value is the index, which is the drift in miniature.
+
+### THE INTERIOR NULL'S PREDICTION, COMMITTED HERE, BEFORE ANY RUNG RUNS
+
+The handoff requires this and warns that **the previous expectation was formed against a
+continuous subject.** It does not transfer, and the reason is specific rather than general.
+
+**PREDICTED: the interior null returns `≤ 1 cell` and does NOT fire.** Under a continuous subject
+the expectation was the opposite, because a transition fit applied to a smoothly varying profile
+finds *some* slope and returns *some* number wherever it is placed — the null would fire off the
+field's own smoothness. **A misclassification profile has no such slope to find.** `_family()` is
+a **pure indicator**: the true family is constant within a regime by construction, so smooth
+within-regime variation in `σ`, `ρ` and the white floor moves the parameters **without moving
+which family is true**. A correct classifier's disagreement rate is therefore flat within a regime
+up to sampling noise, and **the majority rule cannot fire off a flat profile.**
+
+| refuted from below | refuted from above |
+|---|---|
+| **the null returns a width.** Two causes and they need separating, not merging: either the estimator is reading the field's structure — **E6's third row, stop the sub-phase** — or the **baseline disagreement rate itself exceeds a half away from the boundary**, which is a statement about **selection between two Matérn families at `N = 630`** and not about warm-starting at all. **The profile on the reading is what tells them apart**, and the second one invalidates the categorical subject rather than the estimator | **the null can never return a width on any input.** That is not a result, it is an unfalsifiable gate, and it is why Task 2's paired positive control — a band constructed *at* the null line — is a test and not an option |
+
+### (a2b) THE CEILING CANNOT FIRE ON 2d's OWN FIELD, AND THAT CHANGES WHAT IT IS FOR
+
+`spiral_bound(4) × coarse_stride(8) = 32` fine cells, and `N_NORMAL = 4 × COARSE_STRIDE = 32`.
+**The reach is the entire normal axis**, so on the shipped field a width above the reach is not
+merely unphysical — **it is arithmetically impossible for a correct run-length over 32 cells.**
+
+**So the refusal is a self-check on the estimator, not a physics filter, and it is recorded as
+that.** If it ever fires on a real rung the estimator has returned a run longer than the axis it
+ran on. **It is still built, still read from config and still tested**, because the plan's ceiling
+is written against `reach_cells` as a **parameter** and a later field with a longer normal axis —
+or a lowered `spiral_bound` — makes it a physics filter again. **What must not happen is the
+ceiling being quietly dropped as unreachable**, which is the reading a maintainer arrives at from
+the geometry alone without this paragraph.
+
+### (j9) THE REACH GETS ONE SPELLING, AND HALF OF IT IS ALREADY WRITTEN
+
+`fields.COARSE_STRIDE` already reads `WarmStart().coarse_stride`. A new module reading
+`WarmStart().coarse_stride` again would be **a second spelling of a shipped constant** — the
+instance that has fired five times in 2d, most recently on an instrument block that was itself a
+copy. **The reach is `reach_cells(warm=None)`, computed as `warm.spiral_bound ×
+fields.COARSE_STRIDE`, taking the `WarmStart` as an argument** so that a test can move
+`spiral_bound` without monkeypatching a module constant — a constant read once at import is
+exactly the *"config change moves the physics but not the check"* bug the plan's sixth test line
+names.
+
+### THE `NaN` IN THE PLAN'S TEST LINE IS A SENTINEL IN THE STORE, AND IT IS THE COMMONER CASE
+
+The plan's fifth test says *"a map with a NaN column does not silently shorten the profile."* The
+map Task 4 will hand this estimator comes from **`/selection/selected`, `int16`, where `-1` means
+"no winner" and `SELECTED_UNSET = -2` means "nothing wrote here"** — so the real hazard is not a
+float `NaN` arriving, it is **an integer sentinel comparing unequal to the truth index and being
+counted as a misclassification.** That manufactures a smear out of unwritten and undecided cells,
+**and those cluster exactly where fits are hardest, which is near the boundary.** `agreement_map`
+maps both sentinels to `NaN`; a test names each one separately.
+
+**And the plan's line splits in two**, because *"column"* is ambiguous on a 2-D map and the two
+readings fail in opposite directions. **An all-`NaN` line parallel to the normal axis** must leave
+the profile at full length and the width unchanged — the `mean`-for-`nanmean` bug. **An all-`NaN`
+normal row at the growing edge of the band** must **refuse**, because a `NaN` that terminates the
+run behaves exactly like a non-majority cell and **narrows the width, always in the reassuring
+direction.** A `NaN` row far from the band refuses nothing, or a partially fitted field becomes
+unreadable and Task 5 reports nothing at all.
+
+### DEVIATIONS FROM THE BRIEF, STATED RATHER THAN ABSORBED
+
+| the plan says | what ships | why |
+|---|---|---|
+| `smear_width(field_map, …)` is the whole estimator | plus `agreement_map(selected, family)` ahead of it | the categorical subject needs the truth; quarantining it keeps *"reads the boundary index and nothing else"* true |
+| *"the map averaged parallel to the boundary… its transition width"* | a **misclassification profile** and a **majority-run** width | a candidate index has no mean |
+| *"a constructed transition of exactly 5 cells returns 5 **within tolerance**"* | returns **exactly** `5.0` | a run length is integral; a tolerance would only hide an off-by-one |
+| `WidthReading` has nine fields | plus `profile: tuple[float, ...]` | E6's third row says *"stop and diagnose"*, and the profile is what a diagnosis is made of. It is also the only way a sub-majority band is visible at all |
+| the null's location is *"a stated offset"* | `offset_cells` is the parameter; `fields.NULL_LINE_INDEX` derives from it | one location, one spelling |
+
+### THREE THINGS FOUND OUTSIDE TASK 2, NONE OF THEM TASK 2's TO FIX
+
+1. **THE THIRD RUNG IS DECIDED AND NOT SHIPPED.** E4 was re-decided to **three rungs** on
+   2026-08-30 and the 19.7 h budget's `14.047` factor counts three; **`fields.RUNGS` holds two**,
+   `easy` and `hard`, and the middle rung — *"ours to choose, on the same diagonal, and it must
+   say so in its `sources`"* — has no entry. **The docs commit deciding it landed after the code
+   commit that would have carried it.** Task 2 does not need it; **Task 4 cannot run without it**,
+   and the budget is quoted against it today.
+2. **2d HAS NO *"What plan Task 1 established"* SECTION.** The plan's own standing requirement
+   sends each task's findings there; Task 1's live in `phase2d-field-verdict.md` and in item 4 of
+   *what Task 2 inherits* instead. **Not a contradiction — a missing home**, and the next reader
+   looking for Task 1 by the documented route finds nothing.
+3. **CI HAD A RED RUN AT `7ff7763` THAT THE ENUMERATION LINE DOES NOT MENTION.** Run
+   `33338155827`, `test (ubuntu-latest, 3.12)`, `1 failed, 1211 passed … 1965.46 s`, and the
+   failure is **the already-recorded flake** — `test_a_preempted_command_exits_aborted_early_and_resumes`,
+   `GroupNotFoundError`, cold-start item 9(c). The commit is docs-only and the tip is green, so
+   nothing is blocked. **What is wrong is the record:** *"every `src`-touching commit green; the
+   rest docs-only"* is true and **reads as "and the rest were green"**, which they were not.
+   **A colour stated for one subset silently claims nothing about the other**, and the enumeration
+   exists precisely so that no run's colour is supplied by the reader.
