@@ -929,3 +929,235 @@ Measured per arm and per point by this run, never transcribed from `13.15`. **An
 what the figure is:** the budget is priced at the **cold** rate, so **a run finishing early is the
 bound behaving and not an error** — the sentence is in the report because that is the artifact a
 reader meets, and *"why is this 30% under budget"* is otherwise a question someone answers wrongly.
+
+---
+
+## Plan Task 5 — the easy rung, audited before any run (2026-08-31)
+
+**THE BRIEF** is the plan's Task 5 — run the easy rung, read the interior null **first**, establish
+that the smear width exceeds the 1-cell floor, run N1, record the saving — **plus the eight things
+the cold-start handoff carries in**, of which three are load-bearing here: the cold arm's width is
+not zero and the reading is warm **against the N2 floor**; a firing null has two causes and the
+profile separates them; and **the gate can fail as a finding**, with a retune being a new rung
+rather than an edit.
+
+**ELEVEN FINDINGS. The first re-prices the sub-phase, and the second is that the run Task 5 is
+about to pay for already computes three arms and throws them away.** Nothing below re-argues E1–E8
+or restates a magnitude that lives in
+[what 2d's tasks inherit](../../../PROGRESS.md); every figure here is either derived in place from
+those or is new.
+
+### 1. THE N2 MAP COSTS FOUR ARMS AND THE BUDGET PRICED ONE — E2's FACTOR IS 18.047, NOT 14.047
+
+`report.run_rung` calls `n2map.n2_field_map`, which calls **`audit.run_arms`**, which runs
+**four full-field fits** — `COLD`, `WARM`, `N1`, `N2` — and `n2_field_map` returns **the N2
+selection map and the counts only.** That is the design Task 3 was right to choose (*"a second
+derivation of N2 is a second N2"*), and **it means the map is a four-arm object priced in E2 as a
+one-arm one.**
+
+| line | E2's factor | what the shipped code costs |
+|---|---|---|
+| cold full-field pass + two-pass, per rung | 2.016 | 2.016 |
+| the N2 full-field map | **1.0 × 2 rungs** | **4.0 × 3 rungs** — `run_rung` runs the map unconditionally, and its `arms=` argument selects only which widths are **read** |
+| the four-arm audit, one rung | 4.0 | **0 — it is the middle rung's own map**, same batch, same session, same seed |
+| N1, two rungs | 2.0 | **0 — N1 is inside every map** |
+| **total** | **14.047 → 19.7 h** | **18.047 → 25.3 h** at `13.15 s`; **21.9 h** at the re-measured `11.38 s` |
+
+> **AND THE VARIANT THAT DOES NOT FIT.** If Task 6 runs a **separate** `run_arms` for the audit
+> rather than consuming the middle rung's own, the factor is **22.047 = 30.9 h** — **over the 30 h
+> ceiling**, at the rate the budget is priced at. **The plan's wording permits the reuse and its
+> reason survives it**: *"the audit's cold arm is computed by `run_arms` and is NOT read from the
+> criterion-12 run's store"* forbids reading pass 2's **store**, and the map's own `run_arms` call
+> is a computed cold arm in one batch and one session — **the same-session rule met more exactly,
+> not relaxed.**
+>
+> **WHAT THIS COSTS TASK 5 SPECIFICALLY: 6.016 arms = 8.44 h** at `13.15 s/point/arm` over 384
+> points, **7.3 h** at `11.38`, against the **4.016 arms ≈ 5.6 h** the plan's Task 5 line implies.
+> Plus the field build — 384 Cholesky draws at `0.209 s` ≈ **80 s** — which is noise at this scale
+> and is stated so nobody re-derives it.
+
+**AND THE PRE-DECIDED CUT NOW HAS NOTHING TO CUT.** *"If the realised rate lands near 21 s, the
+second N1 rung is cut, and it is cut from the EASY rung"* was written when N1 was a separate 1.0
+line. **N1 is computed inside every N2 map**, so cutting it saves nothing and would only mean
+discarding a reading already paid for. **The cut is not taken and it is not re-decided under time
+pressure — it is retired as inapplicable, which is a different thing and is recorded as one.**
+
+### 2. THE THREE ARMS THE MAP DISCARDS ARE THREE OF TASK 5's OWN READINGS
+
+`n2_field_map` builds an `AuditArms` with four `FitResult`s and returns a map made of one of them.
+The other three die at the end of the call, and **each is a reading this task is otherwise short
+of:**
+
+| discarded arm | what it answers | why it cannot be got more cheaply |
+|---|---|---|
+| **N1** | *"N1's arm is present and its cost is within the spread Task 0 measured"* — the plan's fourth assertion | there is **no other N1 in the driver**; the only alternative is a second `run_arms` call, which is a second N1 at a full arm's price |
+| **COLD** | **Task 0's third reading, still open and owned by Task 4**: does `run`'s fit **phase** cost more per unit work than a bare `fit`? | the driver's cold `run` store and this arm are the **same 384 fits by two paths**, and iterations are deterministic, so the comparison is **bit-exact and free** |
+| **WARM** | the audit's own invariant — *"the `warm` arm must reproduce pass 2's store bitwise at the audited points"* | **nothing has ever checked the driver's REBUILT warm array against the one pass 2 actually used.** N1 and N2 are displacements **from that array**, so if the rebuild is wrong every arm in every 2d report is keyed to a warm start no run ever made |
+
+> **THE THIRD IS THE ONE THAT WOULD BE EXPENSIVE TO FIND LATE.** `run_rung` rebuilds the warm array
+> through `coarse_ok` / `source_map` / `read_warm_starts` because `run_two_pass` does not expose
+> the starts it used. **That is the right construction and it is unverified**, and a silent
+> disagreement would not look like an error — it would look like a smear.
+
+### 3. CRITERION 8 SAYS EVERY RUNG AND E2's FACTOR PRICED TWO
+
+Exit criterion 8 is *"every smear width is reported beside the width N2 produces at the same
+rung"*, and E2's own deliverable table says the maps are consumed **at every rung**; **the budget
+line beneath it counts `2 rungs × 1.0`.** The shipped driver runs the map at all three. **(a5)
+across documents, at a number the budget depends on** — and the two readings differ by 4.0 factor
+points once finding 1 is applied. **Criterion 8 wins on precedence** (it is the specification of a
+reading; the factor is an estimate of a cost), so the map runs at three rungs and the factor moves.
+
+### 4. THE N2 MAP'S SEED IS THE FIELD SEED, AND `config.audit.seed` IS WHERE IT LIVES
+
+`run_rung` passes its own `seed` — the field's draw seed — to `n2_field_map`, whose docstring says
+the argument is **`config.audit.seed`, "Not `Config.seed`"**, the exact trap 2c Task 6 recorded.
+`fields.write_config` writes no `[audit]` section, so **`config.audit.seed` is 0** on every
+benchmark config while the map is keyed on `20_260_830` or whatever the caller passes.
+
+> **THE CONSEQUENCE IS EXIT CRITERION 9**, *"the N2 map and the audit's N2 arm agree at every
+> shared point"*: two `run_arms` calls at two different seeds draw **different directions**, so the
+> criterion fails at Task 9 for a reason that has nothing to do with either instrument. **And the
+> repair invalidates any report committed before it**, because the map's values move with the key.
+> **So it is taken BEFORE the 8-hour run, not after** — the whole argument for a pre-flight
+> existing.
+
+### 5. E6's UPPER REFUTATION CLAUSE NAMES A CEILING THAT DOES NOT EXIST ON THIS FIELD
+
+*"Saving at any rung ≥ the `self` ceiling → the warm arm is reading its own answer back."* **There
+is no `self` arm in `src`.** `Arm` is `WARM / COLD / N1 / N2`, and the `94.53% ± 0.14%` in the
+figures table is **2c's fixture, at 40.79 cold iterations per point**, against this field's 24.4 —
+**so quoting it here is a comparison across fixtures, which is (j5) at the one clause whose job is
+catching a spectacular-looking defect.**
+
+> **AND THE ARM IS THE CHEAPEST IN THE DESIGN, WHICH IS WHY THIS IS NOT A BUDGET QUESTION.** Its
+> input is the cold arm's own output — `FitResult.theta_unconstrained` from the map's own `COLD`
+> arm, with `x0_valid` the `OK` mask — and Task 0 measured `self` collapsing to **4–6% of cold**.
+> **One extra fit at roughly 5% of an arm, in the same batch and the same session**, converts a
+> cross-fixture clause into a same-session one **and** supplies the positive control Task 0's void
+> rule demands: *if `self` does not collapse, no cost reading in this run may be quoted.*
+>
+> **THE STRUCTURAL HALF IS FREE AND IS TAKEN AS WELL**, because it catches the named defect
+> exactly: **no FINE point's source may be itself.** D12 gives coarse points themselves and nobody
+> else, so a `source_map` handing a fine point its own index is the defect the clause describes,
+> readable off `SourceMap.index` with no fits at all. **The two are not redundant** — one catches
+> the map, the other catches everything else that could make warm look like self.
+
+### 6. THE SAVING THE REPORT CAN EXPRESS OMITS PASS 1, AND `1/64` IS `1/48` ON THIS GEOMETRY
+
+`RungReport.iterations` carries `cold_per_point` and `warm_per_point`, and the warm figure is
+`iteration_count(warm_store)` — **pass 2's store.** D11 gives pass 1 **its own** store, so the
+saving computed from the report alone is **pass 2 against cold, with pass 1's fits free.**
+
+**And the coarse fraction is not `1/64`.** At `stride = 8` on `32 × 12` the coarse indices are
+`{0,8,16,24} × {0,8}` — **8 points of 384, `1/48` = 2.08%**, not the `1/k² = 1.56%` E2's arithmetic
+assumed. **The gap is small and the point is not its size:** the budget's 2.016 and the saving's
+denominator are the same quantity spelled twice, and only one of them was multiplied out.
+
+> **SO THE SAVING IS REPORTED TWICE, BOTH NAMED**: `pass 2 against cold`, and **`(pass 1 + pass 2)
+> against cold`, which is the one a reader means by "the saving".** Both come from
+> `fields.iteration_count` on the two stores, so neither is a new instrument.
+
+### 7. THE WIDTH PREDICTION HAS A GEOMETRIC MECHANISM, IT IS ONE-SIDED, AND THE ESTIMATOR IS ANCHORED AT THE BOUNDARY PAIR
+
+**The boundary index is 16 and 16 is itself a coarse index** — `{0,8,16,24}` — so **coarse row 16
+is the first row of region B** and it is the nearest coarse source for the **A-side** rows nearest
+the step. Rows **13, 14, 15** are 1–3 cells from row 16 and 5–7 from row 8, so their warm start
+comes from **across the step, in the wrong family**; row 12 is equidistant and its source is a
+tie-break. **On the B side there is no such pull at all**: rows 17–23 source from 16, which is
+their own regime. **The predicted smear is one-sided, on the A side, and about 3 cells wide.**
+
+> **AND `smear_width` SEEDS ITS RUN AT `(boundary_index - 1, boundary_index)` = (15, 16)**, growing
+> outward only from a seed that is itself over the majority threshold. **A smear that does not
+> touch row 15 or row 16 is invisible by construction** — width 0, reported at the floor. Rows
+> 13–15 include 15, so the mechanism above is exactly the case the estimator can see; **this is
+> stated because it is also how a real one-sided artifact displaced by one cell would read as a
+> null.**
+
+**THE N2 FLOOR IS EXPECTED TO BE ELEVATED IN THE SAME PLACE, AND THAT IS THE ARM'S WHOLE POINT.**
+N2 displaces the cold start by **that cell's own warm/cold distance**, which is **largest exactly
+where the warm source is from the other regime** — near the boundary. **So the interpretable
+quantity is warm's width against N2's width at this rung, never against zero and never against
+cold**, and cold's own width is a third number that is not a floor for either.
+
+### 8. THE SAVING'S BAND COMES FROM D1's REATTRIBUTION, AND IT PREDICTS A SMALL NUMBER
+
+D1's 2026-08-30 amendment reattributes the saving's climb to **cold-start difficulty** rather than
+to coherence, on 2c's own `random` arm:
+
+| 2c's `N` | cold iterations/point | `warm` saving |
+|---|---|---|
+| 96 | 28.27 | **+7.80%** |
+| 384 | 35.32 | +31.73% |
+| 630 | 40.79 | +42.28% |
+
+**2d's field runs at 24.4 iterations per point at `N = 630` — below 2c's SHORTEST fixture**, where
+the saving was 7.80%. **The curve predicts a small saving here, possibly zero**, and the amendment
+says so in as many words: *"a near-zero saving there is what this curve predicts."* **The
+prediction is therefore a band and not an ordering** — there is one rung, so there is nothing to
+order — and E6's monotonicity closes at Task 7 with three points, where an ordering is what was
+predicted. **The clean smoke run had warm ABOVE cold** (52.23 against 51.96 iterations per point);
+no magnitude transfers from a 26 × 2 fixture at `n_time = 24`, but it is not evidence for a large
+saving either.
+
+### 9. THE COST BLOCK IS COMPARABLE TO THE BUDGET ONLY AT THE THREAD SETTING THE RATE WAS MEASURED AT
+
+`13.15` and `11.20–11.38 s/point/arm` were all measured under **`threadpool_limits(1)`**, in
+`phase2d-field-harness.py`. **The driver's `run` takes its thread budget from the config**, so an
+unpinned Task 5 run produces a `seconds_per_point` that is **not** the budget's quantity, and the
+report's own *"a run finishing early is the bound behaving"* sentence would then be read over a
+number that is early for a different reason. **The setting is pinned and recorded in the verdict**;
+it costs nothing, and the alternative is a cost block that cannot be compared to the only figure
+anyone will compare it to.
+
+### 10. THE HOST QUIET CHECK WOULD GET ITS SECOND SPELLING HERE
+
+`quiet_check()` — idle 20 s, `loadavg[0] < physical_cores - 1`, **gating** — lives in
+`phase2d-field-harness.py` and has one home. **Task 5 is 2d's third harness and the first that
+would copy it**, and (j9)'s worst instance in this sub-phase was an instrument block that was
+itself a copy. **It is promoted into `src/metamer/bench/` with a test**, so the gate has one
+implementation and the two harnesses that already exist can be pointed at it rather than diverging
+from it.
+
+### 11. WHAT COSTS NOTHING AND IS CHECKED ANYWAY
+
+- **The easy rung's cold iterations reproduce criterion 17's committed number.** The 2026-08-30 and
+  2026-08-31 runs both measured `2340` iterations over the 96-point subgrid, mean `24.375`, sd
+  `1.630`, min–max `21–28`, `287/288` cells OK, at `seed = 20_260_830`. **The cold store holds
+  every point, so the same 96 are extractable from it** — and the comparison is bit-exact because
+  iterations are deterministic. **So Task 5's field seed is `20_260_830`**, or the check is
+  unavailable for no gain.
+- **Memory is not a question at `B = 384` and it is worth one line rather than an assumption.**
+  `run_arms` fits the whole field as **one batch, outside the tiling path**; 2b measured criterion
+  7 failing above roughly `B = 1500`, and Task 0 measured this geometry at **one tile**, so the
+  batch is well inside a bound that has been measured rather than assumed.
+- **Every arm in one session, interleaved by construction**, because they are all inside one
+  `run_rung` call — which is what the driver was built for and is not a thing Task 5 arranges.
+
+### DEVIATIONS FROM THE BRIEF, STATED RATHER THAN ABSORBED
+
+**THE HANDOFF SAYS TASK 5 IS A CALLER AND NOT A BUILDER, AND THREE OF ITS OWN ASSERTIONS CANNOT BE
+MADE BY A CALLER.** The changes below are surgical and each is tied to an assertion the brief
+requires or to an artifact the run would otherwise invalidate. **None of them is a second gate**:
+`require_clean` stays the only across-rung gate and the ordering inside `run_rung` stays the
+within-rung one.
+
+| change | why it is not optional |
+|---|---|
+| `n2_field_map` **returns the arms it already computed** (or their per-arm iteration totals and selection maps) | finding 2 — the plan's fourth assertion has no other source, and two of the three cross-checks are otherwise unavailable at any price below a full extra arm |
+| the benchmark config **writes `audit.seed`** and `run_rung` **passes `config.audit.seed`** to the map | finding 4 — exit criterion 9 cannot pass otherwise, and the repair after the run would invalidate the report the run exists to produce |
+| a **`self` arm** at this rung, from the map's own cold `theta_unconstrained` | finding 5 — E6's upper clause names it, it is ~5% of an arm, and it is Task 0's void control |
+| `quiet_check` **promoted into `src/metamer/bench/`** | finding 10 — otherwise it is copied, which is (j9) |
+
+**AND ONE WORDING CORRECTION IN THE BRIEF ITSELF.** *"N1's arm is present and its cost is within
+the spread Task 0 measured"* — **Task 0's spread is in ITERATIONS** (`N1/cold = 1.0017`, never
+outside `[1.0000, 1.0026]`, six repeats over two runs), and this box's wall clock has now been
+shown three times not to hold still. **The reading is the iteration ratio; the seconds are reported
+and never compared.**
+
+**WHAT TASK 5 DOES NOT DO.** It does not retune the easy rung — **a retune is a new rung with a new
+name**, and the easy rung's numbers are a floor and a demonstration and are never quoted as a
+magnitude. It does not move `RUNGS`, `PUBLISHED_TILE_SIDE`, `HEADROOM_FRACTION`,
+`resident_bytes_per_series`, `output_slot_bytes`, `SVD_CHUNK_SERIES` or `ALGORITHM_VERSION`, and it
+re-cuts no exit-criterion verdict. It does not read anything downstream until `require_clean`
+returns.
