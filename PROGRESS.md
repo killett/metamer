@@ -4,7 +4,7 @@
 
 1. **Branch `main`, everything on it, every commit pushed by a hook** — https://github.com/killett/metamer. **A SHA here is stale the moment the next commit lands, so nothing here names one:** `git log --oneline -8` is the authority.
 2. **DONE:** Phase 1 (0–18), Phase 2 preliminaries P0–P4, **Phase 2a (0–13)**, **Phase 2b (COMPLETE 2026-08-19 — 10 met / 4 reduced scope / 2 FAILED)**, **Phase 2c's brainstorm (D1–D12)**, and **Phase 2c (COMPLETE 2026-08-29 — 10 met / 2 reduced scope / 0 failed; Tasks 0–4 on 2026-08-24, Task 5 on 2026-08-27, Task 6 on 2026-08-28, Tasks 7–8 on 2026-08-29)**. The modelling sub-phase was decided against 2026-08-22 and **re-decided on closed facts 2026-08-23: it does not open.** Sections below carry each; **none is restated here.**
-3. **NEXT ACTION: PHASE 2d TASK 5 — the easy rung: the positive control, and the gate.** It is the first real measurement and **nothing downstream is read until it passes**. **TASKS 0–4 ARE DONE**: the driver, its report and E6's gate shipped 2026-08-31, with **both gate branches demonstrated on real runs** — see [the driver's smoke runs](docs/superpowers/notes/phase2d-driver-smoke.md), neither of which is a measurement and both of which say so in their own bytes. **2d's brainstorm is settled (E1–E8), its plan is approved — 10 tasks, 17 exit criteria — and TASKS 0, 1, 2 AND 3 ARE DONE.** **§16.2 item 6 is 2d's home, not §11.2.** **Every task's FIRST step is the pre-flight** (method at item 7); 2d's entries are in [`phase2d-preflight.md`](docs/superpowers/notes/phase2d-preflight.md). **Phase 2c is CLOSED (10 met / 2 reduced scope / 0 failed)** plus 2b's criteria 6 and 7 which **stay FAILED** — see [the close](#phase-2c-is-closed-2026-08-29--10-met--2-met-with-reduced-scope--0-failed-plus-2bs-two-inherited-failures). **`ALGORITHM_VERSION` IS `"2"` SINCE 2026-08-27** and every store written before it holds cold fits — see [how to read a store written before 2c Task 5](#how-to-read-a-store-written-before-2c-task-5-recorded-2026-08-24-and-it-cannot-be-reconstructed-later), which is not re-derivable from the stores. **No rate or budget figure is quoted here: they live once, in [what 2d's tasks inherit](#what-2ds-tasks-inherit-2026-08-30).**
+3. **NEXT ACTION: PHASE 2d TASK 5 — the easy rung: the positive control, and the gate. ITS PRE-FLIGHT IS THE FIRST WORK, AND [WHAT TASK 5 INHERITS](#what-task-5-inherits-2026-08-31--the-cold-start-handoff-into-the-first-real-measurement) IS THE FIRST THING READ.** It is **the first task that spends hours rather than minutes** and nothing downstream is read until it passes. **TASKS 0–4 ARE DONE**: the driver, its report and E6's gate shipped 2026-08-31, with **both gate branches demonstrated on real runs** — see [the driver's smoke runs](docs/superpowers/notes/phase2d-driver-smoke.md), neither of which is a measurement and both of which say so in their own bytes. **2d's brainstorm is settled (E1–E8) and its plan is approved — 10 tasks, 17 exit criteria.** **2d's brainstorm is settled (E1–E8), its plan is approved — 10 tasks, 17 exit criteria — and TASKS 0, 1, 2 AND 3 ARE DONE.** **§16.2 item 6 is 2d's home, not §11.2.** **Every task's FIRST step is the pre-flight** (method at item 7); 2d's entries are in [`phase2d-preflight.md`](docs/superpowers/notes/phase2d-preflight.md). **Phase 2c is CLOSED (10 met / 2 reduced scope / 0 failed)** plus 2b's criteria 6 and 7 which **stay FAILED** — see [the close](#phase-2c-is-closed-2026-08-29--10-met--2-met-with-reduced-scope--0-failed-plus-2bs-two-inherited-failures). **`ALGORITHM_VERSION` IS `"2"` SINCE 2026-08-27** and every store written before it holds cold fits — see [how to read a store written before 2c Task 5](#how-to-read-a-store-written-before-2c-task-5-recorded-2026-08-24-and-it-cannot-be-reconstructed-later), which is not re-derivable from the stores. **No rate or budget figure is quoted here: they live once, in [what 2d's tasks inherit](#what-2ds-tasks-inherit-2026-08-30).**
 4. ## THE STANDING LIMITATION ON EVERYTHING 2c DECIDED: **NO 2c NUMBER COMES FROM REAL DATA.** Warm-starting was authorized — and every decision after D1 inherits this — on a **simulated field whose spatial coherence is a construction parameter**. **The spatial coherence of real altimetry optima has never been measured.** Weaker coherence gives a **smaller** saving, and **§11.2's 30% threshold could fail on real data.** **THE NAMED CLOSER, not an open worry: a spike on a real gridded product — same three arms, same record-length lever.** **AND SINCE 2026-08-24 THERE IS A SECOND REGISTER OF IT: every 2c saving is a CEILING, not an estimate**, because the instrument searched with no effective spiral bound — see [what 2c's tasks inherit](#what-2cs-tasks-inherit-2026-08-24).
 5. **Tests: 1312 passed, 0 failed, 0 INDETERMINATE — 2026-08-31, 3548.34 s (sweeps have run 1698–3552 s, which is the machine and not the suite; 2d Task 3 added ~3.5 min of real-filter fixtures, deliberately unmarked — the reason is at `tests/test_bench_n2map.py`).** **`pixi run test` is the full sweep and every end-of-task verification must run it; `test-fast` and `test-ci` are NOT evidence** — the full sweep has caught **seven** things a fast run could not. **Every run prints `RSS measurement validity`, including at zero**; a nonzero count is INDETERMINATE, neither pass nor fail.
 6. **Verify a fresh checkout with `pixi run test && pixi run typecheck && pixi run lint`**, plus `pixi run pre-commit run --all-files` before every commit. **AND `git add` A NEW FILE BEFORE THAT SWEEP, NEVER AT COMMIT TIME** — `--all-files` covers **tracked** files only, so an untracked new module makes every hook print `Passed` without being read. Measured 2026-08-24; it cost two full twenty-minute sweeps before it was noticed. **AND THE RULE HAS A SECOND FORM, PROMOTED 2026-08-31: STAGE ANYTHING A TOOL MAY RESTORE, NOT ONLY ANYTHING A HOOK MAY SKIP** — `git checkout -- <file>` restores **from the index**, so an unstaged edit in a file any tool touches is **silently reset to `HEAD`, with no error**. One changes what is CHECKED, the other changes what SURVIVES; the pair is in [the handoff](docs/superpowers/notes/phase1-to-phase2-handoff.md) and is not restated here.
@@ -7045,6 +7045,70 @@ choose**, because it occupies the slot that used to be plausibility and **a midd
 where a reader supplies *"plausible"* for free.** `Rung.__post_init__` already refuses a rung
 without a source per parameter, so the second half is enforced by construction and the first is
 not.
+
+---
+
+### What Task 5 inherits (2026-08-31) — THE COLD-START HANDOFF INTO THE FIRST REAL MEASUREMENT
+
+**READ THIS BEFORE WRITING TASK 5's PRE-FLIGHT.** Tasks 0–4 built every piece Task 5 uses; this is
+what a fresh session cannot re-derive from the code, and Task 5 is the first task that spends
+**hours** rather than minutes, so a wrong premise is expensive here in a way it has not been yet.
+
+**1. THE DRIVER EXISTS AND TASK 5 IS A CALLER, NOT A BUILDER.**
+`report.run_rung(rung, out_dir=…, seed=…)` builds the field, runs the cold pass, runs the shipped
+two-pass, rebuilds the warm array through `coarse_ok` / `source_map` / `read_warm_starts`, takes
+the N2 map, takes the null and then the widths, and returns a `RungReport`.
+**`report.require_clean(report)` is the across-rung gate and it RAISES** — Task 5 calls it before
+anything downstream is read. **Do not add a second gate**; two instruments for one quantity is
+(j5), and the ordering inside `run_rung` is the mechanism.
+
+**2. THE NULL IS THE FIRST THING TO LOOK AT, AND ITS PROFILE IS HOW YOU DIAGNOSE IT.** A firing
+null has **two causes with different repairs** — the estimator reading the field's own structure,
+or the **baseline disagreement rate itself above a half**, which is a statement about selection and
+not about warm-starting. **The profile separates them and `cells` alone does not.** A **band** is
+the first; a **flat high line** is the second. **This is not theory: the capped smoke run's null
+returned 26.0 cells with a profile flat at 1.0 at every index** — see
+[the driver's smoke runs](docs/superpowers/notes/phase2d-driver-smoke.md).
+
+**3. THE COLD ARM'S SMEAR WIDTH IS NOT ZERO, AND READING THE SMEAR AS WARM'S ABSOLUTE WIDTH IS
+WRONG.** A cold arm has no warm start, so its width is misclassification near the boundary and
+nothing else. On the clean smoke run cold measured **13.0** against warm's **14.0**. **The reading
+is warm against the N2 FLOOR, never against zero** — which is the whole argument for the N2 arm,
+and it will look like a disappointing result if the floor is forgotten. **The smoke figures are on
+a 26 × 2 fixture at `n_time = 24` and NO MAGNITUDE FROM THEM TRANSFERS**; what transfers is the
+shape of the reading.
+
+**4. WHAT THE BUDGET SAYS, AND THE ONE THING THAT WOULD RE-PRICE IT.** `13.15 s/point/arm` and
+`19.7 h` against the `30 h` ceiling, at the three-rung factor `14.047`. **Re-measured a third time
+2026-08-31 at 11.20–11.38 s and NOT lowered** — the budget is an upper bound priced at the larger
+reading on purpose. **The pre-decided N1 cut does not fire**, so N1 keeps both rungs. **Iterations
+per point are 24.375 / 24.333 / 24.396 across easy / middle / hard and are indistinguishable**;
+the budget rests on the largest.
+
+**5. EVERY MEASUREMENT COMMITS PREDICTIONS FIRST, AND THE FORM OF THE CLAUSE MATTERS AS MUCH AS ITS
+VALUE.** E6's table is the source. **Write the clause in the shape the quantity can actually take**:
+the third rung's band was written as a band rather than as an ordering because the two shipped rungs
+were indistinguishable, and an ordering clause would have manufactured a refutation out of a
+0.062 spread against a 0.18 standard error. **A prediction committed in the wrong form manufactures
+a finding.**
+
+**6. TASK 5's OWN GATE IS A POSITIVE CONTROL AND IT CAN FAIL AS A FINDING.** *"The smear width
+exceeds the 1-cell floor"* — if it does not, **the instrument cannot resolve the artifact at any
+contrast, and THAT IS 2d's FINDING**, reported rather than worked around by widening the contrast
+until something appears. **A retune of the easy rung after seeing its result is a NEW RUNG WITH A
+NEW NAME, never an edit** — the plan's invariant, and the reason the easy rung's numbers may never
+be quoted as a magnitude.
+
+**7. WHAT TASK 9 IS OWED, ACCUMULATED AND NOT YET WRITTEN.** (a) **A report carrying
+`is_a_smoke_run: true` must be refused as evidence for any criterion** — two such reports are
+committed. (b) **An assertion that the number of rungs in `RUNGS` matches the three-rung factor the
+budget was priced at** — they live in different files and one is prose, so nothing mechanical
+compares them today. (c) **A committed report's instrument block must be checked against current
+defaults**, which is the whole reason the block exists.
+
+**8. THE THREE UNOWNED DEFECTS** are unchanged, at cold-start item 9: `tiling.py`'s four name-based
+dimension sites, open question 20's uniformity sweep, and `test_completion.py`'s 120 s poll
+deadline.
 
 ---
 

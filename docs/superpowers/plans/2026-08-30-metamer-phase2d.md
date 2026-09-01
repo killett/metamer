@@ -549,8 +549,11 @@ carrying its rung.**
 - **The smear width must exceed the 1-cell floor.** If it does not, **the instrument cannot resolve
   the artifact at any contrast**, the plausibility rung's null would be uninterpretable, and **that
   is 2d's finding** — reported, not worked around by widening the contrast until something appears.
-- **N1 runs here** (Task 0 permitting), because separating *"the surface decides"* from *"the start
-  distance decides"* needs the rung where the artifact is largest.
+- **N1 runs here, and the pre-decided cut DOES NOT FIRE.** The cut was *"if the realised rate lands
+  near the inherited 21 s/point/arm, the second N1 rung is cut, and it is cut from the EASY rung"*;
+  the realised rate is **11.2–13.15 s**, well under it, so **N1 keeps both of its rungs.** Separating
+  *"the surface decides"* from *"the start distance decides"* needs the rung where the artifact is
+  largest, which is this one.
 - Record the saving, so E6's monotonicity has its first point.
 
 **Invariants.**
@@ -580,15 +583,25 @@ carrying its rung.**
 
 **Behaviour** (E1, E2, E8).
 
-- **The rung whose `ℓ` and `Δ` are the published values cited at Task 1**, and which is **also the
-  sweep's middle rung** — so retuning it after a null retunes the sweep's geometry as well as the
-  magnitude. **Noted where the values are recorded, not only here.**
+- ~~**The rung whose `ℓ` and `Δ` are the published values cited at Task 1.**~~ **AMENDED
+  2026-08-31, AND A FRESH SESSION MUST NOT GO LOOKING FOR CITATIONS THAT DO NOT EXIST.** There are
+  no published values: `ℓ` is the coherence of the fitted OPTIMA, published altimetry values
+  describe the coherence of the DATA, and 2c's ceiling arm measured that these differ — so the
+  source is **contradicted, not merely absent**, and `fields.rung("plausibility")` raises with that
+  reason. **The rung that runs here is `middle`, whose `ℓ` and `Δ` are the GEOMETRIC MIDPOINTS of
+  the two shipped rungs and are OURS TO CHOOSE**; both of its `sources` say so, and a test asserts
+  they do. **It is still the sweep's middle rung**, so retuning it after a null retunes the sweep's
+  geometry as well as the magnitude. **Consequence, which changes what this task delivers: 2d
+  QUOTES NO MAGNITUDE.** It establishes that the instrument works and reports a resolution floor.
 - **Criterion 12's magnitude**, through the shipped mechanism at `N = 630`: **iterations and wall
   clock, both named.** This is 2c's criterion 12 closing, or not closing, on the mechanism rather
   than on a harness.
 - **The audit runs over the WHOLE field at this rung** — 384 points, four arms, one batch, one
-  session. Its point strata have 384 members to fill 6 bins at `M = 2`. **Whether they fill them is
-  a reported outcome, not a guarantee**, and the member count ships beside every rate regardless.
+  session. ~~6 bins at `M = 2`.~~ **`M = 3` SINCE THE FAMILY-CHANGE REBUILD**, so D9's `3 × M` gives
+  **9 point strata** and `M × 4` gives **12 cell strata**: 384 points is **42.67 members per point
+  stratum at uniform occupancy**, against the 30-member floor, and 64 if `white` never wins. The
+  arithmetic is at `fields.CANDIDATES`, which is its one home. **Whether they fill is a reported
+  outcome, not a guarantee**, and the member count ships beside every rate regardless.
 - **The audit's cold arm is computed by `run_arms` and is NOT read from the criterion-12 run's
   store.** 2c Task 6's same-session rule is **not relaxed for budget**; the duplication is priced
   in E2's 4.0 factor and is deliberate.
