@@ -961,15 +961,13 @@ one-arm one.**
 | the N2 full-field map | **1.0 × 2 rungs** | **4.0 × 3 rungs** — `run_rung` runs the map unconditionally, and its `arms=` argument selects only which widths are **read** |
 | the four-arm audit, one rung | 4.0 | **0 — it is the middle rung's own map**, same batch, same session, same seed |
 | N1, two rungs | 2.0 | **0 — N1 is inside every map** |
-| **total** | **14.047 → 19.7 h** | **18.047 → 25.3 h** at `13.15 s`; **21.9 h** at the re-measured `11.38 s` |
 
-> **AND THE VARIANT THAT DOES NOT FIT.** If Task 6 runs a **separate** `run_arms` for the audit
-> rather than consuming the middle rung's own, the factor is **22.047 = 30.9 h** — **over the 30 h
-> ceiling**, at the rate the budget is priced at. **The plan's wording permits the reuse and its
-> reason survives it**: *"the audit's cold arm is computed by `run_arms` and is NOT read from the
-> criterion-12 run's store"* forbids reading pass 2's **store**, and the map's own `run_arms` call
-> is a computed cold arm in one batch and one session — **the same-session rule met more exactly,
-> not relaxed.**
+> **THE CORRECTED FACTOR, THE HOURS, AND THE VARIANT THAT DOES NOT FIT LIVE IN ONE PLACE —
+> [the budget box](../../../PROGRESS.md), which declares itself the single home for every 2d rate.**
+> **This entry is the derivation and not a second copy of the number**, which is the rule that
+> deleted a copy rather than reconciling one. What belongs here is why it survived: the reuse
+> `n2_field_map` performs is Task 3's own design and is right, and **the reading that priced it
+> was taken off the call's signature.**
 >
 > **WHAT THIS COSTS TASK 5 SPECIFICALLY: 6.016 arms = 8.44 h** at `13.15 s/point/arm` over 384
 > points, **7.3 h** at `11.38`, against the **4.016 arms ≈ 5.6 h** the plan's Task 5 line implies.

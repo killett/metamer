@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from typing import Any
 
+import numpy as np
 import pytest
 
 from metamer.batch.audit_report import Quantity
@@ -593,3 +594,140 @@ def test_an_arm_that_did_not_run_is_withheld_rather_than_absent():
     assert len(withheld) == 1
     assert withheld[0].withheld is not None
     assert "did not run" in withheld[0].withheld
+
+
+# ---------------------------------------------------------------------------
+# The saving, with pass 1 in it
+# ---------------------------------------------------------------------------
+
+
+def test_the_saving_is_reported_with_pass_one_and_without_it():
+    """Two readings, both named, because a reader means the net one.
+
+    Behaviour: `saving` returns the pass-2-only figure and the net figure,
+    which charges pass 1's coarse fits to the warm arm.
+
+    Expected value determined independently: hand-computed. Cold is 1000
+    iterations, pass 2 is 600 and pass 1 is 40, so the pass-2-only saving is
+    `1 - 600/1000 = 40%` and the net is `1 - 640/1000 = 36%`.
+
+    Bug this catches: **a saving that omits pass 1 entirely**, which is what
+    the report could express before this function existed -- D11 gives pass 1
+    its own store, so `iteration_count(warm_store)` counts pass 2 alone. The
+    omission is small (the coarse grid is 8 points of 384 on this geometry) and
+    it is always in the flattering direction, which is the combination that
+    survives review.
+    """
+    got = report.saving(cold_total=1000, warm_total=600, pass1_total=40)
+
+    assert got.pass2_only == pytest.approx(0.40)
+    assert got.net == pytest.approx(0.36)
+    assert got.net is not None
+    assert got.pass2_only is not None
+    assert got.net < got.pass2_only
+
+
+def test_a_saving_against_a_cold_arm_that_did_nothing_is_refused():
+    """No cold work is no saving, and it is not 100%.
+
+    Behaviour: with a zero cold total the saving is None and the refusal says
+    why.
+
+    Expected value determined independently: the degenerate input, whose ratio
+    is undefined rather than large.
+
+    Bug this catches: dividing by zero and reporting `1.0` -- a **100% saving**
+    -- which is the most quotable number this sub-phase could emit and would be
+    produced by a run where nothing was fitted at all. E6's upper refutation
+    clause fires on a saving at or above the ceiling, so the defect would fire
+    it for the one reason that is not about the source map.
+    """
+    got = report.saving(cold_total=0, warm_total=0, pass1_total=0)
+
+    assert got.pass2_only is None
+    assert got.net is None
+    assert got.refused is not None
+
+
+def test_the_deterministic_readings_travel_on_the_reproducible_side():
+    """Ratios and cross-checks are things the run determines, so they are in.
+
+    Behaviour: `reproducible()` carries the iteration ratios and the
+    cross-check results; `cost` stays out of it.
+
+    Expected value determined independently: the constructed report's own
+    inputs, looked up by key.
+
+    Bug this catches: a deterministic reading being filed with the timings,
+    where the byte-identity invariant does not reach it. **The invariant is
+    "everything the run determines"**, not "the numbers that happen not to be
+    timings", and an N1/cold ratio that differed between two runs of one rung
+    would then be invisible -- which is exactly the defect the ratio exists to
+    detect in the arms.
+    """
+    got = report.build_report(
+        _RUNG,
+        null_line=_CLEAN_NULL,
+        widths={},
+        instrument=_block(),
+        cost={"cold_seconds": 1.5},
+        iterations={"cold_per_point": 24.375},
+        denominator=36,
+        ratios={"n1_over_cold": 1.0017, "self_over_cold": 0.05},
+        checks={"cold_arm_matches_the_store": True},
+    )
+
+    record = got.reproducible()
+
+    assert record["ratios"]["n1_over_cold"] == pytest.approx(1.0017)
+    assert record["checks"]["cold_arm_matches_the_store"] is True
+    assert "cost" not in record
+
+
+def test_the_block_records_the_audit_seed_the_map_was_keyed_on():
+    """The seed is in the instrument block, because the map is keyed on it.
+
+    Behaviour: `instrument_block` records the audit seed it is given, beside
+    the field's own seed.
+
+    Expected value determined independently: the two constants, which differ,
+    so a block that recorded one where the other belongs is visible.
+
+    Bug this catches: a report whose N2 map cannot be reproduced. **The drawn
+    directions are keyed on the audit seed**, so a block carrying only the
+    field's seed describes a field it can rebuild and a floor arm it cannot --
+    and exit criterion 9 compares the map against the audit's own arm, which
+    reads its seed from the config.
+    """
+    block = _block(audit_seed=4242)
+
+    assert block["audit_seed"] == 4242
+    assert block["seed"] == 7
+
+
+def test_a_fine_point_that_sources_itself_is_counted_and_a_coarse_one_is_not():
+    """D12 gives a point its own optimum only where it IS the coarse fit.
+
+    Behaviour: `_self_sourced_fine_points` counts points at source radius 0
+    that are not on the coarse lattice.
+
+    Expected value determined independently: a constructed radius array on a
+    4 x 4 grid at stride 2. The coarse points are `(0,0) (0,2) (2,0) (2,2)`;
+    zero radius is placed at one of them and at `(1, 1)`, which is not one, so
+    the count is exactly 1.
+
+    Bug this catches: **the source map handing fine points their own optimum**,
+    which is what E6's upper refutation clause describes and which would read
+    as a spectacular saving rather than as a defect -- 2c measured a
+    self-sourced fit returning the cold optimum at 99.58% agreement, so the
+    warm arm would look like the ceiling. Counting coarse points as offenders
+    would be the mirror defect: D12 says a coarse point's source IS itself, so
+    a check that flagged them would fire on every correct run.
+    """
+    radius = np.full((16, 1), 3, dtype=np.int64)
+    radius[0 * 4 + 0] = 0  # coarse, and legitimate
+    radius[1 * 4 + 1] = 0  # fine, and the defect
+
+    offenders = report._self_sourced_fine_points(radius, (4, 4), 2)
+
+    assert offenders == 1

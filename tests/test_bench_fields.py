@@ -660,3 +660,222 @@ def test_both_candidates_win_somewhere_on_the_field(tmp_path):
         "cannot see the boundary and D9's winning-candidate axis collapses; "
         f"winners seen: {sorted(winners)}"
     )
+
+
+# --------------------------------------------------------------------------
+# The audit's seed has its own home, and it is not the field's
+# --------------------------------------------------------------------------
+
+
+def test_the_benchmark_config_carries_the_audits_own_seed(tmp_path):
+    """`audit.seed` is written by the config and read back by `load`.
+
+    Behaviour: `config_text` renders an `[audit]` table holding `AUDIT_SEED`,
+    and `load()` round-trips it to `config.audit.seed`.
+
+    Expected value determined independently: `fields.AUDIT_SEED` itself,
+    compared against what the shipped config model parses out of the rendered
+    text -- not against a second copy of the number.
+
+    Bug this catches: the section written under a key the model ignores. A
+    benchmark config with no `[audit]` table parses fine and `config.audit.seed`
+    reads back as its default `0`, so the N2 map would be keyed on a value
+    nobody chose while the file looked right. **Exit criterion 9 -- the map and
+    the audit's arm agreeing at every shared point -- is a comparison of two
+    keyings, so a silently defaulted seed fails it for a reason that is about
+    neither instrument.**
+    """
+    from metamer.config.model import load
+
+    path = fields.write_config(tmp_path, "bench.toml", "memory://x")
+    config = load(path)
+
+    assert config.audit.seed == fields.AUDIT_SEED
+
+
+def test_the_audit_seed_is_not_the_field_seed_and_the_module_says_why(tmp_path):
+    """The two seeds are different values, deliberately.
+
+    Behaviour: `AUDIT_SEED` differs from the seed the criterion-17 runs draw
+    their fields with, and the config carries only the audit one -- the field's
+    is a call-time argument to `build_field`.
+
+    Expected value determined independently: the two constants, compared with
+    each other.
+
+    Bug this catches: **2c Task 6's recorded trap**, one level along. There the
+    field already called `seed` was the wrong one to key the audit on; here the
+    same collapse would make the N2 directions move whenever the field is
+    redrawn, so a re-drawn field and a re-keyed arm could never be told apart.
+    Equal values also make the wiring untestable: a driver that passed the
+    field seed where the audit seed belongs is invisible while the two agree.
+    """
+    assert fields.AUDIT_SEED != 20_260_830
+    text = fields.config_text("memory://x")
+    assert "[audit]" in text
+    assert str(fields.AUDIT_SEED) in text
+
+
+# --------------------------------------------------------------------------
+# The iteration reading: which cells, and which points
+# --------------------------------------------------------------------------
+
+
+def _written_store(path, iterations, outcomes):
+    """A store carrying just the two arrays the iteration reading uses.
+
+    **CONSTRUCTED, BECAUSE THE REDUCTION RULES ARE WHAT IS UNDER TEST.** A real
+    run cannot place a chosen iteration count in a chosen cell, and the rules
+    here -- which cells count, which points are sampled -- are exactly what a
+    fitted fixture cannot control. The layout is anchored to the real one by
+    `test_the_iteration_reading_reads_a_real_store`, which runs the shipped
+    path and reads the same arrays.
+    """
+    import zarr
+
+    from metamer.core.outcomes import Outcome
+
+    root = zarr.open_group(str(path), mode="w")
+    primitives = root.create_group("primitives")
+    status = root.create_group("status")
+    written = np.asarray(iterations, dtype=np.uint16)
+    primitives.create_array(
+        "iterations", shape=written.shape, dtype="uint16", fill_value=0
+    )[:] = written
+    codes = np.full(written.shape, Outcome.OK.code, dtype=np.uint8)
+    for cell in outcomes:
+        codes[cell] = Outcome.ITER_CAP_LARGE_GRAD.code
+    status.create_array("outcome", shape=codes.shape, dtype="uint8", fill_value=0)[
+        :
+    ] = codes
+    return path
+
+
+def test_the_iteration_reading_can_exclude_the_cells_that_did_not_converge(tmp_path):
+    """A capped cell's count measures the cap, not the work.
+
+    Behaviour: `ok_only=True` sums only cells whose outcome is `OK`; the
+    default sums every fitted cell.
+
+    Expected value determined independently: hand-computed from the
+    constructed array. Every cell holds 10 iterations over a 2 x 2 x 2 grid, so
+    the full total is 80 and excluding one cell leaves 70.
+
+    Bug this catches: comparing an arm's OK-only total against a store total
+    that includes capped cells. **Criterion 17's committed figure is an
+    OK-only number** -- the harness zeroed non-OK cells -- so a store read that
+    includes them is a different quantity, and it differs by exactly the cap
+    times the number of unconverged cells. That lands as a plausible few
+    percent rather than as an error.
+    """
+    path = _written_store(tmp_path / "s.zarr", np.full((2, 2, 2), 10), [(0, 0, 0)])
+
+    every = fields.iteration_count(path)
+    converged = fields.iteration_count(path, ok_only=True)
+
+    assert every.total == 80
+    assert converged.total == 70
+    assert converged.cells == 7
+
+
+def test_the_iteration_reading_samples_a_subgrid_per_axis_and_not_a_flat_stride(
+    tmp_path,
+):
+    """The subgrid is every `stride`-th point on **each** axis.
+
+    Behaviour: `stride=2` reads points `[0::2, 0::2]`, which is the sampling
+    the criterion-17 runs used -- every 2nd point on each axis, 16 x 6 = 96 of
+    384.
+
+    Expected value determined independently: a constructed array whose value
+    encodes its own position -- `value = 4 * row + column` -- so the selected
+    points can be named. On a 4 x 4 x 1 grid the subgrid is
+    `(0,0), (0,2), (2,0), (2,2)`, holding `0 + 2 + 8 + 10 = 20`.
+
+    **THE FIRST VERSION OF THIS SUM WAS 24 AND IT WAS WRONG**, read off a
+    1-based reading of the same array. It was caught by the full sweep rather
+    than by inspection, which is (a4) on this test's own worked example: the
+    expected value has to be recomputed, not recognised.
+
+    Bug this catches: striding the flattened point axis instead. That also
+    selects a quarter of the points, so the count matches and the totals do
+    not -- and the comparison against criterion 17's committed `2340` would
+    fail while looking like a field that had changed. **A wrong subgrid is
+    invisible in its own output**, which is why the expected value here names
+    the cells rather than counting them.
+    """
+    values = np.arange(16, dtype=np.uint16).reshape(4, 4, 1)
+    path = _written_store(tmp_path / "s.zarr", values, [])
+
+    sampled = fields.iteration_count(path, stride=2)
+
+    assert sampled.points == 4
+    assert sampled.total == 0 + 2 + 8 + 10
+
+
+def test_the_iteration_reading_reads_a_real_store(tmp_path):
+    """The constructed fixture's layout is the shipped one.
+
+    Behaviour: a real run's store is read by `iteration_count`, with the
+    OK-only total no greater than the total over fitted cells.
+
+    Expected value determined independently: **the store's own two arrays,
+    read here with `zarr` and reduced in the test.** The oracle is not the run's
+    point count -- that is satisfied by reading almost any array of the right
+    shape -- it is the iteration total the store actually holds.
+
+    **AT A REDUCED GEOMETRY AND UNMARKED, DELIBERATELY.** What is under test is
+    the store's LAYOUT, not a production-sized run: `8 x 4` at `n_time = 48`
+    reaches the same arrays through the same writer in seconds, and marking a
+    layout check `slow` would deselect from `test-fast` the only thing pinning
+    the constructed fixtures above to reality.
+
+    Bug this catches: the hand-built fixture above drifting from the real
+    layout, which would leave every reduction test passing against a store
+    shape that no longer exists. **A test whose fixture is a model of the
+    system tests the model** unless something pins the model to the system.
+
+    **AND IT CATCHES THE READING TAKING THE WRONG ARRAY**, which the first
+    version did not: `/status/outcome` has the same shape, its codes are small
+    integers, and reading it instead produced a positive total and the right
+    point count. Every assertion passed. **`total > 0` is an assertion about
+    almost nothing**, and the mutation sweep is what said so.
+    """
+    import zarr
+
+    from metamer.batch.run import run
+    from metamer.batch.store import ITERATIONS_UNSET
+    from metamer.core.outcomes import Outcome
+
+    built = _build(
+        tmp_path,
+        fields.RUNGS["easy"],
+        seed=8,
+        n_time=48,
+        n_normal=8,
+        n_parallel=4,
+    )
+    config_path = fields.write_config(tmp_path, "bench.toml", built.uri)
+    run(config_path, tmp_path / "out.zarr")
+
+    root = zarr.open_group(str(tmp_path / "out.zarr"), mode="r")
+    written = root["primitives/iterations"]
+    outcome = root["status/outcome"]
+    assert isinstance(written, zarr.Array)
+    assert isinstance(outcome, zarr.Array)
+    iterations = np.asarray(written[:])
+    codes = np.asarray(outcome[:])
+    fitted = iterations != ITERATIONS_UNSET
+    ok = fitted & (codes == Outcome.OK.code)
+
+    reading = fields.iteration_count(tmp_path / "out.zarr")
+    converged = fields.iteration_count(tmp_path / "out.zarr", ok_only=True)
+
+    assert reading.points == 8 * 4
+    assert reading.total == int(iterations[fitted].sum())
+    assert reading.cells == int(fitted.sum())
+    assert converged.total == int(iterations[ok].sum())
+    assert converged.cells == int(ok.sum())
+    # The fixture must exercise both rules, or the two readings agree for the
+    # trivial reason that every fitted cell converged.
+    assert converged.total < reading.total

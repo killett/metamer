@@ -495,6 +495,11 @@ carrying its rung.**
   (a2b), and it is E6's gate rather than an advisory note.
 - **It is run on demand and is not in `pixi run test`.** Its report is committed; the suite asserts
   on the report.
+- **THE N2 MAP RUNS AT EVERY RUNG AND COSTS FOUR ARMS — recorded here 2026-08-31, at Task 5's
+  pre-flight.** `n2_field_map` calls `run_arms`, which fits `COLD`, `WARM`, `N1` and `N2`; the
+  driver runs it unconditionally, and **`arms=` selects which widths are READ, not what RUNS.**
+  **The corrected budget lives once, in [what 2d's tasks inherit](../../../PROGRESS.md)**, and the
+  consequence for Tasks 5 and 6 is at their own sections.
 
 **Invariants.**
 
@@ -549,11 +554,25 @@ carrying its rung.**
 - **The smear width must exceed the 1-cell floor.** If it does not, **the instrument cannot resolve
   the artifact at any contrast**, the plausibility rung's null would be uninterpretable, and **that
   is 2d's finding** — reported, not worked around by widening the contrast until something appears.
-- **N1 runs here, and the pre-decided cut DOES NOT FIRE.** The cut was *"if the realised rate lands
-  near the inherited 21 s/point/arm, the second N1 rung is cut, and it is cut from the EASY rung"*;
-  the realised rate is **11.2–13.15 s**, well under it, so **N1 keeps both of its rungs.** Separating
-  *"the surface decides"* from *"the start distance decides"* needs the rung where the artifact is
+- ~~**N1 runs here, and the pre-decided cut DOES NOT FIRE.**~~ **N1 RUNS HERE BECAUSE IT IS INSIDE
+  THE N2 MAP, AND THE CUT IS RETIRED AS INAPPLICABLE — amended 2026-08-31 at this task's
+  pre-flight.** `run_arms` fits N1 on every call, so the map already pays for it and cutting it
+  would discard a reading rather than save one. **The arm must be SURFACED**: `n2_field_map`
+  returns the map and the counts, and the three other arms die inside the call. Separating *"the
+  surface decides"* from *"the start distance decides"* still needs the rung where the artifact is
   largest, which is this one.
+- **AND THE READING IS IN ITERATIONS, NOT SECONDS.** Task 0's spread — `N1/cold = 1.0017`, never
+  outside `[1.0000, 1.0026]`, six repeats over two runs — **is an iteration ratio**, and this box's
+  wall clock has been shown three times not to hold still. The seconds are reported and never
+  compared.
+- **THE `self` CEILING E6's UPPER CLAUSE NAMES DOES NOT EXIST IN `src`, AND IT IS RUN HERE.**
+  `Arm` is `WARM / COLD / N1 / N2`; the `94.53%` in the figures table is **2c's fixture at 40.79
+  cold iterations per point** against this field's **24.4**, so quoting it to bound a saving here
+  is a comparison across fixtures — (j5), at the one clause whose job is catching a
+  spectacular-looking defect. **The arm's input is the map's own cold `theta_unconstrained` and
+  Task 0 measured `self` collapsing to 4–6% of cold**, so it is the cheapest arm in the design and
+  it doubles as the void control: **if `self` does not collapse, no cost reading in this run is
+  quotable.**
 - Record the saving, so E6's monotonicity has its first point.
 
 **Invariants.**
@@ -602,9 +621,23 @@ carrying its rung.**
   stratum at uniform occupancy**, against the 30-member floor, and 64 if `white` never wins. The
   arithmetic is at `fields.CANDIDATES`, which is its one home. **Whether they fill is a reported
   outcome, not a guarantee**, and the member count ships beside every rate regardless.
-- **The audit's cold arm is computed by `run_arms` and is NOT read from the criterion-12 run's
+- ~~**The audit's cold arm is computed by `run_arms` and is NOT read from the criterion-12 run's
   store.** 2c Task 6's same-session rule is **not relaxed for budget**; the duplication is priced
-  in E2's 4.0 factor and is deliberate.
+  in E2's 4.0 factor and is deliberate.~~ **AMENDED 2026-08-31: THE AUDIT IS THIS RUNG'S OWN N2
+  MAP.** The map calls `run_arms`, which fits all four arms over the whole field in one batch and
+  one session, so **the audit's arms already exist** and a second call would be a second
+  computation of the same four numbers at **4.0** more — the difference between **25.3 h** and
+  **30.9 h** against a 30 h ceiling. **The rule that mattered is kept exactly**: the cold arm is
+  **computed by `run_arms`**, not read from pass 2's store.
+- **AND ONE OF THIS TASK'S ASSERTIONS LOSES ITS SUBJECT, WHICH IS DECIDED HERE RATHER THAN AT THE
+  TASK.** *"The audit's cold arm differs in provenance from the criterion-12 run's cold arm, and
+  they agree numerically"* was a paired check over **two computations**; there is now one. **What
+  replaces it is the same comparison against the other path that still exists:** the map's cold
+  arm against the **criterion-12 `run`'s store**, which is a different code path — `run`'s tiled
+  fit phase against a bare `fit` — and is **bit-exact in iterations**, because iterations are
+  deterministic. **That is a stronger check than the one it replaces**, since it crosses the
+  boundary the budget's unit crosses: measured on `fit`, spent on `run`. **It is taken at Task 5**,
+  where the same two paths first exist, and Task 6 inherits the result rather than re-deriving it.
 - **OQ21's measurement, for free** (E8). Both the pre-fit and post-fit sides exist over the same
   384 points. **The pre-fit proxy is NAMED before the correlation is computed**, or the measurement
   selects its own winner — the warm-up-split trap one level up. **The correlation with each of D9's
@@ -633,10 +666,13 @@ carrying its rung.**
   looking like the rule.
 - *The pre-fit proxy's name is recorded before the correlation is computed.* Catches OQ21 closing
   on whichever proxy happened to correlate.
-- *The audit's cold arm differs in provenance from the criterion-12 run's cold arm, and they agree
-  numerically.* The paired check. Catches the same-session rule being quietly dropped to save four
-  hours **and** catches a genuine disagreement between two cold arms, which would be a finding
-  about determinism rather than about the budget.
+- ~~*The audit's cold arm differs in provenance from the criterion-12 run's cold arm, and they
+  agree numerically.*~~ **REPLACED 2026-08-31 — see the behaviour amendment above.** The audit's
+  arms *are* this rung's map, so the two cold arms are one computation and the assertion has no
+  subject. **Its replacement is `run_arms`' cold arm against the criterion-12 `run`'s STORE,
+  asserted bit-exactly in iterations and taken at Task 5**; it catches the same class — two paths
+  to one quantity silently disagreeing — across the boundary that actually matters, `fit` against
+  `run`'s fit phase.
 
 ---
 

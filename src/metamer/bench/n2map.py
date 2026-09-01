@@ -94,7 +94,14 @@ from dataclasses import dataclass
 import numpy as np
 from numpy.typing import NDArray
 
-from metamer.batch.audit import N1_EPSILON, Arm, arm_directions, cold_starts, run_arms
+from metamer.batch.audit import (
+    N1_EPSILON,
+    Arm,
+    AuditArms,
+    arm_directions,
+    cold_starts,
+    run_arms,
+)
 from metamer.batch.store import SELECTED_UNSET
 from metamer.core.capability import Objective
 from metamer.core.criteria import Criterion
@@ -171,6 +178,36 @@ def point_directions(
     return arm_directions(points, list(extents), seed=seed)
 
 
+@dataclass(frozen=True)
+class FieldArms:
+    """The N2 map, its accounting, **and the three arms the call also fitted**.
+
+    **THE CALL RUNS FOUR ARMS AND USED TO RETURN ONE.** `run_arms` fits `COLD`,
+    `WARM`, `N1` and `N2` over the whole field; the map is a reduction of the
+    last. Discarding the other three meant **paying for three full-field arms
+    and throwing them away**, which is the opposite of the usual trade -- and
+    each is a reading 2d is otherwise short of:
+
+    | arm | what it answers |
+    |---|---|
+    | `N1` | its cost against cold's, which is 2d's separation of *"the surface decides"* from *"the start distance decides"*. There is no other N1 in the benchmark |
+    | `COLD` | the same 384 fits the driver's cold `run` writes to a store, **by a second code path** -- so `run`'s tiled fit phase against a bare `fit`, bit-exact, because iterations are deterministic |
+    | `WARM` | the only check that the driver's REBUILT warm array is the one pass 2 actually used. **N1 and N2 are displacements from that array**, so a wrong rebuild is not visible as an error -- it is visible as a smear |
+
+    Attributes:
+        selected: The N2 selection map, `SELECTED_UNSET` where excluded.
+        counts: The exclusion accounting.
+        arms: Every arm, as `run_arms` returned it. **Not a copy and not a
+            reduction** -- a second reduction of one fit is a second spelling of
+            it, and the consumers here want different things from the same
+            object.
+    """
+
+    selected: NDArray[np.int16]
+    counts: N2Counts
+    arms: AuditArms
+
+
 def n2_field_map(
     y: NDArray[np.float64],
     t: NDArray[np.float64],
@@ -188,7 +225,56 @@ def n2_field_map(
     max_iter: int = DEFAULT_MAX_ITER,
     epsilon: float = N1_EPSILON,
 ) -> tuple[NDArray[np.int16], N2Counts]:
-    """Run the audit's N2 arm over a whole field and reduce it to a map.
+    """The N2 map and its counts alone: a view of `field_arms`, not a second run.
+
+    Every argument is `field_arms`', and the reduction happens exactly once --
+    two entry points, one exclusion rule, because `excluded ==
+    exhausted_spiral + inadmissible` is asserted as an identity in one place
+    and a second copy would hold until one of them was edited.
+
+    Returns:
+        The map and the accounting. **Callers that want the arms the call
+        already fitted use `field_arms`**; this one exists because most
+        callers do not, and because it is the signature Tasks 2 and 3 bound
+        against.
+    """
+    result = field_arms(
+        y,
+        t,
+        signal,
+        candidates,
+        criterion,
+        mask=mask,
+        warm=warm,
+        warm_valid=warm_valid,
+        grid_shape=grid_shape,
+        seed=seed,
+        objective=objective,
+        engine=engine,
+        max_iter=max_iter,
+        epsilon=epsilon,
+    )
+    return result.selected, result.counts
+
+
+def field_arms(
+    y: NDArray[np.float64],
+    t: NDArray[np.float64],
+    signal: SignalSpec,
+    candidates: Sequence[ProcessSpec],
+    criterion: Criterion,
+    *,
+    mask: NDArray[np.bool_],
+    warm: NDArray[np.float64],
+    warm_valid: NDArray[np.bool_],
+    grid_shape: tuple[int, int],
+    seed: int,
+    objective: Objective = DEFAULT_OBJECTIVE,
+    engine: Engine | None = None,
+    max_iter: int = DEFAULT_MAX_ITER,
+    epsilon: float = N1_EPSILON,
+) -> FieldArms:
+    """Run the audit's arms over a whole field and reduce N2 to a map.
 
     **THE MAP IS THE SELECTED CANDIDATE**, `fields.SMEAR_SUBJECT`, in
     `/selection/selected`'s own `int16` vocabulary -- so `smear.agreement_map`
@@ -226,10 +312,10 @@ def n2_field_map(
 
     Returns:
         The `(n_normal, n_parallel)` `int16` selection map, `SELECTED_UNSET`
-        at every excluded point, and the accounting. **`-1` stays available for
-        its own meaning** -- *"a fit ran and no candidate won"* -- because both
-        sentinels become NaN in `agreement_map` and the distinction can only be
-        got right here.
+        at every excluded point, the accounting, **and every arm the call
+        fitted**. **`-1` stays available for its own meaning** -- *"a fit ran
+        and no candidate won"* -- because both sentinels become NaN in
+        `agreement_map` and the distinction can only be got right here.
 
     Raises:
         ValueError: If the batch is not the whole grid.
@@ -295,7 +381,11 @@ def n2_field_map(
         inadmissible=int(inadmissible.sum()),
         zero_distance=int(degenerate.sum()),
     )
-    return selected.astype(np.int16).reshape(n_normal, n_parallel), counts
+    return FieldArms(
+        selected=selected.astype(np.int16).reshape(n_normal, n_parallel),
+        counts=counts,
+        arms=arms,
+    )
 
 
 def field_cold_starts(
@@ -338,8 +428,10 @@ def candidate_extents(candidates: Sequence[ProcessSpec]) -> list[int]:
 
 __all__ = [
     "DEFAULT_OBJECTIVE",
+    "FieldArms",
     "N2Counts",
     "candidate_extents",
+    "field_arms",
     "field_cold_starts",
     "n2_field_map",
     "point_directions",

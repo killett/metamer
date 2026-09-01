@@ -44,7 +44,6 @@ Usage:
 from __future__ import annotations
 
 import json
-import os
 import subprocess
 import sys
 import tempfile
@@ -58,8 +57,7 @@ from threadpoolctl import threadpool_limits
 
 from metamer.batch.run import run
 from metamer.batch.twopass import run_two_pass
-from metamer.bench import fields
-from metamer.core import machine
+from metamer.bench import fields, host
 from metamer.core.criteria import Criterion
 from metamer.core.engines.kalman import KalmanEngine
 from metamer.core.fit import fit
@@ -73,8 +71,6 @@ SUBGRID = 2
 #: saving of +7.80%, so an ordering there is an ordering of two live numbers.
 N_TIME_LEVER = 96
 
-QUIET_SECONDS = 20.0
-
 
 def emit(handle: TextIO, record: dict[str, Any]) -> None:
     """Append one JSON record and flush, so a killed run keeps what it measured."""
@@ -83,28 +79,15 @@ def emit(handle: TextIO, record: dict[str, Any]) -> None:
 
 
 def quiet_check() -> dict[str, Any]:
-    """Idle, then report load and stall. **Gates** -- Task 0's fourth defect."""
-    before = machine.memory_stall_us()
-    start = time.perf_counter()
-    time.sleep(QUIET_SECONDS)
-    elapsed = time.perf_counter() - start
-    after = machine.memory_stall_us()
-    load = os.getloadavg()
-    cores = machine.physical_cores()
-    rate = None
-    if before is not None and after is not None:
-        rate = (after[0] - before[0]) / 1000.0 / elapsed
-    return {
-        "record": "quiet_check",
-        "idle_seconds": elapsed,
-        "stall_ms_per_s": rate,
-        "loadavg": list(load),
-        "physical_cores": cores,
-        "load_limit": cores - 1,
-        "quiet": load[0] < (cores - 1),
-        "machine": machine.fingerprint(),
-        "stall_is_not_a_gate": "open question 19",
-    }
+    """Idle, then report load and stall. **Gates** -- Task 0's fourth defect.
+
+    **PROMOTED TO `metamer.bench.host` AT TASK 5's PRE-FLIGHT, 2026-08-31.**
+    This harness held the only copy and Task 5's would have been the second;
+    (j9) says the two would agree until one was edited. The record's keys are
+    unchanged, so this run's records stay comparable with the 2026-08-30 and
+    2026-08-31 ones.
+    """
+    return host.quiet_check().as_record()
 
 
 # --------------------------------------------------------------------------

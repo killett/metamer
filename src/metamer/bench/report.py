@@ -90,12 +90,21 @@ from typing import Any
 import numpy as np
 from numpy.typing import NDArray
 
+from metamer.batch.audit import Arm
 from metamer.batch.audit_report import Quantity
 from metamer.bench import fields, n2map, smear
+from metamer.bench.arms import (
+    arm_cost,
+    iteration_ratio,
+    same_iterations,
+    self_arm,
+    store_cost,
+)
 from metamer.bench.fields import FieldTruth, Rung
 from metamer.bench.smear import WidthReading
 from metamer.config.model import WarmStart
 from metamer.core.criteria import Criterion
+from metamer.core.fit import FitResult
 from metamer.core.hashing import ALGORITHM_VERSION
 from metamer.core.optimize import DEFAULT_MAX_ITER
 
@@ -191,6 +200,8 @@ class RungReport:
     instrument: Mapping[str, Any]
     cost: Mapping[str, float]
     iterations: Mapping[str, float]
+    ratios: Mapping[str, float | None] = field(default_factory=dict)
+    checks: Mapping[str, Any] = field(default_factory=dict)
 
     def quantities(self) -> tuple[RungQuantity, ...]:
         """Every quantity that carries a value."""
@@ -238,6 +249,8 @@ class RungReport:
             ],
             "instrument": dict(self.instrument),
             "iterations": dict(self.iterations),
+            "ratios": dict(self.ratios),
+            "checks": dict(self.checks),
         }
 
 
@@ -264,6 +277,72 @@ def _reading_record(reading: WidthReading | None) -> Mapping[str, Any] | None:
     }
 
 
+@dataclass(frozen=True)
+class Saving:
+    """The warm-start saving, in iterations, with and without pass 1.
+
+    **A READER MEANS THE NET ONE.** D11 gives pass 1 its own store, so a saving
+    read off pass 2's store alone charges the coarse fits to nobody. The
+    omission is small -- 8 coarse points of 384 on this geometry -- and it is
+    **always in the flattering direction**, which is the combination that
+    survives review.
+
+    Attributes:
+        pass2_only: `1 - pass2 / cold`. What the report's iteration entries say
+            on their own.
+        net: `1 - (pass1 + pass2) / cold`. **The saving.**
+        cold_total: The reference arm's iterations.
+        warm_total: Pass 2's.
+        pass1_total: Pass 1's.
+        refused: Why there is no saving, or None. **A zero cold total gives a
+            refusal and not `1.0`** -- a 100% saving is the most quotable
+            number this sub-phase could emit and it would come from a run that
+            fitted nothing.
+    """
+
+    pass2_only: float | None
+    net: float | None
+    cold_total: int
+    warm_total: int
+    pass1_total: int
+    refused: str | None
+
+
+def saving(*, cold_total: int, warm_total: int, pass1_total: int) -> Saving:
+    """The saving both ways, from three iteration totals.
+
+    Args:
+        cold_total: The cold arm's iterations.
+        warm_total: Pass 2's iterations.
+        pass1_total: Pass 1's iterations, which the net figure charges to the
+            warm arm.
+
+    Returns:
+        The saving.
+    """
+    if cold_total <= 0:
+        return Saving(
+            pass2_only=None,
+            net=None,
+            cold_total=int(cold_total),
+            warm_total=int(warm_total),
+            pass1_total=int(pass1_total),
+            refused=(
+                "the cold arm took no iterations, so there is nothing to save "
+                "against; a ratio here would report a 100% saving for a run "
+                "that fitted nothing"
+            ),
+        )
+    return Saving(
+        pass2_only=1.0 - warm_total / cold_total,
+        net=1.0 - (warm_total + pass1_total) / cold_total,
+        cold_total=int(cold_total),
+        warm_total=int(warm_total),
+        pass1_total=int(pass1_total),
+        refused=None,
+    )
+
+
 def instrument_block(
     rung: Rung,
     *,
@@ -271,6 +350,7 @@ def instrument_block(
     n_normal: int,
     n_parallel: int,
     seed: int,
+    audit_seed: int = fields.AUDIT_SEED,
     warm: WarmStart | None = None,
     is_a_smoke_run: bool = False,
 ) -> Mapping[str, Any]:
@@ -283,6 +363,11 @@ def instrument_block(
         n_parallel: Cells along it.
         seed: The field's base seed. **With `draw_method`, this is what keys the
             drawn bytes**; either alone does not.
+        audit_seed: What the N2 arm's DIRECTIONS are keyed on --
+            `config.audit.seed`, never the field's. **A block carrying only the
+            field's seed describes a field it can rebuild and a floor arm it
+            cannot**, and exit criterion 9 compares this map against the
+            audit's own arm, which reads its seed from the config.
         warm: The warm-start settings to describe. Defaults to the shipped ones.
         is_a_smoke_run: **True marks a report that exercised the pipeline rather
             than measuring anything** -- a reduced geometry or record length.
@@ -312,6 +397,7 @@ def instrument_block(
         "algorithm_version": ALGORITHM_VERSION,
         "draw_method": fields.DRAW_METHOD,
         "seed": seed,
+        "audit_seed": audit_seed,
         "n_time": n_time,
         "n_normal": n_normal,
         "n_parallel": n_parallel,
@@ -366,6 +452,8 @@ def build_report(
     iterations: Mapping[str, float],
     denominator: int,
     arms: Sequence[str] = ARMS,
+    ratios: Mapping[str, float | None] | None = None,
+    checks: Mapping[str, Any] | None = None,
 ) -> RungReport:
     """Assemble one rung's report from readings that already exist.
 
@@ -385,6 +473,12 @@ def build_report(
         iterations: Iterations per point per arm.
         denominator: Points the widths were read over.
         arms: Which arms this rung ran.
+        ratios: Deterministic cost ratios between arms -- N1 against cold,
+            `self` against cold. **On the reproducible side**, because they are
+            made of iterations.
+        checks: The run's own cross-checks, each a fact the run determined.
+            **Also reproducible**, and a check that moved between two runs of
+            one rung is exactly what the byte-identity invariant is for.
 
     Returns:
         The report.
@@ -452,6 +546,8 @@ def build_report(
         instrument=dict(instrument),
         cost=dict(cost),
         iterations=dict(iterations),
+        ratios={} if ratios is None else dict(ratios),
+        checks={} if checks is None else dict(checks),
     )
 
 
@@ -517,6 +613,45 @@ def _width_for(
     )
 
 
+def _store_agreement(
+    result: FitResult, store_path: Path, n_models: int
+) -> Mapping[str, Any]:
+    """One arm against the store a `run` wrote, cell by cell.
+
+    **TWO PATHS TO ONE QUANTITY, AND BOTH PRODUCE PLAUSIBLE NUMBERS.** The
+    budget's unit is measured on `fit` and spent on `run`, so this is the
+    boundary the cost model crosses -- and iterations are deterministic, so the
+    comparison is exact rather than tolerance-banded.
+    """
+    agreement = same_iterations(arm_cost(result), store_cost(store_path, n_models))
+    return {
+        "identical": agreement.identical,
+        "cells_compared": agreement.cells_compared,
+        "cells_differing": agreement.cells_differing,
+        "ok_in_the_arm_only": agreement.left_only,
+        "ok_in_the_store_only": agreement.right_only,
+    }
+
+
+def _self_sourced_fine_points(
+    radius: NDArray[np.int64], grid_shape: tuple[int, int], stride: int
+) -> int:
+    """Count fine points whose warm source is themselves; D12 says there are none.
+
+    A source at radius 0 is the point's own coarse fit, which D12 gives to
+    coarse points and to nobody else. **A fine point sourcing itself is exactly
+    the defect E6's upper refutation clause describes** -- the source map
+    handing points their own optimum, which would look like a spectacular
+    saving -- and it is readable here with no fits at all.
+    """
+    n_normal, n_parallel = grid_shape
+    at_zero = np.asarray(radius == 0, dtype=np.bool_)
+    per_point = at_zero.any(axis=1).reshape(n_normal, n_parallel)
+    rows, columns = np.indices((n_normal, n_parallel))
+    coarse = (rows % stride == 0) & (columns % stride == 0)
+    return int((per_point & ~coarse).sum())
+
+
 def run_rung(
     rung: Rung,
     *,
@@ -574,6 +709,12 @@ def run_rung(
     )
     config_path = fields.write_config(out_dir, f"{rung.name}.toml", truth.uri)
     config = load(config_path)
+    # **ONE READ, USED BY THE MAP AND BY THE BLOCK.** The N2 arm's directions
+    # are keyed on `config.audit.seed` and NOT on the field's seed -- 2c Task
+    # 6's recorded trap -- and taking it once here is what stops the block
+    # naming a seed the map did not use.
+    audit_seed = int(config.audit.seed)
+    n_models = len(config.candidates)
 
     cost: dict[str, float] = {}
     iterations: dict[str, float] = {}
@@ -582,15 +723,28 @@ def run_rung(
     started = time.perf_counter()
     run(config_path, cold_store, max_iter=max_iter)
     cost["cold_seconds"] = time.perf_counter() - started
+    cold_reading = fields.iteration_count(cold_store, ok_only=True)
     iterations["cold_per_point"] = fields.iteration_count(cold_store).per_point
+    iterations["cold_ok_total"] = float(cold_reading.total)
+    iterations["cold_ok_per_point"] = cold_reading.per_point
 
     warm_store = out_dir / f"{rung.name}-warm.zarr"
     started = time.perf_counter()
     two_pass = run_two_pass(config_path, warm_store, max_iter=max_iter)
     cost["warm_seconds"] = time.perf_counter() - started
+    warm_reading = fields.iteration_count(warm_store, ok_only=True)
     iterations["warm_per_point"] = fields.iteration_count(warm_store).per_point
+    iterations["warm_ok_total"] = float(warm_reading.total)
+    iterations["warm_ok_per_point"] = warm_reading.per_point
     if two_pass.pass1_path is None:  # pragma: no cover - warm start is on
         raise RuntimeError("the two-pass run produced no coarse pass")
+    # **PASS 1'S FITS ARE CHARGED TO THE WARM ARM, OR THE SAVING OMITS THEM.**
+    # D11 gives pass 1 its own store, so a saving read off pass 2's store alone
+    # leaves the coarse fits with nobody -- 8 points of 384 on this geometry,
+    # always in the flattering direction.
+    pass1_reading = fields.iteration_count(two_pass.pass1_path, ok_only=True)
+    iterations["pass1_ok_total"] = float(pass1_reading.total)
+    iterations["pass1_points"] = float(pass1_reading.points)
 
     # **THE WARM ARRAY IS REBUILT THROUGH THE SHIPPED FUNCTIONS, NOT DERIVED
     # AGAIN.** `run_two_pass` does not expose the starts it used, and a second
@@ -617,8 +771,13 @@ def run_rung(
     block = values.transpose(1, 2, 0).reshape(n_normal * n_parallel, n_time)
     mask = np.isfinite(block)
 
+    # **THE MAP RUNS FOUR ARMS, SO ALL FOUR ARE KEPT.** `run_arms` fits COLD,
+    # WARM, N1 and N2 over the whole field; returning only the N2 map means
+    # paying for three full-field arms and discarding them, and each of the
+    # three is a reading 2d is otherwise short of. See `n2map.FieldArms`.
+    cap = max_iter if max_iter is not None else DEFAULT_MAX_ITER
     started = time.perf_counter()
-    n2_selected, n2_counts = n2map.n2_field_map(
+    field_result = n2map.field_arms(
         block,
         truth.t,
         config.signal_spec(),
@@ -628,10 +787,34 @@ def run_rung(
         warm=warm_starts,
         warm_valid=sources.valid,
         grid_shape=grid_shape,
-        seed=seed,
-        max_iter=max_iter if max_iter is not None else DEFAULT_MAX_ITER,
+        seed=audit_seed,
+        max_iter=cap,
     )
     cost["n2_seconds"] = time.perf_counter() - started
+    n2_selected, n2_counts = field_result.selected, field_result.counts
+    audit_cold = field_result.arms.results[Arm.COLD]
+
+    # **THE CEILING E6's UPPER CLAUSE IS READ AGAINST, MEASURED ON THIS FIELD.**
+    # Its input is the cold arm's own optimum, so it is the cheapest arm in the
+    # design -- and it is the void control: if `self` does not collapse, the
+    # instrument has not been shown able to tell two arms apart by cost.
+    started = time.perf_counter()
+    ceiling = self_arm(
+        block,
+        truth.t,
+        config.signal_spec(),
+        specs,
+        Criterion(config.criteria[0]),
+        mask=mask,
+        cold=audit_cold,
+        grid_shape=grid_shape,
+        max_iter=cap,
+    )
+    cost["self_seconds"] = time.perf_counter() - started
+
+    cold_cost = arm_cost(audit_cold)
+    n1_ratio = iteration_ratio(arm_cost(field_result.arms.results[Arm.N1]), cold_cost)
+    self_ratio = iteration_ratio(ceiling.cost, cold_cost)
 
     selection = {
         "cold": _selection_map(cold_store, grid_shape),
@@ -663,6 +846,7 @@ def run_rung(
             n_normal=n_normal,
             n_parallel=n_parallel,
             seed=seed,
+            audit_seed=audit_seed,
             warm=settings,
             is_a_smoke_run=is_a_smoke_run,
         )
@@ -672,6 +856,43 @@ def run_rung(
     instrument["n2_inadmissible"] = n2_counts.inadmissible
     instrument["n2_zero_distance"] = n2_counts.zero_distance
 
+    earned = saving(
+        cold_total=int(iterations["cold_ok_total"]),
+        warm_total=int(iterations["warm_ok_total"]),
+        pass1_total=int(iterations["pass1_ok_total"]),
+    )
+    ratios = {
+        "n1_over_cold": n1_ratio.ratio,
+        "self_over_cold": self_ratio.ratio,
+        "saving_pass2_only": earned.pass2_only,
+        "saving_net_of_pass1": earned.net,
+    }
+    checks = {
+        "n1_cells_compared": n1_ratio.cells_compared,
+        "self_cells_compared": self_ratio.cells_compared,
+        "self_started_from_cells": ceiling.started_from,
+        "saving_refused": earned.refused,
+        # **THE THREE CROSS-CHECKS THE MAP'S OWN ARMS MAKE FREE.** Each is a
+        # comparison of two paths to one quantity, and each fails silently:
+        # the store and the arm are both plausible numbers.
+        "cold_arm_reproduces_the_run_store": _store_agreement(
+            audit_cold, cold_store, n_models
+        ),
+        "warm_arm_reproduces_pass_2_store": _store_agreement(
+            field_result.arms.results[Arm.WARM], warm_store, n_models
+        ),
+        "self_arm_agrees_with_cold_selection": float(
+            np.mean(ceiling.selected == selection["cold"])
+        ),
+        # D12: a coarse point's source is itself and **no fine point's is**.
+        # A source map handing a fine point its own optimum is exactly the
+        # defect E6's upper clause describes, and it is readable here with no
+        # fits at all.
+        "fine_points_sourcing_themselves": _self_sourced_fine_points(
+            sources.radius, grid_shape, config.warm_start.coarse_stride
+        ),
+    }
+
     return build_report(
         rung,
         null_line=null_line,
@@ -679,6 +900,8 @@ def run_rung(
         instrument=instrument,
         cost=cost,
         iterations=iterations,
+        ratios=ratios,
+        checks=checks,
         denominator=n_normal * n_parallel,
         arms=arms,
     )
@@ -690,10 +913,12 @@ __all__ = [
     "RungQuantity",
     "RungReport",
     "SmearEntry",
+    "Saving",
     "build_report",
     "contamination_reason",
     "instrument_block",
     "null_is_clean",
     "require_clean",
     "run_rung",
+    "saving",
 ]

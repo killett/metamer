@@ -23,6 +23,29 @@ names the reading: **the selected candidate**, which is categorical.
    smeared cells containing a cell adjacent to the boundary.**
 5. **Floor at 1 cell, ceiling at the spiral reach.**
 
+## The width this measures is ONE-SIDED, and that is the geometry's doing
+
+**THE BOUNDARY INDEX IS 16 AND 16 IS ITSELF A COARSE INDEX.** The coarse
+lattice at `stride = 8` is `{0, 8, 16, 24}` along the normal, so **coarse row 16
+is the first row of region B** and it is the nearest coarse source for the rows
+of region **A** that sit just below it. Rows **13, 14, 15** are 1-3 cells from
+it and 5-7 from row 8, so their warm start comes from **across the step, in the
+wrong family**; row 12 is equidistant and is a tie-break. **On the B side there
+is no such pull at all** -- rows 17-23 source from row 16, which is their own
+regime.
+
+**So the artifact this instrument can see lives on ONE side of the boundary**,
+and a measured width of 3 is three cells of region A rather than a band
+straddling the step. A reader who takes the width as symmetric halves it in
+their head and gets a number that describes nothing.
+
+**AND THE RUN IS SEEDED AT `(boundary_index - 1, boundary_index)`**, growing
+outward only from a seed that is itself over the majority threshold. **A smear
+that does not touch row 15 or row 16 is invisible by construction** -- it
+reports 0 and lands at the floor. That is the same forfeit as the gradual case
+below, in a different direction: **a real one-sided artifact displaced by one
+cell reads as a null.**
+
 ## Why a majority rule and not a half-maximum or an excess mass
 
 Every alternative needs a **baseline** -- the disagreement rate the field would

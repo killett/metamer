@@ -1,0 +1,306 @@
+{
+  "task": "Phase 2d plan Task 5 -- the easy rung: the positive control, and the gate",
+  "written": "2026-08-31",
+  "committed_before_the_harness_ran": true,
+  "what_this_rung_is_and_is_not": [
+    "The easy rung's l and Delta were chosen BY US for detectability. It is a demonstration and a",
+    "resolution floor and its numbers are never quoted as a magnitude. A retune after seeing the",
+    "result is a NEW RUNG WITH A NEW NAME, never an edit -- editing in place loses the record of",
+    "what was tried and converts a control into a tuned result.",
+    "And the standing limitation is unchanged: the field's coherence is a construction parameter,",
+    "2d does not close D1, and the named closer is a spike on a real gridded product."
+  ],
+  "instrument": {
+    "field": "metamer.bench.fields, 32 x 12, boundary at index 16, step w = 0, family change",
+    "rung_under_test": "easy",
+    "coherence_length": 16.0,
+    "contrast": 3.0,
+    "candidates": ["white", "white + matern12", "white + matern32"],
+    "M": 3,
+    "signal_terms": ["constant", "trend"],
+    "criteria": ["aic"],
+    "coarse_stride": 8,
+    "spiral_bound": 4,
+    "reach_fine_cells": 32,
+    "n_time": 630,
+    "draw_method": "cholesky",
+    "field_seed": 20260830,
+    "audit_seed": 20260831,
+    "null_line_offset_cells": 12,
+    "threads": "threadpool_limits(1), the setting every 2d rate was measured under",
+    "host_quiet_check": "gates, on load average < physical_cores - 1",
+    "note_on_this_block": [
+      "A recorded measurement is a current claim only while the configuration that produced it",
+      "is. If a named default above has moved, the artifact's check FAILS rather than the number",
+      "being re-quoted."
+    ]
+  },
+  "cost_expected": {
+    "arms_this_rung_pays_for": 6.016,
+    "components": "cold run 1.0 + two-pass 1.016 + the N2 map 4.0 (run_arms fits COLD, WARM, N1, N2)",
+    "upper_bound_hours_at_13_15_s": 8.44,
+    "hours_at_the_re_measured_11_38_s": 7.3,
+    "the_self_arm_is_extra_and_is_not_priced_as_an_arm": [
+      "Task 0 measured self collapsing to 4-6% of cold, so it is roughly 5% of one arm.",
+      "If it costs a full arm, that is reading E5's refutation and not a budget surprise."
+    ]
+  },
+  "readings": [
+    {
+      "id": "E1",
+      "name": "the interior null at the easy rung -- E6's third row, the sub-phase's gate",
+      "prediction_is_cited_not_restated": [
+        "Task 2 committed this prediction before any rung ran and it is NOT re-predicted here:",
+        "'THE INTERIOR NULL'S PREDICTION IS COMMITTED AND UNRUN: IT DOES NOT FIRE.' _family() is a",
+        "pure indicator, so the true family is constant within a regime and a misclassification",
+        "profile has no slope to find. A measurement stated twice has one copy deleted."
+      ],
+      "refuted_from_below": {
+        "when": "not available -- the floor IS the bottom of this quantity",
+        "reading": [
+          "E6's table carries a dash here for the same reason. A one-sided clause is correct when the",
+          "quantity is one-sided; writing a lower clause to make the pair look symmetric would be a",
+          "clause that cannot fire."
+        ]
+      },
+      "refuted_from_above": {
+        "when": "the null returns a width -- at_floor false",
+        "reading": [
+          "STOP. run_rung computes the null FIRST and never computes the widths, and require_clean",
+          "raises. The profile then separates two causes and cells alone cannot:",
+          "A BAND at the null line -- the estimator is reading the field's own structure. E6's third",
+          "row: every smear number on every rung is contaminated, and the estimator is the subject.",
+          "A FLAT HIGH LINE -- the baseline disagreement rate is itself above a half, which is a",
+          "statement about selection between two Matern families at N = 630 and invalidates the",
+          "SUBJECT rather than the estimator. This is what the capped smoke run showed: 26.0 cells,",
+          "profile flat at 1.0 at every index, caused by matern12 never reaching OK at max_iter = 8.",
+          "ACTION either way: report and stop. Do not proceed to the middle rung."
+        ]
+      }
+    },
+    {
+      "id": "E2",
+      "name": "the warm arm's smear width at the easy rung -- the positive control",
+      "prediction": [
+        "Between 2 and 6 fine cells, and ONE-SIDED, on the region-A side of the boundary.",
+        "The mechanism, which is geometry rather than expectation: the boundary index is 16 and 16",
+        "is itself a coarse index, so coarse row 16 is the FIRST ROW OF REGION B and is the nearest",
+        "coarse source for rows 13, 14 and 15 of region A -- 1 to 3 cells away against 5 to 7 from",
+        "row 8. Those rows warm-start from the wrong family. Row 12 is equidistant and is a",
+        "tie-break. On the B side rows 17-23 source from row 16, their own regime, so there is no",
+        "pull at all. Three cells, plus at most the tie, plus the estimator's own resolution."
+      ],
+      "predicted_band_fine_cells": [2, 6],
+      "refuted_from_below": {
+        "when": "the width is at the 1-cell floor",
+        "reading": [
+          "The instrument cannot resolve the artifact at ANY contrast -- this rung was built to be",
+          "the easiest case there is. The middle rung's null would then be uninterpretable, and",
+          "THAT IS 2d's FINDING, reported rather than worked around by widening the contrast until",
+          "something appears.",
+          "Before concluding it, read the profile: the majority rule is blind to a smear that never",
+          "carries a cell past a half (30% over six cells reads at the floor), and a one-sided",
+          "artifact displaced by one cell misses the seed pair (15, 16) and reports 0.",
+          "ACTION: report. A retune is a new rung with a new name."
+        ]
+      },
+      "refuted_from_above": {
+        "when": "the width exceeds 8 fine cells -- one coarse spacing",
+        "reading": [
+          "Cells whose nearest coarse source is on their OWN side of the step are misclassifying, so",
+          "the profile is measuring something other than cross-boundary contamination -- most likely",
+          "the field's own structure, which is E6's third row arriving at the smear line rather than",
+          "at the null line.",
+          "THE CLAUSE IS NOT STATED AT THE SPIRAL REACH, DELIBERATELY. The reach is 32 fine cells and",
+          "N_NORMAL is 32, so Task 2 measured that the reach refusal CANNOT FIRE on this geometry. A",
+          "clause there would be unfireable, and an unfireable clause is not a prediction."
+        ]
+      }
+    },
+    {
+      "id": "E3",
+      "name": "the warm width against the N2 floor -- the interpretable quantity",
+      "prediction": [
+        "warm > n2, an ORDERING, because hysteresis is a directional bias toward the neighbour's",
+        "answer and N2 carries the same per-cell distance in a random direction. The ordering is",
+        "predicted rather than banded because there IS an ordering claimed here.",
+        "N2's own width is expected to be ABOVE the floor and that is not a defect: N2's",
+        "displacement is matched per cell to that cell's warm/cold distance, which is largest",
+        "exactly where the warm source is from the other regime -- near the boundary. That is the",
+        "whole argument for the arm.",
+        "COLD'S WIDTH IS A THIRD NUMBER AND IS A FLOOR FOR NEITHER. A cold arm has no warm start,",
+        "so its width is misclassification near the boundary and nothing else; on the clean smoke",
+        "run it was 13.0 against warm's 14.0, and reading warm's 14.0 as the artifact would have",
+        "been reading 13.0 of something else. The reading is warm against N2, never against zero."
+      ],
+      "refuted_from_below": {
+        "when": "warm <= n2",
+        "reading": [
+          "No directional component at this contrast: the sensitivity is to START DISTANCE and not to",
+          "direction, which is the audit's four-reading-table row 2 -- benign, NOT hysteresis. A",
+          "finding, not a failure, and it makes the middle rung's number a distance effect."
+        ]
+      },
+      "refuted_from_above": {
+        "when": "warm - n2 exceeds 8 fine cells",
+        "reading": [
+          "Same mechanism cap as E2's upper clause: no point is warm-started from beyond its nearest",
+          "coarse source while every coarse fit is OK, so a difference wider than one coarse spacing",
+          "is the estimator rather than the artifact."
+        ]
+      }
+    },
+    {
+      "id": "E4",
+      "name": "the warm-start saving at the easy rung, in iterations -- E6's monotonicity, first point",
+      "prediction": [
+        "SMALL, and possibly zero or negative. Band [-5%, +15%] on the NET saving.",
+        "The mechanism is D1's 2026-08-30 reattribution, which is a measurement and not a guess:",
+        "2c's saving tracks COLD-START DIFFICULTY rather than coherence -- 28.27 iterations/point",
+        "gave +7.80%, 35.32 gave +31.73%, 40.79 gave +42.28%, and its random arm (a distant",
+        "converged optimum, carrying no proximity information) tracks the same curve. 2d's field",
+        "runs at 24.4 iterations/point at N = 630, BELOW 2c's shortest fixture. The amendment says",
+        "so in as many words: 'a near-zero saving there is what this curve predicts.'",
+        "IT IS A BAND AND NOT AN ORDERING because there is one rung here. E6's monotonicity is an",
+        "ordering over three rungs and it closes at Task 7; committing an ordering at one point",
+        "would be a prediction in a form the quantity cannot take."
+      ],
+      "predicted_band_net_saving": [-0.05, 0.15],
+      "reported_twice_and_both_named": [
+        "pass 2 against cold, and (pass 1 + pass 2) against cold. D11 gives pass 1 its own store, so",
+        "a saving read off pass 2 alone charges the coarse fits to nobody. On this geometry pass 1",
+        "is 8 points of 384 -- 1/48, not the 1/64 the budget's arithmetic assumed."
+      ],
+      "refuted_from_above": {
+        "when": "the net saving reaches +30%, section 11.2's threshold",
+        "reading": [
+          "The difficulty explanation fails on this field: a saving that large at 24.4 cold",
+          "iterations per point would put 2d's point far off 2c's curve, and the reattribution's",
+          "claim that the climb is difficulty rather than coherence would need re-examining.",
+          "A FINDING ABOUT WHAT DRIVES THE SAVING, not an error. Report it; do not re-price D1."
+        ]
+      },
+      "refuted_from_below": {
+        "when": "the net saving is below -5% -- warm materially COSTS MORE than cold",
+        "reading": [
+          "Suspect the instrument before the mechanism, and the run carries the check that separates",
+          "them: the WARM arm computed by run_arms must reproduce pass 2's store cell by cell. If it",
+          "does not, the rebuilt warm array is not the one pass 2 used and every arm in this report",
+          "is keyed to a start no run made. If it does, the warm start is genuinely hurting at this",
+          "difficulty, which is a finding about warm-starting an easy field."
+        ]
+      },
+      "and_an_ordering_clause_that_IS_predicted": {
+        "claim": "the warm saving is strictly below the self saving on THIS field",
+        "when_refuted": "warm >= self",
+        "reading": [
+          "E6's upper clause: the warm arm is reading its own answer back -- the source map handing",
+          "points their own optimum. The run also carries the structural half, which says which:",
+          "no FINE point may source itself (D12 gives a coarse point itself and nobody else), read",
+          "off SourceMap.radius with no fits at all."
+        ]
+      }
+    },
+    {
+      "id": "E5",
+      "name": "N1's cost against cold's, and the self arm as the void control",
+      "prediction": [
+        "N1/cold iterations in [1.0000, 1.0026]. Task 0 measured 1.0017 on average and never outside",
+        "that band, over six repeats across two runs: N1_EPSILON = 6.055e-06 is a displacement the",
+        "optimizer cannot distinguish from zero, so N1 starts where cold starts.",
+        "THE READING IS IN ITERATIONS. The plan says 'cost within the spread Task 0 measured' and",
+        "Task 0's spread is an iteration ratio; this box's wall clock has been shown three times not",
+        "to hold still, most recently at 15% across one day on a bit-identical fixture.",
+        "THE RATIO IS TAKEN OVER CELLS OK IN BOTH ARMS. Two totals over two cell sets are totals of",
+        "different things, and one unshared cell of a 384-point field moves the reading across a",
+        "band this narrow.",
+        "THE SELF ARM IS THE POSITIVE CONTROL: self/cold is predicted at or below 0.25, and Task 0",
+        "measured 0.04-0.06 on its own fixture."
+      ],
+      "predicted_band_n1_over_cold": [1.0, 1.0026],
+      "predicted_band_self_over_cold": [0.0, 0.25],
+      "refuted_from_above": {
+        "when": "N1/cold > 1.0026",
+        "reading": [
+          "The perturbation is doing something other than displacing the start, and 2c's four-reading",
+          "table is affected: its first row reads a non-zero N1 as 'the surface is deciding'."
+        ]
+      },
+      "refuted_from_below": {
+        "when": "N1/cold < 1.0000 by more than rounding",
+        "reading": [
+          "N1 costs LESS than cold, which would mean the optimizer's first step is not scale-",
+          "invariant the way fd_step assumes -- a finding about optimize_series, not about 2d."
+        ]
+      },
+      "what_voids_the_cost_readings": {
+        "when": "self/cold > 0.5",
+        "reading": [
+          "The instrument has not been shown able to tell two arms apart by cost. 'N1 costs what cold",
+          "costs' is then byte-identical to 'every arm silently ran cold' and to 'the iteration",
+          "counter is not moving'. NO COST READING IN THIS RUN MAY BE QUOTED. Task 0's own rule."
+        ]
+      }
+    },
+    {
+      "id": "E6",
+      "name": "the free cross-checks, which gate rather than annotate",
+      "prediction": [
+        "All four pass. None is a new measurement: each is a comparison of two paths to one",
+        "quantity that the run already produced."
+      ],
+      "checks": [
+        {
+          "name": "the map's COLD arm reproduces the cold run's store, cell by cell",
+          "expected": "identical, because iterations are deterministic and it is the same 384 fits",
+          "if_it_fails": [
+            "run's tiled fit phase does different work from a bare fit. That is Task 0's third",
+            "reading -- open since 2026-08-30 and owned by Task 4 -- answering itself, and it",
+            "re-bases the budget, whose unit is measured on fit and spent on run.",
+            "It replaces the assertion Task 6 lost when its audit became this rung's own map."
+          ]
+        },
+        {
+          "name": "the map's WARM arm reproduces pass 2's store, cell by cell",
+          "expected": "identical",
+          "if_it_fails": [
+            "STOP. The driver's rebuilt warm array is not the one pass 2 used, and N1 and N2 are",
+            "displacements FROM that array -- so every arm in this report is keyed to a start no",
+            "run made. It would not look like an error. It would look like a smear."
+          ]
+        },
+        {
+          "name": "criterion 17's committed figure reproduces off this run's cold store",
+          "expected": "2340 iterations over the 96-point subgrid, mean 24.375, min-max 21-28, 287 of 288 cells OK",
+          "if_it_fails": [
+            "Either the field is not the fixture criterion 17 measured -- seed, geometry, draw method",
+            "or candidate set has moved -- or run's fit phase differs from core.fit's, which is the",
+            "check above. The two are told apart by which of them fails."
+          ]
+        },
+        {
+          "name": "no fine point sources itself",
+          "expected": "zero, by D12 -- a coarse point's source is itself and nobody else's is",
+          "if_it_fails": [
+            "The source map is handing fine points their own optimum, which 2c measured returns the",
+            "cold answer at 99.58% agreement. It would read as a spectacular saving."
+          ]
+        }
+      ]
+    }
+  ],
+  "the_fixture_fact_that_would_void_everything": [
+    "At a low iteration cap matern12 never reaches OK and the selection axis collapses to white",
+    "everywhere: n_valid is 1 and no selection is being made. This run uses the DEFAULT cap of 200",
+    "and asserts that both correlated candidates win somewhere before any width is read. A width",
+    "measured on a degenerate selection axis is a statement about the cap."
+  ],
+  "what_this_run_does_not_establish": [
+    "No magnitude. 2d quotes none: the plausibility rung is not constructible, the middle rung is",
+    "ours to choose, and this one was built to fire.",
+    "Nothing about real altimetry. Every number is measured on a field whose coherence and contrast",
+    "are construction parameters, at a cold difficulty (24.4 iterations/point) BELOW 2c's field at",
+    "its shortest record length -- so every 2d saving is a saving at lower difficulty than D1's",
+    "headline came from."
+  ]
+}

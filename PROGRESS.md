@@ -6530,6 +6530,15 @@ BUDGET.** The three deliverables consume different things:
 | **criterion 12's magnitude** | the same cold and warm full-field runs | **the plausibility rung** |
 | **the audit's first real numbers** | `run_arms`' four arms, one batch one session | **one rung** — and it must be the plausibility one |
 
+> **THIS TABLE'S THIRD COLUMN IS RIGHT AND THE BUDGET LINE UNDER IT WAS NOT — corrected
+> 2026-08-31.** *"Every rung"* is also exit criterion 8 (*"every smear width is reported beside the
+> width N2 produces at the same rung"*) and it is what Task 5's own reading needs, since **a smear
+> read against zero is a different claim from one read against N2's width.** The budget priced
+> **two** rungs of N2 map, and at **one arm** each where the shipped map is **four**. **The
+> corrected factor lives once, in [what 2d's tasks inherit](#the-cost-model-and-the-budget-it-produced),
+> and is not restated here.** **A specification of a reading outranks an estimate of a cost**, so
+> the criterion is what moved the factor rather than the other way round.
+
 **Separated, the audit affords EVERY point in the field at the rung that needs it**, which is what
 D8/D10's 30-member floor requires and what no fraction of the field could deliver. **A
 quarter-audit of 384 points is 96 points across `3 margin × M = 6` point strata at `M = 2` — 16
@@ -6675,9 +6684,45 @@ to re-measure the first two before the budget is committed.
 > | shape | factor | **budget** |
 > |---|---|---|
 > | two rungs, N1 at both | 12.032 | 16.9 h |
-> | **three rungs, N1 at two — E4's decision** | **14.047** | **19.7 h** |
+> | ~~three rungs, N1 at two — E4's decision~~ | ~~14.047~~ | ~~19.7 h~~ |
+> | **three rungs, THE N2 MAP AT ITS SHIPPED COST — corrected 2026-08-31** | **18.047** | **25.3 h** |
 >
-> **Against a 30 h ceiling.** The pre-decided N1 cut does not fire.
+> **Against a 30 h ceiling**, and at the re-measured `11.38 s` it is **21.9 h**.
+>
+> ## THE N2 MAP COSTS FOUR ARMS AND WAS PRICED AT ONE — A 4× ERROR ON THE LINE THAT DOMINATES
+>
+> **`n2map.n2_field_map` calls `audit.run_arms`, which fits `COLD`, `WARM`, `N1` and `N2` over the
+> whole field**, and returns the N2 selection map alone. That reuse is Task 3's design and is
+> correct — *"a second derivation of N2 is a second N2"* — but it makes the map **a four-arm
+> object**, and `run_rung` runs it at **every** rung, unconditionally.
+>
+> | line | priced at | shipped |
+> |---|---|---|
+> | cold pass + two-pass, per rung | 2.016 | 2.016 |
+> | the N2 full-field map | **1.0 × 2 rungs** | **4.0 × 3 rungs** |
+> | the four-arm audit, one rung | 4.0 | **0 — it IS the middle rung's own map**, one batch, one session, one seed |
+> | N1, two rungs | 2.0 | **0 — N1 is inside every map** |
+>
+> **THE VARIANT THAT DOES NOT FIT, STATED SO THE DECISION IS VISIBLE:** a **separate** `run_arms`
+> for Task 6's audit puts the factor at **22.047 = 30.9 h**, over the ceiling. **Decided
+> 2026-08-31: Task 6 consumes the middle rung's own map.** The plan's rule was *"the audit's cold
+> arm is computed by `run_arms` and is NOT read from the criterion-12 run's store"*, and the map's
+> own call is a computed cold arm in one session — **the same-session rule met more exactly, not
+> relaxed.** **The consequence is at [Task 6's line in the plan](docs/superpowers/plans/2026-08-30-metamer-phase2d.md)
+> and is not restated here:** the audit's cold arm and criterion 12's cold arm are no longer two
+> computations, so the assertion that they agree while differing in provenance needs a
+> replacement, chosen before Task 6 rather than at it.
+>
+> **AND THE PRE-DECIDED N1 CUT IS RETIRED AS INAPPLICABLE RATHER THAN TAKEN.** *"If the realised
+> rate lands near 21 s, the second N1 rung is cut, and it is cut from the EASY rung"* was written
+> when N1 was a separate `1.0` line. **N1 is computed inside every N2 map**, so cutting it saves
+> nothing and would only discard a reading already paid for. **Retiring a lever and declining to
+> pull it are different things**, and the record says which happened.
+>
+> **THE TRANSFERABLE PART, AND IT IS WHY THIS SURVIVED FOUR DOCUMENTS.** `run_rung`'s `arms=`
+> argument selects **which widths are READ**, not what RUNS. **A selector that filters results
+> does not reduce work**, and the budget was priced off the signature — **the wrong end.** A cost
+> line for a call is the cost of what the call *does*, which is only visible one level down.
 >
 > **SUPERSEDED, AND STRUCK RATHER THAN DELETED BECAUSE TWO DECISIONS RESTED ON THEM:**
 > ~~`21.0 s` inherited from 2026-08-29~~ — **refuted from below and NOT re-measurable**, because
@@ -6710,6 +6755,14 @@ the warm and N2 arms come in under it by an amount the spike put at 42.28%, itse
                         + 2 rungs × 1.0    (the N2 full-field map)
                         + 1 rung  × 4.0    (the four arms, whole field) ]
     = 21 × 384 × 12.047 = 97 146 s = 27.0 h   <- the INHERITED rate; see the box above
+
+**TWO LINES OF THAT ARITHMETIC ARE WRONG AND THE BOX ABOVE CARRIES THE CORRECTED FACTOR.** The N2
+line is `4.0 × 3 rungs`, not `1.0 × 2` — the map is four arms and criterion 8 asks for one at
+**every** rung. **And `pass 1 at 1/64` is `1/48` on this geometry:** at `stride = 8` on `32 × 12`
+the coarse indices are `{0, 8, 16, 24} × {0, 8}`, which is **8 points of 384 = 2.08%**, not
+`1/k² = 1.56%`. **`1/k²` is right for a grid whose axes divide by `k` and this one's do not** —
+the ceiling on each axis is where the two part company, and the same `1/48` is the **saving's
+denominator**, so the two spellings had to agree and only one had been multiplied out.
 
 **Against a 30 h ceiling** — roughly one weekend with margin for one re-run, and **every long
 measurement in this project has needed at least one re-run. A design that fits only if nothing

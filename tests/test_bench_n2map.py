@@ -761,3 +761,176 @@ def test_the_map_carries_the_grids_shape_and_the_stores_dtype():
 
     assert got.shape == grid_shape
     assert got.dtype == np.int16
+
+
+# ---------------------------------------------------------------------------
+# The three arms the map used to discard
+# ---------------------------------------------------------------------------
+
+
+def test_the_field_map_surfaces_every_arm_run_arms_actually_fitted():
+    """The call fits four arms, so it returns four arms.
+
+    Behaviour: `field_arms` returns the N2 map and the counts `n2_field_map`
+    returns, **and the `AuditArms` they were reduced from** -- so the `COLD`,
+    `WARM` and `N1` fits the call already paid for are readable instead of
+    dying inside it.
+
+    Expected value determined independently: a second `run_arms` call in the
+    test at the same seed and the same points, compared arm by arm on the
+    winning candidate. The oracle is the shipped arm, not a re-derivation.
+
+    **The fixture's vacuity is asserted rather than assumed:** if every arm
+    selected the same candidate everywhere, this test would pass for an
+    implementation that returned one arm four times, which is exactly the
+    mis-keying it exists to catch. So the fixture is required to disagree
+    somewhere between the warm and cold arms.
+
+    Bug this catches: surfacing the arms by re-deriving them -- a second
+    `run_arms` call inside the map, which is a second N1 and a second cold arm
+    at a full arm's price each -- or returning them under the wrong `Arm` key,
+    which would report N2's iteration count as N1's. **N1's cost against cold's
+    is Task 5's fourth assertion and the whole reading is a ratio of those two
+    numbers**, so a swap would be read as a finding about the perturbation.
+    """
+    grid_shape = (2, 2)
+    y, mask, t = _correlated_batch(*grid_shape)
+    cold = _cold(y, mask, t)
+    warm = _warm_near(cold, delta=3.0)
+    valid = np.ones((y.shape[0], len(_SPECS)), dtype=np.bool_)
+
+    got = n2map.field_arms(
+        y,
+        t,
+        _SIGNAL,
+        _SPECS,
+        _CRITERION,
+        mask=mask,
+        warm=warm,
+        warm_valid=valid,
+        grid_shape=grid_shape,
+        seed=_SEED,
+        max_iter=_LIVE_MAX_ITER,
+    )
+
+    expected = run_arms(
+        y,
+        t,
+        _SIGNAL,
+        _SPECS,
+        _CRITERION,
+        mask=mask,
+        warm=warm,
+        warm_valid=valid,
+        points=np.arange(y.shape[0], dtype=np.int64),
+        seed=_SEED,
+        max_iter=_LIVE_MAX_ITER,
+    )
+
+    # **THE FIXTURE'S SEPARATING POWER, MEASURED RATHER THAN ASSUMED.** The
+    # warm arm differs from cold in ITERATIONS and not in selection here; the
+    # N2 arm differs in selection. Both are asserted, because a test that could
+    # only see one of them would pass for an implementation that returned that
+    # one arm under several keys.
+    assert (
+        expected.results[Arm.WARM].n_iter != expected.results[Arm.COLD].n_iter
+    ).any(), "fixture is vacuous: the warm and cold arms cost exactly the same"
+    assert (
+        expected.results[Arm.N2].ranking.best_index
+        != expected.results[Arm.COLD].ranking.best_index
+    ).any(), "fixture is vacuous: N2 and cold select the same candidate everywhere"
+    # **AND ONE PAIR IS INDISTINGUISHABLE HERE BY CONSTRUCTION, WHICH IS THE
+    # READING N1 EXISTS FOR.** `N1_EPSILON` is a displacement the optimizer
+    # cannot tell from zero, so N1 reproduces cold's selection AND its
+    # iteration counts exactly on this fixture. **A swap of those two returns
+    # is therefore a mutation that does not mutate** -- (e2), which has fired
+    # three times in this sub-phase -- and no fixture at this scale can catch
+    # it. Stated rather than chased.
+    assert np.array_equal(
+        expected.results[Arm.N1].n_iter, expected.results[Arm.COLD].n_iter
+    )
+
+    for arm in (Arm.COLD, Arm.WARM, Arm.N1, Arm.N2):
+        assert np.array_equal(
+            got.arms.results[arm].ranking.best_index,
+            expected.results[arm].ranking.best_index,
+        ), f"the {arm} arm surfaced is not the {arm} arm run_arms fitted"
+        assert np.array_equal(
+            got.arms.results[arm].n_iter, expected.results[arm].n_iter
+        ), f"the {arm} arm's iteration counts are not the ones it was fitted with"
+
+
+def test_the_n2_map_is_the_field_arms_reduction_and_not_a_second_one():
+    """One reduction, two entry points.
+
+    Behaviour: `n2_field_map` returns exactly the map and counts `field_arms`
+    produced for the same inputs.
+
+    Expected value determined independently: the two calls, compared with each
+    other -- there is no third spelling of the exclusion rule to compare
+    against, and that is the property.
+
+    Bug this catches: the exclusion arithmetic being written twice, once per
+    entry point. **`excluded == exhausted_spiral + inadmissible` is asserted as
+    an identity in one of them**, and a second copy would hold until one was
+    edited -- (j9), which has fired six times in this sub-phase.
+    """
+    grid_shape = (2, 3)
+    y, mask, t = _batch(*grid_shape)
+    cold = _cold(y, mask, t)
+    warm = _push_out_of_box(_warm_near(cold), cold, row=0)
+    valid = np.ones((y.shape[0], len(_SPECS)), dtype=np.bool_)
+
+    selected, counts = _map(y, mask, t, warm, valid, grid_shape=grid_shape)
+    rich = n2map.field_arms(
+        y,
+        t,
+        _SIGNAL,
+        _SPECS,
+        _CRITERION,
+        mask=mask,
+        warm=warm,
+        warm_valid=valid,
+        grid_shape=grid_shape,
+        seed=_SEED,
+        max_iter=_MAX_ITER,
+    )
+
+    assert counts.excluded > 0, "fixture is vacuous: nothing was excluded"
+    assert np.array_equal(selected, rich.selected)
+    assert counts == rich.counts
+
+
+def test_two_audit_seeds_key_different_directions_on_one_field():
+    """The map moves with the seed it is given, and that is what makes the wiring visible.
+
+    Behaviour: the same batch and the same warm array, keyed on two different
+    audit seeds, produce different N2 exclusion patterns.
+
+    Expected value determined independently: the two maps, compared with each
+    other at a displacement whose admissibility depends on the drawn direction
+    -- norm 18.0, every coordinate inside the box -- so the observable is the
+    exclusion pattern and no converged fit is needed.
+
+    Bug this catches: **a driver passing the field's seed where the audit's
+    belongs.** That substitution is invisible whenever the two values agree,
+    and it fails exit criterion 9 -- the map and the audit's own arm agreeing
+    at every shared point -- for a reason that is about neither instrument. It
+    is also why `fields.AUDIT_SEED` is not the seed any field is drawn with.
+    """
+    grid_shape = (2, 3)
+    y, mask, t = _batch(*grid_shape)
+    cold = _cold(y, mask, t)
+    warm = _push_to_the_wall(_warm_near(cold), cold)
+    valid = np.ones((y.shape[0], len(_SPECS)), dtype=np.bool_)
+
+    first, first_counts = _map(y, mask, t, warm, valid, grid_shape=grid_shape, seed=101)
+    second, second_counts = _map(
+        y, mask, t, warm, valid, grid_shape=grid_shape, seed=202
+    )
+
+    assert (first_counts.inadmissible, second_counts.inadmissible) != (0, 0), (
+        "fixture is vacuous: no direction left the box under either seed, so "
+        "the exclusion pattern cannot observe the key"
+    )
+    assert not np.array_equal(first, second)

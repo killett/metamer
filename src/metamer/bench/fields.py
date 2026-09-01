@@ -191,12 +191,29 @@ SIGNAL_TERMS: tuple[str, ...] = ("constant", "trend")
 #: The criteria, named once for the same reason.
 CRITERIA: tuple[str, ...] = ("aic",)
 
+#: The seed the N2 arm's direction is keyed on. **NOT THE FIELD'S SEED, AND
+#: THAT IS 2c TASK 6's RECORDED TRAP ONE LEVEL ALONG.** The field's seed is a
+#: call-time argument to `build_field`; this one keys the audit's random
+#: direction and belongs to `config.audit.seed`, which is where `run_arms` and
+#: the N2 map read it from. **Collapsing the two would move every N2 direction
+#: whenever the field is redrawn**, so a re-drawn field and a re-keyed arm
+#: could not be told apart -- and it would make the wiring untestable, since a
+#: driver passing the wrong one is invisible while the two agree.
+#:
+#: **IT IS IN THE CONFIG RATHER THAN PASSED**, because exit criterion 9 asks
+#: the full-field map and the audit's own arm to agree at every shared point,
+#: and two callers reading one config cannot disagree about the key.
+AUDIT_SEED: int = 20_260_831
+
 _CONFIG_TEMPLATE = """\
 data_uri = "{uri}"
 variable = "sla"
 signal_terms = {signal_terms}
 candidates = {candidates}
 criteria = {criteria}
+
+[audit]
+seed = {audit_seed}
 """
 
 
@@ -214,6 +231,7 @@ def config_text(uri: str) -> str:
         signal_terms=json.dumps(list(SIGNAL_TERMS)),
         candidates=json.dumps(list(CANDIDATES)),
         criteria=json.dumps(list(CRITERIA)),
+        audit_seed=AUDIT_SEED,
     )
 
 
@@ -605,17 +623,39 @@ class IterationCount:
     cells: int
 
 
-def iteration_count(store_path: Path | str) -> IterationCount:
+def iteration_count(
+    store_path: Path | str, *, stride: int = 1, ok_only: bool = False
+) -> IterationCount:
     """Read a finished store's iteration total.
 
     **Read from the store rather than from a report**, so the number describes
     the run that was written rather than the object a caller happens to hold --
     and so it can be re-read from a committed artifact later, which is what
     lets a 27-hour measurement's criteria be checked at all.
+
+    Args:
+        store_path: The finished store.
+        stride: Sample every `stride`-th point **on each axis**, which is the
+            subgrid criterion 17 was measured over -- every 2nd point on each
+            axis, `16 x 6 = 96` of 384. **Not a stride over the flattened
+            point axis**: that also selects a quarter of the points, so a
+            comparison against the committed figure would fail while looking
+            like a field that had changed.
+        ok_only: Count only cells whose outcome is `OK`. **Criterion 17's
+            committed figure is an OK-only number** -- its harness zeroed
+            non-converged cells -- and a capped cell's count measures the cap
+            rather than the work, so the two totals differ by exactly the cap
+            times the number of unconverged cells. That lands as a plausible
+            few percent rather than as an error, which is why the caller has to
+            choose.
+
+    Returns:
+        The reading, over the sampled points.
     """
     import zarr
 
     from metamer.batch.store import ITERATIONS_UNSET
+    from metamer.core.outcomes import Outcome
 
     root = zarr.open_group(str(store_path), mode="r")
     written = root["primitives/iterations"]
@@ -623,6 +663,16 @@ def iteration_count(store_path: Path | str) -> IterationCount:
         raise TypeError("primitives/iterations is not an array")
     iterations = np.asarray(written[:])
     live = iterations != ITERATIONS_UNSET
+    if ok_only:
+        outcome = root["status/outcome"]
+        if not isinstance(outcome, zarr.Array):  # pragma: no cover - store shape
+            raise TypeError("status/outcome is not an array")
+        live &= np.asarray(outcome[:]) == Outcome.OK.code
+    if stride != 1:
+        sampler = (slice(None, None, stride), slice(None, None, stride))
+        iterations = iterations[sampler]
+        live = live[sampler]
+
     total = int(iterations[live].sum())
     cells = int(live.sum())
     points = int(live.any(axis=-1).sum()) if live.ndim > 2 else cells
