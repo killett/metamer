@@ -114,10 +114,22 @@ def wiring_smoke(handle: TextIO, directory: Path) -> bool:
             "the_two_seeds_differ": smoke.instrument["audit_seed"]
             != smoke.instrument["seed"],
             "contaminated": smoke.contaminated,
+            # **THE NULL'S PROFILE TRAVELS EVEN HERE.** The first run of this
+            # harness came back contaminated at this geometry and the record
+            # said only `contaminated: true`, which is the one thing a firing
+            # null must never say on its own: a BAND is the estimator reading
+            # the field's structure and a FLAT HIGH LINE is the baseline
+            # disagreement rate above a half, and they have different repairs.
+            "null_cells": smoke.null_line.cells,
+            "null_at_floor": smoke.null_line.at_floor,
+            "null_profile": list(smoke.null_line.profile),
             "checks": dict(smoke.checks),
             "ratios": dict(smoke.ratios),
             "not_a_measurement": (
-                "reduced geometry and record length; the flag is in the block"
+                "reduced geometry and record length; the flag is in the block. "
+                "At n_parallel = 2 the majority is over two points, so the "
+                "profile is nearly binary and this fixture's null is fragile "
+                "by construction -- Task 4 recorded the same thing."
             ),
         },
     )
@@ -137,8 +149,13 @@ def selection_is_live(store: Path, grid_shape: tuple[int, int]) -> dict[str, Any
         "record": "selection_axis",
         "winners": winners,
         "both_regimes_win": {1, 2} <= set(winners),
+        # **OVER THE CANDIDATE SET, NOT OVER `range(len(winners))`.** The first
+        # version counted as many candidates as there were WINNERS, so a field
+        # where candidates 1 and 2 win reported counts for 0 and 1 and never
+        # for 2 -- (c5) in this harness's own output, found by reading it.
         "counts": {
-            str(index): int((selected == index).sum()) for index in range(len(winners))
+            candidate: int((selected == index).sum())
+            for index, candidate in enumerate(fields.CANDIDATES)
         },
     }
 
