@@ -4,7 +4,7 @@
 
 1. **Branch `main`, everything on it, every commit pushed by a hook** — https://github.com/killett/metamer. **A SHA here is stale the moment the next commit lands, so nothing here names one:** `git log --oneline -8` is the authority.
 2. **DONE:** Phase 1 (0–18), Phase 2 preliminaries P0–P4, **Phase 2a (0–13)**, **Phase 2b (COMPLETE 2026-08-19 — 10 met / 4 reduced scope / 2 FAILED)**, **Phase 2c's brainstorm (D1–D12)**, and **Phase 2c (COMPLETE 2026-08-29 — 10 met / 2 reduced scope / 0 failed; Tasks 0–4 on 2026-08-24, Task 5 on 2026-08-27, Task 6 on 2026-08-28, Tasks 7–8 on 2026-08-29)**. The modelling sub-phase was decided against 2026-08-22 and **re-decided on closed facts 2026-08-23: it does not open.** Sections below carry each; **none is restated here.**
-3. **NEXT ACTION: A SCOPE DECISION ON TASKS 6 AND 7, NOT A TASK. TASK 5 IS DONE (2026-09-01) AND ITS POSITIVE CONTROL FAILED — [read what it established](#what-plan-task-5-established-done-2026-09-01--read-before-planning-task-6-or-7-because-the-sub-phase-stops-here) before anything else.** The easy rung's interior null came back **clean** and then **all three arms returned the 1-cell floor, because the warm and cold profiles are identical at all 32 indices** — with every one of the 384 points warm-started. **The cause is difficulty, not the estimator**: at 24.4 cold iterations per point the optimizer reaches the same optimum from either start, so there is no saving (**−0.4%**) and nothing to smear. **All three rungs sit at that difficulty and the other two have weaker contrast**, so running them as planned measures the same null for ~20 h — and **E2 no longer fits: 10.18 h per rung measured, 30.5 h for three against a 30 h ceiling.** **Nothing is retuned: a retune of the easy rung is a new rung with a new name.** It is **the first task that spends hours rather than minutes** and nothing downstream is read until it passes. **TASKS 0–4 ARE DONE**: the driver, its report and E6's gate shipped 2026-08-31, with **both gate branches demonstrated on real runs** — see [the driver's smoke runs](docs/superpowers/notes/phase2d-driver-smoke.md), neither of which is a measurement and both of which say so in their own bytes. **2d's brainstorm is settled (E1–E8) and its plan is approved — 10 tasks, 17 exit criteria.** **2d's brainstorm is settled (E1–E8), its plan is approved — 10 tasks, 17 exit criteria — and TASKS 0, 1, 2 AND 3 ARE DONE.** **§16.2 item 6 is 2d's home, not §11.2.** **Every task's FIRST step is the pre-flight** (method at item 7); 2d's entries are in [`phase2d-preflight.md`](docs/superpowers/notes/phase2d-preflight.md). **Phase 2c is CLOSED (10 met / 2 reduced scope / 0 failed)** plus 2b's criteria 6 and 7 which **stay FAILED** — see [the close](#phase-2c-is-closed-2026-08-29--10-met--2-met-with-reduced-scope--0-failed-plus-2bs-two-inherited-failures). **`ALGORITHM_VERSION` IS `"2"` SINCE 2026-08-27** and every store written before it holds cold fits — see [how to read a store written before 2c Task 5](#how-to-read-a-store-written-before-2c-task-5-recorded-2026-08-24-and-it-cannot-be-reconstructed-later), which is not re-derivable from the stores. **No rate or budget figure is quoted here: they live once, in [what 2d's tasks inherit](#what-2ds-tasks-inherit-2026-08-30).**
+3. **NEXT ACTION: PHASE 2d TASK 5b — THE DIFFICULTY RUNG. ONE RUNG, NOT A SWEEP.** Its lever is named and measured at its pre-flight, its value is chosen by a calibration that solves difficulty and cost together, and **its prediction is committed before it runs: an ordering with a floor.** **TASKS 6 AND 7 ARE DECIDED AGAINST, 2026-09-01** — same difficulty, weaker contrast, ~20 h for the same null. **TASK 5 IS DONE and its positive control failed — [read what it established](#what-plan-task-5-established-done-2026-09-01--read-before-planning-task-6-or-7-because-the-sub-phase-stops-here) before anything else.** The easy rung's interior null came back **clean** and then **all three arms returned the 1-cell floor, because the warm and cold profiles are identical at all 32 indices** — with every one of the 384 points warm-started. **The cause is difficulty, not the estimator**: at 24.4 cold iterations per point the optimizer reaches the same optimum from either start, so there is no saving (**−0.4%**) and nothing to smear. **All three rungs sit at that difficulty and the other two have weaker contrast**, so running them as planned measures the same null for ~20 h — and **E2 no longer fits: 10.18 h per rung measured, 30.5 h for three against a 30 h ceiling.** **Nothing is retuned: a retune of the easy rung is a new rung with a new name.** It is **the first task that spends hours rather than minutes** and nothing downstream is read until it passes. **TASKS 0–4 ARE DONE**: the driver, its report and E6's gate shipped 2026-08-31, with **both gate branches demonstrated on real runs** — see [the driver's smoke runs](docs/superpowers/notes/phase2d-driver-smoke.md), neither of which is a measurement and both of which say so in their own bytes. **2d's brainstorm is settled (E1–E8) and its plan is approved — 10 tasks, 17 exit criteria.** **2d's brainstorm is settled (E1–E8), its plan is approved — 10 tasks, 17 exit criteria — and TASKS 0, 1, 2 AND 3 ARE DONE.** **§16.2 item 6 is 2d's home, not §11.2.** **Every task's FIRST step is the pre-flight** (method at item 7); 2d's entries are in [`phase2d-preflight.md`](docs/superpowers/notes/phase2d-preflight.md). **Phase 2c is CLOSED (10 met / 2 reduced scope / 0 failed)** plus 2b's criteria 6 and 7 which **stay FAILED** — see [the close](#phase-2c-is-closed-2026-08-29--10-met--2-met-with-reduced-scope--0-failed-plus-2bs-two-inherited-failures). **`ALGORITHM_VERSION` IS `"2"` SINCE 2026-08-27** and every store written before it holds cold fits — see [how to read a store written before 2c Task 5](#how-to-read-a-store-written-before-2c-task-5-recorded-2026-08-24-and-it-cannot-be-reconstructed-later), which is not re-derivable from the stores. **No rate or budget figure is quoted here: they live once, in [what 2d's tasks inherit](#what-2ds-tasks-inherit-2026-08-30).**
 4. ## THE STANDING LIMITATION ON EVERYTHING 2c DECIDED: **NO 2c NUMBER COMES FROM REAL DATA.** Warm-starting was authorized — and every decision after D1 inherits this — on a **simulated field whose spatial coherence is a construction parameter**. **The spatial coherence of real altimetry optima has never been measured.** Weaker coherence gives a **smaller** saving, and **§11.2's 30% threshold could fail on real data.** **THE NAMED CLOSER, not an open worry: a spike on a real gridded product — same three arms, same record-length lever.** **AND SINCE 2026-08-24 THERE IS A SECOND REGISTER OF IT: every 2c saving is a CEILING, not an estimate**, because the instrument searched with no effective spiral bound — see [what 2c's tasks inherit](#what-2cs-tasks-inherit-2026-08-24).
 5. **Tests: 1312 passed, 0 failed, 0 INDETERMINATE — 2026-08-31, 3548.34 s (sweeps have run 1698–3552 s, which is the machine and not the suite; 2d Task 3 added ~3.5 min of real-filter fixtures, deliberately unmarked — the reason is at `tests/test_bench_n2map.py`).** **`pixi run test` is the full sweep and every end-of-task verification must run it; `test-fast` and `test-ci` are NOT evidence** — the full sweep has caught **seven** things a fast run could not. **Every run prints `RSS measurement validity`, including at zero**; a nonzero count is INDETERMINATE, neither pass nor fail.
 6. **Verify a fresh checkout with `pixi run test && pixi run typecheck && pixi run lint`**, plus `pixi run pre-commit run --all-files` before every commit. **AND `git add` A NEW FILE BEFORE THAT SWEEP, NEVER AT COMMIT TIME** — `--all-files` covers **tracked** files only, so an untracked new module makes every hook print `Passed` without being read. Measured 2026-08-24; it cost two full twenty-minute sweeps before it was noticed. **AND THE RULE HAS A SECOND FORM, PROMOTED 2026-08-31: STAGE ANYTHING A TOOL MAY RESTORE, NOT ONLY ANYTHING A HOOK MAY SKIP** — `git checkout -- <file>` restores **from the index**, so an unstaged edit in a file any tool touches is **silently reset to `HEAD`, with no error**. One changes what is CHECKED, the other changes what SURVIVES; the pair is in [the handoff](docs/superpowers/notes/phase1-to-phase2-handoff.md) and is not restated here.
@@ -6685,9 +6685,31 @@ to re-measure the first two before the budget is committed.
 > |---|---|---|
 > | two rungs, N1 at both | 12.032 | 16.9 h |
 > | ~~three rungs, N1 at two — E4's decision~~ | ~~14.047~~ | ~~19.7 h~~ |
-> | **three rungs, THE N2 MAP AT ITS SHIPPED COST — corrected 2026-08-31** | **18.047** | **25.3 h** |
+> | ~~three rungs, the N2 map at its shipped cost — corrected 2026-08-31~~ | ~~18.047~~ | ~~25.3 h~~ |
+> | **WHAT 2d ACTUALLY BUYS — re-priced on MEASURED seconds, 2026-09-01** | see below | **~25 h** |
 >
-> **Against a 30 h ceiling**, and at the re-measured `11.38 s` it is **21.9 h**.
+> ## 2d IS NO LONGER THREE ARM-SWEEPS. IT IS ONE NULL, ONE DIFFICULTY RUNG, AND A LADDER OF ITERATION COUNTS
+>
+> **Decided 2026-09-01 on Task 5's result.** Tasks 6 and 7 as planned would spend ~20 h moving
+> `Δ` — which Task 5b's pre-flight then measured to be **mostly an amplitude the likelihood is
+> invariant to** — while holding difficulty fixed at the value that produced the null. **Three
+> nulls at one difficulty is one null reported three times.**
+>
+> | what 2d has or buys | cost | state |
+> |---|---|---|
+> | the three rungs' **cold iteration counts** — 24.375 / 24.333 / 24.396 | spent | **measured 2026-08-31.** It is what shows the contrast lever does not move difficulty |
+> | the **easy rung's full arm sweep** — null clean, all arms at the floor, saving −2.45% | **10.18 h, spent** | **measured 2026-09-01** |
+> | ~~the middle rung's arm sweep (Task 6)~~ | ~~10 h~~ | **NOT RUN.** Same difficulty, weaker contrast |
+> | ~~the hard rung's arm sweep (Task 7)~~ | ~~10 h~~ | **NOT RUN**, same reason |
+> | the **difficulty rung's calibration** — the lever's value chosen against a measurement | ~1 h | Task 5b |
+> | the **difficulty rung** itself | **~13–17 h**, priced on measured seconds at the chosen difficulty | Task 5b |
+>
+> **THE RUNG'S PRICE RISES WITH ITS DIFFICULTY AND THAT IS THE BINDING CONSTRAINT.** At the easy
+> rung's difficulty an arm costs **13.98 s/point**; at `white/sigma = 0.8` the probe measured
+> **26.48 s/point**. **6.016 arms × 384 points** is therefore **10.2 h at 13.98 s and 17.0 h at
+> 26.5 s**, so *"land near 2c's 40.79 iterations"* and *"fit the remaining ceiling"* are two
+> constraints on one number — **(a5b), and they are solved together at the calibration rather than
+> each in its own paragraph.**
 >
 > ## THE N2 MAP COSTS FOUR ARMS AND WAS PRICED AT ONE — A 4× ERROR ON THE LINE THAT DOMINATES
 >
@@ -7108,25 +7130,49 @@ the report is [`phase2d-easy-rung-report.json`](docs/superpowers/notes/phase2d-e
 and the predictions were committed before the run. None of the three is restated here.** What
 belongs here is what a later session cannot re-derive.
 
-> ## THE GATE PASSED AND THE POSITIVE CONTROL FAILED, AND THE SUB-PHASE STOPS FOR A DECISION
+> ## THIS IS THE ABSENCE OF HYSTERESIS, NOT A RESOLUTION LIMIT — AND THAT IS THE STRONGER RESULT
 >
 > **The interior null came back at the floor** — E6's third row held, as Task 2 committed before any
-> rung ran. **Then all three arms returned the floor**, and the reason is sharper than *"the
-> instrument cannot resolve it"*: **the warm and cold misclassification profiles are IDENTICAL at
-> all 32 indices.** There is no smear at the rung built to make one appear.
+> rung ran. **Then all three arms returned the floor**, and the reason is not that a width sat under
+> the estimator's threshold: **the warm and cold misclassification profiles are IDENTICAL at all 32
+> indices.** Every point was warm-started, none was excluded, none had a zero displacement, and the
+> selection axis was live. **The mechanism ran to completion and changed nothing.**
+>
+> **A marginal width would have been a weaker finding than this.** *"The instrument could not
+> resolve it"* leaves the artifact's existence open; *"warm equals cold everywhere on a field where
+> every point was warm-started"* does not. **The framing matters because the two send the next
+> session to different places** — one to the estimator, one to the field.
 >
 > **AND IT IS NOT "NOBODY GOT A WARM START":** `n2_exhausted_spiral = 0` and `n2_excluded = 0`, so
 > **every one of the 384 points had a valid warm source**, and `n2_zero_distance = 0`, so every
 > displacement was real. **The N2 arm moved two points in one row; the warm arm moved none.** The
 > floor arm is not the silent one.
 
-**THE CAUSE IS DIFFICULTY, AND D1's REATTRIBUTION PREDICTED HALF OF IT.** The saving came in at
-**−0.41% (pass 2 only) and −2.45% (net of pass 1)** on a field running at **24.4 cold iterations
-per point**, below 2c's shortest fixture — which is what the reattribution's curve says. **The new
-half is that the ARTIFACT follows the same curve:** at 24 iterations from a moment-ladder start the
-optimizer reaches the same optimum from either start, so there is nothing to keep and nothing to
-smear. **The lever that produces hysteresis is the LIKELIHOOD's difficulty; `Δ` only makes the
-boundary stark.**
+**ONE FINDING WITH TWO LEGS, AND IT EXTENDS D1's REATTRIBUTION ALONG THE SAME AXIS.** The saving
+came in at **−0.41% (pass 2 only) and −2.45% (net of pass 1)** on a field running at **24.4 cold
+iterations per point**, below 2c's shortest fixture — which is what the reattribution's curve says.
+**Its second leg is that the ARTIFACT follows the same axis:** at 24 iterations from a moment-ladder
+start the optimizer reaches the same optimum from either start, so there is nothing to keep and
+nothing to smear. **The saving is mostly *"start from any converged optimum"* and the artifact is
+mostly *"the cold start was poor enough to be improved on"* — one statement about difficulty, not
+two statements about coherence.** **The lever that produces hysteresis is the LIKELIHOOD's
+difficulty; `Δ` only makes the boundary stark.**
+
+> ## AND `Δ` IS MOSTLY AN AMPLITUDE RESCALE, WHICH THE LIKELIHOOD IS INVARIANT TO — MEASURED 2026-09-01
+>
+> `build_field` computes `parameters = factor × BASE`, so **one factor multiplies `sigma`, `rho`
+> and `white` together** and `white/sigma` is **constant everywhere on the field by construction**.
+> At `contrast = 3` region B is `(2.5, 2.0, 1.0)` against region A's `(1.0, 0.8, 0.4)`: the same
+> series, 2.5× larger, with a 2.5× longer timescale.
+>
+> **Measured at Task 5b's pre-flight, 8 series at `N = 630`: the same data scaled by 2.5 fits in
+> 23.50 iterations per point against 23.62 unscaled** — free, as a concentrated likelihood must be.
+> **So the only part of `Δ` the fit can see is `rho` in samples, and that is worth about one
+> iteration** (23.62 at 9.4 samples per `rho`, 24.62 at 23.6, 24.75 at 3.5).
+>
+> **THAT IS WHY THE THREE RUNGS ARE INDISTINGUISHABLE IN COLD ITERATIONS** — 24.375 / 24.333 /
+> 24.396 — **and it is a property of the lever's construction rather than a coincidence.** The
+> sweep holds difficulty fixed and moves an amplitude.
 
 > **AND THAT PROPAGATES TO THE OTHER TWO RUNGS BEFORE EITHER IS RUN.** All three are
 > indistinguishable in cold iterations — 24.375 / 24.333 / 24.396 — so all three sit at this
@@ -7276,6 +7322,28 @@ of iteration counts and came back identical through all three runs; every wall-c
 **Iterations are deterministic — the same fixture returned 405 in every repeat — and this box's
 wall clock is not.** That is why the budget was rebuilt in iterations rather than re-measured in
 seconds, and it is the transferable finding.
+
+> ## CORRECTED 2026-09-01 BY TASK 5's MEASUREMENT: ITERATIONS ARE THE RIGHT UNIT FOR REPRODUCIBILITY AND THE WRONG ONE FOR MONEY
+>
+> **The conclusion above is right about determinism and was over-extended into pricing.** Task 5
+> measured the two coming apart in **both** directions on one run:
+>
+> | arm or setting | iterations, against cold | seconds, against cold |
+> |---|---|---|
+> | the `self` arm | **0.0895** | **0.460** — 5.1× more seconds per iteration |
+> | a noisier field (`white/sigma` 0.4 → 0.8) | **+22%** | **+93%** — 1.6× more seconds per iteration |
+>
+> **A fit pays a fixed per-cell cost — state space, ladder start, scoring, ranking — that does not
+> shrink when the optimizer stops early**, and a harder likelihood costs more *per iteration* as
+> well as more iterations. **So a budget built in iterations under-prices a fast arm by ~5× and a
+> hard one by ~1.6×**, and Task 0's own *"`self` is 4–6% of cold"* would have mis-predicted its
+> wall clock five-fold.
+>
+> **WHAT SURVIVES UNCHANGED:** iterations are what a committed artifact must record, what two runs
+> are compared on, and what a re-measurement must reproduce — Task 5's cold arm reproduced
+> criterion 17's **2340** exactly, a day and a code path apart. **What changes is that a COST
+> estimate must be built from measured seconds per arm at the difficulty being priced**, and that
+> is why E2's factor was re-priced twice from seconds and not once from iterations.
 
 **A REFUSED COMPARISON IS NOT A GAP IF THE QUANTITY HAS A SECOND INSTRUMENT.** The `run`-versus-`fit`
 ratio was refused three times — `same_workload` false in every run that checked — and the quantity

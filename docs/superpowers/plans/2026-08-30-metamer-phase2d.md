@@ -1,6 +1,12 @@
 # Phase 2d — the simulated-field benchmark, and the audit's first real numbers
 
-**Status: APPROVED 2026-08-30. TASKS 0–4 ARE DONE; TASKS 5–9 REMAIN.** Production code is
+**Status: APPROVED 2026-08-30. TASKS 0–5 ARE DONE. TASKS 6 AND 7 ARE DECIDED AGAINST, 2026-09-01,
+AND TASK 5b REPLACES THEM.** Task 5's easy rung came back with a **clean interior null and every
+arm at the 1-cell floor, because warm and cold agree at all 32 indices** — the absence of
+hysteresis at that difficulty rather than a resolution limit. **Tasks 6 and 7 would move `Δ`, which
+is mostly an amplitude the likelihood is invariant to** (measured), while holding difficulty fixed
+at the value that produced the null. **Task 5b asks the question that is open: is there a
+difficulty at which the artifact appears?** Production code is
 `src/metamer/bench/fields.py` (the field, its rungs and its geometry), `src/metamer/bench/smear.py`
 (the misclassification profile, the width and the interior null) `src/metamer/bench/n2map.py`
 (the N2 full-field map and its exclusions) and `src/metamer/bench/report.py` (the driver, the
@@ -114,18 +120,19 @@ the section where it was discussed.** The repair was not a compromise but a re-f
 
 ## Task index and dependencies
 
-| # | task | depends on |
-|---|---|---|
-| 0 | the pricing and lever spike | — |
-| 1 | the field builder, and the plausibility rung's sources | 0 |
-| 2 | the smear-width estimator, and its interior null | — |
-| 3 | the N2 full-field map | — |
-| 4 | the benchmark driver and its reproducible report | 1, 2, 3 |
-| 5 | the easy rung — the positive control, and the gate | 4 |
-| 6 | the plausibility rung — criterion 12, the audit's numbers, OQ21 | 5 |
-| 7 | the hard rung — the floor from below, and the monotonicity | 6 |
-| 8 | the README figure, and what it is allowed to say | 6 |
-| 9 | the 2d exit-criteria suite | all |
+| # | task | depends on | state |
+|---|---|---|---|
+| 0 | the pricing and lever spike | — | done |
+| 1 | the field builder, and the plausibility rung's sources | 0 | done |
+| 2 | the smear-width estimator, and its interior null | — | done |
+| 3 | the N2 full-field map | — | done |
+| 4 | the benchmark driver and its reproducible report | 1, 2, 3 | done |
+| 5 | the easy rung — the positive control, and the gate | 4 | **DONE 2026-09-01. The control failed: warm ≡ cold** |
+| **5b** | **the difficulty rung — one rung, on the axis Task 5 says is the axis** | **5** | **NEXT** |
+| ~~6~~ | ~~the plausibility rung~~ | — | **DECIDED AGAINST 2026-09-01**: same difficulty, weaker contrast |
+| ~~7~~ | ~~the hard rung~~ | — | **DECIDED AGAINST**, same reason |
+| 8 | the README figure, and what it is allowed to say | 6 | |
+| 9 | the 2d exit-criteria suite | all | |
 
 **Tasks 2 and 3 are independent of everything and of each other**, and both are falsifiable by unit
 test alone on constructed maps with no field and no run. **Task 0 gates Task 1 because a cost
@@ -596,7 +603,75 @@ carrying its rung.**
 
 ---
 
-## Task 6 — the plausibility rung: criterion 12, the audit's first real numbers, and OQ21
+## Task 5b — the difficulty rung: one rung, on the axis Task 5 says is the axis
+
+**Goal.** Answer the question Task 5 left open and nothing else: **is there a difficulty at which
+the artifact appears?** If it does, the audit is demonstrably an instrument and 2d has the positive
+control the easy rung was meant to be. **If it does not, that is a much larger finding about
+warm-starting and it belongs in the record beside D1.**
+
+**Behaviour.**
+
+- **ONE RUNG. NOT A SWEEP.** Its target is **2c's measured difficulty — 40.79 cold iterations per
+  point at `N = 630`** — approached as closely as the ceiling allows, and **not more contrast**.
+- **THE LEVER IS `white/sigma`, NAMED AND MEASURED BEFORE ANY VALUE IS CHOSEN**, at
+  [the pre-flight](../notes/phase2d-preflight.md): amplitude is free (23.50 against 23.62 under a
+  2.5× rescale), `rho` in samples is worth about one iteration across a factor of 6.7, and the
+  noise floor is worth five. **The existing rung parameters cannot express it**, because
+  `parameters = factor × BASE` moves `white` with `sigma` and holds the ratio constant everywhere.
+- **THE VALUE IS CHOSEN BY A CALIBRATION, NOT BY ARGUMENT**, and the calibration reports
+  **iterations per point, seconds per point and the misclassification rate** at each setting.
+  **Two constraints bind one number and are solved together** — (a5b): land near 2c's difficulty,
+  and fit the **19.8 h** left of the ceiling, at a price that **rises with the difficulty being
+  bought** (13.98 s/point at the easy rung, 26.48 at `white/sigma = 0.8`).
+- **AND A THIRD CONSTRAINT VOIDS THE RUNG IF IT IS MISSED: the baseline misclassification must stay
+  well under a half.** A noisier field makes the two Matérn families harder to separate, and a
+  baseline above a half is the **second cause** of a firing interior null — the one that invalidates
+  the *subject* rather than the estimator.
+- **IT IS A NEW RUNG WITH A NEW NAME.** `easy`, `middle` and `hard` are not retuned, `BASE`,
+  `WITHIN_REGIME_RANGE` and the geometry do not move, and **every existing rung's drawn bytes stay
+  identical** — a test asserts it. **The three shipped rungs' null is the comparison that gives this
+  rung its meaning**, and editing one would destroy it.
+- **Its `sources` say what it is:** chosen by us, against a calibration, to sit near 2c's measured
+  difficulty. **Not a claim about the ocean.** The middle rung's slot is the recorded example of
+  what a reader supplies when provenance is left open.
+
+**What this task asserts, and the bug each assertion catches.**
+
+- *The new parameter defaults to the shipped value and every existing rung's field is byte-identical
+  to before.* Catches a difficulty lever that silently re-draws the three rungs whose null this rung
+  is read against.
+- *The calibration's chosen setting is recorded with its measured iterations, seconds and
+  misclassification rate, before the rung runs.* Catches a value chosen after seeing the rung's
+  result, which is the tuning this sub-phase forbids everywhere else.
+- *The interior null is read first, as at every rung.* Unchanged, and it is the clause most likely
+  to fire at a noisier setting.
+- *The saving and the width are reported with the difficulty they were measured at.* Catches this
+  rung's numbers being quoted as 2d's headline; **its `l` and `Δ` are the easy rung's**, so the only
+  thing that differs is difficulty and the reading has to say so.
+
+**THE PREDICTION, COMMITTED BEFORE THE RUN — AN ORDERING WITH A FLOOR.**
+
+- **If difficulty is the lever, the saving rises toward 2c's range and a width appears above the
+  1-cell floor.** Both, and in that order: the saving is the cheaper signal and it moves first.
+- **REFUTED FROM BELOW — the pre-decided stop.** Difficulty reaches 2c's range and **warm still
+  equals cold at every index**. **No further rungs.** That is the branch Task 1 already wrote, and
+  it makes the finding a statement about warm-starting rather than about this field.
+- **REFUTED FROM ABOVE.** A width **exceeding one coarse spacing (8 fine cells)**, which means
+  points are misclassifying on their own side of the boundary and the profile is reading something
+  other than cross-boundary contamination.
+
+---
+
+## ~~Task 6 — the plausibility rung: criterion 12, the audit's first real numbers, and OQ21~~
+
+> **DECIDED AGAINST, 2026-09-01, ON TASK 5's RESULT.** The middle rung sits at the **same
+> difficulty** as the easy one — 24.333 against 24.375 — and at **weaker contrast**, and `Δ` is
+> mostly an amplitude the likelihood is invariant to. **Running it spends ~10 h to report the same
+> null with less contrast.** Task 5b replaces it. **What this forfeits is stated rather than
+> absorbed: criterion 12's magnitude, the audit's first real numbers and OQ21's correlation are
+> NOT delivered by 2d**, and each needs a field on which warm-starting does something — which is
+> exactly what Task 5b is measuring the existence of.
 
 **Goal.** The one rung a magnitude is quoted from. **This is the task 2d exists for.**
 
@@ -676,7 +751,13 @@ carrying its rung.**
 
 ---
 
-## Task 7 — the hard rung: the floor from below, and the monotonicity
+## ~~Task 7 — the hard rung: the floor from below, and the monotonicity~~
+
+> **DECIDED AGAINST, 2026-09-01, WITH TASK 6.** Same difficulty (24.396), weaker contrast still.
+> **E6's monotonicity has no lever left to be monotone in**: the three rungs' cold iteration counts
+> span 0.062 against standard errors of 0.17–0.20, and the contrast they differ in is an amplitude.
+> **The monotonicity prediction is therefore not refuted — it is unmeasurable on this construction**,
+> and saying so is the honest outcome.
 
 **Goal.** A measured floor beside the rung where a null is expected, and E6's first prediction
 closed with three points rather than two.

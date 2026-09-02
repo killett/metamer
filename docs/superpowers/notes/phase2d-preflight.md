@@ -1159,3 +1159,116 @@ magnitude. It does not move `RUNGS`, `PUBLISHED_TILE_SIDE`, `HEADROOM_FRACTION`,
 `resident_bytes_per_series`, `output_slot_bytes`, `SVD_CHUNK_SERIES` or `ALGORITHM_VERSION`, and it
 re-cuts no exit-criterion verdict. It does not read anything downstream until `require_clean`
 returns.
+
+---
+
+## Plan Task 5b — the difficulty rung, audited before any value is chosen (2026-09-01)
+
+**THE BRIEF** is one rung, not a sweep, taken after Task 5's null: **is there a difficulty at which
+the artifact appears?** If yes, the audit is demonstrably an instrument and 2d has its positive
+control. If no, that is a much larger finding about warm-starting and it belongs beside D1. **Three
+constraints came in with it:** the rung's target is **2c's difficulty (40.79 cold iterations per
+point), not more contrast**; the lever is **named before values are chosen**; and it is a **new
+rung with a new name** — the easy rung is not retuned, because the three shipped rungs and their
+null are what make the new rung's contrast interpretable.
+
+**FIVE FINDINGS. The first says the lever the sweep has been moving is not one, and the second
+names the one that is — both measured rather than argued.**
+
+### 1. `Δ` IS MOSTLY AN AMPLITUDE RESCALE, AND A CONCENTRATED LIKELIHOOD IS INVARIANT TO IT
+
+`build_field` computes `parameters = factor × BASE`, so a single factor multiplies `sigma`, `rho`
+**and** `white` together. **`white/sigma` is therefore constant everywhere on every rung by
+construction**, and at `contrast = 3` region B is `(2.5, 2.0, 1.0)` against region A's
+`(1.0, 0.8, 0.4)` — the same series, 2.5× larger, on a 2.5× longer timescale.
+
+> **MEASURED, 8 series at `N = 630`, the shipped candidate set and the shipped `fit`:**
+>
+> | setting | `rho` in samples | iterations/point | s/point |
+> |---|---|---|---|
+> | region A, as the rungs build it | 9.4 | **23.62** | 13.70 |
+> | **the same data × 2.5 — pure amplitude** | 9.4 | **23.50** | 14.49 |
+> | region B, what `contrast = 3` produces | 23.6 | 24.62 | 16.47 |
+> | `rho` 0.8 → 0.30 yr — 2c's own region B | 3.5 | 24.75 | 16.78 |
+> | **`white/sigma` 0.4 → 0.8** | 9.4 | **28.75** | **26.48** |
+> | both together | 3.5 | 26.00 | 26.13 |
+>
+> **Amplitude is free** — 23.50 against 23.62 — as a concentrated likelihood requires. **`rho` in
+> samples is worth about one iteration** across a factor of 6.7. **The noise floor is worth five**,
+> and it nearly doubles the seconds.
+
+**SO THE THREE RUNGS BEING INDISTINGUISHABLE IS A PROPERTY OF THE LEVER, NOT A COINCIDENCE**
+(24.375 / 24.333 / 24.396). **The sweep held difficulty fixed and moved an amplitude**, and no
+value of `contrast` on this construction could have done otherwise. That is the sharpest available
+answer to *"why did the easy rung produce nothing"*, and it is recorded here rather than in the
+new rung's verdict because **it is a fact about the existing three.**
+
+### 2. THE LEVER IS THE NOISE FLOOR RELATIVE TO THE CORRELATED AMPLITUDE, AND 2c's OWN FIXTURE SAYS SO
+
+**2c's field IS recoverable — `warmstart-spike-harness.py` is in the tree** — and comparing its
+`true_params` against `fields.BASE` puts a number on the gap that the 40.79-against-24.4 comparison
+could not:
+
+| | 2c region A | 2c region B | 2d region A | 2d region B (`contrast = 3`) |
+|---|---|---|---|---|
+| family | matern32 | matern12 | matern32 | matern12 |
+| `sigma` | 1.0–1.5 | 0.7–1.1 | ~1.0 | ~2.5 |
+| `white` | 0.4 | **0.5** | 0.4 | 1.0 |
+| **`white/sigma`** | 0.27–0.40 | **0.45–0.71** | **0.40** | **0.40** |
+| `rho` in samples | 9.6–24 | **3.6–7.2** | 9.4 | 23.6 |
+
+**2c's hard regime is noisier AND shorter-correlated; 2d's is neither, and cannot be, because the
+one factor moves `white` with `sigma`.** The probe says the noise floor is what the optimizer
+feels. **So the lever is `white/sigma`, and it is a new field parameter rather than a new value of
+an existing one** — the existing ones cannot express it.
+
+> **AND A CORRECTION TO A CLAIM THIS SUB-PHASE HAS REPEATED:** `fields.py`'s docstring says *"the
+> warm-start spike's coherent field lived in a script that is not in the tree"*. **The script is in
+> the tree**, at `docs/superpowers/notes/warmstart-spike-harness.py`, and its field is fully
+> specified there. What was true is that the field was **not in `src`**, so criterion 12 could not
+> be re-measured **on the shipped mechanism** — which is the argument that actually mattered.
+> **Corrected at the docstring, with this task's code** — the pre-flight is docs-only and the
+> correction is a `src` edit, which ships under the same sweep as the new rung parameter. It is
+> recorded here because a reader who checks the stronger claim finds it false and then doubts the
+> argument that rests on it.
+
+### 3. TWO CONSTRAINTS BIND THE RUNG'S VALUE AND THEY ARE SOLVED TOGETHER — (a5b)
+
+*"Land near 40.79 iterations"* and *"fit what is left of the 30 h ceiling"* are constraints on **one
+number**, and the probe says they pull against each other: **at `white/sigma = 0.8` the seconds
+nearly double while the iterations rise 22%.** One rung is `6.016 arms × 384 points`, so it costs
+**10.2 h at the easy rung's 13.98 s/point and 17.0 h at 26.5 s/point.** With 10.18 h already spent,
+**the remaining ceiling is 19.8 h.**
+
+**A THIRD CONSTRAINT IS EASY TO MISS AND WOULD VOID THE RUNG: THE BASELINE MUST STAY UNDER A HALF.**
+A noisier field makes the two Matérn families harder to tell apart, so misclassification rises
+everywhere — and **a baseline disagreement rate above 1/2 is the second cause of a firing interior
+null**, which invalidates the *subject* rather than the estimator and would stop the rung before any
+width was read. **The calibration therefore measures misclassification at every setting, not only
+iterations**, and the value is chosen subject to it.
+
+### 4. THE CALIBRATION IS A SPIKE WITH ITS OWN PREDICTIONS, AND IT PRICES THE RUNG AS WELL AS CHOOSING IT
+
+**D2: Task 0's method is the template for every remaining premise that is unmeasured.** The spike
+sweeps `white/sigma` over a small ladder at `N = 630` on both families, and reports **iterations
+per point, seconds per point, and the misclassification rate against the truth** at each. It buys
+three things at once:
+
+- **the value**, chosen as the highest difficulty whose baseline stays well under a half and whose
+  implied rung cost fits the remaining ceiling;
+- **the rung's price**, from measured seconds at the chosen setting rather than from the easy
+  rung's rate — which the same probe has already shown does not transfer across difficulty;
+- **a third point for the cost model**, which currently has two and therefore cannot tell a line
+  from a curve — D2's own reason for a three-fixture lever, and the rule Task 0's retired
+  `2.43 + 0.324 × iterations` was retired under.
+
+### 5. WHAT THE RUNG MUST NOT DO, AND ONE THING IT MUST CARRY
+
+**It does not retune `easy`, `middle` or `hard`**, and it does not change `BASE`, `WITHIN_REGIME_RANGE`
+or the geometry — the three shipped rungs' null is the comparison that gives this rung its meaning,
+and editing any of them destroys it. **The new parameter is per-rung and defaults to the shipped
+value**, so every existing rung's bytes are unchanged and a test asserts they are.
+
+**AND ITS `sources` MUST SAY WHAT IT IS**: chosen by us, against a calibration, to sit near 2c's
+measured difficulty — **not a claim about the ocean**. The middle rung's slot is the recorded
+example of what happens to a rung whose provenance is left to a reader.
