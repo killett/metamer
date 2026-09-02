@@ -1,0 +1,102 @@
+{
+  "task": "Phase 2d Task 5b -- the difficulty rung's calibration. The value is chosen against this, not after seeing the rung",
+  "written": "2026-09-01",
+  "committed_before_the_calibration_ran": true,
+  "why_a_calibration_rather_than_a_chosen_value": [
+    "Two constraints bind one number and pull against each other -- (a5b). The rung must land near",
+    "2c's measured difficulty of 40.79 cold iterations per point, and it must fit the 19.8 h left",
+    "of the 30 h ceiling at a price that RISES with the difficulty being bought. A third constraint",
+    "voids the rung if it is missed: a baseline misclassification rate above a half is the second",
+    "cause of a firing interior null, and it invalidates the SUBJECT rather than the estimator.",
+    "A value argued for rather than measured would satisfy whichever constraint was discussed last."
+  ],
+  "the_lever_named_before_any_value": {
+    "lever": "white / sigma -- the noise floor relative to the correlated amplitude",
+    "why_not_contrast": [
+      "parameters = factor x BASE, so one factor multiplies sigma, rho and white together and",
+      "white/sigma is constant everywhere on every rung by construction. Measured 2026-09-01, 8",
+      "series at N = 630: the same data scaled by 2.5 fits in 23.50 iterations per point against",
+      "23.62 unscaled. Amplitude is free, as a concentrated likelihood requires."
+    ],
+    "why_not_rho": [
+      "rho in samples is worth about one iteration across a factor of 6.7 -- 23.62 at 9.4 samples,",
+      "24.62 at 23.6, 24.75 at 3.5. It is a lever in name only."
+    ],
+    "why_this_one": [
+      "The same probe measured white/sigma 0.4 -> 0.8 taking iterations from 23.62 to 28.75 and",
+      "seconds from 13.70 to 26.48. And 2c's own fixture -- recoverable, in the tree at",
+      "warmstart-spike-harness.py -- runs its HARD regime at white/sigma 0.45-0.71 against 2d's",
+      "0.40 everywhere, which is the gap the 40.79-against-24.4 comparison could not localise."
+    ]
+  },
+  "instrument": {
+    "n_time": 630,
+    "series_per_setting": 16,
+    "families": ["matern32", "matern12"],
+    "candidates": ["white", "white + matern12", "white + matern32"],
+    "criteria": ["aic"],
+    "draw_method": "cholesky",
+    "seed": 5150,
+    "threads": "threadpool_limits(1), the setting every 2d rate is measured under",
+    "host_quiet_check": "gates, on load average < physical_cores - 1",
+    "rho_held_at": "the shipped BASE value, because the probe measured it worth about one iteration",
+    "sigma_held_at": "1.0, with white varied -- so the ladder moves ONE quantity"
+  },
+  "readings": [
+    {
+      "id": "C",
+      "name": "iterations, seconds and misclassification against white/sigma",
+      "ladder": [0.4, 0.7, 1.0, 1.4],
+      "method": [
+        "16 series per setting per family, drawn from the shipped _covariance at sigma = 1.0 and",
+        "the shipped rho, varying white alone. Fitted through the shipped fit with the shipped",
+        "candidate set. Reports iterations per point, seconds per point, and the fraction of points",
+        "whose selected candidate does not carry the true family."
+      ],
+      "prediction": [
+        "Iterations rise monotonically with white/sigma and reach 2c's 40.79 somewhere at or above",
+        "1.0. Misclassification also rises, because a fainter correlated component is harder to",
+        "attribute to a family. The two rise together and the choice is where they cross.",
+        "SECONDS RISE FASTER THAN ITERATIONS. Measured at 0.4 -> 0.8: +22% iterations, +93%",
+        "seconds. This is the correction filed at Task 0's record and it is what makes the cost",
+        "constraint bind before the difficulty constraint does."
+      ],
+      "predicted_iterations_at_the_top_of_the_ladder": [35.0, 60.0],
+      "refuted_from_below": {
+        "when": "iterations at white/sigma = 1.4 land below 30",
+        "reading": [
+          "The noise floor is not the lever either, and the probe's +5 iterations was a local slope",
+          "rather than a trend. The gap to 2c's fixture is then in something neither the amplitude,",
+          "nor rho, nor the noise floor explains -- most likely the SIGNAL (2c adds a trend of 0.3",
+          "per year to a series of sigma ~1, this field's signal is fitted the same way) or the",
+          "regime's parameter RANGE within a cell rather than its level.",
+          "ACTION: report and stop. Do NOT run a rung at a difficulty the lever cannot reach, and do",
+          "not raise the ladder further hoping -- a third failed lever is a finding about the field",
+          "builder, not a reason for a fourth guess."
+        ]
+      },
+      "refuted_from_above": {
+        "when": "misclassification exceeds 0.35 at every setting reaching 35 iterations",
+        "reading": [
+          "Difficulty and separability cannot be bought apart on this construction: every setting",
+          "hard enough to be interesting has a baseline close enough to a half that the interior",
+          "null is at risk, and a rung there would most likely stop at its own gate.",
+          "ACTION: report the trade-off with its numbers and take the decision explicitly rather",
+          "than running a rung expected to void itself."
+        ]
+      },
+      "what_would_NOT_refute_anything": [
+        "A monotone rise that stops short of 40.79 while staying separable. The rung is then run at",
+        "the highest affordable, separable setting and its difficulty is REPORTED as what it is --",
+        "the question is whether the artifact appears as difficulty rises, not whether one number",
+        "is reproduced."
+      ]
+    }
+  ],
+  "what_this_calibration_does_not_establish": [
+    "Nothing about hysteresis. It measures how hard the fit is, not whether a warm start biases it.",
+    "Nothing about the field's spatial structure: it fits independent series with no boundary, no",
+    "neighbours and no warm starts, which is why it is minutes rather than hours.",
+    "And it is not a rung: no number from it may be quoted as a 2d result."
+  ]
+}
