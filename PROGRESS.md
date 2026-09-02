@@ -6600,6 +6600,32 @@ crossed rung and 2d does not buy one.** The follow-up is named with a **falsifia
 worth buying **only if the plausibility rung returns a null AND the two levers are suspected of
 pulling opposite ways.**
 
+> ## AMENDED 2026-09-01: `Δ` IS MOSTLY AN AMPLITUDE, AND THE DIAGONAL WAS A DIAGONAL IN A QUANTITY THE LIKELIHOOD CANNOT SEE
+>
+> **This is filed at E5 because E5 is where the diagonal was decided**, and it is the more
+> important half of what Task 5b found.
+>
+> **`build_field` computes `parameters = factor × BASE`, so one factor multiplies `sigma`, `rho`
+> and `white` together and `white/sigma` is CONSTANT everywhere on every rung by construction.**
+> At `contrast = 3` region B is `(2.5, 2.0, 1.0)` against region A's `(1.0, 0.8, 0.4)` — the same
+> series, 2.5× larger, on a 2.5× longer timescale.
+>
+> **A concentrated likelihood is invariant to the amplitude, and it was measured rather than
+> argued: 8 series at `N = 630`, the same data scaled by 2.5, fits in 23.50 iterations per point
+> against 23.62 unscaled.** The only part of `Δ` the fit can see is `rho` in samples, and a ladder
+> across a factor of 6.7 in `rho` moves it by **about one iteration** (23.62 / 24.62 / 24.75).
+>
+> **SO THE THREE RUNGS' IDENTICAL DIFFICULTY IS STRUCTURAL, NOT A COINCIDENCE** — 24.375 / 24.333 /
+> 24.396 — and **no value of `Δ` on this construction could have produced a different one.** The
+> sweep moved an amplitude and held difficulty fixed.
+>
+> **WHAT THIS DOES AND DOES NOT OVERTURN.** E5's `ℓ` leg is untouched: `ℓ` is measured on the
+> truth and Task 1's test shows the builder controls it. **What is overturned is `Δ` as a lever on
+> the fit** — it moves what the *truth* looks like and almost nothing about what the *optimizer*
+> does — and with it E6's monotonicity, which had no lever left to be monotone in. **The follow-up
+> trigger above is therefore withdrawn rather than left standing:** a crossed rung in `(ℓ, Δ)`
+> would cross one real axis with an amplitude.
+
 ### E6 — THE PREDICTIONS, COMMITTED BEFORE THE RUNS, WITH REFUTATION IN BOTH DIRECTIONS
 
 | prediction | refuted from below | refuted from above |

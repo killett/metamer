@@ -1,0 +1,122 @@
+{
+  "task": "Phase 2d Task 5b -- what makes 2c's field 40.79, probed on 2c's own fixture",
+  "written": "2026-09-02",
+  "committed_before_the_probe_ran": true,
+  "why_a_probe_and_not_a_rung": [
+    "The difficulty ladder puts 2c's own white/sigma of 0.45-0.71 at about 28 iterations per",
+    "point, against the 40.79 2c measured. So the noise floor accounts for roughly 3.5 of a",
+    "16.4-iteration gap and something else accounts for the remaining ~12.",
+    "A rung at white/sigma = 1.0 would sit at 30.5 iterations, still well below 2c's range, and a",
+    "null there would leave open whether an artifact appears at 40.79 -- the pre-decided stop was",
+    "written against 'difficulty reaches 2c's range' and would not cleanly apply.",
+    "2c's fixture is IN THE TREE. (j4): an existing measurement is evidence, and reading it costs",
+    "under an hour where approaching it costs 15 hours a step."
+  ],
+  "instrument": {
+    "fixture_source": "docs/superpowers/notes/warmstart-spike-harness.py, imported rather than re-spelled",
+    "n_time": 630,
+    "points_per_setting": 16,
+    "candidates": ["white", "white + matern12", "white + matern32"],
+    "criteria": ["aic"],
+    "draw_method": "cholesky",
+    "seed": 5150,
+    "threads": "threadpool_limits(1)",
+    "host_quiet_check": "gates, on load average < physical_cores - 1",
+    "what_varies_between_rows": "the DATA only -- every setting is fitted through the shipped fit with the shipped candidate set"
+  },
+  "the_four_settings": [
+    "1. 2c's field exactly as its harness builds it -- the target",
+    "2. the same, with 2c's signal (2.0 + 0.3 x (t - t.mean())) removed from the draw",
+    "3. the same, on 2d's 31-day time axis instead of exact months",
+    "4. 2d's own parameters at the same point count, as the same-session comparison arm"
+  ],
+  "readings": [
+    {
+      "id": "P1",
+      "name": "does 40.79 reproduce on 2c's own fixture, under the shipped fit?",
+      "prediction": [
+        "Setting 1 lands in [35, 46] iterations per point -- reproducing 2c's 40.79 within the",
+        "spread a 16-point sample carries. The mechanism: it is the same construction, the same",
+        "record length and the same candidate set, fitted by the same shipped fit.",
+        "Setting 4 lands near 24-26, reproducing 2d's own difficulty in the same session, so the",
+        "gap is measured once rather than across two runs."
+      ],
+      "predicted_band_setting_1": [35.0, 46.0],
+      "refuted_from_below": {
+        "when": "setting 1 lands below 35",
+        "reading": [
+          "2c's 40.79 does not reproduce on 2c's own construction under today's fit. Then the",
+          "number is not a property of the fixture but of something that has since changed --",
+          "ALGORITHM_VERSION moved to '2' at 2c Task 5, the optimizer's ladder or its convergence",
+          "test may have moved with it -- and the target 2d has been chasing is a figure from a",
+          "code path that no longer exists.",
+          "ACTION: that is a finding about the record, not about the field. Report it, and retire",
+          "40.79 as a target rather than building a rung to approach it."
+        ]
+      },
+      "refuted_from_above": {
+        "when": "setting 1 lands above 46",
+        "reading": [
+          "2c's fixture is HARDER under today's fit than when it was measured. Same conclusion",
+          "about comparability as the clause below, in the opposite direction, and the same",
+          "action: the target is not a fixed point."
+        ]
+      }
+    },
+    {
+      "id": "P2",
+      "name": "how much of the gap is the SIGNAL 2c adds and 2d does not?",
+      "prediction": [
+        "Setting 2 -- 2c's field without its signal -- lands MATERIALLY BELOW setting 1, taking",
+        "back at least a third of the gap between settings 1 and 4.",
+        "The mechanism, stated so it can be wrong: 2c adds 2.0 + 0.3 x (t - t.mean()) to every",
+        "series, which over a 52-year record is a rise of ~15.6 against sigma ~1. The signal is",
+        "profiled out by the concentrated objective, but the MOMENT LADDER that produces the cold",
+        "start is what sets the iteration count, and a start computed on a series dominated by a",
+        "trend is a worse start. 2d's field carries no signal at all while its config fits a",
+        "constant and a trend."
+      ],
+      "refuted_from_below": {
+        "when": "setting 2 is within 2 iterations of setting 1",
+        "reading": [
+          "The signal is not what makes 2c hard, and the ladder's own arithmetic is then the whole",
+          "story: something in rho, the parameter spread within a regime, or the sigma level",
+          "accounts for the remaining ~12 iterations. The probe has narrowed it by elimination,",
+          "which is what it is for."
+        ]
+      },
+      "refuted_from_above": {
+        "when": "setting 2 falls to or below setting 4",
+        "reading": [
+          "The signal accounts for the WHOLE gap, and 2d's difficulty could be raised to 2c's by",
+          "adding a trend to the field rather than by touching the noise floor at all.",
+          "That would be the cheapest possible repair and it is worth knowing precisely."
+        ]
+      }
+    },
+    {
+      "id": "P3",
+      "name": "the time axis is not the difference",
+      "prediction": [
+        "Setting 3 is within one iteration of setting 1. 31-day steps against exact months is a",
+        "1.9% difference in spacing and rho is expressed in years, so rho in SAMPLES barely moves",
+        "-- and the ladder already measured rho worth about one iteration across a factor of 6.7.",
+        "This is a null, and it is measured because it is free rather than because it is in doubt."
+      ],
+      "refuted": {
+        "when": "setting 3 differs from setting 1 by more than 2 iterations",
+        "reading": [
+          "The axis matters more than the ladder implies, which would make every cross-fixture",
+          "comparison in 2d and 2c suspect -- both were built on different axes. It would also",
+          "make to_decimal_years part of the difficulty rather than only of fit identity."
+        ]
+      }
+    }
+  ],
+  "what_this_probe_does_not_establish": [
+    "Nothing about hysteresis, warm starts or the artifact. It measures how hard a fit is.",
+    "Nothing about spatial structure: independent series, no boundary, no neighbours.",
+    "And no number here is a 2d result -- it is a reading of 2c's fixture, taken to decide whether",
+    "2d's builder can reach that difficulty at all."
+  ]
+}
