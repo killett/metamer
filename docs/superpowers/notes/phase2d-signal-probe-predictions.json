@@ -1,0 +1,123 @@
+{
+  "task": "Phase 2d Task 5b -- 2d's own field WITH a signal: does the defect's repair reach 2c's difficulty, and is it separable?",
+  "written": "2026-09-02",
+  "committed_before_the_probe_ran": true,
+  "what_this_is_a_measurement_OF": [
+    "Not a knob setting. The 2c probe localised essentially the whole 24.4-to-43.94 difficulty gap",
+    "in ONE difference: 2c's series carry 2.0 + 0.3 x (t - t.mean()) and 2d's carry NOTHING, while",
+    "both configs fit constant + trend. Removing the signal from 2c's own field takes it from",
+    "43.94 to 25.69 iterations per point.",
+    "So 2d's field builder is missing a term the whole design assumes: section 11.2's subject is",
+    "trend uncertainty, section 16.2's benchmark is for a trend-estimation package, and real",
+    "altimetry has sea-level rise. This measures the REPAIR, and the difficulty is a consequence",
+    "of it rather than its purpose."
+  ],
+  "instrument": {
+    "field_parameters": "2d's own BASE -- sigma 1.0, rho 0.8, white 0.4, white/sigma 0.40",
+    "families": ["matern12", "matern32"],
+    "signal_added": "2.0 + 0.3 x (t - t.mean()), 2c's own values, so the two are comparable",
+    "also_measured": "a half-amplitude trend (0.15/yr) and a trend with no constant offset",
+    "n_time": 630,
+    "points_per_setting": 16,
+    "candidates": ["white", "white + matern12", "white + matern32"],
+    "criteria": ["aic"],
+    "draw_method": "cholesky",
+    "seed": 5150,
+    "threads": "threadpool_limits(1)",
+    "host_quiet_check": "gates, on load average < physical_cores - 1"
+  },
+  "readings": [
+    {
+      "id": "S1",
+      "name": "does 2d's field reach 2c's difficulty from the signal alone?",
+      "prediction": [
+        "2d's parameters plus 2c's signal land in [38, 48] iterations per point -- at or near 2c's",
+        "own 43.94, and above its published 40.79.",
+        "The mechanism: the 2c probe's decomposition attributes 18.25 of the 18.3-iteration gap to",
+        "the signal, and the remaining differences between the fields -- white/sigma 0.40 against",
+        "0.35-0.71, rho 0.8 against 0.42-1.04 -- were measured on the ladder to be worth a few",
+        "iterations at most.",
+        "IF IT HOLDS, the rung lands at 2c's difficulty and the pre-decided stop applies cleanly:",
+        "a null there is a null at the difficulty where 2c measured a 42.28% saving."
+      ],
+      "predicted_band": [38.0, 48.0],
+      "refuted_from_below": {
+        "when": "below 38 iterations per point",
+        "reading": [
+          "The signal does not carry 2d's field to 2c's range on 2d's parameters, so the two fields",
+          "differ in more than the signal and the decomposition is incomplete. The remaining",
+          "distance would then have to come from the noise floor after all -- the calibration",
+          "ladder is the measured alternative and is not deleted.",
+          "ACTION: report the shortfall with the ladder beside it and take the rung's shape as an",
+          "explicit decision rather than reaching for a second knob."
+        ]
+      },
+      "refuted_from_above": {
+        "when": "above 48 iterations per point",
+        "reading": [
+          "2d's field with a signal is HARDER than 2c's was, which would make the rung's difficulty",
+          "an extrapolation beyond the range any saving has been measured at -- 2c's curve stops at",
+          "40.79. A null there would be a null outside the evidence, which is weaker than a null",
+          "inside it.",
+          "ACTION: reduce the trend's amplitude to land inside 2c's range rather than beyond it,",
+          "and record that the amplitude was chosen to stay inside measured territory."
+        ]
+      }
+    },
+    {
+      "id": "S2",
+      "name": "is it separable? -- the constraint that voids a rung",
+      "prediction": [
+        "Misclassification stays at or below 0.25 at 2d's white/sigma of 0.40, materially below",
+        "2c's 0.375.",
+        "The mechanism: 2c's 0.375 was measured at white/sigma 0.45-0.71, and the calibration",
+        "ladder put misclassification at 0.19-0.25 at white/sigma 1.0 and 0.00-0.06 at 0.40. The",
+        "signal is profiled out by the concentrated objective, so it should cost iterations without",
+        "costing separability -- and that is exactly the property that would make the noise-floor",
+        "route unnecessary."
+      ],
+      "predicted_band": [0.0, 0.25],
+      "refuted_from_above": {
+        "when": "misclassification exceeds 0.30",
+        "reading": [
+          "The signal costs separability as well as iterations, so the two constraints are coupled",
+          "on this construction after all and a rung is at risk of its own interior null firing --",
+          "P(Binom(12, 0.30) >= 7) is about 6% per row and the null reads two seed rows.",
+          "ACTION: report the coupling. A rung is not run at a setting expected to void itself."
+        ]
+      },
+      "refuted_from_below": {
+        "when": "misclassification is exactly zero at every setting",
+        "reading": [
+          "Not a refutation of the repair, but a warning about the SMEAR reading rather than the",
+          "null: at a baseline of zero the majority rule needs the artifact to flip more than half",
+          "a row from perfect classification, which is the same forfeit the easy rung hit. The",
+          "profile stays the primary reading either way."
+        ]
+      }
+    },
+    {
+      "id": "S3",
+      "name": "which half of the signal does the work -- the trend or the offset?",
+      "prediction": [
+        "The TREND does the work and the constant offset does little. A constant is one column of",
+        "the design matrix and is absorbed almost exactly; a trend of 0.3/yr over 52 years is a",
+        "rise of 15.6 against sigma ~1, which is what a moment-based cold start has to contend",
+        "with before the optimizer sees it.",
+        "Half the trend amplitude should land materially below the full one but still well above",
+        "the no-signal 24.4."
+      ],
+      "what_would_NOT_refute_anything": [
+        "Any ordering among the three signal variants that keeps all of them above the no-signal",
+        "baseline. This reading exists to say WHICH part of the repair matters, so that the field",
+        "builder's new term can be specified with a reason rather than copied from 2c."
+      ]
+    }
+  ],
+  "what_this_probe_does_not_establish": [
+    "Nothing about hysteresis: independent series, no boundary, no neighbours, no warm starts.",
+    "Nothing about whether the three shipped rungs' null transfers to a signal-bearing field --",
+    "that is what a rung would test, and it is a scope decision rather than a measurement.",
+    "And no number here is a 2d result."
+  ]
+}
