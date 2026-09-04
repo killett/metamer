@@ -392,6 +392,8 @@ def test_a_floor_reading_carries_its_profile_or_it_has_recorded_nothing():
         (fields, "COARSE_STRIDE", 4, "coarse_stride"),
         (smear, "FLOOR_CELLS", 2.0, "floor_cells"),
         (smear, "MAJORITY", 0.75, "majority_threshold"),
+        (fields, "FIELD_CONSTRUCTION_VERSION", 99, "field_construction_version"),
+        (fields, "SIGNAL_RISE_SIGMAS", 3.5, "drawn_signal_rise_sigmas"),
     ],
 )
 def test_the_instrument_block_follows_the_constant_it_names(
@@ -544,6 +546,14 @@ def test_a_report_is_self_describing_from_its_own_bytes():
     """
     instrument = _report().reproducible()["instrument"]
 
+    # **(c5): THIS IS AN ENUMERATION OVER A SET THAT GROWS, AND IT DOES NOT
+    # DEMAND ITS OWN COMPLETENESS.** A key added to `instrument_block` and left
+    # out of this list is a key nothing requires -- so it can be deleted later
+    # and every test still passes. The list has grown three times in 2d; the
+    # note is here so a fourth addition meets it. **A key added to the block
+    # gets its line here in the SAME edit**, and if it names a shipped constant
+    # it also gets a row in the parametrized derivation test above, which is
+    # what stops it being transcribed rather than read.
     for key in (
         "n_normal",
         "n_parallel",
@@ -559,9 +569,68 @@ def test_a_report_is_self_describing_from_its_own_bytes():
         "coarse_stride",
         "spiral_bound",
         "rung_sources",
+        "field_construction_version",
+        "drawn_signal_terms",
+        "drawn_signal_rise_sigmas",
     ):
         assert key in instrument, f"the report cannot say what {key!r} was"
     assert len(instrument["candidate_spec_hashes"]) == len(fields.CANDIDATES)
+
+
+def test_the_block_says_what_the_builder_drew_and_not_only_what_the_config_fits():
+    """The two signal keys are different questions, and both are answered.
+
+    Behaviour: `signal_terms` names the terms the CONFIG FITS; the drawn-signal
+    keys name the terms the BUILDER DREW. A block must answer both, and they
+    must not be the same key.
+
+    Expected values determined independently: from the two shipped constants,
+    which describe different objects -- a model with a constant and a trend,
+    and a drawn signal that is a trend alone because the offset was measured to
+    change nothing.
+
+    Bug this catches: **the defect wearing the report's clothes.** Three
+    committed reports carry `signal_terms = constant, trend` over fields whose
+    signal was identically zero, because the only signal key in the block named
+    the model. A reader with the report could not tell a signal-free field from
+    a signal-bearing one. This fails if the drawn keys are dropped, or if
+    someone "simplifies" by making one key serve both -- which would
+    reinterpret those three artifacts instead of distinguishing them.
+    """
+    instrument = _block()
+
+    assert instrument["signal_terms"] == list(fields.SIGNAL_TERMS)
+    assert instrument["drawn_signal_terms"] == list(fields.DRAWN_SIGNAL_TERMS)
+    assert instrument["signal_terms"] != instrument["drawn_signal_terms"], (
+        "the terms the config fits and the terms the builder draws are the "
+        "same list, so the block cannot distinguish the model from the data"
+    )
+
+
+def test_the_block_reports_the_construction_that_was_built_not_the_default():
+    """A rebuilt older construction is described as what it is.
+
+    Behaviour: `instrument_block` takes the construction version of the field
+    that was actually built, and only falls back to the shipped constant when
+    no version is given.
+
+    Expected value determined independently: version 1 is the signal-free
+    construction the three shipped rungs were measured on, named in
+    `fields.CONSTRUCTIBLE_VERSIONS`, and it is not the current default.
+
+    Bug this catches: a block that reads the version from the constant, so that
+    **a report of a rebuilt version 1 field would claim to be version 2**. That
+    is the transcription failure this block exists to prevent, arriving through
+    a default instead of a literal -- and it would be invisible exactly when it
+    matters, since the two agree on every run that does not rebuild.
+    """
+    assert 1 in fields.CONSTRUCTIBLE_VERSIONS
+    assert fields.FIELD_CONSTRUCTION_VERSION != 1
+
+    rebuilt = _block(construction_version=1)
+
+    assert rebuilt["field_construction_version"] == 1
+    assert _block()["field_construction_version"] == fields.FIELD_CONSTRUCTION_VERSION
 
 
 def test_an_arm_that_did_not_run_is_withheld_rather_than_absent():

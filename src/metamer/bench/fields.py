@@ -196,6 +196,64 @@ CANDIDATES: tuple[str, ...] = ("white", "white + matern12", "white + matern32")
 #: config text and any `SignalSpec` a caller needs are BUILT from this tuple.
 SIGNAL_TERMS: tuple[str, ...] = ("constant", "trend")
 
+#: The terms the builder **DRAWS**, which are not the terms the config
+#: **FITS**. `SIGNAL_TERMS` above is the model; this is the data. **They were
+#: the same word until 2026-09-03 and that is exactly how the defect hid:** a
+#: report carrying `signal_terms = constant, trend` reads as a field that has a
+#: constant and a trend, and until version 2 the field had neither.
+#:
+#: **A TREND ONLY. NO OFFSET, AND THAT IS MEASURED RATHER THAN CHOSEN.** A
+#: constant is one column of the design matrix and is absorbed EXACTLY, so
+#: trend-only and trend-plus-offset came back bit-identical -- same mean, same
+#: spread, to every digit. Carrying an offset would transcribe a constant that
+#: changes no reading.
+DRAWN_SIGNAL_TERMS: tuple[str, ...] = ("trend",)
+
+#: The trend's **RISE OVER THE RECORD, in multiples of THAT CELL's `sigma`**.
+#:
+#: **THE UNIT IS PORTABLE AND A BARE COEFFICIENT IS NOT.** A slope of `0.3` is
+#: `0.3 x 53.4 yr / sigma` here and something else at any other record length
+#: or noise level; a rise in sigmas is the same statement at every `N`.
+#:
+#: **SCALED PER CELL, NOT AGAINST A FIELD-LEVEL `sigma`, AND THE ARGUMENT IS A
+#: MEASUREMENT.** `parameters = factor x BASE` and `factor` STEPS at the
+#: boundary, so a field-level scaling would put `rise/sigma` -- the only part of
+#: the signal a concentrated likelihood can see -- at a step across the
+#: boundary, and difficulty would step with it. **That is a difficulty step on
+#: the boundary whose only step is supposed to be in the covariance.** Per cell,
+#: every point sees the same `rise/sigma`, so the signal adds NO structure in
+#: any quantity the fit responds to. It also keeps the field
+#: `dimensionless truth x BASE`, which is what the construction already is.
+#:
+#: **16 IS 2c's OWN**, and the difficulty is linear in it, so the rung lands at
+#: the difficulty any saving has been measured at rather than beyond it.
+SIGNAL_RISE_SIGMAS: float = 16.0
+
+#: The FIELD CONSTRUCTION VERSION, which is what a committed rung number needs
+#: in order to name its own field.
+#:
+#: **VERSION 0** SVD draws, signal-free. **No committed number depends on it.**
+#: **VERSION 1** Cholesky draws, signal-free -- `ed8f39b`, 2026-08-30 19:03,
+#: which **predates every committed rung measurement** (earliest 2026-08-31
+#: 12:01, checked rather than assumed). **The three shipped rungs' null is a
+#: version 1 result** and version 1 stays constructible, which is the marker's
+#: real test: a marker that labels without making the old construction
+#: REACHABLE leaves those numbers with no subject.
+#: **VERSION 2** Cholesky draws plus the trend above.
+#:
+#: **IT IS A VERSION, NOT A LEVER.** `build_field` takes it so that a committed
+#: measurement can be rebuilt, and for no other purpose. **The signal is FIXED
+#: for every field** -- a trend-estimation benchmark carrying no trend is the
+#: defect, and one carrying it on some fields and not others is the same defect
+#: with a switch -- so a rung's lever is never this.
+FIELD_CONSTRUCTION_VERSION: int = 2
+
+#: The versions `build_field` can construct. **A gate over a set that can GROW
+#: is written against the set** -- (c5) -- so adding a version here is what
+#: makes it buildable, and an unknown version raises rather than silently
+#: drawing the newest thing.
+CONSTRUCTIBLE_VERSIONS: frozenset[int] = frozenset({1, 2})
+
 #: The criteria, named once for the same reason.
 CRITERIA: tuple[str, ...] = ("aic",)
 
@@ -461,6 +519,11 @@ class FieldTruth:
             the oracle must not share a derivation path with what it checks.
         t: The time axis, from `to_decimal_years` of the stored coordinate.
         rung: The rung this field is, carried so every number can name it.
+        construction_version: Which construction drew it. **Carried on the
+            object rather than read from the constant at reporting time**, so a
+            report describes the field that was BUILT and not the default that
+            was current when the report was written -- the distinction the
+            instrument block exists for.
     """
 
     uri: str
@@ -469,6 +532,7 @@ class FieldTruth:
     boundary_index: int
     t: NDArray[np.float64]
     rung: Rung
+    construction_version: int
 
 
 def _factor(rung_: Rung, n_normal: int, n_parallel: int) -> NDArray[np.float64]:
@@ -541,6 +605,7 @@ def build_field(
     seed: int,
     n_normal: int = N_NORMAL,
     n_parallel: int = N_PARALLEL,
+    construction_version: int = FIELD_CONSTRUCTION_VERSION,
 ) -> FieldTruth:
     """Draw the field, write it, and return it with its truth.
 
@@ -557,10 +622,26 @@ def build_field(
             geometry is marked in its report's instrument block**, which is what
             stops its numbers being quoted as the benchmark's.
         n_parallel: Cells along the boundary, on the same terms.
+        construction_version: Which construction to draw. Defaults to the
+            shipped one. **Version 1 exists so a committed measurement can be
+            REBUILT, not so a caller can choose a difficulty** -- the signal is
+            a property of every field, never a rung's lever.
 
     Returns:
         The field and its truth.
+
+    Raises:
+        ValueError: For a version this builder cannot construct. **Refusing is
+            the point**: silently drawing the newest construction for an
+            unknown version would let a request to rebuild a committed field
+            return a different one and report success.
     """
+    if construction_version not in CONSTRUCTIBLE_VERSIONS:
+        raise ValueError(
+            f"unknown field construction version {construction_version!r}; "
+            f"this builder can construct {sorted(CONSTRUCTIBLE_VERSIONS)}"
+        )
+
     factor = _factor(rung_, n_normal, n_parallel)
     parameters = factor[:, :, None] * np.asarray(BASE, dtype=np.float64)[None, None, :]
     family = _family(n_normal, n_parallel)
@@ -573,6 +654,14 @@ def build_field(
     # derivation of it is a second derivation of fit identity. Task 0's own
     # harness shipped this defect and it took two runs to find.
     t = to_decimal_years(stamps)
+
+    # **THE RAMP CARRIES THE UNIT.** It runs from `-1/2` to `+1/2` over the
+    # record, so multiplying by `SIGNAL_RISE_SIGMAS * sigma` gives a term whose
+    # RISE -- its last value minus its first -- is exactly that many sigmas,
+    # whatever the record length. Centring it keeps the trend orthogonal to the
+    # constant the config also fits, so the term the builder draws is the term
+    # its name says and not a trend plus an accidental offset.
+    ramp = (t - t.mean()) / float(t[-1] - t[0])
 
     values = np.empty((n_time, n_normal, n_parallel), dtype=np.float64)
     for iy in range(n_normal):
@@ -597,6 +686,19 @@ def build_field(
             values[:, iy, ix] = generator.multivariate_normal(
                 np.zeros(n_time), covariance, method=DRAW_METHOD
             )
+            # **THE SIGNAL IS ADDED AFTER THE DRAW, AND THAT IS LOAD-BEARING
+            # RATHER THAN INCIDENTAL.** The generator has already been consumed,
+            # so version 1 and version 2 share their NOISE bit for bit and
+            # differ by exactly this term -- which is what makes version 1
+            # reconstructible and what a test asserts by subtracting the two.
+            #
+            # **DRAWN BYTES AND FIELD VALUES ARE NOT THE SAME OBJECT.** This
+            # leaves the RNG stream and `parameters` untouched while moving
+            # every stored value, so a test written over either of those would
+            # print green through this line. The guard that catches it compares
+            # the STORED FIELD.
+            if construction_version >= 2:
+                values[:, iy, ix] += SIGNAL_RISE_SIGMAS * sigma * ramp
 
     dataset = xr.Dataset(
         {"sla": (("time", "y", "x"), values.astype("float32"))},
@@ -614,6 +716,7 @@ def build_field(
         boundary_index=n_normal // 2,
         t=t,
         rung=rung_,
+        construction_version=construction_version,
     )
 
 

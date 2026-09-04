@@ -2794,6 +2794,37 @@ The conversion still has to happen, and it is where the unrecorded workload bite
 happens **once, late, against a fixture that is by then in the tree**, instead of being baked into
 a plan as a constant nobody can re-derive.
 
+#### (j8)'s THIRD REGISTER: A HARNESS IS A FROZEN INSTRUMENT, AND ITS LITERALS ARE PART OF IT
+
+> **DO NOT CONSOLIDATE A CONSTANT INTO A HARNESS THAT PRODUCED A COMMITTED MEASUREMENT.**
+> Importing a mutable value replays a past run **at today's tree rather than at the tree it ran
+> on**, trading a naming problem for a reproducibility one. **Consolidate for new code; close the
+> divergence with an assertion against a committed artifact**, which a later edit to the constant
+> cannot reach.
+
+The two registers above say the instrument is part of the specification, and that its input is
+too. **This says its FROZEN VALUES are part of it.** A harness in the tree is not source code that
+happens to be old — it is the experimental apparatus of a number somebody is still quoting, and
+the whole reason it is committed is that it can be run again and give the same answer.
+
+**AND IT NAMES THE EXCEPTION TO (j9), WHICH IS WORTH HAVING EXPLICITLY.** (j9) says a quantity with
+one authoritative source must have no second spelling. **This is the case where a second spelling
+is correct, because the two are not spellings of the same thing:** one is **the current value**,
+the other is **a record of a past value**. Collapsing them destroys the record. **The test of which
+you are looking at is whether changing the constant SHOULD change it** — if the answer is no, it is
+a record, and it stays where it is.
+
+**WORKED INSTANCE, PHASE 2d, 2026-09-03.** The 2d field seed had **four spellings and no home in
+`src`** — `FIXTURE_SEED` in one harness, `FIELD_SEED` in another, two bare literals in a third —
+while every 2d measurement depended on it. **Consolidating it into `src` was right; rewriting the
+three harnesses to import it would not have been**, because each is the instrument of a committed
+rung number. The divergence freezing allows was closed instead by asserting the new constant
+against **the seed recorded in a committed report**, which no later edit to the constant can move.
+
+**THE SAME INSTINCT, ONE LEVEL DOWN: THE BUILDER STILL REQUIRES ITS SEED EXPLICITLY** rather than
+defaulting to the constant. **A value that KEYS THE DRAW arriving silently at a caller that never
+named it** is the failure the constant exists to make visible — a default would automate it.
+
 ### (j3) AN EXISTING FEATURE CAN BE AN INSTRUMENT FOR A PROPERTY ITS OWN PURPOSE DOES NOT CONCERN
 
 > **Before building a harness, enumerate the code paths that already exercise the loop under

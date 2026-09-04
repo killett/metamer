@@ -38,6 +38,14 @@ pytestmark = pytest.mark.filterwarnings("ignore::UserWarning")
 #: the shipped-path one and the both-candidates-win one -- name their own.
 _TRUTH_N_TIME = 24
 
+#: The iteration cap the real-store fixture runs under, chosen so that fits
+#: land on BOTH sides of it: measured on that fixture, cells run from about 3
+#: iterations to about 44 with a median near 15, so a cap of 10 leaves some
+#: converged and caps the rest. **It exists so the fixture's decisive property
+#: is a property of the FIXTURE and not of the field's difficulty**, which a
+#: builder change moved once already.
+_ITERATION_CAP = 10
+
 
 def _build(tmp_path, rung, **kwargs):
     """Build one rung's field under `tmp_path`, with the shipped defaults."""
@@ -348,9 +356,14 @@ def test_the_shipped_rungs_fields_are_the_ones_their_recorded_numbers_describe(
     """The byte guard the three-rung null rests on, at production size.
 
     Behaviour: at the recorded seed and the shipped geometry, each of `easy`,
-    `middle` and `hard` rebuilds to the exact field its committed numbers were
-    measured on -- **and that field carries no trend**, which is what field
-    construction version 1 IS.
+    `middle` and `hard` rebuilds **at construction version 1** to the exact
+    field its committed numbers were measured on -- **and that field carries no
+    trend**, which is what version 1 IS.
+
+    **THIS IS THE VERSION MARKER'S TEST, NOT THE LABEL.** Version 1 being
+    NAMED costs nothing; version 1 being REBUILDABLE is what keeps the three
+    shipped rungs' numbers attached to a subject. If this fails after a builder
+    change, the marker is insufficient whatever it is called.
 
     Expected values determined independently: the digests are a pin, frozen
     from the builder and committed, never recomputed here. The rise threshold
@@ -383,8 +396,12 @@ def test_the_shipped_rungs_fields_are_the_ones_their_recorded_numbers_describe(
 
     for name, expected in _VERSION_1_SLA_DIGESTS.items():
         truth = fields.build_field(
-            fields.rung(name), path=tmp_path / f"{name}.zarr", seed=seed
+            fields.rung(name),
+            path=tmp_path / f"{name}.zarr",
+            seed=seed,
+            construction_version=1,
         )
+        assert truth.construction_version == 1
         sla = xr.open_zarr(truth.uri)["sla"].values
         assert sla.shape == (fields.N_TIME, fields.N_NORMAL, fields.N_PARALLEL), (
             f"the {name} rung's field is not the shipped geometry"
@@ -407,6 +424,107 @@ def test_the_shipped_rungs_fields_are_the_ones_their_recorded_numbers_describe(
             f"that lands in it silently makes the three-rung null a measurement "
             f"of something else"
         )
+
+
+def test_version_2_adds_exactly_the_specified_trend_and_disturbs_nothing_else(tmp_path):
+    """The two constructions differ by the term, and by nothing else.
+
+    Behaviour: version 2 is version 1 plus a trend whose rise over the record
+    is `SIGNAL_RISE_SIGMAS` times THAT CELL's sigma. Subtracting the two must
+    leave exactly that trend -- no change to the noise, and no offset.
+
+    Expected value determined independently: the difference is constructed by
+    hand from the truth the builder reports, as
+    `rise * sigma * (t - t.mean()) / (t[-1] - t[0])`, and compared to the
+    measured difference. It is not read back from the builder.
+
+    Bug this catches, and there are three: a signal added BEFORE the draw, or
+    one that re-seeds, which would move the noise and make version 1
+    unreconstructible -- the difference would then not be a straight line at
+    all. A signal scaled against a field-level sigma rather than the cell's,
+    which is the choice that would put a difficulty step on the boundary; the
+    per-cell expectation fails everywhere the factor is not 1. And an offset
+    creeping in with the trend, which the centred ramp forbids and which this
+    catches as a nonzero mean of the difference.
+    """
+    one = _build(tmp_path / "v1", fields.RUNGS["easy"], seed=3, construction_version=1)
+    two = _build(tmp_path / "v2", fields.RUNGS["easy"], seed=3, construction_version=2)
+
+    first = xr.open_zarr(one.uri)["sla"].values.astype(np.float64)
+    second = xr.open_zarr(two.uri)["sla"].values.astype(np.float64)
+    difference = second - first
+
+    t = two.t
+    ramp = (t - t.mean()) / float(t[-1] - t[0])
+    sigma = two.parameters[:, :, fields.SIGMA]
+    expected = fields.SIGNAL_RISE_SIGMAS * sigma[None, :, :] * ramp[:, None, None]
+
+    # float32 storage is what makes this a tolerance rather than an equality:
+    # the values are order sigma and float32 carries about seven digits.
+    assert np.allclose(difference, expected, rtol=0.0, atol=1e-3 * sigma.max()), (
+        "version 2 is not version 1 plus the specified trend: the difference "
+        "between the two constructions is not the term the builder names"
+    )
+    assert np.abs(difference.mean(axis=0)).max() < 1e-3 * sigma.max(), (
+        "the added signal carries an offset: the trend is not centred, so the "
+        "builder draws a term other than the one its name says"
+    )
+
+
+def test_every_rung_carries_the_signal_because_it_is_the_builders_and_not_a_rungs(
+    tmp_path,
+):
+    """The signal is FIXED for every field, and is not a lever.
+
+    Behaviour: all three shipped rungs, built at the default construction,
+    carry a trend of the specified size. No rung opts out and none gets a
+    different magnitude.
+
+    Expected value determined independently: `SIGNAL_RISE_SIGMAS` itself,
+    recovered per cell by least squares and divided by the cell's true sigma,
+    which is the definition of the unit the constant is stated in.
+
+    Bug this catches: the signal wired in as a rung parameter -- a per-rung
+    default, or a term applied only where some rung field is set. **A
+    trend-estimation benchmark carrying a trend on some fields and not others
+    is the original defect with a switch**, and it would make the rungs
+    incomparable in a quantity nobody was sweeping. It also catches the
+    magnitude drifting between rungs, which would confound difficulty with the
+    rung's own lever.
+    """
+    for name in fields.RUNGS:
+        truth = _build(tmp_path / name, fields.RUNGS[name], seed=4)
+        sla = xr.open_zarr(truth.uri)["sla"].values
+        rise = _rise_over_record_in_sigmas(sla, truth)
+
+        assert np.median(rise) == pytest.approx(fields.SIGNAL_RISE_SIGMAS, rel=0.05), (
+            f"the {name} rung's trend is {np.median(rise):.2f} sigma rather "
+            f"than the builder's {fields.SIGNAL_RISE_SIGMAS}: the signal is a "
+            f"property of every field, not a rung's parameter"
+        )
+
+
+def test_an_unknown_construction_version_raises_rather_than_drawing_the_newest(
+    tmp_path,
+):
+    """A version the builder cannot construct is refused.
+
+    Behaviour: `build_field` raises `ValueError` naming the versions it can
+    construct, rather than falling through to the current one.
+
+    Expected value determined independently: `CONSTRUCTIBLE_VERSIONS` is the
+    set, and 3 is not in it.
+
+    Bug this catches: a version check written as `if version >= 2` alone, with
+    no gate on the input. **A request to rebuild a committed field at an
+    unknown version would then return the newest construction and report
+    success** -- the worst possible answer, because the caller asked precisely
+    in order to get a specific one.
+    """
+    assert 3 not in fields.CONSTRUCTIBLE_VERSIONS
+
+    with pytest.raises(ValueError, match="unknown field construction version"):
+        _build(tmp_path / "v3", fields.RUNGS["easy"], seed=3, construction_version=3)
 
 
 def test_the_coherence_length_orders_the_spatial_autocorrelation(tmp_path):
@@ -1005,7 +1123,18 @@ def test_the_iteration_reading_reads_a_real_store(tmp_path):
         n_parallel=4,
     )
     config_path = fields.write_config(tmp_path, "bench.toml", built.uri)
-    run(config_path, tmp_path / "out.zarr")
+    # **THE CAP IS WHAT MAKES BOTH RULES EXERCISED, AND IT IS SET HERE RATHER
+    # THAN INHERITED FROM THE FIELD'S DIFFICULTY.** Until 2026-09-04 this
+    # fixture happened to contain three cells that did not converge, so the
+    # OK-only reading really was smaller than the total -- and then field
+    # construction version 2 landed and every cell converged, leaving the two
+    # readings equal and the vacuity assertion below firing. **The fixture's
+    # decisive property was an accident of the field**, which is exactly the
+    # kind of precondition that should not depend on a builder nobody is
+    # testing here. A cap of 10, against a median near 15 and a minimum near 3,
+    # splits the field both ways by construction: some cells converge under it
+    # and some hit it, whatever the field's difficulty does next.
+    run(config_path, tmp_path / "out.zarr", max_iter=_ITERATION_CAP)
 
     root = zarr.open_group(str(tmp_path / "out.zarr"), mode="r")
     written = root["primitives/iterations"]
@@ -1025,6 +1154,17 @@ def test_the_iteration_reading_reads_a_real_store(tmp_path):
     assert reading.cells == int(fitted.sum())
     assert converged.total == int(iterations[ok].sum())
     assert converged.cells == int(ok.sum())
-    # The fixture must exercise both rules, or the two readings agree for the
-    # trivial reason that every fitted cell converged.
-    assert converged.total < reading.total
+    # The fixture must exercise both rules, and **bounded on BOTH sides**: a
+    # run where nothing converged would satisfy `converged < reading` while
+    # testing the OK filter just as vacuously as one where everything did.
+    assert 0 < converged.total < reading.total, (
+        f"the fixture does not exercise both rules: {converged.total} of "
+        f"{reading.total} iterations came from converged cells"
+    )
+    assert {int(code) for code in codes[fitted]} == {
+        Outcome.OK.code,
+        Outcome.ITER_CAP_LARGE_GRAD.code,
+    }, (
+        "the capped fixture no longer produces exactly the converged and "
+        "capped outcomes it was built to produce"
+    )

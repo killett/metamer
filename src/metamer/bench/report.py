@@ -353,6 +353,7 @@ def instrument_block(
     audit_seed: int = fields.AUDIT_SEED,
     warm: WarmStart | None = None,
     is_a_smoke_run: bool = False,
+    construction_version: int | None = None,
 ) -> Mapping[str, Any]:
     """What produced the numbers, read from the shipped constants at call time.
 
@@ -374,11 +375,22 @@ def instrument_block(
             Task 9 must refuse such a report as a measurement, and the flag is
             in the block rather than in a filename because a filename does not
             travel with the bytes.
+        construction_version: Which construction BUILT the field. Defaults to
+            the shipped one. **A run that rebuilds an older construction must
+            pass its own**, or the block describes the default that was current
+            when the block was written rather than the field that was drawn --
+            which is the transcription this block exists to prevent, arriving
+            through a parameter instead of a literal.
 
     Returns:
         The block.
     """
     settings = WarmStart() if warm is None else warm
+    version = (
+        fields.FIELD_CONSTRUCTION_VERSION
+        if construction_version is None
+        else construction_version
+    )
     return {
         "estimator": smear.ESTIMATOR,
         "smear_subject": fields.SMEAR_SUBJECT,
@@ -393,6 +405,17 @@ def instrument_block(
             spec.spec_hash() for spec in fields.candidate_specs()
         ],
         "signal_terms": list(fields.SIGNAL_TERMS),
+        # **`signal_terms` NAMES WHAT THE CONFIG FITS. THESE THREE NAME WHAT THE
+        # BUILDER DRAWS.** They are separate keys, added 2026-09-03, and NOT a
+        # redefinition of the one above: three committed reports carry
+        # `signal_terms = constant, trend` over fields that had neither, and
+        # redefining the key would REINTERPRET those artifacts where the whole
+        # point is to DISTINGUISH them. A reader of an old report sees these
+        # keys missing, which is the truthful answer to "which construction was
+        # this?" -- the answer being "one from before the question existed".
+        "field_construction_version": version,
+        "drawn_signal_terms": list(fields.DRAWN_SIGNAL_TERMS),
+        "drawn_signal_rise_sigmas": fields.SIGNAL_RISE_SIGMAS,
         "criteria": list(fields.CRITERIA),
         "algorithm_version": ALGORITHM_VERSION,
         "draw_method": fields.DRAW_METHOD,
@@ -849,6 +872,11 @@ def run_rung(
             audit_seed=audit_seed,
             warm=settings,
             is_a_smoke_run=is_a_smoke_run,
+            # **FROM THE FIELD THAT WAS BUILT, NEVER FROM THE CONSTANT.** The
+            # truth object knows which construction drew it; the constant only
+            # knows what the default is now. They agree today and would not
+            # agree in the one case this key exists for.
+            construction_version=truth.construction_version,
         )
     )
     instrument["n2_excluded"] = n2_counts.excluded
