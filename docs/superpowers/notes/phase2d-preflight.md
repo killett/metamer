@@ -1164,6 +1164,15 @@ returns.
 
 ## Plan Task 5b — the difficulty rung, audited before any value is chosen (2026-09-01)
 
+> ## SUPERSEDED 2026-09-03, AND KEPT WHOLE SO THE ARGUMENT STAYS VISIBLE
+>
+> **This entry audits a brief whose lever was wrong.** The difficulty was the symptom of a defect
+> in the field builder, not a setting of the noise floor, and everything below about `white/sigma`
+> is the retired route. **Its findings 1 and 2 are still measurements and still hold**; what does
+> not hold is the conclusion they were pointing at. **The current entry is
+> [the 2026-09-03 one](#plan-task-5b--the-difficulty-rung-re-audited-on-the-corrected-builder-2026-09-03)**,
+> and one sentence in finding 5 below is false — corrected in place, there.
+
 **THE BRIEF** is one rung, not a sweep, taken after Task 5's null: **is there a difficulty at which
 the artifact appears?** If yes, the audit is demonstrably an instrument and 2d has its positive
 control. If no, that is a much larger finding about warm-starting and it belongs beside D1. **Three
@@ -1266,9 +1275,190 @@ three things at once:
 
 **It does not retune `easy`, `middle` or `hard`**, and it does not change `BASE`, `WITHIN_REGIME_RANGE`
 or the geometry — the three shipped rungs' null is the comparison that gives this rung its meaning,
-and editing any of them destroys it. **The new parameter is per-rung and defaults to the shipped
-value**, so every existing rung's bytes are unchanged and a test asserts they are.
+and editing any of them destroys it. ~~**The new parameter is per-rung and defaults to the shipped
+value**, so every existing rung's bytes are unchanged and a test asserts they are.~~
+
+> **THE STRUCK SENTENCE IS FALSE, AND IT WAS LOAD-BEARING. Corrected 2026-09-03.** No test asserted
+> it. `tests/test_bench_fields.py` compared `FieldTruth.parameters` — the truth array — which a
+> signal added after the draw leaves untouched, **so the cited guard would have printed green
+> through exactly the change it was cited against.** This is (a0)'s register **at a citation rather
+> than at a value**: the existence of a mechanism was asserted instead of checked. The guard now
+> exists and is at
+> `test_the_shipped_rungs_fields_are_the_ones_their_recorded_numbers_describe`.
 
 **AND ITS `sources` MUST SAY WHAT IT IS**: chosen by us, against a calibration, to sit near 2c's
 measured difficulty — **not a claim about the ocean**. The middle rung's slot is the recorded
 example of what happens to a rung whose provenance is left to a reader.
+
+---
+
+## Plan Task 5b — the difficulty rung, re-audited on the corrected builder (2026-09-03)
+
+**THE BRIEF**, as amended: one rung on a builder whose missing signal has been repaired, targeting
+2c's difficulty, read against the three shipped rungs' null. **The lever is the signal.** The
+decision behind it — signal FIXED for every field, three rungs NOT re-run — is in `PROGRESS.md`,
+and every measurement it rests on is in [`phase2d-signal-defect.md`](phase2d-signal-defect.md).
+**Neither is restated here.**
+
+**EIGHT FINDINGS. The first is a citation in my own brief that named a mechanism which did not
+exist, and the constraint built on it was load-bearing.**
+
+### 1. THE BYTE GUARD THE CONSTRAINT RESTS ON DID NOT EXIST — (a0) AT A CITATION
+
+The brief said *"every existing rung's drawn bytes stay identical — a test asserts it."* **No test
+asserted that.** `tests/test_bench_fields.py::test_one_rung_twice_is_identical_and_two_rungs_differ`
+compares `FieldTruth.parameters`, and `FieldTruth`'s own docstring says so: *"This is what the tests
+assert on."* Nothing in the suite compared a drawn series or a stored value.
+
+**A signal added after the draw leaves `parameters` untouched**, so the cited guard **prints green
+through exactly the change it was cited against**. (a0)'s sixth register — a check that never read
+the file prints the same word as one that did — **arriving at a citation rather than at a value**:
+the existence of a mechanism was asserted instead of checked.
+
+**The guard was written, run green on the unchanged builder, and committed BEFORE the builder
+moves.** That ordering is the finding's other half: **a guard written after the change is a guard
+fitted to the outcome.**
+
+### 2. DRAWN NOISE AND FIELD VALUES SEPARATE, AND THE VERSION MARKER FIRES
+
+`build_field` draws `multivariate_normal(zeros, covariance)` per cell under
+`default_rng([seed, iy, ix])`. **A trend added after that draw leaves the RNG stream
+bit-identical** and **moves every stored value on all four rungs.** The two objects are not the
+same, and an assertion over the first says nothing about the second.
+
+**So the marker is a FIELD-CONSTRUCTION VERSION, not a signal flag** — and the reason is that the
+signal is not the first thing to move the drawn bytes. **The Cholesky change is a prior instance of
+the same class**, and its call site already records that a later change there invalidates every
+committed rung report. A marker narrow to the signal would not cover it; a construction version
+covers both and any third.
+
+**Version 1 is defined, and the Cholesky question is CHECKED rather than assumed.** `ed8f39b`,
+**2026-08-30 19:03**, introduced the Cholesky draw. The earliest committed rung measurement is
+`64e4514` / `d2c57bc`, **2026-08-31 12:01 / 12:59** — **after it.** So **the Cholesky change
+predates every committed rung number and is part of what version 1 already is**; version 0 is the
+SVD draw and no committed number depends on it, which is what the call-site comment claimed and is
+now verified rather than believed.
+
+**AND THE MARKER'S TEST IS REACHABILITY, NOT LABELLING:** can the three shipped rungs' exact fields
+be rebuilt after the change? **The guard at finding 1 is what answers it**, and a marker that
+labels without making version 1 constructible is insufficient whatever it is called.
+
+### 3. THE SIZING UNIT WAS AMBIGUOUS, AND THE TWO READINGS BUILD DIFFERENT FIELDS — PER-CELL SIGMA
+
+`parameters = factor × BASE`, and `factor` **steps at the boundary**, so *"16 sigma"* means one
+thing per cell and another against a field-level `BASE`.
+
+- **`BASE`-scaled** puts **rise/sigma** — the only part of the signal the fit can see — **at a step
+  across the boundary**, and difficulty steps with it. **That is a difficulty step on the boundary
+  whose only step is supposed to be in the covariance.**
+- **Per-cell-scaled** gives every cell the same rise/sigma. **Difficulty is uniform**, and it is the
+  value the probe measured, since the probe measured at `BASE` alone.
+
+**PER-CELL, AND THE ARGUMENT IS THE PROJECT'S OWN MEASUREMENT RATHER THAN A PREFERENCE.** Amplitude
+is free under a concentrated likelihood — E5's measured pair — so the fit responds to rise/sigma and
+not to rise. **Per-cell adds no structure in any quantity the fit can see; `BASE`-scaling adds
+one.** The apparent objection, that per-cell makes the mean's slope jump at the boundary, is
+answered by the same measurement: the absolute slope jumps, and so does sigma, and the fit sees only
+the ratio.
+
+**The second argument is as strong: per-cell keeps the field `dimensionless truth × BASE`, which is
+what the construction already is.** `BASE`-scaling bolts a dimensional term onto a scale-free
+construction, and **that asymmetry is where a later reader's confusion lives.**
+
+**AND THE CONSEQUENCE IS THE CHECK THAT THE SWEEP'S RETIREMENT WAS NOT PREMATURE:** `Δ` still moves
+nothing the fit can see, **even corrected**. So the corrected builder does **not** resurrect the
+rung sweep, and **one rung remains the right shape** — the decision agreeing with the measurement
+rather than being strained by it.
+
+### 4. THE TWO CONSTRUCTIONS SHARE A FIT IDENTITY
+
+`batch/geometry.py` states it at the top: the fingerprint is over **the type, not the values**, and
+*"a value edit at fixed geometry does not move it."* **So a signal-free and a signal-bearing field
+at one rung and one geometry share `geometry_hash`, hence `fit_hash`.**
+
+**Correct for the production package** — data lives at a URI and identity covers geometry —
+**wrong-shaped for a constructed fixture, whose construction IS part of its identity and is
+unhashed.** The rung must not use fit identity to tell the two constructions apart, and **any resume
+or reuse path keyed on it can cross them silently.** Promoted to the gotchas, because it is not
+5b's alone.
+
+### 5. THE INSTRUMENT BLOCK NAMES THE TERMS THE CONFIG FITS, NOT THE TERMS THE BUILDER DRAWS
+
+`report.instrument_block` emits `"signal_terms": list(fields.SIGNAL_TERMS)` — `constant, trend`,
+which is **the model**. **The committed easy-rung report carries exactly that**, so **three
+committed reports already read as though their fields carried a constant and a trend.** The defect
+wearing the report's clothes.
+
+**The drawn signal needs its own NEW key, never a redefinition of `signal_terms`** — redefining it
+would **reinterpret** three committed artifacts where the point is to **distinguish** them.
+
+### 6. (c5) AT THE REPORT'S OWN COMPLETENESS CHECK
+
+`tests/test_bench_report.py` checks **key presence over a hand-written enumeration**, so a new key
+is not required by it — the exact *"gate over a set that can grow"* shape. **The new key needs its
+own assertion**, and the enumeration needs the note.
+
+**And a fact rather than a finding: no test reads any committed 2d rung report.** The artifact
+register is a documented practice here, not an installed mechanism; it is owed at Task 9. **The
+guard at finding 1 is the first test to read one**, because it needs the seed.
+
+### 7. THE TARGET HAS TWO SPELLINGS FROM TWO INSTRUMENTS — THE RUNG AIMS AT 43.94
+
+The plan aimed at **40.79**, recovered from 2c's own JSONL on **2c's own optimizer path**. The probe
+measures 2c's fixture at **43.94** under the **shipped `fit`**. Both dated, both measured, about
+0.8 sd apart — **(j5): a second instrument is a cross-check only if it measures the same quantity
+under the same conditions**, and these do not.
+
+**THE RUNG AIMS AT 43.94, AND ITS PRE-DECIDED STOP IS STATED RELATIVE TO 43.94 IN THE PREDICTIONS
+FILE, EXPLICITLY** — the stop was written against *"2c's difficulty"* and that phrase now has two
+referents. **40.79 IS NOT DELETED**: it stands as 2c's own reading on its own path, and **the gap
+between the two is a recorded fact about the two instruments, not a discrepancy to reconcile.**
+
+**AND THE UNIT WAS CHECKED BEFORE THE COMPARISON WAS TRUSTED: per-point iterations are comparable
+only at equal `M`.** Both readings are at `M = 3`, so this one is safe — **but it was not before the
+candidate set grew from two to three**, and the field verdict's own per-point/per-cell split says
+the third candidate is worth roughly 1.5× on its own.
+
+### 8. THE SEED HAS FOUR SPELLINGS, NO HOME IN `src`, AND CRITERION 17's ARTIFACTS DO NOT RECORD IT
+
+`20_260_830` appears as `FIXTURE_SEED` in the spike harness, as `FIELD_SEED` in the easy-rung
+harness, and as **two bare literals** — and **nowhere in `src`.** A quantity with one authoritative
+source has four spellings and no source.
+
+**Worse: criterion 17's own artifacts record geometry, candidates and signal terms but NOT the
+seed.** So **the three-rung ladder's numbers describe fields that cannot be rebuilt from their own
+artifact** — only from a harness literal. **The only committed artifact carrying the seed is
+`phase2d-easy-rung-report.json`**, which is why the guard reads it from there rather than adding a
+fifth spelling. **Consolidating the seed into `src` is owed with the builder change**, and is not
+done here because this commit does not touch `src`.
+
+### THE GUARD, AND WHY IT HAS TWO ASSERTIONS OF DIFFERENT KINDS
+
+One test, **marked `slow`**, at the shipped geometry and `n_time`, over all three rungs at the
+recorded seed. **Not a reduced-geometry twin** — that would pin a field nobody measured and give the
+same guarantee a second spelling. **CI runs `-m "not machine"`, so `slow` runs there**, and it cost
+**5 m 17 s** for the three rungs.
+
+| assertion | what it catches | how its expected value was fixed |
+|---|---|---|
+| the stored `sla` hashes to its committed digest, per rung | any builder change that moves a shipped rung's field, **including one invisible to every other test in the suite** | a **pin**, frozen from the builder and committed. Its independence is that it is never recomputed |
+| the field carries **no trend** — median per-cell rise over the record, in that cell's sigma, **< 1.0** | a signal landing in version 1 **by accident**, where updating the digest to match would ratify the bug. **A trend cannot be pinned away** | an **argument**: at `rho = 0.8 yr` over 53.4 years there are ~66 effectively independent samples, so a fitted rise has se ≈ 0.43 sigma and a median near 0.67 of that. **Set before the run; the three rungs measure 0.42–0.47** |
+
+**BOTH WERE PROVEN TO BITE BEFORE BEING RECORDED AS GUARDS** — (e2), prove the mutant differs.
+Against a version-2 field built exactly as specified (trend only, 16 sigma per cell, added after the
+draw): **the digest differs, and the median rise reads 15.93 against the 1.0 limit.** The mutant was
+constructed and measured, not argued.
+
+**ONE KNOWN FAILURE MODE, STATED SO IT IS NOT MISREAD.** The digests are exact bytes from a Cholesky
+factorisation, so a change of BLAS, numpy or platform can move them **without the builder moving**.
+**That is a different finding, not a reason to loosen the assertion** — it would mean the shipped
+rungs are not rebuildable off this machine, which is precisely what a reachability guard exists to
+surface. The failure message names both causes so the next reader looks at the right one.
+
+### DEVIATIONS FROM THE BRIEF, STATED RATHER THAN ABSORBED
+
+- **The brief cited a guard that did not exist** (finding 1). The one that would have been absorbed.
+- **The brief's sizing unit did not determine the field** (finding 3); a choice was owed.
+- **The brief's target number had two spellings from two instruments** (finding 7).
+- **The brief's new parameter was described as per-rung**; the decision makes the signal **fixed**,
+  a property of the builder, and the rung's lever stays whatever the rung's lever is.

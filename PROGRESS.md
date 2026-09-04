@@ -4,7 +4,7 @@
 
 1. **Branch `main`, everything on it, every commit pushed by a hook** — https://github.com/killett/metamer. **A SHA here is stale the moment the next commit lands, so nothing here names one:** `git log --oneline -8` is the authority.
 2. **DONE:** Phase 1 (0–18), Phase 2 preliminaries P0–P4, **Phase 2a (0–13)**, **Phase 2b (COMPLETE 2026-08-19 — 10 met / 4 reduced scope / 2 FAILED)**, **Phase 2c's brainstorm (D1–D12)**, and **Phase 2c (COMPLETE 2026-08-29 — 10 met / 2 reduced scope / 0 failed; Tasks 0–4 on 2026-08-24, Task 5 on 2026-08-27, Task 6 on 2026-08-28, Tasks 7–8 on 2026-08-29)**. The modelling sub-phase was decided against 2026-08-22 and **re-decided on closed facts 2026-08-23: it does not open.** Sections below carry each; **none is restated here.**
-3. **NEXT ACTION: TASK 5b's PRE-FLIGHT, THEN TASK 5b, ON THE CORRECTED BUILDER. THE HEAD ITEM IS A DEFECT: THE FIELD BUILDER HAS NO SIGNAL** — `build_field` draws noise alone while the config fits `constant + trend`, so every rung so far fitted a signal model to data whose signal is identically zero, on a benchmark for a trend-estimation package. **Every measurement of it lives once, in [`phase2d-signal-defect.md`](docs/superpowers/notes/phase2d-signal-defect.md); nothing here or below restates one.** **Read [what Task 5b inherits](#what-task-5b-inherits-2026-09-02--the-cold-start-handoff-and-the-head-item-is-a-defect) for the shape and the decision.** The defect explains three findings at once — the easy rung's null, E5's diagonal being invariant in a quantity the likelihood cannot see, and a difficulty no noise-floor setting could reach. **The three-rung null is NOT withdrawn; its scope narrows to signal-free fields.** **THE SCOPE DECISION IS TAKEN, 2026-09-03: the signal is FIXED for every field, trend only, and the three shipped rungs are NOT RE-RUN.** 2d becomes three rungs' null on signal-free fields, **one** rung on the corrected builder at 2c's difficulty, and the contrast between them — which is a contrast in **exactly the term whose absence was the defect**, and therefore the finding rather than a confound. **TASKS 6 AND 7 STAY DECIDED AGAINST. NOTHING IS BUILT TOWARD THE RUNG.**
+3. **NEXT ACTION: THE BUILDER'S SIGNAL TERM — FIELD CONSTRUCTION VERSION 2 — THEN TASK 5b's RUNG. THE PRE-FLIGHT IS RUN AND THE BYTE GUARD IS IN. THE HEAD ITEM IS A DEFECT: THE FIELD BUILDER HAS NO SIGNAL** — `build_field` draws noise alone while the config fits `constant + trend`, so every rung so far fitted a signal model to data whose signal is identically zero, on a benchmark for a trend-estimation package. **Every measurement of it lives once, in [`phase2d-signal-defect.md`](docs/superpowers/notes/phase2d-signal-defect.md); nothing here or below restates one.** **Read [what Task 5b inherits](#what-task-5b-inherits-2026-09-02--the-cold-start-handoff-and-the-head-item-is-a-defect) for the shape and the decision.** The defect explains three findings at once — the easy rung's null, E5's diagonal being invariant in a quantity the likelihood cannot see, and a difficulty no noise-floor setting could reach. **The three-rung null is NOT withdrawn; its scope narrows to signal-free fields.** **THE SCOPE DECISION IS TAKEN, 2026-09-03: the signal is FIXED for every field, trend only, and the three shipped rungs are NOT RE-RUN.** 2d becomes three rungs' null on signal-free fields, **one** rung on the corrected builder at 2c's difficulty, and the contrast between them — which is a contrast in **exactly the term whose absence was the defect**, and therefore the finding rather than a confound. **TASKS 6 AND 7 STAY DECIDED AGAINST. NOTHING IS BUILT TOWARD THE RUNG.**
 4. ## THE STANDING LIMITATION ON EVERYTHING 2c DECIDED: **NO 2c NUMBER COMES FROM REAL DATA.** Warm-starting was authorized — and every decision after D1 inherits this — on a **simulated field whose spatial coherence is a construction parameter**. **The spatial coherence of real altimetry optima has never been measured.** Weaker coherence gives a **smaller** saving, and **§11.2's 30% threshold could fail on real data.** **THE NAMED CLOSER, not an open worry: a spike on a real gridded product — same three arms, same record-length lever.** **AND SINCE 2026-08-24 THERE IS A SECOND REGISTER OF IT: every 2c saving is a CEILING, not an estimate**, because the instrument searched with no effective spiral bound — see [what 2c's tasks inherit](#what-2cs-tasks-inherit-2026-08-24).
 5. **Tests: 1340 passed, 0 failed, 0 INDETERMINATE — 2026-09-01, 4899.75 s (1:21:39).** **`pixi run test` is the full sweep and every end-of-task verification must run it; `test-fast` and `test-ci` are NOT evidence** — the full sweep has caught **eight** things a fast run could not, the most recent being a test whose own expected value was computed from a 1-based reading of `np.arange`. **Every run prints `RSS measurement validity`, including at zero**; a nonzero count is INDETERMINATE, neither pass nor fail.
 6. **Verify a fresh checkout with `pixi run test && pixi run typecheck && pixi run lint`**, plus `pixi run pre-commit run --all-files` before every commit. **AND `git add` A NEW FILE BEFORE THAT SWEEP, NEVER AT COMMIT TIME** — `--all-files` covers **tracked** files only, so an untracked new module makes every hook print `Passed` without being read. Measured 2026-08-24; it cost two full twenty-minute sweeps before it was noticed. **AND THE RULE HAS A SECOND FORM, PROMOTED 2026-08-31: STAGE ANYTHING A TOOL MAY RESTORE, NOT ONLY ANYTHING A HOOK MAY SKIP** — `git checkout -- <file>` restores **from the index**, so an unstaged edit in a file any tool touches is **silently reset to `HEAD`, with no error**. One changes what is CHECKED, the other changes what SURVIVES; the pair is in [the handoff](docs/superpowers/notes/phase1-to-phase2-handoff.md) and is not restated here.
@@ -7259,7 +7259,34 @@ appears at the new rung, that contrast is the finding. **If none appears there, 
 stop applies cleanly** — a null at 2c's own difficulty, on a field carrying what 2c's carried.
 **One rung fits the remaining ceiling; the price is in the note.**
 
-> ## THE CONSTRAINT THAT RIDES WITH IT, AND IT IS THE PRE-FLIGHT'S FIRST QUESTION
+**(c) THE THREE ANSWERS THE PRE-FLIGHT ASKED FOR, TAKEN 2026-09-03.** **The trend's rise is scaled
+by the CELL's sigma**, because the fit sees rise/sigma and not rise, so per-cell adds no structure
+in any quantity the fit can see while a field-level scaling puts a difficulty step on the boundary
+— and because per-cell keeps the field `dimensionless truth × BASE`, which is what the construction
+already is. **The rung aims at 2c's difficulty AS THE SHIPPED `fit` MEASURES IT**, which is the one
+condition under which the comparison is like-for-like; **the other reading, from 2c's own optimizer
+path, is not deleted** — the two are different instruments on one fixture and the gap is a recorded
+fact about them. **The marker is a FIELD-CONSTRUCTION VERSION, not a signal flag**, because the
+signal is not the first thing to move the drawn bytes — the Cholesky change is a prior instance of
+the same class, and **checking rather than assuming shows it predates every committed rung number,
+so it is part of what version 1 already is.** **The reasoning and the checks are in
+[the pre-flight](docs/superpowers/notes/phase2d-preflight.md), once.**
+
+> ## THE CONSTRAINT THAT RIDES WITH IT, AND ITS GUARD NOW EXISTS
+>
+> **THE GUARD THE CONSTRAINT RESTED ON DID NOT EXIST, AND THE CITATION OF IT WAS MINE.** *"A test
+> asserts it"* named a mechanism nobody had checked for: the suite compared `FieldTruth.parameters`,
+> which a signal added after the draw leaves untouched, **so the cited guard would have printed
+> green through exactly the change it was cited against.** (a0)'s register **at a citation rather
+> than at a value**. **Written, run green on the unchanged builder and committed BEFORE `fields.py`
+> moves** — a guard written after the change is a guard fitted to the outcome.
+>
+> **It compares what it claims to compare**: the stored field for each shipped rung, at the recorded
+> seed and the shipped geometry, against a committed digest — **and, separately, that the field
+> carries no trend**, which is what version 1 IS and which no digest update can satisfy. **Both were
+> proven to bite against a version-2 mutant before being recorded as guards.**
+
+> ## THE CONSTRAINT ITSELF, RESTATED ONCE
 >
 > **The corrected builder's rung is a NEW RUNG WITH A NEW NAME, and the three shipped rungs' fields
 > must not change.** If the repair moves their values, **the null's artifact is invalidated
@@ -10227,6 +10254,20 @@ question; compute/bandwidth roofline pair for cross-machine prediction) are in d
 ---
 
 ## Gotchas discovered
+
+- **TWO FIELDS THAT DIFFER ONLY IN THEIR VALUES SHARE A `fit_hash`, AND FOR A CONSTRUCTED FIXTURE
+  THAT IS THE WRONG SHAPE (found 2026-09-03, at 2d Task 5b's pre-flight).** `batch/geometry.py`
+  says it at the top: the fingerprint is over **the type, not the values**, and *"a value edit at
+  fixed geometry does not move it."* **This is correct for the production package** — data lives at
+  a URI, and identity covers the geometry the fits were computed against. **It is wrong-shaped for a
+  benchmark fixture, whose CONSTRUCTION is part of its identity and is hashed nowhere.** A
+  signal-free and a signal-bearing field, at one rung and one geometry, are **the same fit identity
+  and different data**. Consequences, and neither is 5b's alone: **nothing may use fit identity to
+  tell two constructions apart**, and **any resume or `--reuse-fits-from` path keyed on it can cross
+  them silently** — a warm start or a cached fit from one construction satisfying a run of the
+  other, with no error anywhere. The instrument block is where a construction has to be recorded,
+  and **it currently names the terms the config FITS rather than the terms the builder DRAWS**, so
+  it does not distinguish them today either.
 
 - **A PERIODIC PATTERN IN AN OUTPUT MAP AT THE COARSE STRIDE IS A KNOWN METHOD ARTIFACT, NOT A
   SPATIAL SIGNAL — read this before interpreting one.** Phase 2c warm-starts every pass-2 point

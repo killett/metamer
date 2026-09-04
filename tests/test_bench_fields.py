@@ -15,6 +15,10 @@ function of the thing under test -- (j).
 
 from __future__ import annotations
 
+import hashlib
+import json
+import pathlib
+
 import numpy as np
 import pytest
 import xarray as xr
@@ -258,6 +262,124 @@ def test_one_rung_twice_is_identical_and_two_rungs_differ(tmp_path):
         "two rungs produced the same truth: the rung parameters are recorded "
         "and not used"
     )
+
+
+#: The three shipped rungs' fields, at the recorded seed and the shipped
+#: geometry, as SHA-256 of the stored `sla` bytes. **These are a PIN, not a
+#: derivation**: they were computed once from the builder and frozen here, and
+#: their independence comes from being committed rather than recomputed. A test
+#: that re-derived them the way the builder does would assert nothing.
+#:
+#: **FIELD CONSTRUCTION VERSION 1** -- Cholesky draws (`ed8f39b`, 2026-08-30,
+#: which PREDATES every committed rung measurement, the earliest being
+#: 2026-08-31) of zero-mean noise, with no signal term. Version 0 is the SVD
+#: draw and no committed number depends on it. **A change that moves these
+#: digests is a new version, not an update to these constants.**
+_VERSION_1_SLA_DIGESTS = {
+    "easy": "2470c5a24b7a6fd121bb3b2aecd442b7316f43fb8469c8c701ba53f921c7bea4",
+    "middle": "16bd9b7c67e70eae8f292fb6be3aabe7ff6d7815fec71f7acb1bfc3110e9a80a",
+    "hard": "76e2a45a1b37bad3f14c9d5ea5b0049c89c6dafccdbcd549629be1d73700af4e",
+}
+
+#: The largest median per-cell rise, over the record, in units of that cell's
+#: `sigma`, that a SIGNAL-FREE field may show. **Set from an argument, not from
+#: the observed value**: at `rho = 0.8 yr` over a 53.4-year record there are
+#: roughly 66 effectively independent samples, so a fitted rise has standard
+#: error near `sigma * sqrt(12 / 66)` ~ 0.43 `sigma` and a median near 0.67 of
+#: that. The three rungs measure 0.42 to 0.47, so 1.0 is comfortable without
+#: being vacuous -- and the signal specified for version 2 is **16** `sigma`.
+_SIGNAL_FREE_MEDIAN_RISE_SIGMAS = 1.0
+
+#: The one committed artifact that records the field seed. **The seed has four
+#: spellings and no home in `src`** -- `FIXTURE_SEED` in the spike harness,
+#: `FIELD_SEED` in the easy-rung harness and two bare literals -- so this test
+#: reads the artifact rather than adding a fifth. Criterion 17's own artifacts
+#: record geometry, candidates and signal terms but NOT the seed, so the three
+#: rungs' ladder cannot be rebuilt from its own artifact at all.
+_EASY_RUNG_REPORT = pathlib.Path("docs/superpowers/notes/phase2d-easy-rung-report.json")
+
+
+def _rise_over_record_in_sigmas(sla, truth):
+    """Per cell, the least-squares rise over the record, in that cell's sigma.
+
+    The estimator is the ordinary slope of `sla` on centred time, scaled to the
+    full record and divided by the cell's TRUE sigma -- which the builder
+    controls and the fits do not, so this stays an assertion about the truth.
+    """
+    centred = truth.t - truth.t.mean()
+    slope = np.einsum(
+        "tyx,t->yx", sla.astype(np.float64) - sla.mean(axis=0), centred
+    ) / (centred @ centred)
+    span = float(truth.t[-1] - truth.t[0])
+    return np.abs(slope) * span / truth.parameters[:, :, fields.SIGMA]
+
+
+@pytest.mark.slow
+def test_the_shipped_rungs_fields_are_the_ones_their_recorded_numbers_describe(
+    tmp_path,
+):
+    """The byte guard the three-rung null rests on, at production size.
+
+    Behaviour: at the recorded seed and the shipped geometry, each of `easy`,
+    `middle` and `hard` rebuilds to the exact field its committed numbers were
+    measured on -- **and that field carries no trend**, which is what field
+    construction version 1 IS.
+
+    Expected values determined independently: the digests are a pin, frozen
+    from the builder and committed, never recomputed here. The rise threshold
+    is from an argument about the noise -- the standard error of a fitted rise
+    at this `rho` and record length -- and not from the observed value; see
+    the two constants above.
+
+    Bug this catches, and it is the reason this test exists: **a builder change
+    that moves a shipped rung's field.** The signal owed to `build_field` is
+    added AFTER the draw, so it leaves the RNG stream and `FieldTruth`
+    `parameters` bit-identical -- which means
+    `test_one_rung_twice_is_identical_and_two_rungs_differ`, the test that was
+    cited as guarding this, **passes through exactly that change**. It compares
+    the truth array; this compares the drawn field. Without this test the three
+    rungs' null would silently become a claim about a field nobody can rebuild.
+
+    The second assertion catches the failure the first cannot: a signal landing
+    in version 1 by accident, where updating the digests to match would ratify
+    the bug. **A trend cannot be pinned away** -- 16 sigma against a 1.0 sigma
+    limit.
+
+    Known failure mode, stated so it is not misread: these digests are exact
+    bytes from a Cholesky factorisation, so a change of BLAS, of numpy, or of
+    platform can move them without the builder moving. **That is a different
+    finding, not a reason to loosen the assertion** -- it would mean the
+    shipped rungs are not rebuildable off this machine, which is precisely
+    what the guard exists to surface. The message says which cause to look at.
+    """
+    seed = json.loads(_EASY_RUNG_REPORT.read_text())["instrument"]["seed"]
+
+    for name, expected in _VERSION_1_SLA_DIGESTS.items():
+        truth = fields.build_field(
+            fields.rung(name), path=tmp_path / f"{name}.zarr", seed=seed
+        )
+        sla = xr.open_zarr(truth.uri)["sla"].values
+        assert sla.shape == (fields.N_TIME, fields.N_NORMAL, fields.N_PARALLEL), (
+            f"the {name} rung's field is not the shipped geometry"
+        )
+
+        digest = hashlib.sha256(np.ascontiguousarray(sla).tobytes()).hexdigest()
+        assert digest == expected, (
+            f"the {name} rung's field changed: its committed numbers describe a "
+            f"field this builder no longer produces. Either the construction "
+            f"moved -- which is a new field-construction version, not a digest "
+            f"update -- or the numeric environment did, which means the shipped "
+            f"rungs are not rebuildable here"
+        )
+
+        rise = _rise_over_record_in_sigmas(sla, truth)
+        median = float(np.median(rise))
+        assert median < _SIGNAL_FREE_MEDIAN_RISE_SIGMAS, (
+            f"the {name} rung's field carries a trend of {median:.2f} sigma per "
+            f"record: version 1 is the SIGNAL-FREE construction, and a signal "
+            f"that lands in it silently makes the three-rung null a measurement "
+            f"of something else"
+        )
 
 
 def test_the_coherence_length_orders_the_spatial_autocorrelation(tmp_path):
