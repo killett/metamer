@@ -290,13 +290,40 @@ _VERSION_1_SLA_DIGESTS = {
 #: being vacuous -- and the signal specified for version 2 is **16** `sigma`.
 _SIGNAL_FREE_MEDIAN_RISE_SIGMAS = 1.0
 
-#: The one committed artifact that records the field seed. **The seed has four
-#: spellings and no home in `src`** -- `FIXTURE_SEED` in the spike harness,
-#: `FIELD_SEED` in the easy-rung harness and two bare literals -- so this test
-#: reads the artifact rather than adding a fifth. Criterion 17's own artifacts
-#: record geometry, candidates and signal terms but NOT the seed, so the three
-#: rungs' ladder cannot be rebuilt from its own artifact at all.
+#: The one committed artifact that records the field seed. Criterion 17's own
+#: artifacts record geometry, candidates and signal terms but **NOT the seed**,
+#: so the three rungs' ladder cannot be rebuilt from its own artifact at all --
+#: which is why this report, and not one of those, is what the seed is checked
+#: against.
 _EASY_RUNG_REPORT = pathlib.Path("docs/superpowers/notes/phase2d-easy-rung-report.json")
+
+
+def test_the_field_seed_constant_is_the_one_the_shipped_rungs_were_measured_at():
+    """The consolidated seed still names the field the committed numbers describe.
+
+    Behaviour: `fields.FIELD_SEED` is the authoritative home for a value that
+    had four spellings and no source in `src`, and it must equal the seed
+    recorded in the committed easy-rung report.
+
+    Expected value determined independently: from the committed artifact, which
+    was written by the run that produced the three rungs' numbers and cannot be
+    edited by a later change to the constant.
+
+    Bug this catches: the constant drifting from the seed the shipped rungs
+    were actually drawn at -- after which the byte guard would rebuild a
+    DIFFERENT field, its digests would fail, and the failure would point at the
+    builder rather than at the constant. **This is the assertion that lets the
+    three committed harnesses keep their frozen literals**: a harness is the
+    instrument of a past measurement, so it must not import a constant a later
+    tree can move, and this catches the divergence that freezing allows.
+    """
+    recorded = json.loads(_EASY_RUNG_REPORT.read_text())["instrument"]["seed"]
+
+    assert fields.FIELD_SEED == recorded, (
+        f"the consolidated field seed {fields.FIELD_SEED} is not the seed "
+        f"{recorded} the shipped rungs were measured at: every committed rung "
+        f"number describes a field this constant no longer names"
+    )
 
 
 def _rise_over_record_in_sigmas(sla, truth):
@@ -352,7 +379,7 @@ def test_the_shipped_rungs_fields_are_the_ones_their_recorded_numbers_describe(
     shipped rungs are not rebuildable off this machine, which is precisely
     what the guard exists to surface. The message says which cause to look at.
     """
-    seed = json.loads(_EASY_RUNG_REPORT.read_text())["instrument"]["seed"]
+    seed = fields.FIELD_SEED
 
     for name, expected in _VERSION_1_SLA_DIGESTS.items():
         truth = fields.build_field(

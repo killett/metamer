@@ -9814,6 +9814,25 @@ loop already built in Task 13.
   manually.
 - Never push tags without deciding to: a `v*` tag is the release trigger.
 
+### A `&&` CHAIN ENDING IN THE VERIFICATION REPORTS ITS ABSENCE AND ITS FAILURE IDENTICALLY (2026-09-03)
+
+**Where a chain ends in the check that matters, the check not running and the check failing are the
+same observation.** Measured on 2026-09-03: a sweep written as
+`typecheck && lint && pre-commit && test` stopped at `ruff-format`, which reformatted a new test
+file and failed the hook — **so `pytest` never ran**, and the tail of the log showed hook lines that
+read like a completed sweep. **The echoed exit code was the `tail`'s, not the chain's**, so even the
+status was an artifact of the reporting rather than of the work.
+
+**Run the verification as its own step, or capture per-link status. Never infer that the last link
+ran from the chain's exit code.** And when a formatter is in the chain, expect it to *modify the
+tree* on first contact with a new file — the run after it is the one that verifies anything.
+
+**THIS IS THE SAME SPECIES AS CI-BY-POSITION**, which is why it is filed here: an artifact that
+**looks like a verdict and is an absence**. There, a row adjacent to a green run reads as a green
+run; here, a log that ends in `Passed` reads as a suite that ran. **Both are answered the same way —
+enumerate what you actually asked for, and check that the thing you wanted verified is the thing
+that reported.**
+
 ### A SECOND PUSH CANCELS THE RUN VERIFYING THE FIRST (2026-08-22 — a standing rule, not an anecdote)
 
 **THE RULE: a commit that changes `tests/` or `src/` must have its own COMPLETED run before the

@@ -213,6 +213,28 @@ CRITERIA: tuple[str, ...] = ("aic",)
 #: and two callers reading one config cannot disagree about the key.
 AUDIT_SEED: int = 20_260_831
 
+#: The base seed the SHIPPED RUNGS were drawn at, and the authoritative home
+#: for it. **Consolidated into `src` on 2026-09-03, where it had none.** Before
+#: that it had four spellings and no source: `FIXTURE_SEED` in the spike
+#: harness, `FIELD_SEED` in the easy-rung harness, and two bare literals in the
+#: field harness -- a quantity whose one authoritative source did not exist,
+#: while every measurement in 2d depended on it.
+#:
+#: **THE THREE COMMITTED HARNESSES KEEP THEIR LITERALS, DELIBERATELY.** A
+#: harness is the INSTRUMENT of a committed measurement, and a harness that
+#: imported this constant would replay a past measurement at whatever the tree
+#: says today rather than at what it said then. Freezing the value in the
+#: harness is the property that makes it reproducible; consolidating means
+#: **new** code has one source, not that history is rewritten. A test asserts
+#: this constant still equals the seed recorded in the committed easy-rung
+#: report, which is what catches a divergence without editing an instrument.
+#:
+#: **`build_field` STILL REQUIRES ITS SEED EXPLICITLY** and does not default to
+#: this. A default here would let a value that KEYS THE DRAW arrive silently at
+#: a caller that never named it, which is the failure this constant exists to
+#: make visible rather than to automate.
+FIELD_SEED: int = 20_260_830
+
 _CONFIG_TEMPLATE = """\
 data_uri = "{uri}"
 variable = "sla"
