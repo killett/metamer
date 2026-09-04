@@ -1462,3 +1462,84 @@ surface. The failure message names both causes so the next reader looks at the r
 - **The brief's target number had two spellings from two instruments** (finding 7).
 - **The brief's new parameter was described as per-rung**; the decision makes the signal **fixed**,
   a property of the builder, and the rung's lever stays whatever the rung's lever is.
+
+---
+
+## Plan Task 5b — the rung itself, audited before the measurement (2026-09-04)
+
+**THE BRIEF**, as it now stands: one rung on field construction version 2, at 2c's difficulty, read
+against the three shipped rungs' null on signal-free fields. **The predictions are committed before
+either run, at
+[`phase2d-difficulty-rung-predictions.json`](phase2d-difficulty-rung-predictions.json), and are not
+restated here.** The builder audit is [the 2026-09-03 entry](#plan-task-5b--the-difficulty-rung-re-audited-on-the-corrected-builder-2026-09-03).
+
+**FOUR FINDINGS, AND THE FIRST RETIRES A CONSTRAINT THAT WAS CORRECT WHEN IT WAS WRITTEN.**
+
+### 1. THERE IS NO NEW RUNG NAME, AND ASKING FOR ONE WOULD PRODUCE A SECOND SPELLING
+
+The constraint said **a new rung with a new name**, and it was right for the lever it was written
+against: a noise-floor rung needed parameters the existing rungs could not express. **The lever is
+now the SIGNAL, and the signal is FIXED for every field** — so a rung carrying the easy rung's own
+`(coherence_length, contrast)` would differ from `easy` in **nothing**, and at the same seed would
+draw a **byte-identical field under a different name**. That is (j9)'s second spelling, arriving
+through a constraint rather than through carelessness.
+
+**WHAT DISTINGUISHES THIS MEASUREMENT IS THE CONSTRUCTION VERSION, AND IT IS A BETTER IDENTIFIER
+THAN A NAME WOULD BE** — it names what actually differs, it is in the instrument block, and it is
+the thing the byte guard tests. **The constraint's purpose is untouched:** `easy`, `middle` and
+`hard` are not retuned, `BASE`, `WITHIN_REGIME_RANGE` and the geometry do not move, and the three
+shipped rungs' fields are still rebuildable at version 1.
+
+### 2. THE CONFOUND IS REAL, AND THE RUNG CANNOT ANSWER IT — SO A PROBE RUNS FIRST
+
+**The signal does two things and only one was predicted:** it raises iterations, and on the small
+fixture it moved convergence from **93/96 to 96/96**. So a null at 43.94 has two readings — no
+hysteresis at 2c's difficulty, or **a better-conditioned field with less to be hysteretic about** —
+and the pre-decided stop was written as though only the first existed.
+
+**THE RUNG RUNS VERSION 2 ALONE, SO NO COLUMN ADDED TO IT CAN SETTLE THIS.** The comparison needs
+both constructions, interleaved in one session; that is a probe, not a column. **And the version 1
+rung cannot supply the other half from the record:** its committed report carries iterations, ratios
+and smears and **no outcome distribution at all**, and its store was temporary. **It costs about 11
+minutes against the rung's 13.2 h**, so it runs **first** — if conditioning has moved, that is known
+before the thirteen hours, not inside their report.
+
+**IT IS A READING WITH ITS OWN CLAUSE, NOT A CAVEAT.** C1 and C2 fire, and when they fire **the
+pre-decided stop is suspended** and a null is reported as two candidate readings rather than one
+conclusion.
+
+### 3. `hessian_cond` EXISTS AND IS NOT IN THE STORE, WHICH DECIDES WHERE THE READING IS TAKEN
+
+`FitResult.hessian_cond` is the number the `DEGENERATE_HESSIAN` verdict is taken on, recorded on the
+result rather than recomputed. **It is not written to the store**, so a store-mediated arm cannot
+report it, while `bench/arms.py` — which imports `FitResult` and `fit` directly — can. **This is why
+the κ half of the discriminator is in-process and the outcome half comes from the store**, and it is
+a fact about where each reading is available rather than a preference.
+
+**NaN IS UNDEFINED AND HAS TWO CAUSES** — no Hessian, or one that is not positive definite — so NaN
+fits are **counted and reported**, never dropped into a median. A median over the fits that happened
+to be well-behaved would answer a question nobody asked.
+
+### 4. THE ARTIFACT MUST NAME ITS OWN FIELD, AND THE DEFECT IT WOULD INHERIT IS IN THE TREE
+
+**Criterion 17's artifacts record geometry, candidates and signal terms and NOT the seed**, so the
+three-rung ladder's numbers are rebuildable only from a harness literal. **The version marker does
+not fix that for them** — it makes version 1 constructible; it does not make those artifacts
+self-describing. **This rung records the SEED and the CONSTRUCTION VERSION**, or it starts life with
+the same defect.
+
+### WHAT IS CHECKED BEFORE THE RUN AND COSTS NOTHING
+
+**The byte guard runs against version 1 first** — that is the marker's test, and a guard run after
+the measurement is a guard fitted to the outcome. **The quiet-host check GATES.** **Arms are
+interleaved within one session.** **Cost is priced in seconds off the named 16-point fixture**, with
+iterations kept as the reproducible unit and converted late.
+
+### DEVIATIONS FROM THE BRIEF, STATED RATHER THAN ABSORBED
+
+- **No new rung name** (finding 1). The constraint's purpose is met by the construction version; its
+  letter would have produced a byte-identical field under a second name.
+- **The conditioning discriminator is a separate probe that runs BEFORE the rung**, not a column of
+  it (finding 2). The rung cannot compare two constructions when only one of them is present.
+- **The κ reading is in-process and the outcome reading is from the store** (finding 3), because
+  that is where each number exists.

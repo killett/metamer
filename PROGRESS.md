@@ -7298,6 +7298,31 @@ worst available answer. The report's block gained **three new keys, never a rede
 `signal_terms`**, each with its own assertion in the same edit, and the completeness enumeration
 carries its (c5) note — it has grown three times in 2d and does not demand its own completeness.
 
+**(e) THERE IS NO NEW RUNG NAME, AND THE CONSTRAINT THAT ASKED FOR ONE IS RETIRED WITH ITS REASON,
+2026-09-04.** *"A new rung with a new name"* was **correct for the lever it was written against**: a
+noise-floor rung needed parameters `easy`, `middle` and `hard` could not express. **The lever is now
+the signal and the signal is FIXED for every field**, so a rung carrying the easy rung's own
+`(coherence_length, contrast)` differs from it in **nothing** and at the same seed draws a
+**byte-identical field under a second name** — (j9) arriving through a constraint rather than
+through carelessness. **What distinguishes the measurement is `construction_version`**, which names
+what actually differs, travels in the instrument block, and is what the byte guard tests. **The
+constraint's purpose is untouched:** the three shipped rungs are not retuned and their fields still
+rebuild at version 1.
+
+**(f) THE CONFOUND IS REAL AND THE RUNG CANNOT ANSWER IT, SO A PAIRED PROBE RUNS FIRST.** The signal
+**raises iterations AND improved convergence** on the small fixture, so a null at 2c's difficulty has
+two readings and the pre-decided stop was written as though only one existed. **The rung runs version
+2 alone — no column added to it can compare two constructions**, and the version 1 rung's committed
+report carries **no outcome distribution at all** while its store was temporary. So the discriminator
+is a **paired probe, interleaved by point, run BEFORE the rung** at about eleven minutes against
+13.2 h: a conditioning difference is then something known before the run rather than reported inside
+it. **C1 and C2 are BANDS with their own clauses** — both directions are findings — **and when either
+fires the pre-decided stop is SUSPENDED**, the rung still runs, and a null is reported as two
+candidate readings. **Nothing is retuned to bring the bands back: the confound is a property of the
+corrected builder, not a defect to remove.** A firing by a **large** margin is a decision to bring
+back rather than a suspension to record, because a difference big enough to dominate makes the null
+**uninterpretable** rather than ambiguous.
+
 **AND TWO THINGS THE RUNG THAT FOLLOWS MUST CARRY, BOTH ALREADY PAID FOR ELSEWHERE.** **Its artifact
 records the SEED and the CONSTRUCTION VERSION**, or it inherits criterion 17's defect on day one —
 those artifacts name geometry, candidates and signal terms and **cannot name their own field**, and

@@ -1,0 +1,229 @@
+{
+  "task": "2d Task 5b -- the difficulty rung on field construction version 2, and the conditioning discriminator that runs before it",
+  "written": "2026-09-04",
+  "committed_before_either_ran": true,
+  "what_this_rung_is_and_is_not": [
+    "It is ONE rung on the corrected builder, read against the three shipped rungs' null on",
+    "signal-free fields. It is NOT a sweep: `parameters = factor x BASE` holds white/sigma constant",
+    "and amplitude is free under a concentrated likelihood, so a rung sweep moves a quantity the fit",
+    "cannot see -- filed at E5 and unchanged by the repair.",
+    "IT IS NOT A NEW RUNG NAME. The lever is the SIGNAL and the signal is FIXED for every field, so",
+    "what distinguishes this measurement from the easy rung's is the CONSTRUCTION VERSION, not a",
+    "different (coherence_length, contrast). A new rung carrying the easy rung's own parameters",
+    "would be a second spelling of it -- (j9) -- and would produce a byte-identical field under a",
+    "different name. The construction version is the better identifier because it names what",
+    "actually differs, and it is in the instrument block.",
+    "It quotes no magnitude about the ocean. Its field is simulated and its parameters are ours."
+  ],
+  "the_fixture_fact_that_would_void_everything": [
+    "If version 1 stops rebuilding bit-identically, the three-rung null loses its subject and this",
+    "rung has nothing to be read against. The byte guard is the check and it is run BEFORE this,",
+    "not after -- a guard run afterwards is a guard fitted to the outcome."
+  ],
+  "instrument": {
+    "field": "fields.build_field at construction version 2, rung `easy`'s parameters, seed fields.FIELD_SEED, geometry 32 x 12, n_time 630",
+    "signal": "trend only, rise over the record = 16 x THAT CELL's sigma, added after the draw",
+    "fit": "the shipped `fit`, candidates fields.CANDIDATES (M = 3), criteria fields.CRITERIA",
+    "arms": "the shipped ARMS, interleaved within one session, never compared across sessions",
+    "host_gate": "the quiet check GATES the run and does not annotate it",
+    "cost_basis": {
+      "source": "phase2d-signal-probe-measured.jsonl, the 16-point probe",
+      "fixture_named": "2d's own parameters at fields.BASE, 16 points, both families, N = 630, M = 3, shipped fit",
+      "seconds_per_point_signal_bearing": 20.65,
+      "seconds_per_point_signal_free": 10.89,
+      "note": [
+        "A rate is a measurement of a WORKLOAD -- (j8)'s second register -- so the fixture is named",
+        "beside the number. Iterations are the reproducible unit and seconds are the money; the",
+        "budget is in seconds and the conversion is late."
+      ]
+    }
+  },
+  "readings": [
+    {
+      "id": "C1",
+      "name": "the conditioning discriminator -- outcome distribution, version 1 against version 2, interleaved",
+      "why_it_exists": [
+        "The signal does TWO things and only one was predicted: it raises iterations, and on the",
+        "small fixture it improved convergence from 93/96 to 96/96. So a null at 43.94 has two",
+        "readings -- no hysteresis at 2c's difficulty, or a better-conditioned field that suppresses",
+        "hysteresis independently of iteration count -- and the pre-decided stop is written as though",
+        "only the first existed. This reading is what tells them apart, and it FIRES rather than",
+        "annotating."
+      ],
+      "why_it_is_a_separate_probe_and_not_a_column_of_the_rung": [
+        "The rung runs version 2 ALONE. No amount of recording inside it can compare two",
+        "constructions, because the other one is not there. The comparison needs both, interleaved in",
+        "one session, which is a probe. It also costs about 11 minutes against the rung's 13.2 h, so",
+        "it runs FIRST: if conditioning has materially moved, the rung's stop clause is known to be",
+        "confounded before the 13 hours are spent rather than inside its report."
+      ],
+      "quantity": "fraction of fitted cells whose outcome is not OK, version 1 minus version 2, on the same 16 points at N = 630",
+      "form": "a BAND, because there is no ordering to extend -- version 2 could condition better or worse and both are findings",
+      "predicted": "|difference| <= 0.05",
+      "expected_value_determined_by": [
+        "An argument, not an observation. The trend is one column of the design matrix and is",
+        "projected out of the concentrated likelihood, so the curvature in the covariance parameters",
+        "should be essentially unchanged; what moves is the path, not the geometry of the optimum.",
+        "The small-fixture observation (3 of 96 cells, at n_time = 48) is inside this band and is",
+        "what raised the question rather than what sets its width."
+      ],
+      "refuted_from_either_side": {
+        "when": "|difference| > 0.05",
+        "reading": [
+          "Conditioning has materially moved, so a null on this field is CONFOUNDED: it could be the",
+          "absence of hysteresis or the absence of anything to be hysteretic about. THE PRE-DECIDED",
+          "STOP IS SUSPENDED and the rung's null, if it comes, is reported as two candidate readings",
+          "rather than one conclusion. This is the clause that makes the stop honest."
+        ]
+      }
+    },
+    {
+      "id": "C2",
+      "name": "the conditioning discriminator -- Hessian condition number",
+      "quantity": "median log10 of FitResult.hessian_cond over OK fits, version 2 minus version 1, same points",
+      "form": "a BAND, for the same reason as C1",
+      "predicted": "|difference| <= 0.5 decades",
+      "expected_value_determined_by": [
+        "The same argument as C1: an exactly absorbed column changes the profile, not the curvature",
+        "of the parameters that remain. Half a decade is the width at which a shift stops being",
+        "arithmetic and starts being a different optimisation problem.",
+        "NaN means UNDEFINED and has two causes -- no Hessian, or one that is not positive definite --",
+        "so NaN fits are COUNTED and reported, never dropped into the median."
+      ],
+      "refuted_from_either_side": {
+        "when": "|difference| > 0.5 decades, or the NaN count differs by more than 0.05 of fits",
+        "reading": "Same as C1: the stop is suspended and the null is reported as two readings."
+      }
+    },
+    {
+      "id": "R1",
+      "name": "the rung's difficulty, stated against 43.94 and not against 40.79",
+      "quantity": "cold iterations per point over the field",
+      "form": "a band",
+      "predicted": "[40, 47]",
+      "the_target_has_two_referents_and_this_names_one": [
+        "THE STOP IS AGAINST 43.94 -- 2c's fixture as the SHIPPED fit measures it, which is the only",
+        "condition under which the comparison is like-for-like, because this rung runs on the shipped",
+        "mechanism.",
+        "40.79 IS NOT DELETED AND IS NOT THE TARGET: it is 2c's own reading on its own optimizer path.",
+        "The two are different instruments on one fixture -- (j5) -- and the gap between them is a",
+        "recorded fact about the two, not a discrepancy to reconcile.",
+        "Per-point iterations are comparable only at equal M. Both readings are at M = 3, so this",
+        "comparison is safe; it was not before the candidate set grew from two to three."
+      ],
+      "expected_value_determined_by": [
+        "The 16-point probe measured 43.50 for this construction at fields.BASE. The field's factor",
+        "runs 0.5 to 3.0, and per-cell scaling holds rise/sigma at 16 everywhere, so the only quantity",
+        "that varies across the field is rho in samples -- worth about one iteration across a factor",
+        "of 6.7. The band is the probe's value plus that variation and the between-point spread."
+      ],
+      "refuted_from_below": {
+        "when": "< 40",
+        "reading": [
+          "The per-cell scaling did not deliver the uniform difficulty it was chosen for, so the field",
+          "is not at 2c's difficulty and the stop does not apply at all."
+        ]
+      },
+      "refuted_from_above": {
+        "when": "> 47",
+        "reading": [
+          "The field is harder than the construction predicts, which would mean the signal is doing",
+          "something beyond the term it names -- the version 2 difference test asserts it is not, so",
+          "this firing is a contradiction between two instruments and is reported as one."
+        ]
+      }
+    },
+    {
+      "id": "R2",
+      "name": "the interior null -- the gate, read first as at every rung",
+      "prediction_is_cited_not_restated": [
+        "Task 2 committed this before any rung ran and it is NOT re-predicted here: it does not fire.",
+        "_family() is a pure indicator, so the true family is constant within a regime and a",
+        "misclassification profile has no slope to find. A measurement stated twice has one copy",
+        "deleted."
+      ],
+      "note_at_a_raised_baseline": [
+        "The baseline is measured at 0.062 with the signal and 0.062 without, so the profile is the",
+        "primary reading and the width is secondary -- a smear must push a row past 0.5 to register as",
+        "a width at all, and at this baseline that is a large flip. WidthReading.profile travels with",
+        "every reading so a band that never crosses a half is still visible."
+      ]
+    },
+    {
+      "id": "R3",
+      "name": "the saving and the width -- an ordering, with a floor",
+      "form": "an ordering, because one is predicted: the saving is the cheaper signal and moves first",
+      "predicted": "the saving rises toward 2c's range AND a width appears above the 1-cell floor, in that order",
+      "refuted_from_below": {
+        "when": "warm equals cold at every index, at R1's difficulty, with C1 and C2 inside their bands",
+        "reading": "THE PRE-DECIDED STOP. No further rungs. See the prepared conclusion below."
+      },
+      "refuted_from_above": {
+        "when": "a width exceeding one coarse spacing (8 fine cells)",
+        "reading": [
+          "Points are misclassifying on their own side of the boundary, so the profile is reading",
+          "something other than cross-boundary contamination and the estimator's subject is not what",
+          "the reading assumes."
+        ]
+      }
+    },
+    {
+      "id": "R4",
+      "name": "the rung's own outcome distribution, recorded alongside iterations",
+      "quantity": "fraction of fitted cells whose outcome is not OK, on the rung itself, per arm",
+      "why": [
+        "C1 measures 16 points; the rung measures 384 across both regimes. This is the in-situ check",
+        "that the probe's discriminator describes the run it was used to interpret."
+      ],
+      "form": "a band around the probe's version 2 arm",
+      "predicted": "|rung fraction - probe version 2 fraction| <= 0.05",
+      "refuted_from_either_side": {
+        "when": "> 0.05",
+        "reading": [
+          "The probe does not describe the rung -- most likely because 16 points at fields.BASE do not",
+          "represent a field whose factor runs 0.5 to 3.0 -- and the confound question is REOPENED on",
+          "the rung's own numbers rather than closed by the probe's."
+        ]
+      }
+    },
+    {
+      "id": "R5",
+      "name": "the artifact can name its own field",
+      "form": "a check, not a prediction",
+      "required": [
+        "The rung's artifact records the SEED and the FIELD CONSTRUCTION VERSION, with its instrument",
+        "block.",
+        "Criterion 17's artifacts record geometry, candidates and signal terms and cannot name their",
+        "own field -- their numbers are rebuildable only from a harness literal. The version marker",
+        "does not fix that for them, and this rung must not inherit it on day one."
+      ]
+    }
+  ],
+  "the_prepared_conclusion_if_the_stop_fires": [
+    "Written now so it is a prepared reading and not an improvised one.",
+    "If no artifact appears at 43.94 with conditioning comparable to version 1's, that is the",
+    "pre-decided stop, and it is a LARGER finding than a width would have been: no hysteresis at",
+    "2c's own difficulty, on a field carrying what 2c's carried, measured on the shipped mechanism.",
+    "It puts two things side by side and asks what connects them: D1's 42.28% saving, and the",
+    "absence of any artifact at the difficulty where that saving was measured. A warm start that",
+    "saves 42.28% of iterations while moving no selected candidate anywhere is buying TIME and not",
+    "BIAS -- which is the good case for warm-starting, and the one 2c's own measurements could not",
+    "distinguish from the bad one.",
+    "That reading is not a null result about 2d. It is a positive statement about the method, and it",
+    "belongs in the record beside D1 rather than in a caveat under it.",
+    "It is stated as conditional on C1 and C2 landing inside their bands. If they do not, this",
+    "conclusion is NOT available and the null is reported as two candidate readings."
+  ],
+  "cost_expected": {
+    "discriminator_probe": "about 11 minutes: 16 points x 2 constructions at 20.65 and 10.89 seconds per point",
+    "rung": "about 13.2 h at the signal-bearing rate, against 19.8 h left of the ceiling",
+    "priced_in": "seconds, because iterations are the right unit for reproducibility and the wrong one for money"
+  },
+  "what_this_run_does_not_establish": [
+    "Nothing here comes from real altimetry and no magnitude is quoted. The standing limitation is",
+    "unchanged: the spatial coherence of real altimetry optima has never been measured, and the",
+    "named closer is a spike on a real gridded product.",
+    "A null on this field is a statement about THIS construction at THIS difficulty. Its transfer to",
+    "a real field is exactly what the standing limitation says is unmeasured."
+  ]
+}
