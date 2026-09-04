@@ -1,0 +1,6 @@
+cores 4 | cpu.max max 100000
+sample 0: cgroup_busy_cores=0.267  loadavg_1m 5.32 -> 2.98  5m 4.27
+sample 1: cgroup_busy_cores=0.218  loadavg_1m 2.98 -> 2.22  5m 3.83
+sample 2: cgroup_busy_cores=0.212  loadavg_1m 2.22 -> 1.88  5m 3.43
+sample 3: cgroup_busy_cores=0.212  loadavg_1m 1.88 -> 2.07  5m 3.25
+sample 4: cgroup_busy_cores=0.250  loadavg_1m 2.07 -> 4.13  5m 3.64

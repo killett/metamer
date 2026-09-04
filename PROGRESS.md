@@ -7323,6 +7323,17 @@ corrected builder, not a defect to remove.** A firing by a **large** margin is a
 back rather than a suspension to record, because a difference big enough to dominate makes the null
 **uninterpretable** rather than ambiguous.
 
+**(g) THE DISCRIMINATOR RAN AND BOTH BANDS HELD, 2026-09-04 — THE STOP IS NOT SUSPENDED.** The
+verdict is [`phase2d-conditioning-probe-verdict.md`](docs/superpowers/notes/phase2d-conditioning-probe-verdict.md)
+and its numbers are not restated here. **The finding that matters beyond the bands: the small
+fixture's convergence improvement DID NOT REPRODUCE at production length, and its sign reversed** —
+version 2 has one more non-OK cell out of 48, not fewer. **So the improvement was a property of
+`n_time = 48`, not of the signal**, and the confound is absent at the length the rung runs at. **The
+band came from the argument and the argument predicted the result; the observation that raised the
+question did not.** One caution is recorded there **before** the rung: the 16-point sample across
+the whole field comes back at the **lower edge** of R1's band, so R1 may fire from below, and the
+reading for that is written down in advance.
+
 **AND TWO THINGS THE RUNG THAT FOLLOWS MUST CARRY, BOTH ALREADY PAID FOR ELSEWHERE.** **Its artifact
 records the SEED and the CONSTRUCTION VERSION**, or it inherits criterion 17's defect on day one —
 those artifacts name geometry, candidates and signal terms and **cannot name their own field**, and
@@ -9858,6 +9869,21 @@ loop already built in Task 13.
   manually.
 - Never push tags without deciding to: a `v*` tag is the release trigger.
 
+### NEVER PIPE A MEASUREMENT'S OUTPUT THROUGH ANYTHING — REDIRECT, THEN READ THE FILE (2026-09-04)
+
+> **`cmd | tail`, `cmd | jq`, `cmd | head` all report the LAST stage's status, not the
+> measurement's.** Redirect the measurement to a file, read the file, and check the exit code
+> **separately** if at all. **The artifact is the only honest record.**
+
+**This is the operational form of the entry below, promoted after it fired TWICE IN ONE SESSION.**
+First a sweep whose `pytest` never ran while the log's tail read like a completed one; then a probe
+that **exited 1 on a refused quiet gate** while `timeout ... | tail -5` printed `EXIT=0`. **Both
+times the failure was found by reading the artifact, and neither time by reading the status.**
+
+**The pair is the same defect at two levels** — a chain hides its earlier link, a pipe hides its
+earlier stage — and the operational rule is one line: **the thing that produced the number must be
+the thing whose status you read.**
+
 ### A `&&` CHAIN ENDING IN THE VERIFICATION REPORTS ITS ABSENCE AND ITS FAILURE IDENTICALLY (2026-09-03)
 
 **Where a chain ends in the check that matters, the check not running and the check failing are the
@@ -10684,6 +10710,30 @@ question; compute/bandwidth roofline pair for cross-machine prediction) are in d
 ## Open questions
 
 Still open. **A new session must not assume these were settled.**
+
+22. **THE QUIET GATE READS `/proc/loadavg`, WHICH IS NOT ITS SUBJECT — MEASURED 2026-09-04, AND THE
+    GATE IS NOT CHANGED ON THIS EVIDENCE.** Five one-minute windows on a container at rest
+    ([`phase2d-gate-subject-measured.txt`](docs/superpowers/notes/phase2d-gate-subject-measured.txt)):
+    **this cgroup used 0.21–0.27 of its 4 cores — 5 to 7% — while `/proc/loadavg` read 1.88 to
+    5.32.** An order of magnitude apart, and **volatile**: it swung 2.07 to 4.13 inside one minute
+    with the container idle, so the gate's pass or fail is partly a draw on the host's other
+    tenants. The conditioning probe was **refused at 4.46 and passed at 2.37 twenty minutes later,
+    with nothing about this container different.**
+    **THIS IS (a2) AT THE INSTRUMENT, THE SAME SHAPE AS THE STALL GATE:** the gate reads the number
+    that is **available** rather than the number that is its **subject**, and open question 19 is
+    the same defect one field along. **The repair, if it holds, is the same too** — read the
+    cgroup's own `cpu.stat`, and keep the host reading as a **secondary diagnostic** rather than as
+    the gate.
+    **NOT ACTED ON, DELIBERATELY.** A gate deciding wrongly in the **conservative** direction costs
+    waiting, which is the safe failure, and changing a gate on the evidence of the session it
+    inconvenienced is how a gate becomes a formality. **What it does change is what a refusal
+    MEANS:** *"this host is loud"* is not *"this container is busy"*, and a refusal is not evidence
+    that the machine could not have carried the run.
+    **AND IT BEARS ON THE 13.2-HOUR RUNG DIRECTLY:** a gate whose input is host-wide and outside
+    our control can block a long run indefinitely. **The mitigation is already known and does not
+    need the gate changed** — a loud-host rung still yields valid **iterations**, a valid **smear**
+    and a valid **outcome distribution**, with only the **cost block** marked, because iterations
+    are the deterministic proxy and seconds are the contaminated half. See (j8)'s second register.
 
 21. **HOW DOES THE AUDIT SELECT ITS POINTS, GIVEN THAT §11.2's STRATIFIED SUBSAMPLE IS NOT
     CONSTRUCTIBLE FOR THE POPULATION IT NOW DRAWS FROM?** Opened 2026-08-29 at 2c Task 7.
