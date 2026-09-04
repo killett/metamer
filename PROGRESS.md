@@ -4,12 +4,12 @@
 
 1. **Branch `main`, everything on it, every commit pushed by a hook** — https://github.com/killett/metamer. **A SHA here is stale the moment the next commit lands, so nothing here names one:** `git log --oneline -8` is the authority.
 2. **DONE:** Phase 1 (0–18), Phase 2 preliminaries P0–P4, **Phase 2a (0–13)**, **Phase 2b (COMPLETE 2026-08-19 — 10 met / 4 reduced scope / 2 FAILED)**, **Phase 2c's brainstorm (D1–D12)**, and **Phase 2c (COMPLETE 2026-08-29 — 10 met / 2 reduced scope / 0 failed; Tasks 0–4 on 2026-08-24, Task 5 on 2026-08-27, Task 6 on 2026-08-28, Tasks 7–8 on 2026-08-29)**. The modelling sub-phase was decided against 2026-08-22 and **re-decided on closed facts 2026-08-23: it does not open.** Sections below carry each; **none is restated here.**
-3. **NEXT ACTION: A SCOPE DECISION, THEN TASK 5b. THE HEAD ITEM IS A DEFECT: THE FIELD BUILDER HAS NO SIGNAL** — `build_field` draws noise alone while the config fits `constant + trend`, so every rung so far fitted a signal model to data whose signal is identically zero, on a benchmark for a trend-estimation package. **Read [what Task 5b inherits](#what-task-5b-inherits-2026-09-02--the-cold-start-handoff-and-the-head-item-is-a-defect) first; it carries the whole session.** The defect explains three findings at once — the easy rung's null, E5's diagonal being invariant in a quantity the likelihood cannot see, and a difficulty no noise-floor setting could reach. **The three-rung null is NOT withdrawn; its scope narrows to signal-free fields.** Measured: 2d's field plus a trend reaches **43.50** iterations per point — 2c's own difficulty — at **0.062** misclassification, unchanged from 0.062 without it. **The open decision is whether the signal is fixed for every field or a rung parameter, and it re-prices 2d either way.** **TASKS 6 AND 7 STAY DECIDED AGAINST. NOTHING WAS BUILT TOWARD THE RUNG.**
+3. **NEXT ACTION: TASK 5b's PRE-FLIGHT, THEN TASK 5b, ON THE CORRECTED BUILDER. THE HEAD ITEM IS A DEFECT: THE FIELD BUILDER HAS NO SIGNAL** — `build_field` draws noise alone while the config fits `constant + trend`, so every rung so far fitted a signal model to data whose signal is identically zero, on a benchmark for a trend-estimation package. **Every measurement of it lives once, in [`phase2d-signal-defect.md`](docs/superpowers/notes/phase2d-signal-defect.md); nothing here or below restates one.** **Read [what Task 5b inherits](#what-task-5b-inherits-2026-09-02--the-cold-start-handoff-and-the-head-item-is-a-defect) for the shape and the decision.** The defect explains three findings at once — the easy rung's null, E5's diagonal being invariant in a quantity the likelihood cannot see, and a difficulty no noise-floor setting could reach. **The three-rung null is NOT withdrawn; its scope narrows to signal-free fields.** **THE SCOPE DECISION IS TAKEN, 2026-09-03: the signal is FIXED for every field, trend only, and the three shipped rungs are NOT RE-RUN.** 2d becomes three rungs' null on signal-free fields, **one** rung on the corrected builder at 2c's difficulty, and the contrast between them — which is a contrast in **exactly the term whose absence was the defect**, and therefore the finding rather than a confound. **TASKS 6 AND 7 STAY DECIDED AGAINST. NOTHING IS BUILT TOWARD THE RUNG.**
 4. ## THE STANDING LIMITATION ON EVERYTHING 2c DECIDED: **NO 2c NUMBER COMES FROM REAL DATA.** Warm-starting was authorized — and every decision after D1 inherits this — on a **simulated field whose spatial coherence is a construction parameter**. **The spatial coherence of real altimetry optima has never been measured.** Weaker coherence gives a **smaller** saving, and **§11.2's 30% threshold could fail on real data.** **THE NAMED CLOSER, not an open worry: a spike on a real gridded product — same three arms, same record-length lever.** **AND SINCE 2026-08-24 THERE IS A SECOND REGISTER OF IT: every 2c saving is a CEILING, not an estimate**, because the instrument searched with no effective spiral bound — see [what 2c's tasks inherit](#what-2cs-tasks-inherit-2026-08-24).
 5. **Tests: 1340 passed, 0 failed, 0 INDETERMINATE — 2026-09-01, 4899.75 s (1:21:39).** **`pixi run test` is the full sweep and every end-of-task verification must run it; `test-fast` and `test-ci` are NOT evidence** — the full sweep has caught **eight** things a fast run could not, the most recent being a test whose own expected value was computed from a 1-based reading of `np.arange`. **Every run prints `RSS measurement validity`, including at zero**; a nonzero count is INDETERMINATE, neither pass nor fail.
 6. **Verify a fresh checkout with `pixi run test && pixi run typecheck && pixi run lint`**, plus `pixi run pre-commit run --all-files` before every commit. **AND `git add` A NEW FILE BEFORE THAT SWEEP, NEVER AT COMMIT TIME** — `--all-files` covers **tracked** files only, so an untracked new module makes every hook print `Passed` without being read. Measured 2026-08-24; it cost two full twenty-minute sweeps before it was noticed. **AND THE RULE HAS A SECOND FORM, PROMOTED 2026-08-31: STAGE ANYTHING A TOOL MAY RESTORE, NOT ONLY ANYTHING A HOOK MAY SKIP** — `git checkout -- <file>` restores **from the index**, so an unstaged edit in a file any tool touches is **silently reset to `HEAD`, with no error**. One changes what is CHECKED, the other changes what SURVIVES; the pair is in [the handoff](docs/superpowers/notes/phase1-to-phase2-handoff.md) and is not restated here.
 7. **THE METHOD IS THE PRE-FLIGHT AND IT LIVES IN EXACTLY ONE PLACE:** [`phase1-to-phase2-handoff.md`](docs/superpowers/notes/phase1-to-phase2-handoff.md) §1 — (a0)–(a9), (a)–(k), the standing rules, the fixture facts, **and the ones 2c added:** (i2b) a high-ceiling control converts a null into a **located** null · (i2c) a sign-unstable benefit is worse than a small one · (j5) a second instrument is a cross-check only if it measures the same quantity under the same conditions · (j6) bound the unmeasured region before measuring it · (i11) refutation clauses in **both** directions · (a2b) make an invalid value **unavailable** rather than caveated · (h2) stratify only by axes at the metric's **own** granularity · (j7) never stratify by a quantity the treatment can move · **(h3) check every stratum boundary against the filters the population already passed — an eps-derived boundary and an eps-derived GATE arrive at the same number by the same argument, and the empty strata read as a finding about the data** · **(h4) a rule stated over "the metrics" must be checked against each KIND of metric — 2c hit this three times** · **(a2b) at a count: "zero cases" is a claim about the INSTRUMENT until proven otherwise** · (c4) a validator must be specified in the **coordinates and extent** the validated object actually has · **(c5) a gate over a set that can GROW must be written against the set, not an enumeration of its members** · **(c6) a practice enforced by a MECHANISM must be checked to reach every instance — a partially-installed guard prints a complete-looking green** · (e2) prove a mutant differs before recording a surviving mutation — **(e) now has six causes** · (e3) its opposite colour, a **red** suite hiding a dead assertion · (a2c) populated but nothing **acts** on it · (a2d) a hashed value's **unit** is part of its identity — **and 2d added its artifact register: when a measurement is too expensive to be a test, its recorded output is a current claim only while the configuration that produced it is, so the artifact carries its instrument block and the check FAILS when a named default has moved** · (a2e) encode a classification as a **construction** · (i12) a **uniform fixture set** cannot test a freedom the contract leaves open · (j8) an adopted verdict makes the **instrument** part of the specification · plus (a0)'s sixth register (**a check that never read the file prints the same word as one that did**) and (a4)'s two (**"checked" in your own pre-flight is a claim**, and **a decision's own EXAMPLE can be the case that refutes it — and a retired argument stays visible**), and (a5)'s across-DECISIONS register (**check a decision against the measurements taken for the OTHERS; a term of art repeated across decisions acquires a reading nobody chose**), **plus the four 2d added: (a5b) when two constraints bind the same quantity, solve them together and state which binds — a quantity sized against one and checked against neither is the common case, because each constraint is satisfied in the section where it is discussed · (j8)'s second register: a rate is a measurement of a WORKLOAD and the workload is a precondition, so a cost figure recorded without its fixture can be quoted and cannot be reproduced — and where a DETERMINISTIC proxy for a cost exists, budget in the proxy and convert late · (j7)'s budget-level cousin: a quantity the experiment can MOVE must be reported, not only used · and (a4)'s agreeing-first-check rule gained the worked instance showing the error can point AT the expected answer — contention inflates seconds only, so a loud host pushed a per-iteration cost upward into a 0.3% "match" that is 19% apart when quiet**. **Do not restate them here** — the two copies drifted once already.
-8. **CI IS VERIFIED BY ENUMERATING COMMITS, NOT BY READING `gh run list`** — a run between two green runs is not thereby green, and **a commit that is not the TIP of its push gets no run of its own**, because one push produces one run. **Enumerate by `headSha`, never by position**: a poll on *"is the first row completed"* returned the PREVIOUS run's row in this session and reported a queued commit as verified. **AS OF 2026-09-02, EVERY `src`-TOUCHING COMMIT IN 2d HAS A COMPLETED RUN WITH CONCLUSION `success`.** **Two docs-only commits do not, and the reason is the same each time: the next push cancelled the run verifying them.** A cancelled run is **evidence of nothing**; what covers those commits is that a later commit's green run tested a **tree containing their content**, which is weaker than a run of their own and is stated as such. **The rule that prevents it is one push per run**, and it was broken twice by committing again within minutes. See [THE CI FIXTURE DECISION](#the-ci-fixture-decision--taken-measured-and-verified-2026-08-22); **CI runs `-m "not machine"` and therefore executes exactly ONE of the nine RSS assertions**, so it is not a substitute for the local sweep.
+8. **CI IS VERIFIED BY ENUMERATING COMMITS, NOT BY READING `gh run list`** — a run between two green runs is not thereby green, and **a commit that is not the TIP of its push gets no run of its own**, because one push produces one run. **Enumerate by `headSha`, never by position**: a poll on *"is the first row completed"* returned the PREVIOUS run's row in this session and reported a queued commit as verified. **AS OF 2026-09-02, EVERY `src`-TOUCHING COMMIT IN 2d HAS A COMPLETED RUN WITH CONCLUSION `success`.** **Two commits that touch no `src` do not, and the reason is the same each time: the next push cancelled the run verifying them.** (**Corrected 2026-09-03 from "docs-only"**: one of the two is a `feat:` commit that adds a harness under `notes/`, so the word and the commit type disagreed while the substantive claim — nothing in `src` is unverified — held either way.) A cancelled run is **evidence of nothing**; what covers those commits is that a later commit's green run tested a **tree containing their content**, which is weaker than a run of their own and is stated as such. **The rule that prevents it is one push per run**, and it was broken twice by committing again within minutes. See [THE CI FIXTURE DECISION](#the-ci-fixture-decision--taken-measured-and-verified-2026-08-22); **CI runs `-m "not machine"` and therefore executes exactly ONE of the nine RSS assertions**, so it is not a substitute for the local sweep.
 9. **THREE DEFECTS ARE OPEN AND UNOWNED, AND NONE IS 2d's TO FIX.** (a) **`tiling.py` requires the spatial dims to be literally `y` and `x` in four places** while stage 4a requires only that `time` is first — so a `latitude`/`longitude` input **passes the contract and dies in assembly without exit code 4**, and **stage 4a's own message already calls the contract positional**, so the message and the implementation disagree today. Two closers, both scope decisions — see [What plan Task 2 established](#what-plan-task-2-established-done-2026-08-24--read-before-touching-the-decimation-the-two-stores-identities-or-any-spatial-dimension-name). (b) **Open question 20**: what else is uniform across all sixteen input fixtures and unconstrained by the contract — **coordinate monotonic direction first**, because a decreasing latitude axis is the ordinary case in real altimetry and yields a *plausible* answer rather than an error. **2d WAS OFFERED THIS AND DECLINED IT, 2026-08-30** — grid shape and coordinate direction are different degrees of freedom, and closing half of it while (a)'s scope decision is open would give a suite covering a case the code still gets wrong. The reasoning is at the question. (c) **A FLAKY TEST, found 2026-08-30**: `test_completion.py::test_a_preempted_command_exits_aborted_early_and_resumes` polls **120 s** for the child to create a store, then signals regardless; on a 3.12 runner taking **33m21s** where 3.13 took **18m29s** the deadline expired and it surfaced as `GroupNotFoundError` — **a store-layer error for a scheduling failure**, (i9) across runners, and the presentation sends the next reader at zarr. Repair: record WHY the loop exited and fail with that.
 
 10. **Precedence: the design doc is authoritative on INTENT; a measured, dated number supersedes an unmeasured one wherever it lives, including in the design doc. Any measurement stated twice has one copy DELETED, never reconciled.**
@@ -7164,106 +7164,132 @@ rise**. **The full defect, its measurements and the repair's specification are i
 [`phase2d-signal-defect.md`](docs/superpowers/notes/phase2d-signal-defect.md) and are not
 restated here.**
 
-**WHAT IT EXPLAINS — three findings collapse into one cause:** the easy rung's null (24.4 cold
-iterations per point, where a warm start has nothing to improve; **the same construction with a
-signal sits at 43.5**, where 2c measured a 42.28% saving); **E5's diagonal** being invariant in a
-quantity the likelihood cannot see; and **a difficulty no noise-floor setting could reach** — the
-ladder tops out at 32.8 and the missing distance was never in the noise floor.
+**WHAT IT EXPLAINS — three findings collapse into one cause:** the easy rung's null, where a warm
+start had nothing to improve because the same construction **with** a signal sits where 2c measured
+its saving; **E5's diagonal** being invariant in a quantity the likelihood cannot see; and **a
+difficulty no noise-floor setting could reach**, the missing distance never having been in the
+noise floor at all. **Each of the three is paired with its measurement in the note, once.**
 
 > ## WHAT IT INVALIDATES, AND THE DISTINCTION IS THE POINT
 >
-> **THE THREE-RUNG NULL IS NOT WITHDRAWN. ITS SCOPE IS NARROWED.** It is a measured result *on a
-> field with no signal, at 24.4 cold iterations per point*, and **whether it transfers to a
-> signal-bearing field is exactly what a rung would test.** Every number in the easy rung's report
-> is still what it was measured to be; what moves is the population it describes.
+> **THE THREE-RUNG NULL IS NOT WITHDRAWN. ITS SCOPE IS NARROWED.** It is a measured result *on
+> fields with no signal*, and **whether it transfers to a signal-bearing field is exactly what a
+> rung tests.** Every number in the easy rung's report is still what it was measured to be; what
+> moves is the population it describes.
 >
-> **Criterion 17's ladder is unaffected as a measurement** — 24.375 / 24.333 / 24.396 are what
-> those three fields cost — **and its interpretation moves**: three samples of one difficulty
-> rather than a sweep.
+> **Criterion 17's ladder is unaffected as a measurement** — the three fields cost what they cost —
+> **and its interpretation moves**: three samples of one difficulty rather than a sweep. **The
+> figures are in the note and in criterion 17's own record; they are not spelled here.**
 
 ## 2. THE LEVER FINDING, WHICH IS FILED AT E5 BECAUSE THAT IS WHERE THE DIAGONAL WAS DECIDED
 
 `parameters = factor × BASE` holds **`white/sigma` constant on every rung by construction**, and a
-concentrated likelihood is invariant to amplitude — **measured: 23.50 iterations per point against
-23.62 under a 2.5× rescale.** `rho` in samples is worth about one iteration across a factor of
-6.7. **So `Δ` moved a quantity the fit cannot see**, the three rungs' identical difficulty is
-structural, E6's monotonicity had no lever to be monotone in, and E5's crossed-rung follow-up is
-withdrawn. **The `ℓ` leg is untouched.** The amendment is at E5.
+concentrated likelihood is invariant to amplitude; `rho` in samples is worth about one iteration
+across the ladder that was run. **So `Δ` moved a quantity the fit cannot see**, the three rungs'
+identical difficulty is structural, E6's monotonicity had no lever to be monotone in, and E5's
+crossed-rung follow-up is withdrawn. **The `ℓ` leg is untouched.** **The amendment and its two
+measured pairs live at E5, once** — they were spelled twice here and one copy is deleted.
 
 ## 3. THE 2c PROBE, AND 2c's FIXTURE IS IN THE TREE
 
-**Contrary to a claim this sub-phase has repeated** — `fields.py`'s docstring still says the 2c
-spike's field *"lived in a script that is not in the tree"* — **it is at
-`docs/superpowers/notes/warmstart-spike-harness.py`**, fully specified, and this session imported
-it rather than re-spelling it. What was true is that it was not in `src`, so criterion 12 could
-not be re-measured **on the shipped mechanism**. **The docstring correction is still owed** and is
-the one `src` edit this session did not make.
+**Contrary to a claim this sub-phase repeated** — `fields.py`'s docstring said the 2c spike's field
+*"lived in a script that is not in the tree"* — **it is at
+`docs/superpowers/notes/warmstart-spike-harness.py`**, fully specified, and the probe imported it
+rather than re-spelling it. What was true is that it was not in `src`, so criterion 12 could not be
+re-measured **on the shipped mechanism**. **THE DOCSTRING IS CORRECTED, 2026-09-03**, in the
+narrower form, with the reason the wrong form cost something recorded beside it.
 
-**Four settings, 16 points each, `N = 630`, the shipped `fit`:** 2c as its harness builds it
-**43.94**; 2c without its signal **25.69**; 2c on 2d's time axis **43.50**; 2d's own parameters
-**24.69**. **The signal accounts for 95% of the gap; everything else combined accounts for 1.0
-iteration; the axis accounts for 0.44.**
+**Four settings, 16 points each, `N = 630`, the shipped `fit`** — 2c as its harness builds it, 2c
+with its signal removed, 2c on 2d's time axis, and 2d's own parameters. **The signal accounts for
+almost the whole gap between the two constructions; everything else 2c differs in, combined,
+accounts for about one iteration.** **The table is in the note and is not copied here.**
 
 ## 4. THE CALIBRATION LADDER — KEPT, BECAUSE IT IS THE MEASURED ALTERNATIVE
 
-`white/sigma` 0.4 / 0.7 / 1.0 / 1.4 gives **24.8 / 28.3 / 30.5 / 32.8** iterations per point with
-misclassification **0.03 / 0.09 / 0.22 / 0.31**. **`white/sigma = 1.0` was the setting the
-constraints chose, and separability rather than cost is what ruled out 1.4.** **It is probably not
-the route now** — the signal reaches 43.5 at **zero** separability cost — but **it is not deleted**:
-if the signal route fails, this is the measured fallback and its numbers are already paid for.
-The verdict is [`phase2d-difficulty-calibration-verdict.md`](docs/superpowers/notes/phase2d-difficulty-calibration-verdict.md).
+The ladder over `white/sigma` reports iterations per point **and** misclassification at each
+setting; **`white/sigma = 1.0` was the setting the constraints chose, and separability rather than
+cost is what ruled out the top rung.** **IT IS NOT THE ROUTE, DECIDED 2026-09-03** — the signal
+reaches 2c's difficulty at **no** separability cost, and the ladder never reached it — but **it is
+not deleted**: if the signal route fails, this is the measured fallback and its numbers are already
+paid for. **Every figure is in
+[`phase2d-difficulty-calibration-verdict.md`](docs/superpowers/notes/phase2d-difficulty-calibration-verdict.md),
+once.**
 
 ## 5. THE SEPARABILITY CAUTION, AND 2d DOES NOT INHERIT IT
 
-**2c's misclassification is 0.375 with its signal at `white/sigma` 0.45–0.71**, and **0.375 is
-where the interior null is at risk** — `P(Binom(12, 0.375) ≥ 7) ≈ 17%` per row, and the null reads
-**two** seed rows. **Measured on 2d's parameters at `white/sigma = 0.40`: 0.062 with the signal and
-0.062 without.** **The signal costs difficulty and not separability; 2c's 0.375 is its noise
-floor's doing.** **Re-check this at any raised noise floor**, because the two constraints couple
-there and not here.
+**2c's misclassification is where the interior null would be at risk** — at 2c's rate,
+`P(Binom(12, p) ≥ 7)` is not small and the null reads **two** seed rows. **On 2d's parameters the
+signal changes it by nothing, measured both ways** (the rate is in the note). **The signal costs
+difficulty and not separability; 2c's rate is its noise floor's doing.** **Re-check this at any
+raised noise floor**, because the two constraints couple there and not here.
 
 ## 6. AT ANY RAISED BASELINE THE PROFILE IS THE PRIMARY READING, NOT THE WIDTH
 
-**A smear must push a row past 0.5 to register as a width at all.** At a baseline of 0.06 that is a
-large flip; at 0.22 it is a smaller one. **Task 2's recorded forfeit — the majority rule is blind
+**A smear must push a row past 0.5 to register as a width at all.** At the baseline 2d's parameters
+give, that is a large flip; at the ladder's mid settings it is a much smaller one — **the rates are
+in the note and the calibration verdict.** **Task 2's recorded forfeit — the majority rule is blind
 to a band that never carries a cell past a half — stops being a caveat and becomes a design
 constraint the moment the baseline leaves zero.** A floor result **with a visible band at the
 boundary** is a positive finding, and `WidthReading.profile` travels with every reading so that it
 can be read as one.
 
-## 7. THE OPEN DECISION, WHICH IS NOT MINE TO TAKE
+## 7. THE DECISION, TAKEN 2026-09-03 — FIXED FOR EVERY FIELD, AND THE THREE RUNGS ARE NOT RE-RUN
 
-**(a) Is the rung 2d's parameters plus the signal?** The measurements say it reaches **43.50
-iterations per point — 2c's own difficulty — at 0.062 misclassification**, so the pre-decided stop
-would apply cleanly: a null there is a null where 2c measured a 42.28% saving.
+**(a) THE SIGNAL IS FIXED FOR EVERY FIELD. TREND ONLY, AT 16 `sigma` OF RISE OVER THE RECORD.**
+A trend-estimation benchmark carrying no trend is the defect; **one carrying a trend on some fields
+and not others is the same defect with a switch.** The signal is a property of the **builder**, and
+**the rung's lever stays whatever the rung's lever is.** **No offset** — it is bit-identically
+nothing, and adding it for symmetry would transcribe a constant nobody chose. **The unit is the
+rise over the record in multiples of `sigma`**, never a bare coefficient, because a coefficient is
+not portable across record lengths or noise levels. **The magnitudes, the linearity and the
+separability readings are in
+[`phase2d-signal-defect.md`](docs/superpowers/notes/phase2d-signal-defect.md), once.**
 
-**AND THE TERM IS SPECIFIED, NOT TRANSCRIBED: a TREND ONLY, sized as its RISE OVER THE RECORD IN
-MULTIPLES OF `sigma`.** The offset does **nothing** — trend-only and trend-plus-offset both come
-back at **43.50, sd 3.01**, bit-identical — so carrying 2c's `2.0` would inherit a constant that
-changes no reading. The magnitude is linear in the rise: **0σ → 25.38, 8σ → 33.62, 16σ → 43.50**,
-about **1.13 iterations per σ**. **16σ is recommended**, which is 2c's own and keeps the rung
-**inside** the range any saving has been measured at rather than beyond it.
+**(b) THE THREE SHIPPED RUNGS ARE NOT RE-RUN, AND THE PRICE IS NOT THE REASON.** They are not
+re-run because **their result is already correct for what it measures**: a null on signal-free
+fields, with the mechanism running to completion and changing nothing. **That does not improve by
+being repeated on a different construction — it would become a different measurement wearing the
+same name**, which is the comparability failure this project has hit repeatedly.
 
-**(b) Is the signal FIXED for every field, or a rung's parameter?** **The recommendation is fixed**
-— a trend-estimation benchmark carrying no trend is the defect — **and the consequence is a scope
-question with a price:**
+**WHAT REPLACES RE-RUNNING THEM IS ONE RUNG ON THE CORRECTED BUILDER.** So 2d reports: **three
+rungs' null on signal-free fields, one rung on the corrected builder at 2c's difficulty, and the
+contrast between them.** **The two constructions are the comparison rather than a confound, because
+the difference between them is exactly the term whose absence was the defect.** If an artifact
+appears at the new rung, that contrast is the finding. **If none appears there, the pre-decided
+stop applies cleanly** — a null at 2c's own difficulty, on a field carrying what 2c's carried.
+**One rung fits the remaining ceiling; the price is in the note.**
 
-| | if FIXED | if PER RUNG |
-|---|---|---|
-| the three shipped rungs | fields that lacked what **every** field should have — **the case for re-running them strengthens** | stand as-is, **scope narrowed** to *"signal-free fields"* |
-| what 2d reports | a ladder **within one population** | a contrast **across two field constructions** |
-| the price | a rung costs **~13.2 h** at the signal-bearing rate (20.65 s/point/arm against 10.89), so three re-runs plus a rung is **~40 h** and **fits no remaining ceiling** | one new rung at **~13.2 h**, inside the **19.8 h** remaining |
-
-**Both are priced so the decision can be taken cold. Nothing was built toward either.**
+> ## THE CONSTRAINT THAT RIDES WITH IT, AND IT IS THE PRE-FLIGHT'S FIRST QUESTION
+>
+> **The corrected builder's rung is a NEW RUNG WITH A NEW NAME, and the three shipped rungs' fields
+> must not change.** If the repair moves their values, **the null's artifact is invalidated
+> retroactively** — a recorded number about a field nobody can rebuild.
+>
+> **DRAWN BYTES AND FIELD VALUES ARE NOT THE SAME OBJECT.** A signal added as a term **after** the
+> draw leaves the RNG stream untouched while moving every stored value, so **an assertion written
+> over the draw would print green through exactly this change.** The pre-flight states which of the
+> two the shipped test asserts **before** any code. **If field values move, the fix carries a
+> version marker and the signal-free construction stays reachable.**
 
 ## 8. THE STATE OF THE TREE
 
 **Every measurement in this handoff is committed with its predictions committed first**, and each
-verdict names its own instrument. **No `src` change was made after Task 5's**, so `pixi run test`
-is green as of the last full sweep — 1340 passed, 0 INDETERMINATE — and the only `src` edit owed
-is the `fields.py` docstring correction at item 3. **The quiet gate refused one run of the
-calibration at load 5.12 and no number from it exists**, which is Task 0's fourth defect not
-repeating.
+verdict names its own instrument. **The `src` edit owed at item 3 is made, 2026-09-03** — a
+docstring correction, verified by the full sweep on the tree that ships. **The quiet gate refused
+one run of the calibration at load 5.12 and no number from it exists**, which is Task 0's fourth
+defect not repeating.
+
+> **AND THE FOUR RECORD CORRECTIONS TAKEN WITH THE DECISION, 2026-09-03.** (1) **The plan's Task 5b
+> named `white/sigma` as the lever and did not mention the defect at all** — which is what a cold
+> session would have executed. Amended at its source, the noise-floor route **struck rather than
+> deleted**, with the measurement that retired it. (2) **Task 8 depended on Task 6, which is decided
+> against** — an unsatisfiable gate, and its behaviour named a *"plausibility rung"* that will not
+> exist. **Re-pointed to Task 5b**, and the figure now carries the three-rung null beside the new
+> rung's width, because the contrast is the finding. (3) **The signal probe's measurements were
+> spelled twice**, in a section that said they were not; **one copy deleted, the note is the home,
+> this section points.** The same rule applied to E5's two pairs, which were also spelled twice.
+> (4) the docstring above. **No pair disagreed** — which is the condition under which the rule is
+> cheap, and the reason to apply it then rather than after a drift.
 
 > **AND ONE PROCESS DEFECT OF MY OWN, RECORDED BECAUSE IT IS MECHANICAL.** The docs commit that
 > took the (c) decision **has no run of its own: the next push, minutes later, cancelled it.** One

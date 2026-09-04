@@ -98,4 +98,10 @@ later reader could not tell a measured choice from a transcription. So:
 > ladder within one. **Cheaper by ~26 h and weaker as evidence**, because the comparison is then
 > across two field constructions rather than within one.
 >
-> **THE DECISION IS NOT TAKEN HERE.** Both consequences are priced so it can be taken cold.
+> **TAKEN 2026-09-03: FIXED, AND THE THREE SHIPPED RUNGS ARE NOT RE-RUN.** Not on the price — on
+> comparability: their result is already correct for what it measures, and repeating it on a
+> different construction would make it a different measurement wearing the same name. **One rung on
+> the corrected builder replaces the three re-runs, and the contrast between the two constructions
+> is the finding**, because the difference between them is exactly the term whose absence was the
+> defect. **The decision, its constraint on the three rungs' bytes and what 2d then reports are in
+> `PROGRESS.md`; this note stays the home of the numbers and does not restate the reasoning.**

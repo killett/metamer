@@ -7,10 +7,18 @@ and cold. The sharp-boundary case is decisive: warm-starting will smear the
 boundary, and the smear width is a direct measurement of the artifact."*
 
 **THIS LIVES IN `src` AND NOT IN A HARNESS, AND THAT IS THE POINT.** Phase 2c's
-warm-start spike built a coherent field inside a script that is not in the
-tree, so nothing it established transferred to the shipped path and criterion
-12 could not be re-measured on the mechanism. **Every 2d field goes through the
-ordinary opener, stage 4a, tiling and `fit`.**
+warm-start spike built a coherent field inside a script that is **in the tree,
+at `docs/superpowers/notes/warmstart-spike-harness.py`, but not in `src`** -- so
+nothing it established transferred to the shipped path and criterion 12 could
+not be re-measured on the mechanism. **Every 2d field goes through the ordinary
+opener, stage 4a, tiling and `fit`.**
+
+**CORRECTED 2026-09-03: this docstring previously said the script was "not in
+the tree", and it is.** The claim was repeated through 2d and cost a
+re-spelling that was never needed -- the 2026-09-02 probe imported that harness
+rather than rebuilding its field. **An existing measurement is evidence, not
+history**, and a fixture in the tree answers in minutes what a rung was going
+to approach.
 
 **THE BOUNDARY IS A STEP, `w = 0`, AND THAT IS THE DESIGN RATHER THAN A
 PARAMETER CHOICE.** At `w > 0` a measured width is a true width plus an

@@ -131,7 +131,7 @@ the section where it was discussed.** The repair was not a compromise but a re-f
 | **5b** | **the difficulty rung — one rung, on the axis Task 5 says is the axis** | **5** | **NEXT** |
 | ~~6~~ | ~~the plausibility rung~~ | — | **DECIDED AGAINST 2026-09-01**: same difficulty, weaker contrast |
 | ~~7~~ | ~~the hard rung~~ | — | **DECIDED AGAINST**, same reason |
-| 8 | the README figure, and what it is allowed to say | 6 | |
+| 8 | the README figure, and what it is allowed to say | **5b** (was 6, which is decided against — re-pointed 2026-09-03) | |
 | 9 | the 2d exit-criteria suite | all | |
 
 **Tasks 2 and 3 are independent of everything and of each other**, and both are falsifiable by unit
@@ -605,6 +605,25 @@ carrying its rung.**
 
 ## Task 5b — the difficulty rung: one rung, on the axis Task 5 says is the axis
 
+> ## AMENDED 2026-09-03, BEFORE ANY OF IT WAS BUILT — THE BRIEF BELOW NAMED THE WRONG LEVER
+>
+> **The lever is THE SIGNAL, not `white/sigma`.** `bench.fields.build_field` draws every series as
+> noise alone while the config it writes fits `constant + trend`, so every rung so far fitted a
+> two-parameter signal model to data whose signal is identically zero. **The defect, its
+> measurements and the repair's specification are in
+> [`phase2d-signal-defect.md`](../notes/phase2d-signal-defect.md) and are not restated here.**
+>
+> **`white/sigma` IS RETIRED AS THE ROUTE, WITH THE MEASUREMENT THAT RETIRED IT:** the calibration
+> ladder tops out at **32.8** iterations per point at `white/sigma = 1.4`, short of 2c's difficulty,
+> **and the missing distance was never in the noise floor** — it was one absent term. The ladder is
+> **kept as the measured fallback** ([the verdict](../notes/phase2d-difficulty-calibration-verdict.md))
+> and is not deleted; it is no longer this rung's route, and **its `26.48 s/point` price goes with
+> it.** The struck text below is left visible so a later reader meets the argument.
+>
+> **THE DECISION TAKEN 2026-09-03: THE SIGNAL IS FIXED FOR EVERY FIELD, AND THE THREE SHIPPED RUNGS
+> ARE NOT RE-RUN.** The reasoning, the constraint on the three rungs' bytes and the shape of what 2d
+> then reports are in [PROGRESS.md](../../../PROGRESS.md), at the section this task inherits.
+
 **Goal.** Answer the question Task 5 left open and nothing else: **is there a difficulty at which
 the artifact appears?** If it does, the audit is demonstrably an instrument and 2d has the positive
 control the easy rung was meant to be. **If it does not, that is a much larger finding about
@@ -614,24 +633,40 @@ warm-starting and it belongs in the record beside D1.**
 
 - **ONE RUNG. NOT A SWEEP.** Its target is **2c's measured difficulty — 40.79 cold iterations per
   point at `N = 630`** — approached as closely as the ceiling allows, and **not more contrast**.
-- **THE LEVER IS `white/sigma`, NAMED AND MEASURED BEFORE ANY VALUE IS CHOSEN**, at
+- ~~**THE LEVER IS `white/sigma`, NAMED AND MEASURED BEFORE ANY VALUE IS CHOSEN**, at
   [the pre-flight](../notes/phase2d-preflight.md): amplitude is free (23.50 against 23.62 under a
   2.5× rescale), `rho` in samples is worth about one iteration across a factor of 6.7, and the
   noise floor is worth five. **The existing rung parameters cannot express it**, because
-  `parameters = factor × BASE` moves `white` with `sigma` and holds the ratio constant everywhere.
-- **THE VALUE IS CHOSEN BY A CALIBRATION, NOT BY ARGUMENT**, and the calibration reports
+  `parameters = factor × BASE` moves `white` with `sigma` and holds the ratio constant everywhere.~~
+  **STRUCK. The lever is the signal.** What survives from this bullet is why the *rung parameters*
+  could not express a difficulty at all: `parameters = factor × BASE` holds `white/sigma` constant
+  everywhere and amplitude is free under a concentrated likelihood, so `Δ` moved a quantity the fit
+  cannot see. That finding is filed at E5 and is unaffected.
+- ~~**THE VALUE IS CHOSEN BY A CALIBRATION, NOT BY ARGUMENT**, and the calibration reports
   **iterations per point, seconds per point and the misclassification rate** at each setting.
   **Two constraints bind one number and are solved together** — (a5b): land near 2c's difficulty,
   and fit the **19.8 h** left of the ceiling, at a price that **rises with the difficulty being
-  bought** (13.98 s/point at the easy rung, 26.48 at `white/sigma = 0.8`).
+  bought** (13.98 s/point at the easy rung, 26.48 at `white/sigma = 0.8`).~~ **STRUCK AS TO THE
+  NOISE-FLOOR PRICE.** The two constraints still bind together — (a5b) — but the signal route
+  satisfies both without a search: it reaches **2c's own difficulty** at a **separability cost of
+  nothing**, and the rung's price is the signal-bearing rate, **not** the noise-floor ladder's.
+  **Every number in this rung's price comes from the defect note, once.**
 - **AND A THIRD CONSTRAINT VOIDS THE RUNG IF IT IS MISSED: the baseline misclassification must stay
-  well under a half.** A noisier field makes the two Matérn families harder to separate, and a
-  baseline above a half is the **second cause** of a firing interior null — the one that invalidates
-  the *subject* rather than the estimator.
+  well under a half.** **UNCHANGED AND STILL BINDING**, and the signal route is measured against it
+  rather than assumed past it. A noisier field makes the two Matérn families harder to separate, and
+  a baseline above a half is the **second cause** of a firing interior null — the one that
+  invalidates the *subject* rather than the estimator.
 - **IT IS A NEW RUNG WITH A NEW NAME.** `easy`, `middle` and `hard` are not retuned, `BASE`,
   `WITHIN_REGIME_RANGE` and the geometry do not move, and **every existing rung's drawn bytes stay
   identical** — a test asserts it. **The three shipped rungs' null is the comparison that gives this
   rung its meaning**, and editing one would destroy it.
+- **AND THE FIXED SIGNAL PUTS A SECOND CLAUSE ON THAT, WHICH THE PRE-FLIGHT MUST RESOLVE BEFORE ANY
+  CODE.** A signal added to *every* field is a term added to the three shipped rungs' **values**,
+  even where it leaves their **drawn noise** untouched. **Drawn bytes and field bytes are not the
+  same object**, and the null's artifact is a claim about a field that must stay **reconstructible**.
+  The pre-flight states which of the two the shipped test actually asserts, and if the fix moves the
+  three rungs' fields it carries **a version marker**, with the signal-free construction still
+  reachable. **This is a constraint on the repair, not a licence to make the signal a rung's lever.**
 - **Its `sources` say what it is:** chosen by us, against a calibration, to sit near 2c's measured
   difficulty. **Not a claim about the ocean.** The middle rung's slot is the recorded example of
   what a reader supplies when provenance is left open.
@@ -640,10 +675,15 @@ warm-starting and it belongs in the record beside D1.**
 
 - *The new parameter defaults to the shipped value and every existing rung's field is byte-identical
   to before.* Catches a difficulty lever that silently re-draws the three rungs whose null this rung
-  is read against.
-- *The calibration's chosen setting is recorded with its measured iterations, seconds and
-  misclassification rate, before the rung runs.* Catches a value chosen after seeing the rung's
-  result, which is the tuning this sub-phase forbids everywhere else.
+  is read against. **AMENDED 2026-09-03: the assertion is now over the fields the three rungs'
+  recorded numbers were measured on, and it must say whether it holds over DRAWN NOISE or over
+  FIELD VALUES** — a fixed signal moves the second while leaving the first alone, and an assertion
+  that only ever tested the first would print green through exactly this change.
+- *The rung's chosen signal magnitude is recorded, in its portable unit, with its measured
+  iterations, seconds and misclassification rate, before the rung runs.* Catches a value chosen
+  after seeing the rung's result, which is the tuning this sub-phase forbids everywhere else. **The
+  unit is the trend's RISE OVER THE RECORD in multiples of `sigma`, never a bare coefficient**,
+  which is not portable across record lengths or noise levels.
 - *The interior null is read first, as at every rung.* Unchanged, and it is the clause most likely
   to fire at a noisier setting.
 - *The saving and the width are reported with the difficulty they were measured at.* Catches this
@@ -792,11 +832,19 @@ closed with three points rather than two.
 **Goal.** §16.2 item 6's deliverable: *"That figure goes in the README… it is the honest disclosure
 that makes the smoothness claim credible."*
 
+> **RE-POINTED 2026-09-03. THIS TASK DEPENDED ON TASK 6, WHICH IS DECIDED AGAINST**, so its gate
+> was unsatisfiable and *"the plausibility rung"* names a rung that will not exist. **It now depends
+> on Task 5b**, and what the figure carries changes with it: **the corrected builder's rung, and the
+> three shipped rungs' null beside it.** The contrast between the two constructions is the finding,
+> so the figure carries **both** or it misreports 2d.
+
 **Behaviour** (E7).
 
-- **The figure carries the smear width at the plausibility rung, N2's width beside it, the floor,
-  the reach, and the rung's parameters with their source.** A width alone is not the disclosure;
-  **the width against its floor is.**
+- **The figure carries the smear width at Task 5b's rung, N2's width beside it, the floor, the
+  reach, and the rung's parameters with their source** — **and the three signal-free rungs' null,
+  which is the comparison that gives the reading its meaning.** A width alone is not the disclosure;
+  **the width against its floor is**, and a width without the null beside it is a second figure's
+  worth of claim.
 - **The caption carries the standing limitation.** **A figure is the most-quoted artifact in a
   README and it will travel without the paragraph around it** — which is why this is a task
   requirement and not a review note.
