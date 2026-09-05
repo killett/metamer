@@ -4,7 +4,7 @@
 
 1. **Branch `main`, everything on it, every commit pushed by a hook** — https://github.com/killett/metamer. **A SHA here is stale the moment the next commit lands, so nothing here names one:** `git log --oneline -8` is the authority.
 2. **DONE:** Phase 1 (0–18), Phase 2 preliminaries P0–P4, **Phase 2a (0–13)**, **Phase 2b (COMPLETE 2026-08-19 — 10 met / 4 reduced scope / 2 FAILED)**, **Phase 2c's brainstorm (D1–D12)**, and **Phase 2c (COMPLETE 2026-08-29 — 10 met / 2 reduced scope / 0 failed; Tasks 0–4 on 2026-08-24, Task 5 on 2026-08-27, Task 6 on 2026-08-28, Tasks 7–8 on 2026-08-29)**. The modelling sub-phase was decided against 2026-08-22 and **re-decided on closed facts 2026-08-23: it does not open.** Sections below carry each; **none is restated here.**
-3. **NEXT ACTION: TASK 5b's RUNG, ON THE CORRECTED BUILDER. THE PRE-FLIGHT IS RUN, THE BYTE GUARD IS IN, AND FIELD CONSTRUCTION VERSION 2 SHIPPED 2026-09-04 — the trend is drawn, per cell, and version 1 still rebuilds bit-identically. THE HEAD ITEM IS A DEFECT: THE FIELD BUILDER HAS NO SIGNAL** — `build_field` draws noise alone while the config fits `constant + trend`, so every rung so far fitted a signal model to data whose signal is identically zero, on a benchmark for a trend-estimation package. **Every measurement of it lives once, in [`phase2d-signal-defect.md`](docs/superpowers/notes/phase2d-signal-defect.md); nothing here or below restates one.** **Read [what Task 5b inherits](#what-task-5b-inherits-2026-09-02--the-cold-start-handoff-and-the-head-item-is-a-defect) for the shape and the decision.** The defect explains three findings at once — the easy rung's null, E5's diagonal being invariant in a quantity the likelihood cannot see, and a difficulty no noise-floor setting could reach. **The three-rung null is NOT withdrawn; its scope narrows to signal-free fields.** **THE SCOPE DECISION IS TAKEN, 2026-09-03: the signal is FIXED for every field, trend only, and the three shipped rungs are NOT RE-RUN.** 2d becomes three rungs' null on signal-free fields, **one** rung on the corrected builder at 2c's difficulty, and the contrast between them — which is a contrast in **exactly the term whose absence was the defect**, and therefore the finding rather than a confound. **TASKS 6 AND 7 STAY DECIDED AGAINST. NOTHING IS BUILT TOWARD THE RUNG.**
+3. **NEXT ACTION: TASK 8 (THE README FIGURE, RE-POINTED TO 5b) AND TASK 9 (THE 2d EXIT-CRITERIA SUITE). TASK 5b IS DONE, 2026-09-05, AND THE PRE-DECIDED STOP FIRED** — on field construction version 2 at 2c's difficulty (42.08 cold iterations per point against the 43.94 the stop was stated against), with conditioning comparable to version 1's, **warm equals cold in selection at every index: the width is at the 1-cell floor on cold, warm and N2 alike, and no row of any profile crosses a half.** **AND THE SAVING APPEARED AT 2c's OWN SIZE — 41.81% of pass-2 iterations, 39.75% net of pass 1, against 2c's 42.28%** — while moving no selected candidate anywhere. **The prepared conclusion is now a measurement: a warm start that saves two fifths of the iterations while moving no selected candidate is buying TIME and not BIAS.** The verdict is [`phase2d-difficulty-rung-verdict.md`](docs/superpowers/notes/phase2d-difficulty-rung-verdict.md) and nothing from it is restated here. **NO FURTHER RUNGS**, by the branch Task 1 wrote. The field builder's defect is repaired (version 2), version 1 stays constructible and byte-guarded, and **the three-rung null stands as the signal-free half of the contrast that is the finding.** **TASKS 6 AND 7 STAY DECIDED AGAINST.**
 4. ## THE STANDING LIMITATION ON EVERYTHING 2c DECIDED: **NO 2c NUMBER COMES FROM REAL DATA.** Warm-starting was authorized — and every decision after D1 inherits this — on a **simulated field whose spatial coherence is a construction parameter**. **The spatial coherence of real altimetry optima has never been measured.** Weaker coherence gives a **smaller** saving, and **§11.2's 30% threshold could fail on real data.** **THE NAMED CLOSER, not an open worry: a spike on a real gridded product — same three arms, same record-length lever.** **AND SINCE 2026-08-24 THERE IS A SECOND REGISTER OF IT: every 2c saving is a CEILING, not an estimate**, because the instrument searched with no effective spiral bound — see [what 2c's tasks inherit](#what-2cs-tasks-inherit-2026-08-24).
 5. **Tests: 1340 passed, 0 failed, 0 INDETERMINATE — 2026-09-01, 4899.75 s (1:21:39).** **`pixi run test` is the full sweep and every end-of-task verification must run it; `test-fast` and `test-ci` are NOT evidence** — the full sweep has caught **eight** things a fast run could not, the most recent being a test whose own expected value was computed from a 1-based reading of `np.arange`. **Every run prints `RSS measurement validity`, including at zero**; a nonzero count is INDETERMINATE, neither pass nor fail.
 6. **Verify a fresh checkout with `pixi run test && pixi run typecheck && pixi run lint`**, plus `pixi run pre-commit run --all-files` before every commit. **AND `git add` A NEW FILE BEFORE THAT SWEEP, NEVER AT COMMIT TIME** — `--all-files` covers **tracked** files only, so an untracked new module makes every hook print `Passed` without being read. Measured 2026-08-24; it cost two full twenty-minute sweeps before it was noticed. **AND THE RULE HAS A SECOND FORM, PROMOTED 2026-08-31: STAGE ANYTHING A TOOL MAY RESTORE, NOT ONLY ANYTHING A HOOK MAY SKIP** — `git checkout -- <file>` restores **from the index**, so an unstaged edit in a file any tool touches is **silently reset to `HEAD`, with no error**. One changes what is CHECKED, the other changes what SURVIVES; the pair is in [the handoff](docs/superpowers/notes/phase1-to-phase2-handoff.md) and is not restated here.
@@ -7386,6 +7386,42 @@ defect not repeating.
 > arriving one level down.
 
 ---
+
+### What plan Task 5b established (done 2026-09-05 — READ BEFORE TASK 8 OR TASK 9, BECAUSE THIS IS WHAT THEY REPORT)
+
+**THE FULL VERDICT IS [`phase2d-difficulty-rung-verdict.md`](docs/superpowers/notes/phase2d-difficulty-rung-verdict.md),
+the report is [`phase2d-difficulty-rung-report.json`](docs/superpowers/notes/phase2d-difficulty-rung-report.json),
+the predictions were committed before the run, and the conditioning discriminator that gated the
+stop has [its own verdict](docs/superpowers/notes/phase2d-conditioning-probe-verdict.md). None is
+restated here.** What this section carries is what the next tasks need to know without opening them.
+
+1. **THE PRE-DECIDED STOP FIRED, CLEANLY.** Every condition it was made contingent on held: C1 and
+   C2 before the run, R1 inside its band, the interior null clean, R4 confirming the probe described
+   the rung. **The stop was evaluated against the field's own measured cold iterations, not against
+   `BASE`'s**, and the verdict says which number.
+2. **THE SAVING IS REAL AND IT IS 2c's.** On the signal-free rungs warm equalled cold in iterations
+   because 24.4 is where a warm start has nothing to improve. **On the corrected builder it saves
+   two fifths — and selection does not move.** The contrast between the two constructions is the
+   finding, and it is a contrast in exactly the term whose absence was the defect.
+3. **THE ARTIFACT §16.2 ITEM 6 WAS BUILT TO MEASURE DID NOT APPEAR IN EITHER POPULATION**, and the
+   second population is the one where it had something to appear in. **Task 8's figure therefore
+   carries a floor on every arm at both constructions, and its caption's job is to say why that is
+   the disclosure rather than the absence of one.**
+4. **N2 IS TWO THIRDS OF THE WALL CLOCK.** 10.2 of 15.35 hours. Anyone pricing an audit arm prices
+   the floor arm first.
+5. **THE SECONDS ARE MARKED AND THE ITERATIONS ARE NOT.** 15.35 h against ~13.2 priced, the cold arm
+   25% over the cost basis per point, on a host the gate passed at 2.13 with a live session sharing
+   the cores — **and the iteration ratio reproduces the cost basis to two digits.** (j8)'s second
+   register, measured.
+6. **OPEN QUESTION 22 STOOD BETWEEN THIS RUN AND ITS WINDOW THREE TIMES.** The gate refused at 4.46,
+   6.48 and 6.12 with this container idle, and passed at 2.13. It was not bypassed and it was not
+   changed. The cost of the wrong subject was waiting, which is the safe failure — and it is now
+   measured at roughly a working day of it.
+
+**THE STANDING LIMITATION IS UNCHANGED AND IS NOT SOFTENED BY A RESULT THIS CLEAN.** No number here
+comes from real altimetry; the spatial coherence of real optima is unmeasured; the named closer is
+a spike on a real gridded product. **The only thing this rung adds to that spike's brief is that
+it now has a benchmark whose two constructions agree on what the artifact is not.**
 
 ### What plan Task 5 established (done 2026-09-01 — READ BEFORE PLANNING TASK 6 OR 7, BECAUSE THE SUB-PHASE STOPS HERE)
 

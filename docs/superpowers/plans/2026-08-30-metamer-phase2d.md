@@ -128,10 +128,10 @@ the section where it was discussed.** The repair was not a compromise but a re-f
 | 3 | the N2 full-field map | — | done |
 | 4 | the benchmark driver and its reproducible report | 1, 2, 3 | done |
 | 5 | the easy rung — the positive control, and the gate | 4 | **DONE 2026-09-01. The control failed: warm ≡ cold** |
-| **5b** | **the difficulty rung — one rung, on the axis Task 5 says is the axis** | **5** | **NEXT** |
+| 5b | the difficulty rung — one rung, on the corrected builder | 5 | **DONE 2026-09-05. The stop fired: no artifact at 2c's difficulty; the saving appeared at 2c's size and moved no selection** |
 | ~~6~~ | ~~the plausibility rung~~ | — | **DECIDED AGAINST 2026-09-01**: same difficulty, weaker contrast |
 | ~~7~~ | ~~the hard rung~~ | — | **DECIDED AGAINST**, same reason |
-| 8 | the README figure, and what it is allowed to say | **5b** (was 6, which is decided against — re-pointed 2026-09-03) | |
+| 8 | the README figure, and what it is allowed to say | **5b** (was 6, which is decided against — re-pointed 2026-09-03) | **NEXT** |
 | 9 | the 2d exit-criteria suite | all | |
 
 **Tasks 2 and 3 are independent of everything and of each other**, and both are falsifiable by unit
