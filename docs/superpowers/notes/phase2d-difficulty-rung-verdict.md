@@ -36,7 +36,7 @@ production length as cleanly with the signal as without it, on 1152 cells and no
 | # | reading | clause | measured | verdict |
 |---|---|---|---|---|
 | **C1, C2** | conditioning, version 1 against 2 | bands | held before the run — [the probe's verdict](phase2d-conditioning-probe-verdict.md) | **HELD → the stop is NOT suspended** |
-| **R1** | cold iterations per point | **[40, 47]**; the stop is stated against **43.94** | **42.08** (OK-only 42.04) | **HELD.** The lower-edge caution did not fire. **The stop was evaluated against the field's own 42.08**, which is 4.2% under 43.94 and inside the band |
+| **R1** | cold iterations per point | **[40, 47]**; the stop is stated against **43.94** | **42.08** (OK-only 42.04) | **HELD.** The lower-edge caution did not fire. **THE STOP'S REFERENT MOVED FROM `BASE` TO THE FIELD, AND A READER COMPARING 42.08 TO 43.94 WILL OTHERWISE SEE A 4% MISS.** 43.94 is 2c's fixture under the shipped `fit`, and 43.50 was this construction at `BASE` alone; **the rung measures the whole field**, whose `factor` runs 0.5 to 3.0 and whose `rho` in samples therefore varies, and the field's own number is 42.08. **The stop asks whether the field is at 2c's difficulty, and 42.08 inside [40, 47] says it is** — so the stop was evaluated against 42.08, not against a number the field never produced |
 | **R2** | the interior null, read first | does not fire (Task 2's committed prediction) | at floor, clean, `contaminated: false` | **HELD** — the gate passed |
 | **R3** | saving **and** width, in that order | saving rises toward 2c's range, **and** a width appears above the 1-cell floor | **saving pass-2-only 41.81%, net of pass 1 39.75%** — 2c's own range; **width at the floor on every arm** | **THE FIRST HALF HELD AND THE SECOND WAS REFUTED FROM BELOW: warm equals cold at every index, at R1's difficulty, with C1 and C2 inside their bands. THE PRE-DECIDED STOP.** |
 | **R4** | outcome distribution in situ | \|d\| ≤ 0.05 from the probe's version 2 | −0.020 cold, −0.018 warm | **HELD** |
@@ -53,8 +53,34 @@ its band, the null was clean, and R4 confirmed the probe described the rung.
 (24.46 warm against 42.08 cold per point) and **39.75%** net of pass 1's cost, against **2c's
 42.28%**. The three signal-free rungs saved nothing because there was nothing to save — 24.4 cold
 iterations is where a warm start has nothing to improve. **On the corrected builder the saving is
-real and it is 2c's**, and **it moved no selected candidate anywhere**: 99.48% of cells select the
-same candidate warm and cold, and the 0.52% that differ do not form a band, a row, or a side.
+real and it is 2c's**, and **selection did not move with it**: the warm and cold profiles agree on 31
+of 32 rows and differ on one by exactly one twelfth, in the direction of the truth.
+
+> **CORRECTED 2026-09-05, THE SAME DAY, BEFORE ANYONE BUILT ON IT.** The first draft of this
+> paragraph said *"99.48% of cells select the same candidate warm and cold, and the 0.52% that
+> differ do not form a band."* **That figure is the SELF arm against cold** —
+> `self_arm_agrees_with_cold_selection`, 382 of 384 points — **not warm against cold**, and it is
+> over points, not cells. **The warm-against-cold agreement is not a number in the artifact at all.**
+> The report carries each arm's PROFILE (per-row misclassification fraction) and not its SELECTION
+> MAP, and the run's stores were temporary; so the point-level statement that can be supported is
+> exactly the one above — one row moved by one twelfth — and **the positions and condition numbers
+> of the differing points cannot be recovered from what was kept.** That is a defect in the
+> artifact, filed below, not a fact about the field.
+
+**THE FINDING IN ITS STRONGEST HONEST FORM.** D1 said warm-starting saves 42.28% and reattributed
+most of that to *"any converged optimum"*. **The audit was built on the assumption that a saving of
+that size might be buying bias** — smooth maps by an illegitimate mechanism. This rung says: at 2c's
+own difficulty, on a field carrying what 2c's carried, on the shipped mechanism, **a 42% saving moves
+no row of the selection profile past a half and moves one row by one twelfth, toward the truth.**
+**The audit exists to catch hysteresis and found none where the saving is largest.**
+
+**AND IT IS A NULL WITH A POSITIVE CONTROL BESIDE IT, WHICH IS WHAT MAKES THE INSTRUMENT'S SILENCE
+A READING.** The three-rung result at 24.4 iterations shows the audit reads *warm equals cold* when
+there is **nothing to save**; this shows it reads the same when there is **42% to save**. **The
+audit's instrument is not blind: it has measured two regimes and reported the same answer with the
+mechanism demonstrably active in one.** That does not lift the standing limitation, and this verdict
+must not be read as though it does — it is a null on this construction at this difficulty. But it
+is no longer a null that could be the instrument's.
 
 **THAT IS THE READING WRITTEN IN ADVANCE, AND IT IS NOW A MEASUREMENT RATHER THAN A PREPARATION.**
 D1's 42.28% saving and the absence of any artifact at the difficulty where it was measured now sit

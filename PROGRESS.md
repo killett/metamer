@@ -6495,6 +6495,14 @@ from quantiles** (D9), and it is what makes a quoted magnitude quotable.
 
 ### E2 — THE CEILING IS 30 h, THE FIELD IS 32 × 12 AT `N = 630`, AND THE AUDIT RUNS THE WHOLE FIELD AT ONE RUNG
 
+> **MEASURED 2026-09-05, AT THE ONLY RUNG THAT RAN THE WHOLE AUDIT: N2 IS TWO THIRDS OF THE WALL
+> CLOCK.** 10.20 of 15.35 hours, against 2.76 for cold, 1.63 for warm and 0.76 for the self arm.
+> **The reason is the arm's construction, not the field's difficulty**: the equal-distance
+> random-direction start lands far from any basin by design — that is what makes it a floor — so
+> it converges slowly everywhere. **It is a cost of the CONTROL, not of the mechanism.** Anyone
+> pricing an audit arm prices N2 first, and a 2e or a real-data spike that inherits this budget
+> without this sentence will misattribute two thirds of its bill to the thing under test.
+
 **THE GEOMETRY IS DERIVED FROM `k` — AND ONE HALF OF THE DERIVATION WAS FALSE UNTIL 2026-08-30.**
 **32 along the boundary normal is `4k`**, and **the boundary sits at the midpoint, index 16** —
 a placement this paragraph did not state and which the rest of it depends on — so there are **16
@@ -7401,7 +7409,16 @@ restated here.** What this section carries is what the next tasks need to know w
    `BASE`'s**, and the verdict says which number.
 2. **THE SAVING IS REAL AND IT IS 2c's.** On the signal-free rungs warm equalled cold in iterations
    because 24.4 is where a warm start has nothing to improve. **On the corrected builder it saves
-   two fifths — and selection does not move.** The contrast between the two constructions is the
+   two fifths — and the selection profile moves by one twelfth on one row, toward the truth.**
+   **THE AUDIT IS NOT BLIND: it has measured two regimes and reported the same answer with the
+   mechanism demonstrably active in one** — the three-rung null is the positive control for the
+   instrument's silence here, which is what makes the silence a reading.
+   **CORRECTED THE SAME DAY: the first report said "99.48% of cells agree warm and cold"; that
+   figure is the SELF arm against cold, over points.** Warm-against-cold agreement at point level
+   is **not in the artifact** — the report carries profiles and not selection maps, and the stores
+   were temporary — so the differing points' positions and condition numbers **cannot be recovered
+   without a ~4.4 h re-run**. Filed as an artifact defect for Task 9 and 2e: **a report must carry
+   the map the width was read from.** The contrast between the two constructions is the
    finding, and it is a contrast in exactly the term whose absence was the defect.
 3. **THE ARTIFACT §16.2 ITEM 6 WAS BUILT TO MEASURE DID NOT APPEAR IN EITHER POPULATION**, and the
    second population is the one where it had something to appear in. **Task 8's figure therefore
@@ -10760,8 +10777,14 @@ Still open. **A new session must not assume these were settled.**
     the same defect one field along. **The repair, if it holds, is the same too** — read the
     cgroup's own `cpu.stat`, and keep the host reading as a **secondary diagnostic** rather than as
     the gate.
-    **NOT ACTED ON, DELIBERATELY.** A gate deciding wrongly in the **conservative** direction costs
-    waiting, which is the safe failure, and changing a gate on the evidence of the session it
+    **NOT ACTED ON, DELIBERATELY — AND ITS COST IS NOW MEASURED, WHICH IS THE ARGUMENT FOR TAKING THE
+    REPAIR.** The difficulty rung was refused **three times** — at 4.46, 6.48 and 6.12 — with this
+    container idle each time, and passed at 2.13: **roughly a working day of waiting** between the
+    run being ready and the run starting, for a 15-hour measurement. A gate that reads the wrong
+    subject is not merely imprecise; **it is expensive in the conservative direction, and this is
+    the number that says how expensive.** The repair still gets its own validation against
+    known-good and known-bad, as the stall gate's did. A gate deciding wrongly in the
+    **conservative** direction costs waiting, which is the safe failure, and changing a gate on the evidence of the session it
     inconvenienced is how a gate becomes a formality. **What it does change is what a refusal
     MEANS:** *"this host is loud"* is not *"this container is busy"*, and a refusal is not evidence
     that the machine could not have carried the run.
