@@ -302,17 +302,27 @@ def main() -> None:
         json.dumps(
             {
                 "figure": str(out),
-                "drawn_from": {
-                    path.name: hashlib.sha256(path.read_bytes()).hexdigest()
-                    for path in (VERSION_1_REPORT, VERSION_2_REPORT)
-                },
-                "profiles": {
-                    "construction_1": profiles(one),
-                    "construction_2": profiles(two),
-                },
-                "iterations": {
-                    "construction_1": one["iterations"],
-                    "construction_2": two["iterations"],
+                # **KEYED BY CONSTRUCTION, WITH THE REPORT'S OWN NAME INSIDE**,
+                # so a checker needs no second copy of these paths and no
+                # knowledge of which file is which. The sidecar is the single
+                # source for what was drawn and where it came from.
+                "constructions": {
+                    "construction_1": {
+                        "report": VERSION_1_REPORT.name,
+                        "sha256": hashlib.sha256(
+                            VERSION_1_REPORT.read_bytes()
+                        ).hexdigest(),
+                        "profiles": profiles(one),
+                        "iterations": one["iterations"],
+                    },
+                    "construction_2": {
+                        "report": VERSION_2_REPORT.name,
+                        "sha256": hashlib.sha256(
+                            VERSION_2_REPORT.read_bytes()
+                        ).hexdigest(),
+                        "profiles": profiles(two),
+                        "iterations": two["iterations"],
+                    },
                 },
             },
             indent=2,

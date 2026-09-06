@@ -10438,6 +10438,23 @@ question; compute/bandwidth roofline pair for cross-machine prediction) are in d
 
 ## Gotchas discovered
 
+- **A TEST THAT IMPORTS A DEV-ONLY DEPENDENCY PASSES LOCALLY AND FAILS IN CI, AND THE SUITE CANNOT
+  SEE THE DIFFERENCE (found 2026-09-06, at Task 8 — the first red CI of 2d).** `matplotlib` is in
+  the pixi environment and **not in the dependency set CI installs**, so a test that imported the
+  figure generator — which imports `matplotlib` — passed a **1365-test local sweep** and died in CI
+  with `ModuleNotFoundError`. **This is the rule about local runs and CI being designed to fail
+  differently, arriving as a measurement rather than a warning.**
+  **THE REPAIR WAS TO THE SUBJECT, NOT TO THE ENVIRONMENT.** Adding `matplotlib` to CI would have
+  made a plotting library a test dependency in order to check a JSON file. **The test's subject is
+  the committed ARTIFACTS — the figure, its provenance record, the reports — and not the plotting
+  code**, so it reads the provenance record and imports nothing. The record is keyed by construction
+  and names each report inside itself, which also removes the second copy of the generator's paths.
+  **The general form: before importing anything into a test, ask whether the SUBJECT needs it or
+  only the convenience does** — and a test whose subject is an artifact should read the artifact.
+  **AND THE CHEAP CHECK THAT WOULD HAVE CAUGHT IT: run the new tests with the dependency blocked**
+  (`sys.meta_path` refusing that top-level name) before pushing. It costs seconds and it reproduces
+  the one thing the local environment cannot.
+
 - **A FIXTURE'S DECISIVE PROPERTY MUST BE A PROPERTY OF THE FIXTURE, NOT AN ACCIDENT OF SOMETHING
   ELSE (found 2026-09-04, when the version 2 builder landed).** `test_the_iteration_reading_reads_a_real_store`
   asserts its own fixture exercises both the all-fitted and the OK-only rule, because two readings

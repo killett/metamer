@@ -13,18 +13,28 @@ meets first.
 from __future__ import annotations
 
 import hashlib
-import importlib.util
 import json
 import pathlib
 import re
-import sys
 from typing import Any
 
 import pytest
 
 README = pathlib.Path("README.md")
 FIGURE = pathlib.Path("docs/figures/phase2d-smear-figure.png")
+PROVENANCE = pathlib.Path("docs/figures/phase2d-smear-figure.provenance.json")
 GENERATOR = pathlib.Path("docs/superpowers/notes/phase2d-figure.py")
+NOTES = pathlib.Path("docs/superpowers/notes")
+
+#: **NOTHING HERE IMPORTS THE GENERATOR, AND THAT IS THE POINT.** The subject of
+#: these tests is the committed ARTIFACTS -- the figure, its provenance record
+#: and the reports -- not the plotting code. Importing the generator dragged
+#: `matplotlib` into the suite, which is in the dev environment and **not in the
+#: dependency set CI installs**, so this file passed locally and failed in CI on
+#: its first push. **The local sweep and CI are designed to fail differently and
+#: this is what that looks like.** The provenance record makes the import
+#: unnecessary: it names the reports it was drawn from, so a checker needs no
+#: second copy of the generator's paths and no knowledge of which file is which.
 
 #: The section under test, by its own heading. **Sliced rather than searched
 #: whole-file**: a phrase that happens to appear in the Usage section would
@@ -39,16 +49,6 @@ def _section() -> str:
     rest = text[start + len(SECTION_HEADING) :]
     end = rest.find("\n## ")
     return rest if end == -1 else rest[:end]
-
-
-def _generator():
-    """Import the figure generator from `docs/`, which is not a package."""
-    spec = importlib.util.spec_from_file_location("phase2d_figure", GENERATOR)
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    sys.modules["phase2d_figure"] = module
-    spec.loader.exec_module(module)
-    return module
 
 
 @pytest.mark.parametrize(
@@ -257,23 +257,25 @@ def test_the_committed_figure_was_drawn_from_the_committed_reports():
     test had loaded, which is a tautology: it passed with a report deliberately
     corrupted underneath it. **The hash is what makes the comparison real.**
     """
-    module = _generator()
-    provenance = json.loads(module.PROVENANCE.read_text())
+    constructions = json.loads(PROVENANCE.read_text())["constructions"]
+    assert set(constructions) == {"construction_1", "construction_2"}, (
+        "the figure does not record both constructions, so it cannot be the "
+        "comparison the caption claims"
+    )
 
-    for path in (module.VERSION_1_REPORT, module.VERSION_2_REPORT):
+    for key, drawn in constructions.items():
+        path = NOTES / drawn["report"]
+        assert path.exists(), f"{key} names a report that is not in the tree"
+
         current = hashlib.sha256(path.read_bytes()).hexdigest()
-        assert provenance["drawn_from"][path.name] == current, (
+        assert drawn["sha256"] == current, (
             f"{path.name} has changed since the figure was drawn: re-run "
-            f"{GENERATOR} and commit the new figure"
+            f"{GENERATOR} and commit the new figure and its provenance"
         )
 
-    for key, path in (
-        ("construction_1", module.VERSION_1_REPORT),
-        ("construction_2", module.VERSION_2_REPORT),
-    ):
         report = json.loads(path.read_text())
         expected = {s["arm"]: list(s["reading"]["profile"]) for s in report["smears"]}
-        assert provenance["profiles"][key] == expected, (
+        assert drawn["profiles"] == expected, (
             f"the figure's {key} profiles are not {path.name}'s"
         )
         assert set(expected) == {"cold", "warm", "n2"}, (
