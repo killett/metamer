@@ -10,7 +10,7 @@ that.
 
 ## Status
 
-**Alpha — Phase 1 and Phase 2a/2b complete; Phase 2c in progress.**
+**Alpha — Phase 1 and Phase 2a/2b/2c complete; Phase 2d in progress.**
 
 `metamer.core` is the likelihood spine, end to end. A `ProcessSpec` goes in; a scored,
 ranked, per-series result comes out. That covers the state-space representation, the
@@ -24,9 +24,12 @@ input contract, the geometry fingerprint, the memory budget and the tiling deriv
 it, the zarr store, the completion bitmap, resumption, and — since Phase 2c — the
 two-pass warm start described under [Usage](#usage). `python -m metamer` drives it.
 
-`metamer.bench` also ships: the benchmark harness used to pick the evaluation path.
+`metamer.bench` also ships. It began as the harness used to pick the evaluation path and now
+carries the Phase 2d benchmark: the simulated field with its regime boundary, the smear-width
+estimator, the N2 floor map, and the driver that produces a reproducible rung report.
 
-1174 tests, `mypy --strict`.
+The suite runs to `mypy --strict` and every commit is verified against it in CI; the
+current count is in [`PROGRESS.md`](PROGRESS.md), which is updated with each full sweep.
 
 **Not yet built:** `metamer.cli` as a command tree. `python -m metamer` is a deliberately
 provisional entry point — naming a subcommand would design the argument structure before
@@ -71,9 +74,13 @@ python -m metamer config.toml out.zarr --two-pass
 
 Pass 1 fits a coarse grid — every `warm_start.coarse_stride`-th point on both spatial
 axes — from a cold start. Pass 2 then fits **every** point of the full grid, each one
-warm-started from its nearest valid coarse fit. On a simulated field this cut iterations
-substantially; on real altimetry it has not been measured, and the saving is a ceiling
-rather than an estimate.
+warm-started from its nearest valid coarse fit.
+
+**On a simulated field carrying a trend this cut iterations by about two fifths; on a field
+with no signal it cut nothing**, because a cold fit there converges in 24 iterations and a warm
+start has nothing to improve. **On real altimetry it has not been measured, and the saving is a
+ceiling rather than an estimate.** The two constructions and what separates them are in
+[the figure below](#the-warm-start-smear-and-what-it-is-allowed-to-say).
 
 **Pass 1's store is written beside the output**, with `.pass1` inserted before the
 extension: `out.zarr` gives `out.pass1.zarr`.
@@ -97,6 +104,54 @@ store is written, and the output is what a plain run produces. The setting is pa
 fit identity, so a store fitted with warm starts and one fitted without do not share a
 `fit_hash` and neither resumes the other.
 
+### The warm-start smear, and what it is allowed to say
+
+Warm-starting one fit from a neighbour's optimum could smear a boundary: if a fit inherits its
+neighbour's answer rather than finding its own, a sharp change in the true parameters would come
+back blurred, and the width of that blur measures the artifact. **Design doc §16.2 item 6 asks for
+that width to be measured on simulated fields, and for the figure to go in the README.** This is
+it.
+
+![The warm-start smear at the easy rung: three arms at both field constructions, every width at
+the 1-cell floor, beside the iteration saving at each construction](docs/figures/phase2d-smear-figure.png)
+
+**Both panels are the same rung, the same seed and the same geometry — `easy`, seed `20260830`,
+32 × 12 points, `N = 630`, three candidates.** The only difference between them is whether the
+builder draws a trend, which is what makes the pair a comparison rather than two measurements.
+
+| | construction 1, no signal | construction 2, a trend at 16σ |
+|---|---|---|
+| cold iterations per point | 24.4 | **42.1** — Phase 2c's own difficulty |
+| warm-start saving | −0.4%, nothing to save | **+41.9%** of pass-2 iterations |
+| smear width, cold / warm / N2 | **≤ 1 cell** on every arm | **≤ 1 cell** on every arm |
+
+**The width is at the floor everywhere, so it is unresolved rather than zero, and the profile is
+the evidence.** A smear registers as a width only when it carries a row of the field past the
+majority threshold; no row of any arm reaches it at either construction. **The N2 arm is the floor
+that makes that readable** — it starts every fit from an equal-distance random direction, so the
+width it produces is what this estimator returns when the start is deliberately uninformative. A
+warm width is only interesting beside it.
+
+**The finding is the pair.** At the difficulty where warm-starting saves two fifths of the
+iterations, it moves no row of the selection profile past the threshold, and it moves one row by
+one twelfth — toward the truth. **The saving is real and the artifact is absent.** The signal-free
+panel is what makes that a reading rather than an assumption: it shows the same instrument
+reporting the same null where there was nothing to save, so the silence in the second panel is not
+the instrument's.
+
+> **THIS IS A SIMULATED FIELD AND NO NUMBER HERE IS A CLAIM ABOUT THE OCEAN.** Its parameters,
+> its coherence length and its boundary contrast were chosen by us; the rung is named `easy`
+> because it was built to make an artifact easy to see, not because it resembles altimetry.
+> **The spatial coherence of real altimetry optima has never been measured**, and a weaker
+> coherence gives a smaller saving. **The closer is a spike on a real gridded product**, running
+> the same arms at the same record length; until that runs, every number above describes this
+> construction at this difficulty and nothing else.
+
+> **THE POSITION BESIDE THIS FIGURE IS RESERVED AND EMPTY.** §16.2 asks for the smear figure to sit
+> next to the **misspecification figure**, which is **§16.2 item 4** and belongs to **Phase 6
+> (validation suites)**. It is not built. The position is named here rather than left blank so a
+> reader does not conclude item 4 was done.
+
 ## Where to look
 
 | Document | What it is |
@@ -104,6 +159,7 @@ fit identity, so a store fitted with warm starts and one fitted without do not s
 | [`docs/superpowers/specs/2026-08-04-metamer-design.md`](docs/superpowers/specs/2026-08-04-metamer-design.md) | The design. Module boundaries, the public API surface, the likelihood engines, the zarr output schema, the phased implementation plan, and the testing strategy. |
 | [`docs/superpowers/plans/2026-08-05-metamer-phase1.md`](docs/superpowers/plans/2026-08-05-metamer-phase1.md) | The Phase 1 implementation plan: twenty tasks building the likelihood spine end to end on arrays. |
 | [`docs/superpowers/plans/2026-08-24-metamer-phase2c.md`](docs/superpowers/plans/2026-08-24-metamer-phase2c.md) | The Phase 2c plan: the two-pass warm start, its barrier, and the hysteresis audit. |
+| [`docs/superpowers/plans/2026-08-30-metamer-phase2d.md`](docs/superpowers/plans/2026-08-30-metamer-phase2d.md) | The Phase 2d plan: the simulated-field benchmark, the smear-width estimator, and the figure above. |
 | [`docs/superpowers/notes/phase1-to-phase2-handoff.md`](docs/superpowers/notes/phase1-to-phase2-handoff.md) | The pre-flight — the audit run against every implementation brief before code, and the standing rules. The most reusable thing here. |
 | [`PROGRESS.md`](PROGRESS.md) | Current state, cross-cutting decisions, gotchas, and open questions. |
 | [`docs/phase1-prompt.md`](docs/phase1-prompt.md) | The original brief. Superseded by the design document's §2 wherever they conflict. |

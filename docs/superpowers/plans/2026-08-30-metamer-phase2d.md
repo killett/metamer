@@ -131,8 +131,8 @@ the section where it was discussed.** The repair was not a compromise but a re-f
 | 5b | the difficulty rung — one rung, on the corrected builder | 5 | **DONE 2026-09-05. The stop fired: no artifact at 2c's difficulty; the saving appeared at 2c's size and moved no selection** |
 | ~~6~~ | ~~the plausibility rung~~ | — | **DECIDED AGAINST 2026-09-01**: same difficulty, weaker contrast |
 | ~~7~~ | ~~the hard rung~~ | — | **DECIDED AGAINST**, same reason |
-| 8 | the README figure, and what it is allowed to say | **5b** (was 6, which is decided against — re-pointed 2026-09-03) | **NEXT** |
-| 9 | the 2d exit-criteria suite | all | |
+| 8 | the README figure, and what it is allowed to say | 5b (was 6, which is decided against — re-pointed 2026-09-03) | **DONE 2026-09-06. One rung, two constructions; the profile is the drawn quantity and the width the annotation** |
+| 9 | the 2d exit-criteria suite | all | **NEXT** |
 
 **Tasks 2 and 3 are independent of everything and of each other**, and both are falsifiable by unit
 test alone on constructed maps with no field and no run. **Task 0 gates Task 1 because a cost
