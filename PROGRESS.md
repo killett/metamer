@@ -3,10 +3,10 @@
 ## Start here (cold-start summary)
 
 1. **Branch `main`, everything on it, every commit pushed by a hook** — https://github.com/killett/metamer. **A SHA here is stale the moment the next commit lands, so nothing here names one:** `git log --oneline -8` is the authority.
-2. **DONE:** Phase 1 (0–18), Phase 2 preliminaries P0–P4, **Phase 2a (0–13)**, **Phase 2b (COMPLETE 2026-08-19 — 10 met / 4 reduced scope / 2 FAILED)**, **Phase 2c's brainstorm (D1–D12)**, and **Phase 2c (COMPLETE 2026-08-29 — 10 met / 2 reduced scope / 0 failed; Tasks 0–4 on 2026-08-24, Task 5 on 2026-08-27, Task 6 on 2026-08-28, Tasks 7–8 on 2026-08-29)**. The modelling sub-phase was decided against 2026-08-22 and **re-decided on closed facts 2026-08-23: it does not open.** Sections below carry each; **none is restated here.**
-3. **NEXT ACTION: TASK 9, THE 2d EXIT-CRITERIA SUITE — then 2d's close. TASK 8 IS DONE 2026-09-06 (the README figure: one rung, two constructions, every arm at the floor, the saving beside it) AND TASK 5b IS DONE, 2026-09-05, AND THE PRE-DECIDED STOP FIRED** — on field construction version 2 at 2c's difficulty (42.08 cold iterations per point against the 43.94 the stop was stated against), with conditioning comparable to version 1's, **warm equals cold in selection at every index: the width is at the 1-cell floor on cold, warm and N2 alike, and no row of any profile crosses a half.** **AND THE SAVING APPEARED AT 2c's OWN SIZE — 41.81% of pass-2 iterations, 39.75% net of pass 1, against 2c's 42.28%** — while moving no selected candidate anywhere. **The prepared conclusion is now a measurement: a warm start that saves two fifths of the iterations while moving no selected candidate is buying TIME and not BIAS.** The verdict is [`phase2d-difficulty-rung-verdict.md`](docs/superpowers/notes/phase2d-difficulty-rung-verdict.md) and nothing from it is restated here. **NO FURTHER RUNGS**, by the branch Task 1 wrote. The field builder's defect is repaired (version 2), version 1 stays constructible and byte-guarded, and **the three-rung null stands as the signal-free half of the contrast that is the finding.** **TASKS 6 AND 7 STAY DECIDED AGAINST.**
+2. **DONE:** Phase 1 (0–18), Phase 2 preliminaries P0–P4, **Phase 2a (0–13)**, **Phase 2d (COMPLETE 2026-09-06 — 13 met / 1 reduced scope / 3 failed)**, **Phase 2b (COMPLETE 2026-08-19 — 10 met / 4 reduced scope / 2 FAILED)**, **Phase 2c's brainstorm (D1–D12)**, and **Phase 2c (COMPLETE 2026-08-29 — 10 met / 2 reduced scope / 0 failed; Tasks 0–4 on 2026-08-24, Task 5 on 2026-08-27, Task 6 on 2026-08-28, Tasks 7–8 on 2026-08-29)**. The modelling sub-phase was decided against 2026-08-22 and **re-decided on closed facts 2026-08-23: it does not open.** Sections below carry each; **none is restated here.**
+3. **NEXT ACTION: 2e, WHATEVER THE DESIGN DOC SAYS IT IS — PHASE 2d IS CLOSED 2026-09-06 (13 met / 1 reduced / 3 failed; the close is [here](#phase-2d-is-closed-2026-09-06--13-met--1-met-with-reduced-scope--3-failed-plus-2bs-two-inherited-failures-and-2cs-one) and carries the one sentence 2d is). TASK 8 IS DONE 2026-09-06 (the README figure: one rung, two constructions, every arm at the floor, the saving beside it) AND TASK 5b IS DONE, 2026-09-05, AND THE PRE-DECIDED STOP FIRED** — on field construction version 2 at 2c's difficulty (42.08 cold iterations per point against the 43.94 the stop was stated against), with conditioning comparable to version 1's, **warm equals cold in selection at every index: the width is at the 1-cell floor on cold, warm and N2 alike, and no row of any profile crosses a half.** **AND THE SAVING APPEARED AT 2c's OWN SIZE — 41.81% of pass-2 iterations, 39.75% net of pass 1, against 2c's 42.28%** — while moving no selected candidate anywhere. **The prepared conclusion is now a measurement: a warm start that saves two fifths of the iterations while moving no selected candidate is buying TIME and not BIAS.** The verdict is [`phase2d-difficulty-rung-verdict.md`](docs/superpowers/notes/phase2d-difficulty-rung-verdict.md) and nothing from it is restated here. **NO FURTHER RUNGS**, by the branch Task 1 wrote. The field builder's defect is repaired (version 2), version 1 stays constructible and byte-guarded, and **the three-rung null stands as the signal-free half of the contrast that is the finding.** **TASKS 6 AND 7 STAY DECIDED AGAINST.**
 4. ## THE STANDING LIMITATION ON EVERYTHING 2c DECIDED: **NO 2c NUMBER COMES FROM REAL DATA.** Warm-starting was authorized — and every decision after D1 inherits this — on a **simulated field whose spatial coherence is a construction parameter**. **The spatial coherence of real altimetry optima has never been measured.** Weaker coherence gives a **smaller** saving, and **§11.2's 30% threshold could fail on real data.** **THE NAMED CLOSER, not an open worry: a spike on a real gridded product — same three arms, same record-length lever.** **AND SINCE 2026-08-24 THERE IS A SECOND REGISTER OF IT: every 2c saving is a CEILING, not an estimate**, because the instrument searched with no effective spiral bound — see [what 2c's tasks inherit](#what-2cs-tasks-inherit-2026-08-24).
-5. **Tests: 1365 passed, 0 failed, 0 INDETERMINATE — 2026-09-06, 4032.07 s (1:07:12).** **`pixi run test` is the full sweep and every end-of-task verification must run it; `test-fast` and `test-ci` are NOT evidence** — the full sweep has caught **eight** things a fast run could not, the most recent being a test whose own expected value was computed from a 1-based reading of `np.arange`. **Every run prints `RSS measurement validity`, including at zero**; a nonzero count is INDETERMINATE, neither pass nor fail.
+5. **Tests: 1388 passed, 0 failed, 0 INDETERMINATE — 2026-09-06, 5144.42 s (1:25:44).** **`pixi run test` is the full sweep and every end-of-task verification must run it; `test-fast` and `test-ci` are NOT evidence** — the full sweep has caught **eight** things a fast run could not, the most recent being a test whose own expected value was computed from a 1-based reading of `np.arange`. **Every run prints `RSS measurement validity`, including at zero**; a nonzero count is INDETERMINATE, neither pass nor fail.
 6. **Verify a fresh checkout with `pixi run test && pixi run typecheck && pixi run lint`**, plus `pixi run pre-commit run --all-files` before every commit. **AND `git add` A NEW FILE BEFORE THAT SWEEP, NEVER AT COMMIT TIME** — `--all-files` covers **tracked** files only, so an untracked new module makes every hook print `Passed` without being read. Measured 2026-08-24; it cost two full twenty-minute sweeps before it was noticed. **AND THE RULE HAS A SECOND FORM, PROMOTED 2026-08-31: STAGE ANYTHING A TOOL MAY RESTORE, NOT ONLY ANYTHING A HOOK MAY SKIP** — `git checkout -- <file>` restores **from the index**, so an unstaged edit in a file any tool touches is **silently reset to `HEAD`, with no error**. One changes what is CHECKED, the other changes what SURVIVES; the pair is in [the handoff](docs/superpowers/notes/phase1-to-phase2-handoff.md) and is not restated here.
 7. **THE METHOD IS THE PRE-FLIGHT AND IT LIVES IN EXACTLY ONE PLACE:** [`phase1-to-phase2-handoff.md`](docs/superpowers/notes/phase1-to-phase2-handoff.md) §1 — (a0)–(a9), (a)–(k), the standing rules, the fixture facts, **and the ones 2c added:** (i2b) a high-ceiling control converts a null into a **located** null · (i2c) a sign-unstable benefit is worse than a small one · (j5) a second instrument is a cross-check only if it measures the same quantity under the same conditions · (j6) bound the unmeasured region before measuring it · (i11) refutation clauses in **both** directions · (a2b) make an invalid value **unavailable** rather than caveated · (h2) stratify only by axes at the metric's **own** granularity · (j7) never stratify by a quantity the treatment can move · **(h3) check every stratum boundary against the filters the population already passed — an eps-derived boundary and an eps-derived GATE arrive at the same number by the same argument, and the empty strata read as a finding about the data** · **(h4) a rule stated over "the metrics" must be checked against each KIND of metric — 2c hit this three times** · **(a2b) at a count: "zero cases" is a claim about the INSTRUMENT until proven otherwise** · (c4) a validator must be specified in the **coordinates and extent** the validated object actually has · **(c5) a gate over a set that can GROW must be written against the set, not an enumeration of its members** · **(c6) a practice enforced by a MECHANISM must be checked to reach every instance — a partially-installed guard prints a complete-looking green** · (e2) prove a mutant differs before recording a surviving mutation — **(e) now has six causes** · (e3) its opposite colour, a **red** suite hiding a dead assertion · (a2c) populated but nothing **acts** on it · (a2d) a hashed value's **unit** is part of its identity — **and 2d added its artifact register: when a measurement is too expensive to be a test, its recorded output is a current claim only while the configuration that produced it is, so the artifact carries its instrument block and the check FAILS when a named default has moved** · (a2e) encode a classification as a **construction** · (i12) a **uniform fixture set** cannot test a freedom the contract leaves open · (j8) an adopted verdict makes the **instrument** part of the specification · plus (a0)'s sixth register (**a check that never read the file prints the same word as one that did**) and (a4)'s two (**"checked" in your own pre-flight is a claim**, and **a decision's own EXAMPLE can be the case that refutes it — and a retired argument stays visible**), and (a5)'s across-DECISIONS register (**check a decision against the measurements taken for the OTHERS; a term of art repeated across decisions acquires a reading nobody chose**), **plus the four 2d added: (a5b) when two constraints bind the same quantity, solve them together and state which binds — a quantity sized against one and checked against neither is the common case, because each constraint is satisfied in the section where it is discussed · (j8)'s second register: a rate is a measurement of a WORKLOAD and the workload is a precondition, so a cost figure recorded without its fixture can be quoted and cannot be reproduced — and where a DETERMINISTIC proxy for a cost exists, budget in the proxy and convert late · (j7)'s budget-level cousin: a quantity the experiment can MOVE must be reported, not only used · and (a4)'s agreeing-first-check rule gained the worked instance showing the error can point AT the expected answer — contention inflates seconds only, so a loud host pushed a per-iteration cost upward into a 0.3% "match" that is 19% apart when quiet**. **Do not restate them here** — the two copies drifted once already.
 8. **CI IS VERIFIED BY ENUMERATING COMMITS, NOT BY READING `gh run list`** — a run between two green runs is not thereby green, and **a commit that is not the TIP of its push gets no run of its own**, because one push produces one run. **Enumerate by `headSha`, never by position**: a poll on *"is the first row completed"* returned the PREVIOUS run's row in this session and reported a queued commit as verified. **AS OF 2026-09-02, EVERY `src`-TOUCHING COMMIT IN 2d HAS A COMPLETED RUN WITH CONCLUSION `success`.** **Two commits that touch no `src` do not, and the reason is the same each time: the next push cancelled the run verifying them.** (**Corrected 2026-09-03 from "docs-only"**: one of the two is a `feat:` commit that adds a harness under `notes/`, so the word and the commit type disagreed while the substantive claim — nothing in `src` is unverified — held either way.) A cancelled run is **evidence of nothing**; what covers those commits is that a later commit's green run tested a **tree containing their content**, which is weaker than a run of their own and is stated as such. **The rule that prevents it is one push per run**, and it was broken twice by committing again within minutes. See [THE CI FIXTURE DECISION](#the-ci-fixture-decision--taken-measured-and-verified-2026-08-22); **CI runs `-m "not machine"` and therefore executes exactly ONE of the nine RSS assertions**, so it is not a substitute for the local sweep.
@@ -7394,6 +7394,130 @@ defect not repeating.
 > arriving one level down.
 
 ---
+
+### PHASE 2d IS CLOSED, 2026-09-06 — 13 MET / 1 MET WITH REDUCED SCOPE / 3 FAILED, PLUS 2b's TWO INHERITED FAILURES AND 2c's ONE
+
+> ## THE SENTENCE A READER CAN CARRY
+>
+> **The field builder was missing the trend it was fitting; corrected, warm-starting saves 42% at
+> 2c's difficulty and moves no selected candidate — and that is a null with a positive control
+> beside it, on a simulated field, with the real-data spike still the closer.**
+>
+> Everything below supports that sentence.
+
+**THE RECORD IS `tests/exit_criteria_2d.py` AND IT IS EXECUTABLE.** Every criterion names its
+reading, names the tests that establish it, and names what it is driven from **or why no outside
+exists**; `tests/test_exit_criteria_2d.py` binds all of that to the collected suite and takes the
+benchmark readings **off the committed reports**, because a 15-hour measurement cannot be a test
+and its recorded output can. **The table below is the reasoning; the record is the part a test can
+hold**, and neither restates the other.
+
+| # | criterion | verdict | reading |
+|---|---|---|---|
+| 1 | The step occupies one cell; an interior line has no transition | **MET** | the truth array, both lines |
+| 2 | The builder's `ℓ` is recoverable from the truth | **MET** | the coherence length of the TRUE parameters |
+| 3 | The field opens through the shipped opener and every point fits | **MET** | the exit code, and the fitted point count |
+| 4 | `≤ 1` cell on a step, 5 on a constructed 5-cell transition | **MET** | the width in fine cells, both sides |
+| 5 | The interior null returns `≤ 1` cell at every rung | **MET** | the null on each committed report |
+| 6 | The smear width at the easy rung exceeds the 1-cell floor | **FAILED** | the width, against its stated floor |
+| 7 | No width exceeds the spiral reach; one above it is refused | **MET** | the width against `spiral_bound × k`, from config |
+| 8 | Every width is reported beside N2's at the same rung | **MET** | both numbers in one report, per rung |
+| 9 | The N2 map and the audit's N2 arm agree at every shared point | **MET** | the per-cell value under one seed |
+| 10 | The warm-start saving at `N = 630` through the shipped mechanism | **MET**, re-pointed | iterations **and** wall clock, both named |
+| 11 | The saving is monotone in `ℓ`; no rung reaches the self ceiling | **FAILED by construction** | the per-rung saving, against the ceiling |
+| 12 | Every audit point stratum reports a rate or its member count | **REDUCED SCOPE** | the report's own withheld list |
+| 13 | A number without a rung cannot be constructed | **MET** | the construction, both directions |
+| 14 | OQ21 closes: a named pre-fit proxy against each post-fit proxy | **FAILED** | the coefficient, and the name recorded first |
+| 15 | The README carries the width, its rung, its floor and the limitation | **MET** | the README's own text |
+| 16 | The committed reports name an instrument matching current defaults | **MET** | the block against the shipped defaults |
+| 17 | The field's iteration count is recorded and the budget was finalised on it | **MET** | the recorded count, and the factor it selected |
+
+**THE THREE FAILURES ARE THREE DIFFERENT KINDS, AND COLLAPSING THEM WOULD LOSE ALL THREE.**
+
+- **6 FAILED ON ITS OWN TERMS AND THE CRITERION DID ITS JOB.** The width was predicted at 2–6 fine
+  cells and came back **at the floor on every arm at both constructions**, on a field where the
+  mechanism ran to completion with every point warm-started. **Reinterpreting it would delete the
+  finding.** What closes it is an artifact appearing somewhere — a rung, a construction or a real
+  field where warm and cold disagree — and **2d looked in the two places it could.**
+- **11 FAILED BY CONSTRUCTION, TWICE OVER.** The lever is not a lever, measured at E5; and only one
+  rung ever produced a saving, so monotonicity has one point to be monotone through. **The
+  self-ceiling half is separately satisfied** — 0.053 and 0.089 against a ceiling of 1 — **but a
+  criterion is not half met.** It is recorded so a later reader meets the measurement instead of
+  reinstating the sweep.
+- **14 FAILED BECAUSE ITS ROUTE WAS DECIDED AGAINST, NOT BECAUSE THE QUESTION CHANGED.** OQ21 was to
+  close as a by-product of Task 6's subsample; Task 6 was decided against. **The question stands
+  with its original closer intact.**
+
+> ## AND CRITERION 12 IS THE FINDING IN THE SUITE, NOT A FOOTNOTE
+>
+> **It has no reading at all.** The rung report carries checks, ratios, smears, the null line,
+> iterations and cost — **and no strata.** The stratified report, its withholding rules, its
+> 30-member floor and its per-stratum-only output are **2c's `batch.audit` machinery, which the 2d
+> driver never invoked.**
+>
+> **SO THE STRATA REMAIN UNEXERCISED ON REAL OUTPUT AFTER TWO SUB-PHASES:** 2c built them and
+> measured nothing with them; 2d measured something and did not run them. **This is the standing
+> state, not a 2d shortfall.** What closes it is **a driver that runs `batch.audit` over a rung's
+> arms — a small piece of wiring against a large piece of already-built machinery**, and a test
+> asserts the absence so the day it lands, criterion 12 fails and asks to be re-evaluated.
+
+**THE INHERITED VERDICTS ARE READ OUT OF THEIR OWN RECORDS, BY NUMBER, NOT COPIED.** 2b's criteria
+6 and 7 stay **FAILED** and 2c's criterion 11 stays **REDUCED SCOPE**. **2d does not reopen the
+residency model and must not be read as having done so**, and it does not re-cut D9's boundaries —
+which is the temptation this sub-phase had most, because it finally has an answer in view.
+
+### WHAT 2d MEASURED, AND WHAT IT DID NOT
+
+**MEASURED.** A defect in the field builder — it drew noise while its config fitted
+`constant + trend` — found, localised and repaired as **field construction version 2**, with
+version 1 kept **constructible and byte-guarded** so the three signal-free rungs' numbers keep
+their subject. One rung on the corrected builder at **2c's own difficulty**, where warm-starting
+saves **41.81%** of pass-2 iterations and **39.75%** net of pass 1, against 2c's 42.28% — **and
+moves no row of the selection profile past the majority threshold**, moving one row by one twelfth,
+toward the truth. **The audit read the same null at 24 iterations, where there was nothing to save,
+and at 42, where there was 42% to save: the instrument is not blind, and the silence is a reading.**
+
+**NOT MEASURED, AND THE LIMITATION IS UNCHANGED BY A RESULT THIS CLEAN.** **No 2d number comes from
+real altimetry and 2d quotes no magnitude.** The spatial coherence of real optima has never been
+measured; weaker coherence gives a smaller saving. **The closer is a spike on a real gridded
+product**, same arms, same record length. A null on this construction at this difficulty is a
+statement about this construction at this difficulty.
+
+### THE INSTRUMENT FINDINGS, WHICH OUTLIVE THE SUB-PHASE
+
+1. **The lever that was not a lever.** `parameters = factor × BASE` holds `white/sigma` constant and
+   amplitude is free under a concentrated likelihood, so a sweep moved a quantity the fit cannot
+   see. **A sweep's axis must be checked against what the estimator can respond to.**
+2. **Iterations against seconds.** Iterations reproduced the cost basis to two digits through a
+   15.35 h run on a shared host that put the seconds 25% over. **Budget in the deterministic proxy;
+   convert late; mark the seconds' preconditions.**
+3. **The gate's subject** — open question 22, with its cost measured.
+4. **The byte guard, written before the builder moved.** A guard written after a change is a guard
+   fitted to the outcome.
+5. **A harness is a frozen instrument** — (j8)'s third register, and the explicit exception to (j9).
+6. **Prove the test fails before recording it as a guard** — (e2)'s converse, which caught a
+   tautology that passed with a corrupted report underneath it.
+7. **A test whose subject is an artifact should read the artifact** — the first red CI of 2d, and
+   the repair narrowed the dependency surface rather than widening it.
+8. **Look at the rendered figure.** Four defects no validator catches, the worst being an arm
+   entirely invisible beneath two others. **The palette check passes on colour, not layout.**
+
+### WHAT 2e INHERITS
+
+**An audit that has measured something** — for the first time in this project. Concretely:
+
+- **A field builder that carries the trend it was always fitting**, versioned, with the older
+  construction reachable and guarded.
+- **An estimator whose primary reading is the profile, not the width**, because at any baseline
+  above zero a width is censored at its floor and the profile is what carries the band.
+- **A saving of 42% at 2c's difficulty that moves no selected candidate**, with a positive control
+  beside it rather than a bare null.
+- **A standing limitation unchanged**, and the real-data spike still the named closer.
+- **Two pieces of owed wiring, both small against what is already built:** a driver that runs
+  `batch.audit` over a rung's arms (criterion 12), and a report that carries the **selection map**
+  the width was read from — the estimator's own subject is not in the artifact that reports on it.
+
+**2e is whatever the design doc says it is.** What is different is where it starts.
 
 ### What plan Task 8 established (done 2026-09-06 — read before touching the README figure or its tests)
 
