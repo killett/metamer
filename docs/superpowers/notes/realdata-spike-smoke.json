@@ -1,0 +1,230 @@
+{
+  "record": "realdata_spike_report",
+  "git_head": "3fda535c232c61c57e3f0684a78422bf33729ea4",
+  "quiet": {
+    "record": "quiet_check",
+    "idle_seconds": 20.00078266300261,
+    "stall_ms_per_s": 0.0,
+    "loadavg": [
+      1.92138671875,
+      2.34765625,
+      2.52197265625
+    ],
+    "physical_cores": 4,
+    "load_limit": 3.0,
+    "quiet": true,
+    "machine": "344868651edf0b92",
+    "stall_is_not_a_gate": "open question 19"
+  },
+  "arms": [
+    {
+      "arm": "control",
+      "signal_terms": [
+        "constant",
+        "trend"
+      ],
+      "iterations": {
+        "record": "iterations",
+        "arm": "control",
+        "store": "/tmp/claude-1000/-workspace/df8c1331-52cf-44f5-b899-d6fca665cdbf/scratchpad/spike/control-smoke/easy-cold.zarr",
+        "per_point": 46.083333333333336,
+        "per_cell": 15.36111111111111,
+        "total": 553,
+        "points": 12,
+        "cells": 36,
+        "ok_per_point": 46.083333333333336,
+        "ok_per_cell": 15.36111111111111,
+        "ok_total": 553,
+        "ok_points": 12,
+        "ok_cells": 36,
+        "all_minus_ok_per_point": 0.0
+      },
+      "outcomes": {
+        "record": "outcome_distribution",
+        "arm": "control",
+        "cells_total": 36,
+        "cells_fitted": 36,
+        "cells_ok": 36,
+        "ok_fraction": 1.0,
+        "counts": {
+          "OK": 36
+        },
+        "cells_at_cap": 0,
+        "reachable_codes_here": [
+          "OK"
+        ],
+        "fixture_limit": "this box has no land, ice or gaps, so NOT_ATTEMPTED is unreachable and a clean histogram is a property of the box"
+      },
+      "kappa": {
+        "record": "kappa",
+        "arm": "control",
+        "instrument": "in-process core.fit; NOT the run's store path (j5)",
+        "stride": 8,
+        "points": 2,
+        "cells": 6,
+        "cells_with_defined_kappa": 4,
+        "kappa_undefined": 2,
+        "kappa_quantiles_50_90_99_100": [
+          11.00872362284065,
+          28.13810665763018,
+          30.884646716524742,
+          31.189817834179696
+        ],
+        "hessian_cond_limit": 67108864.0,
+        "cells_above_limit": 0,
+        "degenerate_hessian_cells": 0,
+        "seconds": 5.274732234887779,
+        "note_iterations_are_not_the_primary_reading": true
+      },
+      "seconds": 36.21914772200398
+    },
+    {
+      "arm": "real_ct",
+      "signal_terms": [
+        "constant",
+        "trend"
+      ],
+      "iterations": {
+        "record": "iterations",
+        "arm": "real_ct",
+        "store": "/tmp/claude-1000/-workspace/df8c1331-52cf-44f5-b899-d6fca665cdbf/scratchpad/spike/real_ct-cold.zarr",
+        "per_point": 60.083333333333336,
+        "per_cell": 20.02777777777778,
+        "total": 721,
+        "points": 12,
+        "cells": 36,
+        "ok_per_point": 45.333333333333336,
+        "ok_per_cell": 18.133333333333333,
+        "ok_total": 544,
+        "ok_points": 12,
+        "ok_cells": 30,
+        "all_minus_ok_per_point": 14.75
+      },
+      "outcomes": {
+        "record": "outcome_distribution",
+        "arm": "real_ct",
+        "cells_total": 36,
+        "cells_fitted": 36,
+        "cells_ok": 30,
+        "ok_fraction": 0.8333333333333334,
+        "counts": {
+          "OK": 30,
+          "DEGENERATE_HESSIAN": 6
+        },
+        "cells_at_cap": 0,
+        "reachable_codes_here": [
+          "DEGENERATE_HESSIAN",
+          "OK"
+        ],
+        "fixture_limit": "this box has no land, ice or gaps, so NOT_ATTEMPTED is unreachable and a clean histogram is a property of the box"
+      },
+      "kappa": {
+        "record": "kappa",
+        "arm": "real_ct",
+        "instrument": "in-process core.fit; NOT the run's store path (j5)",
+        "stride": 5,
+        "points": 3,
+        "cells": 9,
+        "cells_with_defined_kappa": 6,
+        "kappa_undefined": 3,
+        "kappa_quantiles_50_90_99_100": [
+          8509539.043183813,
+          122854828.90591872,
+          149681450.77591547,
+          152662186.53924844
+        ],
+        "hessian_cond_limit": 67108864.0,
+        "cells_above_limit": 2,
+        "degenerate_hessian_cells": 2,
+        "seconds": 55.46771317184903,
+        "note_iterations_are_not_the_primary_reading": true
+      },
+      "seconds": 203.85668833507225
+    },
+    {
+      "arm": "real_ctas",
+      "signal_terms": [
+        "constant",
+        "trend",
+        "annual",
+        "semiannual"
+      ],
+      "iterations": {
+        "record": "iterations",
+        "arm": "real_ctas",
+        "store": "/tmp/claude-1000/-workspace/df8c1331-52cf-44f5-b899-d6fca665cdbf/scratchpad/spike/real_ctas-cold.zarr",
+        "per_point": 64.41666666666667,
+        "per_cell": 21.47222222222222,
+        "total": 773,
+        "points": 12,
+        "cells": 36,
+        "ok_per_point": 55.666666666666664,
+        "ok_per_cell": 20.242424242424242,
+        "ok_total": 668,
+        "ok_points": 12,
+        "ok_cells": 33,
+        "all_minus_ok_per_point": 8.750000000000007
+      },
+      "outcomes": {
+        "record": "outcome_distribution",
+        "arm": "real_ctas",
+        "cells_total": 36,
+        "cells_fitted": 36,
+        "cells_ok": 33,
+        "ok_fraction": 0.9166666666666666,
+        "counts": {
+          "OK": 33,
+          "DEGENERATE_HESSIAN": 3
+        },
+        "cells_at_cap": 0,
+        "reachable_codes_here": [
+          "DEGENERATE_HESSIAN",
+          "OK"
+        ],
+        "fixture_limit": "this box has no land, ice or gaps, so NOT_ATTEMPTED is unreachable and a clean histogram is a property of the box"
+      },
+      "kappa": {
+        "record": "kappa",
+        "arm": "real_ctas",
+        "instrument": "in-process core.fit; NOT the run's store path (j5)",
+        "stride": 5,
+        "points": 3,
+        "cells": 9,
+        "cells_with_defined_kappa": 8,
+        "kappa_undefined": 1,
+        "kappa_quantiles_50_90_99_100": [
+          5014766.0976208635,
+          27286181.15269177,
+          35640520.38550055,
+          36568780.30025709
+        ],
+        "hessian_cond_limit": 67108864.0,
+        "cells_above_limit": 0,
+        "degenerate_hessian_cells": 0,
+        "seconds": 57.294511614134535,
+        "note_iterations_are_not_the_primary_reading": true
+      },
+      "seconds": 242.85952588217333
+    }
+  ],
+  "control_expected_per_point": 42.080729166666664,
+  "control_expected_ok_per_point": 42.0390625,
+  "instrument": {
+    "primary": "batch.run.run then bench.fields.iteration_count",
+    "secondary": "in-process core.fit for kappa only, not a cross-check",
+    "candidates": [
+      "white",
+      "white + matern12",
+      "white + matern32"
+    ],
+    "criteria": [
+      "aic"
+    ],
+    "algorithm_version": "2",
+    "max_iter": 200,
+    "threads": 1,
+    "seconds_are_the_contaminated_half": "iterations, outcomes and kappa are host-independent; only the cost blocks are",
+    "unique_dt_on_the_real_axis": 6
+  },
+  "is_a_smoke_run": true
+}

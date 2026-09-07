@@ -1,0 +1,114 @@
+{
+  "record": "realdata_spike_predictions",
+  "written": "2026-09-07",
+  "written_before": "any fit of the real data; the fixture exists, nothing has been fitted",
+  "preflight": "realdata-spike-preflight.md",
+  "harness": "realdata-spike-harness.py",
+  "scope": "the FIRST half only: cold difficulty. No warm start, no coherence.",
+
+  "fixture": {
+    "product": "CMEMS SEALEVEL_GLO_PHY_L4_MY_008_047, cmems_obs-sl_glo_phy-ssh_my_allsat-l4-duacs-0.125deg_P1M-m_202411",
+    "box": "lat 20.06-34.06 N, lon 39.94-20.94 W",
+    "points": 300,
+    "spacing_degrees": 1.0,
+    "n_time": 396,
+    "cadence": "monthly means, 1993-01 to 2025-12",
+    "unique_dt": 6,
+    "missing_fraction": 0.0,
+    "candidates": ["white", "white + matern12", "white + matern32"],
+    "M": 3,
+    "criteria": ["aic"],
+    "max_iter": 200,
+    "engine": "KalmanEngine (default)",
+    "objective": "ML (default)",
+    "threads": 1
+  },
+
+  "comparators": {
+    "42.080729166666664": "2d v2 rung, N=630, 384 points, SAME instrument (run + iteration_count). The anchor.",
+    "24.377604166666668": "2d v1 rung, N=630, same instrument, signal-free construction.",
+    "35.32": "2c ladder, N=384, 2c's own optimizer path. +/- 2.94. The nearest measured rung to N=396.",
+    "28.27": "2c ladder, N=96, +/- 5.70, where the warm saving was +7.80%.",
+    "40.79": "2c ladder, N=630, +/- 3.73, where the warm saving was +42.28%.",
+    "43.94": "2c's fixture under the shipped in-process fit. A different instrument (j5); not a target."
+  },
+
+  "predictions": [
+    {
+      "id": "P1",
+      "subject": "the control reproduces the anchor EXACTLY",
+      "form": "equality",
+      "claim": "control cold per-point iterations == 42.080729166666664 and OK-only == 42.0390625, to within 1e-9",
+      "why_an_equality_is_available": "iterations are deterministic; src/ is unchanged since f409b7f, the commit that measured the anchor; and the anchor's own cold arm was run(config, store, max_iter=None) then fields.iteration_count -- the identical two calls",
+      "refutes_if_below": "any difference at all refutes it, in either direction",
+      "refutes_if_above": "any difference at all refutes it, in either direction",
+      "what_a_refutation_means": "the environment or the tree has moved -- most likely numpy or BLAS under the lock -- so the real readings are not comparable to any committed anchor and the spike stops rather than reporting them",
+      "gates": "the real arms do not run if this fails"
+    },
+    {
+      "id": "P2",
+      "subject": "arm real_ct -- cold iterations per point on real SLA, constant+trend, N=396",
+      "form": "band",
+      "band": [28.0, 55.0],
+      "centre_expected": 40.0,
+      "reasoning": "2c's ladder puts synthetic difficulty at 35.32 for N=384. Real SLA carries real low-frequency structure and, under constant+trend, an unmodelled annual cycle in the residual; 2d measured that ADDING structure to a field raised cold iterations from 24.38 to 42.08. So a reading near or above the ladder is expected.",
+      "refutes_if_below": "below 28 -- real fits are easier than 2c's SHORTEST rung, where the mechanism returned +7.80%. The saving is then bounded well under section 11.2's 30% threshold by the ladder alone, and the coherence half is moot.",
+      "refutes_if_above": "above 55 -- real fits are harder than every fixture this project has measured. The anchors then all sit below the subject, the ladder placement is an extrapolation rather than an interpolation, and it must be reported as one.",
+      "note": "the surprise direction is the HIGH one; the whole record is braced for the low one"
+    },
+    {
+      "id": "P3",
+      "subject": "the two real arms, ordered",
+      "form": "ordering",
+      "claim": "real_ctas < real_ct in cold iterations per point",
+      "gap_band": [2.0, 20.0],
+      "reasoning": "removing a large unmodelled periodic component from the residual leaves a better-posed noise-estimation problem, so the correctly-specified arm should converge in fewer iterations",
+      "refutes_if_reversed": "real_ctas >= real_ct means the misspecification was HELPING convergence, and the difficulty reading is contaminated in the OPPOSITE direction from the one feared -- which would be a finding about the estimator, not about the ocean",
+      "refutes_if_gap_below_band": "a gap under 2.0 means the signal model does not move difficulty here at all, and the misspecification worry was empty -- in which case arm real_ct is the reading and needs no caveat",
+      "refutes_if_gap_above_band": "a gap over 20.0 means most of the measured difficulty is OUR MODEL CHOICE rather than the data, and no single number from this spike may be quoted as 'the cold difficulty of real fits'"
+    },
+    {
+      "id": "P4",
+      "subject": "convergence cleanliness on the real arms",
+      "form": "band",
+      "claim": "OK fraction >= 0.95 of fitted cells on real_ct, and (all-cells per-point minus OK-only per-point) < 1.0 iteration",
+      "reasoning": "this box has no land, no ice and no gaps, N=396 is far above the parameter count, and the data are a smoothed L4 product",
+      "refutes_if_below": "an OK fraction under 0.95, or a gap over 1.0 iteration, means capped and failed cells are carrying the headline number -- a capped cell contributes max_iter=200 -- and the all-cells figure the anchor is quoted in stops being a difficulty reading",
+      "refutes_if_above": "an OK fraction of exactly 1.000 with zero cells at the cap is not a refutation but IS a statement about the box, not the ocean: NOT_ATTEMPTED is unreachable here by construction, so this histogram cannot be evidence that a global run is clean"
+    },
+    {
+      "id": "P5",
+      "subject": "Hessian conditioning on the real arms",
+      "form": "band",
+      "claim": "median kappa over cells with a defined kappa is below 2**26, and DEGENERATE_HESSIAN is under 5% of cells",
+      "boundary_note": "2**26 is optimize.HESSIAN_COND_LIMIT and optimize_series refuses OK above it, so the reading is taken over EVERY cell the in-process pass fits, not over the OK ones -- (h3), or the emptiness would be a property of the selection",
+      "refutes_if_above": "a median above 2**26, or DEGENERATE_HESSIAN above 5%, means real fits are ill-conditioned where every simulated fixture was not -- and D9's kappa strata would have live members for the first time, which changes what 2c's audit machinery is for",
+      "refutes_if_below": "a kappa distribution far tighter than the simulated fixtures' would say the simulated fields are harder-conditioned than the ocean, which is the opposite confound and equally worth knowing"
+    },
+    {
+      "id": "P6",
+      "subject": "cost, in seconds, which is the contaminated half",
+      "form": "band",
+      "claim": "control 2.2-4.0 h; real_ct 1.0-2.5 h; real_ctas 1.2-3.0 h; each kappa pass under 0.6 h",
+      "basis": "0.616 s per iteration at N=630, M=3, one thread, from the difficulty rung's own cost block -- a rate that belongs to THAT workload",
+      "known_bias": "unique_dt = 6 on the real axis against 1 on every synthetic fixture, so F and Q are built six times per series per iteration where every cost figure in this project was measured at one. The real arms' seconds are expected to run high against a naive N-scaling, and the iteration counts are untouched by it.",
+      "refutes_if_above": "a real arm over 3 h would say the per-iteration cost on a real axis is more than double the synthetic basis, which is a fact about unique_dt and belongs in the cost record rather than in the reading",
+      "refutes_if_below": "a real arm under 1 h with iterations inside P2's band would say the per-iteration cost FELL on a six-timestep axis, which contradicts the amortization argument and means something else is wrong"
+    }
+  ],
+
+  "decision_clauses": {
+    "keyed_on": "real_ct cold iterations per point, all cells, M=3",
+    "<=20": "the saving is bounded near zero by the ladder; section 11.2's 30% threshold cannot be met; the coherence half is MOOT and is not run. D1 goes back in play, with D6, D9 and D10 behind it.",
+    "20-32": "real difficulty sits at or below 2c's shortest rung, where the mechanism returned +7.80%. The threshold is at risk and the bound is the finding. The coherence half becomes a decision, not a default.",
+    "32-45": "real difficulty is inside 2c's and 2d's range. The coherence half is worth its cost -- and is still not started without checking in.",
+    ">=45": "real fits are harder than any fixture measured here. Every anchor sits below the subject and the ladder placement must be reported as an extrapolation."
+  },
+
+  "what_no_outcome_licenses": [
+    "a cold iteration count is a BOUND on the saving, never a measurement of it",
+    "one box is not the ocean; this box is subtropical open water with no land, ice or gaps",
+    "2d's null does not transfer by being quoted -- whether it transfers is the second half",
+    "the standing limitation survives a clean result, exactly as it survived 2d's"
+  ]
+}
