@@ -136,6 +136,13 @@ this species' fifth instance.
 
 **Recommended: (1).** Recorded rather than taken, because it touches `src/`.
 
+> **CLOSED 2026-09-07 WITHOUT EITHER CLOSER: THE PRODUCT'S VARIABLE IS LITERALLY `sla`.** DUACS
+> names sea level anomaly `sla`, which is the name `config_text` already renders, so the config
+> for the real run is `fields.config_text(uri)` unchanged and there is no second spelling. **The
+> finding stands for the next product** — it is a property of the single source, not of this
+> dataset — and it is left here rather than deleted, because the next real input to arrive is
+> where it bites.
+
 ### F4 — (j6)/(a4) THE READING IS PLACED ON A CURVE, AND THE CURVE IS WHAT BOUNDS THE SAVING
 
 **A single iteration count does not bound a saving on its own.** What bounds it is 2c's own
@@ -188,9 +195,10 @@ is committed beside it as the instrument it is.
 
 ### F6 — THE INPUT PATH BREAKS BEFORE THE STORE EXISTS, AND IT LANDS ON 2e's EXIT-CODE COLLISION
 
-**This is the finding the brief predicted, traced to its line and its exit code. It is derived
-from reading and has NOT been run**; verifying it is step 1 of the plan below, and it costs
-seconds.
+**This is the finding the brief predicted, traced to its line and its exit code — and it was
+MEASURED on 2026-09-07, twice: once on a synthetic `latitude`/`longitude` fixture and once on the
+real DUACS store.** The paragraphs below were written from reading; the measurement is beneath
+them and it agrees, at a line number one off the one the reading predicted.
 
 The contract, at `src/metamer/batch/input.py:308–318`, requires exactly three dimensions,
 `dims[0] == "time"`, and a strictly increasing decodable time axis. **It says nothing about the
@@ -224,6 +232,30 @@ exception and **CPython exits 1**.
 > as *"harmless while 1 has no producer"*. **The first is a producer of the second.** It is
 > reachable today, by a user pointing the shipped CLI at an ordinary `latitude`/`longitude`
 > product — which is the one input the whole package exists for.
+
+> ## MEASURED, 2026-09-07 — AND THE READING WAS RIGHT ABOUT THE MECHANISM AND ONE LINE OUT
+>
+> `pixi run python -m metamer <config> <store>`, on a 60 × 4 × 4 zarr whose dims are
+> `(time, latitude, longitude)`:
+>
+>     File "/workspace/src/metamer/batch/run.py", line 1094, in run
+>       amplification = read_amplification(handle, tiles[0])
+>     File "/workspace/src/metamer/batch/tiling.py", line 907, in read_amplification
+>       read *= _chunk_points(start, stop, by_dim[dim], sizes[dim])
+>     KeyError: 'y'
+>
+> **Exit code 1. No store created** — `ls` on the store path returns *No such file or directory*.
+> **Stage 4a passed**, as predicted: the contract accepted the input and reported on it.
+>
+> **Then the same run on the real DUACS store**, 396 × 15 × 20: **byte-for-byte the same
+> traceback, the same line, the same exit code, the same absent store.** The finding is not a
+> property of a fixture.
+>
+> **THE READING SAID LINE 904/906 AND THE MEASUREMENT SAYS 907.** Recorded rather than quietly
+> corrected: the record's own citation of these sites says 973 for the `isel` that is now at
+> 974–975, so this file is the third document to carry a line number for this defect and the
+> second to carry a stale one. **A line number is a copy of something the file already knows**,
+> and every copy of it here has drifted. What does not drift is the call and the key.
 
 **What this changed:** the spike expects this failure, records it as a reading rather than as an
 accident, and **does not fix it.** Both closers named in the record — stage 4a enforces the names,
@@ -300,6 +332,13 @@ which is the placement F4 says is the deliverable. **This is a deviation from th
 and it is named as one rather than absorbed**; the brief's own clause — *per-point iterations
 compare only at equal `M`* — has an unstated twin in `N`, and the twin is the binding constraint.
 
+> **MEASURED 2026-09-07, AND `N` IS 396.** The DUACS monthly product runs **1993-01 to 2025-12**,
+> which is 396 monthly means — **3.1% longer than the ladder's measured 384 rung**, and reachable
+> without decimating anything. The reading is therefore compared against **35.32 ± 2.94** as its
+> nearest measured rung, with 42.08 reported beside it as the same-instrument anchor at a record
+> length real altimetry does not have. **Neither comparison is an interpolation**, which is what
+> (a4)'s *a point between two measured points is not measured* was asking for.
+
 ### F9 — (j5) NO INSTRUMENT YIELDS ALL THREE READINGS, SO THERE ARE TWO PASSES AND THEY ARE NOT CROSS-CHECKS
 
 The brief asks for iterations, the outcome distribution, **and Hessian condition numbers**.
@@ -338,6 +377,13 @@ still broken for every user who does not know to rename.
 
 **The conversion preserves the product's own dimension names.** The run that fails on them is a
 reading; a run that succeeds because we renamed them is a reading about our rename.
+
+> **MEASURED 2026-09-07: THIS PRODUCT EXERCISES ONE FREEDOM AND NOT THE OTHER.** Its dims are
+> `("time", "latitude", "longitude")` — the name freedom, and F6 fires on it. Its **latitude is
+> INCREASING** (20.0625 → 34.0625) and so is its longitude, so **the decreasing-latitude case
+> OQ20 names first is NOT exercised here.** Recorded plainly, because a spike that reported
+> *"run on a real product"* would otherwise read as having closed OQ20's first candidate, and it
+> has not. A descending-latitude product remains untested by anything.
 
 **AND THE DURABLE FIX IS A FIXTURE, NOT A CALL SITE** — (i12), and it is OQ20's own answer.
 `tests/test_decimate.py` already carries the first fixture in this project whose spatial dims are
@@ -378,6 +424,30 @@ reading the brief asks for, with the seconds marked.
 **The repair — read the cgroup's `cpu.stat`, keep the host reading as a secondary diagnostic — is
 not taken here**, and if it is taken it gets its own validation against known-good **and**
 known-bad, as the stall gate's did.
+
+### F14 — MEASURED 2026-09-07: `unique_dt = 6`, AND A FIXTURE FACT BECOMES A MEASUREMENT
+
+Stage 4a's own report on the real store, through `input.check_contract`:
+
+    n_time 396   n_y 15   n_x 20   calendar proleptic_gregorian
+    source_dtype float32  units "days since 1993-01-01"
+    unique_dt 6  t_start 1993.0  t_end 2025.9151  median_dt 0.08470
+
+**`unique_dt = 6` is exactly what the handoff predicted and nothing here had ever seen.** §5's
+fixture facts say: *"Calendar months are 28–31 days, so 50 years of month-start timestamps give
+`unique_dt = 6` … **Only a synthetic `2000 + arange(n)/12` gives 1**, and that is the shape every
+synthetic fixture and the spike harness use — so any claim resting on 'F and Q are built once per
+series per iteration' is a claim about the fixture, not about the workload."*
+
+**IT WAS AN ARGUMENT AND IT IS NOW A READING**, taken through the shipped contract on the shipped
+product. **This is the first real time axis this project has fed through stage 4a.**
+
+**AND IT BEARS ON THE COST BASIS, NOT ON THE ITERATIONS.** The `F`/`Q` amortization has six
+distinct timesteps to build rather than one, so the **per-iteration seconds measured on every
+synthetic fixture are an underestimate for real data** — while the iteration count, which is what
+the reading is, is untouched. (j8)'s second register, arriving from the fixture's side: the rate's
+denominator was a property of the synthetic axis all along. **The spike's cost block says so
+rather than reporting a surprise.**
 
 ### F13 — (i2b)/(i11) THE PREDICTION IS A BAND, NOT AN ORDERING, AND ITS CLAUSES FIRE BOTH WAYS
 
@@ -437,17 +507,46 @@ measurement invites:
 
 ---
 
-## 5. THE ONE THING THIS PRE-FLIGHT CANNOT DECIDE
+## 5. THE PRODUCT — DECIDED 2026-09-07, AND IT NEEDED NO CREDENTIALS
 
-**There is no real gridded product in this repository or on this machine.** Checked:
-`find / -xdev \( -name '*.nc' -o -name '*.zarr' \)` returns GMT coastline files, and pytest
-temporaries. Network egress works — `pypi.org`, `api.github.com`,
-`data.marine.copernicus.eu` and `podaac.jpl.nasa.gov` all answer 200.
+**The product is CMEMS `SEALEVEL_GLO_PHY_L4_MY_008_047`, dataset
+`cmems_obs-sl_glo_phy-ssh_my_allsat-l4-duacs-0.125deg_P1M-m_202411`** — the reprocessed DUACS
+monthly-mean gridded sea level anomaly, 0.125°, 1993-01 to 2025-12. **This is real altimetry, so
+the standing limitation is addressed as it is worded** rather than by a substitute.
 
-**So the spike's first precondition is an outward-facing fetch of a third-party dataset**, and it
-is a decision rather than a step: it needs a product choice, it may need credentials, it carries a
-licence and an attribution, and **the choice changes what the spike closes.** It is put to the user
-before anything is downloaded.
+**AND THE CREDENTIAL BLOCKER DISSOLVED ON MEASUREMENT.** The pre-flight expected a Copernicus
+Marine account. The ARCO store's `.zmetadata` returns **200 anonymously**; only bucket *listing*
+is 403, which is ordinary. So the key layout is **computed from the store's own consolidated
+metadata** rather than enumerated, and nothing is authenticated.
 
-The options, with what each does to the finding, are in the session report that accompanies this
-document. **Nothing is fetched, converted, or measured until that question is answered.**
+**THE FETCH IS ITS OWN INSTRUMENT AND IT IS COMMITTED**:
+[`realdata-spike-fetch.py`](realdata-spike-fetch.py), with its record in
+[`realdata-spike-fetch-provenance.json`](realdata-spike-fetch-provenance.json).
+
+**IT ADDS NO DEPENDENCY, AND THAT WAS A DECISION.** `fsspec`'s HTTP filesystem needs `aiohttp`,
+which this environment does not have. `pixi add aiohttp` re-solves the lock — **the lock every
+committed anchor was measured under, and whose numpy and BLAS 2d's field digests are pinned to,
+with a documented failure mode saying so.** Changing the environment to obtain the fixture would
+change the instrument, so the store is mirrored over `urllib` against the published zarr v2 key
+layout instead. **The saving is not effort; it is that the control run's expected value survives.**
+
+**The fixture, as built:**
+
+| | |
+|---|---|
+| box | lat **20.06–34.06 °N**, lon **39.94–20.94 °W** — open subtropical North Atlantic, chosen inside one lat-chunk and one lon-chunk |
+| grid | **15 × 20 = 300 points** at stride 8, so **1° spacing** |
+| record | **N = 396** monthly means, 1993-01 to 2025-12, `unique_dt = 6` |
+| missing | **zero.** No land, no ice, no gaps: `series_all_missing = 0`, `missing_fraction = 0.0` |
+| dtype | `float32` on disk, cast from the product's int32 × 1e-4 |
+| dims | `("time", "latitude", "longitude")`, both spatial axes **increasing** |
+| fetched | 401 keys, 182.6 MB, digest recorded |
+
+> **THE ZERO MISSING FRACTION IS A PROPERTY OF THE BOX, NOT OF THE OCEAN**, and it is the
+> flattering direction: it removes the land-and-gap confound from the difficulty reading, and it
+> also removes every `NOT_ATTEMPTED` from the outcome distribution the brief asks for. **So the
+> outcome histogram this box can produce is narrower than a global run's**, and a clean one here
+> is not evidence that a real global run is clean. Stated before the run, not after it.
+
+**WHAT REMAINS OPEN IS NOT THE PRODUCT.** Two fixture decisions are still owed and both change
+what the number means; they are in the session report and are not taken here.
