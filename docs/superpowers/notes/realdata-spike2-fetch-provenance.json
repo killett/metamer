@@ -1,0 +1,75 @@
+{
+  "record": "realdata_spike_fetch",
+  "stac_item": "https://stac.marine.copernicus.eu/metadata/SEALEVEL_GLO_PHY_L4_MY_008_047/cmems_obs-sl_glo_phy-ssh_my_allsat-l4-duacs-0.125deg_P1M-m_202411/dataset.stac.json",
+  "store_url": "https://s3.waw3-1.cloudferro.com/mdl-arco-time-045/arco/SEALEVEL_GLO_PHY_L4_MY_008_047/cmems_obs-sl_glo_phy-ssh_my_allsat-l4-duacs-0.125deg_P1M-m_202411/timeChunked.zarr",
+  "variable": "sla",
+  "kept_arrays": [
+    "sla"
+  ],
+  "dropped_arrays": [
+    "lat_bnds",
+    "lon_bnds",
+    "climatology_bnds",
+    "nv"
+  ],
+  "box": {
+    "lat0": 26.06,
+    "lat1": 28.07,
+    "lon0": -30.94,
+    "lon1": -28.93,
+    "i0": 928,
+    "i1": 945,
+    "j0": 1192,
+    "j1": 1209
+  },
+  "source": {
+    "variable_shape": [
+      396,
+      1440,
+      2880
+    ],
+    "variable_chunks": [
+      1,
+      512,
+      1024
+    ],
+    "lat_chunks": [
+      1
+    ],
+    "lon_chunks": [
+      1
+    ],
+    "keys_fetched": 401,
+    "bytes_fetched": 182553137,
+    "fetched_sha256": "8dcd02a3cd5967875bb4ce6222381bef14340a6b063e7ffab66ecdbf3bbb5258"
+  },
+  "store": {
+    "n_time": 396,
+    "n_latitude": 17,
+    "n_longitude": 17,
+    "points": 289,
+    "stride": 1,
+    "dims": [
+      "time",
+      "latitude",
+      "longitude"
+    ],
+    "latitude_increasing": true,
+    "longitude_increasing": true,
+    "latitude_range": [
+      26.0625,
+      28.0625
+    ],
+    "longitude_range": [
+      -30.9375,
+      -28.9375
+    ],
+    "time_first": "1993-01-01T00:00:00.000000000",
+    "time_last": "2025-12-01T00:00:00.000000000",
+    "dtype": "float32",
+    "series_all_missing": 0,
+    "series_any_missing": 0,
+    "missing_fraction": 0.0
+  },
+  "store_path": "/tmp/claude-1000/-workspace/df8c1331-52cf-44f5-b899-d6fca665cdbf/scratchpad/duacs2/duacs-monthly.zarr"
+}

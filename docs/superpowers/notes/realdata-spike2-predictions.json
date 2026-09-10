@@ -1,0 +1,140 @@
+{
+  "record": "realdata_spike2_predictions",
+  "written": "2026-09-09",
+  "written_before": "any fit of the second half; the fixture has not been cut yet",
+  "preflight": "realdata-spike2-preflight.md",
+  "harness": "realdata-spike2-harness.py",
+  "scope": "the SECOND half: does PROXIMITY buy anything beyond being converged -- the 12 points, not the 30",
+
+  "fixture": {
+    "product": "CMEMS SEALEVEL_GLO_PHY_L4_MY_008_047, monthly means, re-cut at NATIVE 0.125 deg",
+    "grid": "17 x 17 = 289 points, contiguous, 2.125 deg x 2.125 deg",
+    "why_native": "the first half's 1-degree grid would put coarse points 8 deg apart under the shipped stride, against 1 deg in production; coherence falls with distance, so it would understate proximity",
+    "n_time": 396,
+    "coarse_stride": 8,
+    "spiral_bound": 4,
+    "coarse_points": 9,
+    "warm_radius_mean_measured": 2.602,
+    "warm_radius_max_measured": 4,
+    "distant_min": 6,
+    "far_pool_min_measured": 5,
+    "candidates": ["white", "white + matern12", "white + matern32"],
+    "M": 3,
+    "signal_terms": ["constant", "trend"],
+    "criteria": ["aic"],
+    "max_iter": 200,
+    "threads": 1
+  },
+
+  "arms": {
+    "cold": "x0 = None. The reference, and it supplies self's x0.",
+    "warm": "nearest valid coarse source by the SHIPPED warmstart.source_map at stride 8, bound 4",
+    "random": "a coarse point at Chebyshev distance > 6 fine cells, uniformly chosen, fixed seed -- 2c's DISTANT_MIN, unchanged",
+    "self": "the point's own converged theta_unconstrained. The (i2) ceiling.",
+    "all_one_code_path": "in-process core.fit, because warm - random is a DIFFERENCE and two code paths would not make one"
+  },
+
+  "priors_this_is_read_against": {
+    "90.37": "2c warm-vs-cold SELECTION agreement, 122 of 135, N=630, against a pre-agreed 90% stop that 121 would have failed. THE comparable prior.",
+    "99.58": "D12 self-vs-cold over points. A DIFFERENT comparison; the brief's 99.48% was this figure and was corrected the same day.",
+    "95.00": "D12 fine points vs cold, the other half of the lattice contrast",
+    "42.28": "2c warm saving in iterations, N=630, and a CEILING -- the instrument searched with no effective spiral bound",
+    "30.28": "2c random saving, N=630",
+    "12.00": "the difference, and the quantity this half is about",
+    "none": "2d has NO point-level warm-vs-cold agreement figure; the artifact does not carry it"
+  },
+
+  "predictions": [
+    {
+      "id": "Q1",
+      "subject": "the control reproduces 2d's WARM arm exactly",
+      "form": "equality",
+      "claim": "control warm_per_point == 24.463541666666668 and warm_ok_total == 9394, to within 1e-9 and exactly",
+      "why": "iterations are deterministic and `git log f409b7f..HEAD -- src/` is empty, re-checked 2026-09-09",
+      "why_the_warm_path_and_not_the_cold": "the cold path was verified to zero difference on 2026-09-07; the two-pass path never has been, and a warm pipeline has more ways to be silently wrong",
+      "refutes_if_different": "any difference at all, either direction -- the two-pass path or the environment has moved and no warm number below is comparable to anything",
+      "gates": "the real arms do not run if this fails"
+    },
+    {
+      "id": "Q2",
+      "subject": "the warm start actually reached the optimizer",
+      "form": "equality",
+      "claim": "InitRung.WARM_START count on the warm arm equals the source map's valid cells minus cells that fail before the optimizer",
+      "why": "a valid warm start is not a warm start used; every point warm-started with x0_valid all false is byte-identical to a cold run",
+      "refutes_if_below": "fewer warm rungs than accounted for means x0 is not reaching the optimizer and NOTHING in the run may be quoted",
+      "refutes_if_above": "more warm rungs than valid sources means the accounting is wrong, which is the same refusal"
+    },
+    {
+      "id": "Q3",
+      "subject": "THE HEADLINE -- warm minus random, in percentage points of cold iterations",
+      "form": "band",
+      "band": [3.0, 20.0],
+      "centre_expected": 10.0,
+      "reasoning": "2c measured 12.00 points at N=630 on a simulated field whose coherence was a construction parameter. The geometry here reproduces 2c's warm radius to 1.8%, so the arm is the same kind of arm; what is unknown is whether real optima are coherent at 0.5 degrees.",
+      "refutes_if_below": "under 3 points -- proximity buys essentially nothing on real data. The coarse grid, the barrier, the spiral and the stride inside fit_hash deliver the 12 and the 12 is not there; D2's machinery does not earn its cost, and the cheap variant D1 declined would get almost the whole benefit.",
+      "refutes_if_above": "over 20 points -- proximity is worth MORE on the ocean than on 2c's constructed field, which would be the first evidence that the simulation UNDERSTATED the mechanism rather than flattering it",
+      "note": "this is orthogonal to Q4: a near start and a distant converged start can each land in a different basin"
+    },
+    {
+      "id": "Q4",
+      "subject": "THE DISCRIMINATOR -- warm-vs-cold selection agreement over points",
+      "form": "band",
+      "band": [85.0, 99.0],
+      "denominator": "points where both arms have at least one OK candidate",
+      "reasoning": "2c measured 90.37% on a simulated field with a regime boundary, against a 90% stop it cleared by one grid cell. Real optima have no reason to be more consistent and 58.89 cold iterations says the surface is further to travel across.",
+      "refutes_if_below": "under 85% -- warm-starting moves selections on real data at a rate 2c's own pre-agreed stop would have refused. The hysteresis risk section 11.2 was written for is real, the audit is load-bearing rather than precautionary, and a saving quoted without it is buying bias.",
+      "refutes_if_above": "over 99% -- real optima are consistent enough that hysteresis is not a concern in this geography, which is a stronger claim than 2d's simulated null and must be stated as a claim about THIS box",
+      "the_horn": "Q3 and Q4 together are the discrimination. A large saving with high agreement is 'time and not bias' on real data. A large saving with FALLING agreement is iterations saved by converging somewhere else. Both predict a large saving and only the agreement separates them."
+    },
+    {
+      "id": "Q5",
+      "subject": "the self ceiling, and it is the (i2) control on every cost reading",
+      "form": "band",
+      "band": [0.03, 0.25],
+      "claim": "self iterations / cold iterations lands in [0.03, 0.25]",
+      "reasoning": "2d measured self/cold at 0.053 and 0.089; 2c's self saved 93.97%",
+      "refutes_if_above": "above 0.25 -- either x0 is not reaching the optimizer, or the surface is rough enough that starting AT the optimum does not collapse the work. 2d's own rule: if self does not collapse, the instrument has not been shown able to tell two arms apart by cost and NO cost reading in the run may be quoted.",
+      "refutes_if_below": "below 0.03 is not a refutation and is reported"
+    },
+    {
+      "id": "Q6",
+      "subject": "the both-OK intersection and the outcome flips",
+      "form": "band",
+      "claim": "warm/cold both-OK intersection >= 85% of points; flips (OK in one arm, not the other) under 10% of cells and roughly symmetric, neither direction more than 2x the other",
+      "reasoning": "the first half measured 10.1% non-OK per arm on real data, so a tenth leaves per arm before any comparison",
+      "refutes_if_below": "an intersection under 85% means the comparison's population is a selection, and section 11.2's audit measures a narrower thing on real data than any fixture has shown",
+      "refutes_if_asymmetric": "flips more than 2x in one direction mean warm-starting systematically changes CONVERGENCE OUTCOMES, not just optima -- a different finding from moving selections, with its own denominator"
+    },
+    {
+      "id": "Q7",
+      "subject": "the shipped two-pass driver agrees with the in-process warm arm",
+      "form": "band",
+      "claim": "the shipped path's warm iteration total is within 1% of the in-process warm arm's, and exact equality is expected",
+      "reasoning": "both take the same source map and call the same fit; fit loops optimize_series per series, so batch composition should not matter",
+      "refutes_if_above": "a difference over 1% means the two paths do not deliver the same warm start, and every warm number in this project inherits the question -- nobody has run this comparison",
+      "note": "this is a cross-check (j5) permits: same quantity, same conditions, different route"
+    },
+    {
+      "id": "Q8",
+      "subject": "cost, the contaminated half",
+      "form": "band",
+      "claim": "control warm 1.2-2.5 h; cold arm 1.2-2.2 h; warm arm 0.6-1.8 h; random arm 1.0-2.2 h; self arm under 0.4 h; shipped cross-check 0.6-1.8 h",
+      "basis": "the first half measured 0.3199 s per iteration at N=396, M=3, one thread, on this box's water",
+      "refutes_if_above": "any arm over its band with iterations inside their bands means the per-iteration cost moved between the two boxes, which is a fact about the water and belongs in the cost record"
+    }
+  ],
+
+  "decision_clauses": {
+    "keyed_on": "Q3, warm minus random in percentage points",
+    "<3": "proximity buys nothing measurable on real data. The two-pass geometry does not earn its cost and the finding is that the cheap variant D1 declined would get nearly the whole benefit. D1, D6, D9 and D10 go back in play.",
+    "3-20": "proximity buys what 2c said it buys, on real data, in this geography. D2's machinery earns its cost here and the standing limitation narrows to geography rather than to simulation.",
+    ">20": "proximity is worth more on the ocean than on the constructed field, and every 2c figure is a floor rather than a ceiling in this respect -- which contradicts the 'every 2c saving is a CEILING' register and must be reconciled, not absorbed."
+  },
+
+  "what_no_outcome_licenses": [
+    "one box, 2.125 deg square, subtropical open North Atlantic: no land, no ice, no gaps, one regime. A saving here is a saving THERE.",
+    "the Southern Ocean, a shelf, a western boundary current and the Rossby transition are all unmeasured",
+    "a selection-agreement figure from this box is not a hysteresis rate for a global run",
+    "nothing here measures the smear width, which is 2d's subject and needs a regime boundary this box does not have"
+  ]
+}
