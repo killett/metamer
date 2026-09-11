@@ -4,7 +4,7 @@
 
 1. **Branch `main`, everything on it, every commit pushed by a hook** — https://github.com/killett/metamer. **A SHA here is stale the moment the next commit lands, so nothing here names one:** `git log --oneline -8` is the authority.
 2. **DONE:** Phase 1 (0–18), Phase 2 preliminaries P0–P4, **Phase 2a (0–13)**, **Phase 2d (COMPLETE 2026-09-06 — 13 met / 1 reduced scope / 3 failed)**, **Phase 2b (COMPLETE 2026-08-19 — 10 met / 4 reduced scope / 2 FAILED)**, **Phase 2c's brainstorm (D1–D12)**, and **Phase 2c (COMPLETE 2026-08-29 — 10 met / 2 reduced scope / 0 failed; Tasks 0–4 on 2026-08-24, Task 5 on 2026-08-27, Task 6 on 2026-08-28, Tasks 7–8 on 2026-08-29)**. The modelling sub-phase was decided against 2026-08-22 and **re-decided on closed facts 2026-08-23: it does not open.** Sections below carry each; **none is restated here.**
-3. **NEXT ACTION: WIRING ONE — A DRIVER THAT RUNS `batch.audit` OVER A RUNG'S ARMS — AND IT IS URGENT RATHER THAN TIDY-UP.** Its brief, the two things the spike added to it, and the pieces already built that it reuses are in [WIRING ONE](#wiring-one--what-the-next-session-needs-written-2026-09-10). **Its pre-flight IS WRITTEN — [`wiring-one-preflight.md`](docs/superpowers/notes/wiring-one-preflight.md), 2026-09-11, before any code — and it found THREE disagreements between the brief and the committed records, one of them in this file. Nothing from it is restated here.** After it: the selection-map report, then 2e, whatever the design doc says it is. **THE REAL-DATA SPIKE IS COMPLETE — first half 2026-09-07, second half 2026-09-10 — AND ITS FOUR READINGS ONLY MAKE SENSE TOGETHER: warm-starting saves 64.72% of cold iterations on real altimetry; 6.7% of that is the two-pass GEOMETRY and the rest is available from any converged start; ZERO of 289 points was re-ranked, on every arm, positive-controlled; and the selected candidate differs at 34% of points, ENTIRELY by candidates passing the conditioning gate in one arm and failing it in the other, of which 15 points are reachable from the exact optimum as the start.** A reader taking the first alone ships the two-pass architecture; the first two ship the cheap variant; the third calls warm-starting safe; **the fourth is the one needing a decision and it is not a decision about warm-starting — it is open question 23.** Verdicts: [first half](docs/superpowers/notes/realdata-spike-verdict.md), [second half](docs/superpowers/notes/realdata-spike2-verdict.md); sections [here](#the-real-data-spikes-first-half-is-done-2026-09-07) and [here](#the-real-data-spikes-second-half-is-done-2026-09-10). **PHASE 2d IS CLOSED 2026-09-06 (13 met / 1 reduced / 3 failed), its close is [here](#phase-2d-is-closed-2026-09-06--13-met--1-met-with-reduced-scope--3-failed-plus-2bs-two-inherited-failures-and-2cs-one), and TASKS 6 AND 7 STAY DECIDED AGAINST.** **Nothing from any verdict is restated in this head.**
+3. **NEXT ACTION: WIRING ONE — A DRIVER THAT RUNS `batch.audit` OVER A RUNG'S ARMS — AND IT IS URGENT RATHER THAN TIDY-UP.** Its brief, the two things the spike added to it, and the pieces already built that it reuses are in [WIRING ONE](#wiring-one--what-the-next-session-needs-written-2026-09-10). **WIRING ONE IS BUILT AND SMOKED, 2026-09-11 — [pre-flight](docs/superpowers/notes/wiring-one-preflight.md) (which found THREE disagreements between the brief and the committed records, one of them in this file), [smoke record](docs/superpowers/notes/wiring-one-smoke.md), both gate branches. CRITERION 12 STAYS REDUCED AND ITS CLOSER CHANGED — no rung was re-run, and that is a [decision with three reasons](#the-scope-call-on-criterion-12-taken-2026-09-11-validate-on-smoke-do-not-re-run-the-rung). NEXT ACTION: the selection-map report, then 2e. Nothing from either document is restated here.** After it: the selection-map report, then 2e, whatever the design doc says it is. **THE REAL-DATA SPIKE IS COMPLETE — first half 2026-09-07, second half 2026-09-10 — AND ITS FOUR READINGS ONLY MAKE SENSE TOGETHER: warm-starting saves 64.72% of cold iterations on real altimetry; 6.7% of that is the two-pass GEOMETRY and the rest is available from any converged start; ZERO of 289 points was re-ranked, on every arm, positive-controlled; and the selected candidate differs at 34% of points, ENTIRELY by candidates passing the conditioning gate in one arm and failing it in the other, of which 15 points are reachable from the exact optimum as the start.** A reader taking the first alone ships the two-pass architecture; the first two ship the cheap variant; the third calls warm-starting safe; **the fourth is the one needing a decision and it is not a decision about warm-starting — it is open question 23.** Verdicts: [first half](docs/superpowers/notes/realdata-spike-verdict.md), [second half](docs/superpowers/notes/realdata-spike2-verdict.md); sections [here](#the-real-data-spikes-first-half-is-done-2026-09-07) and [here](#the-real-data-spikes-second-half-is-done-2026-09-10). **PHASE 2d IS CLOSED 2026-09-06 (13 met / 1 reduced / 3 failed), its close is [here](#phase-2d-is-closed-2026-09-06--13-met--1-met-with-reduced-scope--3-failed-plus-2bs-two-inherited-failures-and-2cs-one), and TASKS 6 AND 7 STAY DECIDED AGAINST.** **Nothing from any verdict is restated in this head.**
 4. ## THE STANDING LIMITATION ON EVERYTHING 2c DECIDED: **NO 2c NUMBER COMES FROM REAL DATA.** Warm-starting was authorized — and every decision after D1 inherits this — on a **simulated field whose spatial coherence is a construction parameter**. **The spatial coherence of real altimetry optima has never been measured.** Weaker coherence gives a **smaller** saving, and **§11.2's 30% threshold could fail on real data.** **THE NAMED CLOSER, not an open worry: a spike on a real gridded product — same three arms, same record-length lever.** **AND SINCE 2026-08-24 THERE IS A SECOND REGISTER OF IT: every 2c saving is a CEILING, not an estimate**, because the instrument searched with no effective spiral bound — see [what 2c's tasks inherit](#what-2cs-tasks-inherit-2026-08-24). **NARROWED 2026-09-07 AND NOT LIFTED.** The spike's **first half** is measured on CMEMS DUACS monthly SLA and the bound is gone: real cold difficulty is **above every fixture here**, so §11.2's 30% threshold is not refuted by difficulty and the coherence half is worth its cost. **NO NUMBER ABOUT WARM-STARTING STILL COMES FROM REAL ALTIMETRY** — what changed is that a number about real **difficulty** does, and that the ~30 of 2c's 42.28 points which are cold-start difficulty have MORE to work with on real data, not less. **MEASURED 2026-09-10: the 12.00 proximity points are worth 4.36 on real data — a third of their simulated size and a twentieth of their share of the benefit.** A distant converged optimum already gets 93.3% of what warm-starting saves. **AND THE SELECTION DISAGREEMENT IS NOT HYSTERESIS: zero re-rankings at 289 points on every arm**, positive-controlled. What moves the map is that `DEGENERATE_HESSIAN` is **start-dependent**, which is a defect with no owner. **THE STANDING LIMITATION IS NOW GEOGRAPHIC RATHER THAN SIMULATED:** both halves are one box of subtropical open ocean, and a saving there is a saving there.
 5. **Tests: 1388 passed, 0 failed, 0 INDETERMINATE — 2026-09-06, 5144.42 s (1:25:44).** **`pixi run test` is the full sweep and every end-of-task verification must run it; `test-fast` and `test-ci` are NOT evidence** — the full sweep has caught **eight** things a fast run could not, the most recent being a test whose own expected value was computed from a 1-based reading of `np.arange`. **Every run prints `RSS measurement validity`, including at zero**; a nonzero count is INDETERMINATE, neither pass nor fail.
 6. **Verify a fresh checkout with `pixi run test && pixi run typecheck && pixi run lint`**, plus `pixi run pre-commit run --all-files` before every commit. **AND `git add` A NEW FILE BEFORE THAT SWEEP, NEVER AT COMMIT TIME** — `--all-files` covers **tracked** files only, so an untracked new module makes every hook print `Passed` without being read. Measured 2026-08-24; it cost two full twenty-minute sweeps before it was noticed. **AND THE RULE HAS A SECOND FORM, PROMOTED 2026-08-31: STAGE ANYTHING A TOOL MAY RESTORE, NOT ONLY ANYTHING A HOOK MAY SKIP** — `git checkout -- <file>` restores **from the index**, so an unstaged edit in a file any tool touches is **silently reset to `HEAD`, with no error**. One changes what is CHECKED, the other changes what SURVIVES; the pair is in [the handoff](docs/superpowers/notes/phase1-to-phase2-handoff.md) and is not restated here.
@@ -57,6 +57,78 @@ What a cold session cannot re-derive, and which is therefore here rather than on
   on the both-OK intersection. **The audit's subject is narrower on the ocean than any fixture has
   shown**, and the box this was measured in is the easiest geography available: no land, no ice, no
   gaps.
+
+---
+
+## WIRING ONE IS BUILT AND SMOKED, BOTH GATE BRANCHES (2026-09-11)
+
+> **`batch.audit` reaches a rung report, every number on it carries its rung, and the pooled
+> selection rate now travels with the decomposition that makes it readable.**
+
+**THE RECORD IS [`wiring-one-smoke.md`](docs/superpowers/notes/wiring-one-smoke.md) AND NOTHING
+FROM IT IS RESTATED HERE.** The pre-flight, the harness, the JSONL and the two reports are the five
+files beside it. **Neither run is a measurement** — `is_a_smoke_run` is true, the geometry is 26 × 2
+at `n_time = 24`, and neither report is one of `COMMITTED_REPORTS`.
+
+What a cold session cannot re-derive:
+
+- **THE DECOMPOSITION DECOMPOSES THE OPPOSITE WAY ON THE TWO POPULATIONS THIS PROJECT HAS, AND THAT
+  IS THE ARGUMENT FOR IT ARRIVING AS A MEASUREMENT.** Five differing points across two simulated
+  seeds are **five moves and zero dropouts**; the real-altimetry box was **zero moves in 289
+  points**, every difference a dropout. **A report carrying the pooled rate alone would have
+  described the two identically.** It also means the `move` branch is not dead code — the rule
+  reported moves on real fits, not only on its fabricated control.
+- **`kappa_undefined` IS POPULATED, ON BOTH SEEDS, AND THE PRE-FLIGHT PREDICTED IT EMPTY.** (h3) is
+  untouched — the two UPPER bins stay unreachable because `HESSIAN_COND_LIMIT` **is** the first
+  boundary — but **W3's stronger claim that the `κ` axis is DEGENERATE on this population is
+  refuted**, and the axis is separating something real. **NOT ACTED ON:** at `n_time = 24` a
+  Hessian that is not positive definite is cheap, so this may be a property of a 24-epoch record;
+  a smoke cannot be evidence for a criterion and **2c's criterion 11 is NOT amended.** What is owed
+  is that **the first real run checks whether `undefined` is populated at production record
+  length.**
+- **ON THE CLEAN BRANCH EVERY POINT STRATUM IS BELOW THE 30-MEMBER FLOOR**, so all three selection
+  headlines are withheld and there is no quotable selection number at all. **That is the scope
+  call's own argument, measured**: 52 points across 9 strata produce nothing quotable, and 384
+  would not have either.
+- **THE NULL REPRODUCED THE EASY-RUNG HARNESS'S OWN SMOKE READING AT THE SAME SEED**, on a path this
+  change does not touch — a free control that the wiring moved nothing it was not meant to.
+- **THE (j7) CHECK THE BRIEF OWED IS RELOCATED RATHER THAN SKIPPED.** What the treatment moves is
+  **membership of the both-OK intersection**, not bin assignment, and `CandidateOutcomes` now
+  carries the per-arm `DEGENERATE_HESSIAN` counts beside `both_ok_fraction` so it is readable
+  without stratifying by a quantity the treatment can move. **No second binning by the warm arm**:
+  it would condition on a post-treatment variable to test whether conditioning on a post-treatment
+  variable matters.
+
+---
+
+## THE SCOPE CALL ON CRITERION 12, TAKEN 2026-09-11: VALIDATE ON SMOKE, DO NOT RE-RUN THE RUNG
+
+> **CRITERION 12 STAYS REDUCED AND ITS CLOSER CHANGES.** It was *"a driver that runs `batch.audit`
+> over a RUNG's arms"*. It is now **"a run of that driver over a population with a LIVE DIFFERING
+> SET"**, and the first such population this project holds is the real-data spike's committed arms.
+
+**THE DRIVER IS BUILT AND NO RUNG WAS RE-RUN, AND THE SECOND HALF IS A DECISION RATHER THAN AN
+OMISSION.** Three reasons, and they are recorded here because the alternative is the rung being
+re-run by default the next time somebody reads the criterion:
+
+1. **THE RE-RUN WOULD CLOSE THE CRITERION ON THE WRONG POPULATION.** The rung field carries **1
+   degenerate cell in 1152**; the real-altimetry box carries **~10%, start-dependent**, with a
+   differing population that is **100% outcome flip**. So 10.18 h buys a report whose every stratum
+   is withheld by the 30-member floor — satisfying the criterion's letter and telling nobody
+   anything. **A criterion met on a population that cannot exercise it is the shape this project
+   has refused repeatedly.**
+2. **THE POPULATION THAT MAKES THE STRATA MEAN SOMETHING ALREADY EXISTS**, and it is **289 points of
+   already-fitted arms rather than a ten-hour rung** — cheaper AND better evidence.
+3. **THE REMINDER SHOULD FIRE ON A REAL READING.** A smoke report is not one of
+   `COMMITTED_REPORTS`, so the wiring is proved end to end without closing the criterion or firing
+   its guard, which leaves criterion 12's test doing its job.
+
+**AND THE GUARD ITSELF WAS WRONG, WHICH IS W1 OF THE PRE-FLIGHT.** It iterated the committed
+report's **top-level keys only**, so a stratified reading nested under `checks` or `instrument`
+would have passed it and the reduced scope would have gone stale silently — (c5) at a guard, the
+same defect shape the guard exists to catch. **Widened to walk the document, and proved to fire on a
+nested stratum before being relied on.** The driver's key is `strata` at the top level anyway:
+routing around a designed guard is not a fix.
 
 ---
 

@@ -381,6 +381,150 @@ def margin_bin(margin: NDArray[np.float64]) -> NDArray[np.int8]:
     return out
 
 
+@dataclass(frozen=True)
+class SelectionSplit:
+    """A changed selection, split into the optimum MOVING and a candidate DROPPING OUT.
+
+    **THE POOLED RATE IS TWO FINDINGS UNDER ONE NAME AND ONLY ONE OF THEM IS
+    HYSTERESIS.** §11.2 calls selection disagreement *"most directly about the
+    smoothness artifact"*, which is a claim about the optimizer landing
+    somewhere that ranks the candidates differently. On real altimetry the
+    pooled rate was **100% outcome flip and 0% re-ranking**, so an audit
+    reporting it alone reports hysteresis about a number containing none.
+
+    Attributes:
+        live: Points both arms ranked. **`-1` compares unequal to everything**,
+            so a differing mask without this calls every unranked point a
+            disagreement.
+        differs: Live points whose selected candidate is not the same.
+        move: Differing points where **each arm's winner was `OK` in the other
+            too**, so both were available and the ranking changed. This is
+            optimizer hysteresis and it is what §11.2 exists to detect.
+        dropout: Differing points where **exactly one** arm's winner was not
+            `OK` in the other, so it was never selectable there. D9's outcome
+            flip -- a different quantity with its own denominator.
+        both_unavailable: Differing points where **neither** winner was
+            available in the other arm. **Counted separately rather than
+            assigned to whichever bin is tested first**, because it is neither
+            a move nor a one-sided dropout and folding it into either would
+            overstate that one.
+    """
+
+    live: NDArray[np.bool_]
+    differs: NDArray[np.bool_]
+    move: NDArray[np.bool_]
+    dropout: NDArray[np.bool_]
+    both_unavailable: NDArray[np.bool_]
+
+
+def selection_decomposition(
+    *,
+    cold_outcome: NDArray[np.uint8],
+    cold_best: NDArray[np.int64],
+    warm_outcome: NDArray[np.uint8],
+    warm_best: NDArray[np.int64],
+) -> SelectionSplit:
+    """Split a changed selection into moves, dropouts and neither.
+
+    **PORTED FROM THE SPIKE'S COMMITTED ADDENDUM RATHER THAN RE-DERIVED**, and
+    `tests/test_audit_report.py` checks the port against that rule point for
+    point. The branch order is part of the rule: *both available* first,
+    *neither available* second, everything else a dropout. Testing
+    *"cold's winner is missing in warm"* first would sweep every
+    both-unavailable point into the dropout bin.
+
+    **IT TAKES ARRAYS AND NOT TWO `FitResult`s, SO THE POSITIVE CONTROL NEEDS
+    NO FIT.** (i2): `move = 0` is a pure negative, and a rule that cannot
+    report a move produces the same integer as a population that has none. The
+    control fabricates four small arrays; see `decomposition_selftest`.
+
+    Args:
+        cold_outcome: The reference arm's per-cell outcome codes, `(B, M)`.
+        cold_best: Its `Ranking.best_index`, `(B,)`, `-1` where nothing won.
+        warm_outcome: The treated arm's outcome codes, `(B, M)`.
+        warm_best: Its `Ranking.best_index`, `(B,)`.
+
+    Returns:
+        The four masks, each `(B,)`.
+    """
+    cold_ok = np.asarray(cold_outcome, dtype=np.uint8) == Outcome.OK.code
+    warm_ok = np.asarray(warm_outcome, dtype=np.uint8) == Outcome.OK.code
+    cold_sel = np.asarray(cold_best, dtype=np.int64).reshape(-1)
+    warm_sel = np.asarray(warm_best, dtype=np.int64).reshape(-1)
+
+    live = (cold_sel >= 0) & (warm_sel >= 0)
+    differs = live & (cold_sel != warm_sel)
+
+    # `-1` is not a column, so it is clamped before indexing and masked after.
+    # Reading row `b` at column `-1` would silently pick the LAST candidate,
+    # which is a plausible answer for an unranked point and a wrong one.
+    rows = np.arange(cold_sel.size)
+    cold_pick = np.where(cold_sel >= 0, cold_sel, 0)
+    warm_pick = np.where(warm_sel >= 0, warm_sel, 0)
+    # **`& live` HERE IS REDUNDANT AND IS KEPT, AND THE MUTATION IS PROVEN
+    # EQUIVALENT RATHER THAN RECORDED AS A SURVIVOR.** Every mask below is
+    # built from `differs`, and `differs` already carries `live`, so dropping
+    # it changes nothing -- checked over 3000 random (outcome, best_index)
+    # fixtures, `max |difference| = 0` on all three kinds. (e2): the mutant
+    # does not differ from the original on any input, which is one of (e)'s
+    # six causes and not a coverage gap.
+    #
+    # It stays because it makes the INTERMEDIATE array honest: at an unranked
+    # row the clamped index reads candidate 0, and a future caller reusing
+    # `cold_pick_survives` on its own would get a plausible answer for a point
+    # that selected nothing.
+    cold_pick_survives = warm_ok[rows, cold_pick] & live
+    warm_pick_survives = cold_ok[rows, warm_pick] & live
+
+    move = differs & cold_pick_survives & warm_pick_survives
+    both_unavailable = differs & ~cold_pick_survives & ~warm_pick_survives
+    dropout = differs & ~move & ~both_unavailable
+    return SelectionSplit(
+        live=np.asarray(live, dtype=np.bool_),
+        differs=np.asarray(differs, dtype=np.bool_),
+        move=np.asarray(move, dtype=np.bool_),
+        dropout=np.asarray(dropout, dtype=np.bool_),
+        both_unavailable=np.asarray(both_unavailable, dtype=np.bool_),
+    )
+
+
+def decomposition_selftest() -> None:
+    """(i2): prove the rule CAN report a move, before any zero is believed.
+
+    **THIS RUNS IN THE PROCESS THAT PRODUCES THE NUMBER, NOT ONLY IN THE
+    SUITE.** The benchmark driver is excluded from `pixi run test` (E7), so a
+    unit test of the rule never executes where a committed report is written.
+    It costs three fabricated points and no fit, so it runs on every
+    invocation, **before the host gate** -- a gate refusal is the cheapest
+    opportunity there is to discover the instrument is broken.
+
+    The construction is the spike addendum's: one point that is a move by
+    construction, one that is a dropout by construction, one identical.
+
+    Raises:
+        AssertionError: If the rule cannot separate the two.
+    """
+    ok, bad = Outcome.OK.code, Outcome.DEGENERATE_HESSIAN.code
+    split = selection_decomposition(
+        cold_outcome=np.array([[ok, ok], [ok, ok], [ok, ok]], dtype=np.uint8),
+        cold_best=np.array([0, 0, 1], dtype=np.int64),
+        warm_outcome=np.array([[ok, ok], [bad, ok], [ok, ok]], dtype=np.uint8),
+        warm_best=np.array([1, 1, 1], dtype=np.int64),
+    )
+    counts = (
+        int(split.differs.sum()),
+        int(split.move.sum()),
+        int(split.dropout.sum()),
+    )
+    if counts != (2, 1, 1):
+        raise AssertionError(
+            "the decomposition rule cannot separate a move from a dropout on a "
+            "fabricated pair where both exist by construction; a MOVE count of "
+            f"zero is a statement about the instrument until this passes. Got "
+            f"(differing, move, dropout) = {counts}, expected (2, 1, 1)"
+        )
+
+
 # ------------------------------------------------------------------------
 # The per-cell metrics. Each is computed over the both-OK intersection and
 # nowhere else, because outside it `loglik` and `theta_unconstrained` are NaN
@@ -576,7 +720,20 @@ class PointStratum:
         lint_flagged: Whether the lint flagged this candidate.
         margin: The bin, from the COLD arm's delta-IC to next-best.
         members: Points landing here with a winner in BOTH arms.
-        selection_disagreement: The rate over those members.
+        selection_disagreement: The rate over those members. **The POOLED
+            quantity, and it is kept rather than replaced**: D8's rule is that
+            no figure exists over everything, not that the flip rate is wrong.
+            It is wrong ALONE, which is what the three counts below fix.
+        differing: How many of `members` selected differently.
+        by_move: Of those, how many were re-rankings. See `SelectionSplit`.
+        by_dropout: How many were one-sided outcome flips.
+        by_both_unavailable: How many were neither.
+        selection_move: `by_move` over `members`.
+        selection_dropout: `by_dropout + by_both_unavailable` over `members`.
+            **The two unavailability kinds share a RATE and keep separate
+            COUNTS**, which is the shape the spike's committed addendum
+            reported and the shape `CandidateOutcomes` already uses: counts are
+            plain integers, rates carry a scope and a denominator.
     """
 
     candidate: str
@@ -585,6 +742,12 @@ class PointStratum:
     margin: MarginBin
     members: int
     selection_disagreement: Quantity
+    differing: int
+    by_move: int
+    by_dropout: int
+    by_both_unavailable: int
+    selection_move: Quantity
+    selection_dropout: Quantity
 
 
 @dataclass(frozen=True)
@@ -606,6 +769,12 @@ class CandidateOutcomes:
         attempted: Eligible cells, by `Outcome.is_eligible`.
         cold_ok: Cells the cold arm fitted.
         cold_failed: Cells the cold arm failed, by `Outcome.is_failure`.
+        cold_degenerate: Cells the cold arm refused with `DEGENERATE_HESSIAN`.
+        warm_degenerate: The same for the warm arm. **Open question 23 is about
+            this pair differing**, and `cold_failed` aggregates every failure
+            kind, so a taxonomy-wide count cannot show it. What the treatment
+            moves is which cells are SELECTABLE, and this is where that is
+            visible without stratifying by a quantity the treatment can move.
         both_ok: The intersection's size.
         rescue: warm-OK and cold-failed, **over cold-failed cells**.
         loss: warm-failed and cold-OK, **over cold-OK cells**.
@@ -622,6 +791,8 @@ class CandidateOutcomes:
     attempted: int
     cold_ok: int
     cold_failed: int
+    cold_degenerate: int
+    warm_degenerate: int
     both_ok: int
     rescue: Quantity
     loss: Quantity
@@ -739,6 +910,8 @@ class AuditReport:
             out.extend(cell.per_term_parameter_distance)
         for point in self.point_strata:
             out.append(point.selection_disagreement)
+            out.append(point.selection_move)
+            out.append(point.selection_dropout)
         for candidate in self.candidates:
             out.extend((candidate.rescue, candidate.loss, candidate.both_ok_fraction))
         out.append(self.points.ranked_fraction)
@@ -799,7 +972,12 @@ def audit_report(
             column the trend is, and the failure mode is a seasonal amplitude
             reported as a trend.
         lint_findings: `spec_hash` -> the identifiability rules that fired,
-            from `validation.identifiability_warnings`' own `lint` calls.
+            from `core.lint.lint`, called once per candidate spec.
+            **NOT from `validation.identifiability_warnings`**, which is what
+            this docstring said until 2026-09-11: that function returns a FLAT
+            tuple of findings across every candidate and `Finding` carries no
+            candidate identity, so the mapping is not reconstructible from its
+            return value. (a2c) -- a provenance claim nothing establishes.
             **Passed rather than re-derived** because the lint needs a sampling
             interval, which is a property of the data and not of the arms.
             Absent means "the lint was not run", which is reported as such
@@ -847,9 +1025,7 @@ def audit_report(
         trend_gap,
         min_members,
     )
-    point_strata, conditioning = _point_strata(
-        hashes, flagged, cold.ranking, warm.ranking, min_members
-    )
+    point_strata, conditioning = _point_strata(hashes, flagged, cold, warm, min_members)
     candidates = _candidate_outcomes(hashes, flagged, cold, warm, min_members)
 
     notes = [_POOLED_WITHHELD]
@@ -982,13 +1158,27 @@ def _cell_strata(
 def _point_strata(
     hashes: Sequence[str],
     flagged: Mapping[str, tuple[str, ...]],
-    cold: Ranking,
-    warm: Ranking,
+    cold_result: FitResult,
+    warm_result: FitResult,
     floor: int,
 ) -> tuple[tuple[PointStratum, ...], PointConditioning]:
-    """`margin x winning candidate`, plus what the metric is conditioned on."""
+    """`margin x winning candidate`, plus what the metric is conditioned on.
+
+    **THE DECOMPOSITION IS COMPUTED ONCE OVER THE BATCH AND THEN MASKED PER
+    STRATUM.** Computing it per stratum would be the same arithmetic three
+    times; computing it once and reporting it per stratum without the mask
+    would give every stratum the batch's counts -- plausible numbers, larger
+    than the stratum's own differing count, and wrong.
+    """
+    cold, warm = cold_result.ranking, warm_result.ranking
     cold_best = np.asarray(cold.best_index, dtype=np.int64)
     warm_best = np.asarray(warm.best_index, dtype=np.int64)
+    split = selection_decomposition(
+        cold_outcome=np.asarray(cold_result.outcome, dtype=np.uint8),
+        cold_best=cold_best,
+        warm_outcome=np.asarray(warm_result.outcome, dtype=np.uint8),
+        warm_best=warm_best,
+    )
     cold_ranked = cold_best >= 0
     warm_ranked = warm_best >= 0
     both = cold_ranked & warm_ranked
@@ -1014,6 +1204,9 @@ def _point_strata(
             members = both & (cold_best == model) & (margins == code)
             count = int(np.count_nonzero(members))
             scope = f"winner={name[:12]} margin={binning}"
+            moved = int(np.count_nonzero(members & split.move))
+            dropped = int(np.count_nonzero(members & split.dropout))
+            neither = int(np.count_nonzero(members & split.both_unavailable))
             out.append(
                 PointStratum(
                     candidate=name,
@@ -1027,6 +1220,14 @@ def _point_strata(
                         int(np.count_nonzero(members & disagree)),
                         count,
                         floor,
+                    ),
+                    differing=int(np.count_nonzero(members & split.differs)),
+                    by_move=moved,
+                    by_dropout=dropped,
+                    by_both_unavailable=neither,
+                    selection_move=_rate("selection_move", scope, moved, count, floor),
+                    selection_dropout=_rate(
+                        "selection_dropout", scope, dropped + neither, count, floor
                     ),
                 )
             )
@@ -1063,6 +1264,8 @@ def _candidate_outcomes(
     warm_ok = warm_code == Outcome.OK.code
     cold_bad = _failed(cold_code)
     warm_bad = _failed(warm_code)
+    cold_degenerate = cold_code == Outcome.DEGENERATE_HESSIAN.code
+    warm_degenerate = warm_code == Outcome.DEGENERATE_HESSIAN.code
     attempted = _eligible(cold_code)
 
     out: list[CandidateOutcomes] = []
@@ -1080,6 +1283,8 @@ def _candidate_outcomes(
                 attempted=tried_here,
                 cold_ok=ok_here,
                 cold_failed=failed_here,
+                cold_degenerate=int(np.count_nonzero(cold_degenerate[:, model])),
+                warm_degenerate=int(np.count_nonzero(warm_degenerate[:, model])),
                 both_ok=int(np.count_nonzero(cold_ok[:, model] & warm_ok[:, model])),
                 rescue=_rate(
                     "rescue_rate over cold-failed cells",
@@ -1138,6 +1343,10 @@ def _headlines(
             [p.selection_disagreement for p in points],
             signed=False,
         ),
+        _worst("selection_move", [p.selection_move for p in points], signed=False),
+        _worst(
+            "selection_dropout", [p.selection_dropout for p in points], signed=False
+        ),
         _worst(
             "max_abs_delta_loglik",
             [c.max_abs_delta_loglik for c in cells],
@@ -1173,11 +1382,14 @@ __all__ = [
     "PointConditioning",
     "PointStratum",
     "Quantity",
+    "SelectionSplit",
     "abs_delta_loglik",
     "audit_report",
+    "decomposition_selftest",
     "kappa_bin",
     "margin_bin",
     "parameter_distance",
+    "selection_decomposition",
     "selection_margin",
     "signed_trend_difference",
 ]

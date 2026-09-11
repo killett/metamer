@@ -263,11 +263,30 @@ PHASE_2D_EXIT_CRITERIA: tuple[ExitCriterion, ...] = (
             "per-stratum-only output are 2c's `batch.audit` machinery, and the 2d "
             "driver never invoked them. SO THE STRATA REMAIN UNEXERCISED ON REAL "
             "OUTPUT AFTER TWO SUB-PHASES: 2c built them and measured nothing with "
-            "them; 2d measured something and did not run them. What closes it is "
-            "a driver that runs `batch.audit` over a rung's arms -- a small piece "
-            "of wiring against a large piece of already-built machinery."
+            "them; 2d measured something and did not run them. "
+            "THE WIRING LANDED 2026-09-11 AND THE CRITERION STAYS REDUCED, WHICH "
+            "IS A DECISION AND NOT AN OVERSIGHT: `run_rung` now builds the "
+            "stratified report over the arms it already fits, and no rung was "
+            "RE-RUN to commit one. "
+            "THE CLOSER CHANGED ON 2026-09-11 AND THAT IS THE POINT OF THIS "
+            "ENTRY. It was 'a driver that runs `batch.audit` over a RUNG's "
+            "arms'; it is now 'a run of that driver over a population with a "
+            "LIVE DIFFERING SET'. The rung field carries 1 degenerate cell in "
+            "1152 and the real-altimetry box carries ~10%, start-dependent, with "
+            "a 100%-outcome-flip differing population -- so a 10.18 h rung "
+            "re-run would buy a report whose every stratum is withheld by the "
+            "30-member floor, meeting the criterion's letter and telling nobody "
+            "anything. A criterion met on a population that cannot exercise it "
+            "is what this record refuses. The first such population this project "
+            "holds is the real-data spike's committed arms, 289 points, and "
+            "running the audit over them is cheaper than a rung and better "
+            "evidence. Whether that run happens is a later decision; naming it "
+            "here is what stops the rung being re-run by default."
         ),
-        established_by=("test_criterion_12_no_committed_report_carries_a_stratum",),
+        established_by=(
+            "test_criterion_12_no_committed_report_carries_a_stratum",
+            "test_the_criterion_12_guard_finds_a_stratum_NESTED_rather_than_top_level",
+        ),
         outside=THE_REPORTS,
     ),
     ExitCriterion(

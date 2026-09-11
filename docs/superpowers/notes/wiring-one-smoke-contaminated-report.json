@@ -1,0 +1,1198 @@
+{
+  "rung": {
+    "name": "easy",
+    "coherence_length": 16.0,
+    "contrast": 3.0,
+    "sources": {
+      "coherence_length": "chosen for detectability: 2x the coarse stride, so a coarse neighbour is well inside one correlation length and the warm start has something to exploit",
+      "contrast": "chosen for detectability: 3x the within-regime range, so the step dominates the smooth variation and the smear estimator has an edge it can resolve"
+    }
+  },
+  "contaminated": true,
+  "null_line": {
+    "cells": 7.0,
+    "at_floor": false,
+    "floor_cells": 1.0,
+    "reach_cells": 32.0,
+    "estimator": "majority-run (> 1/2 of the parallel line)",
+    "map_name": "selected candidate agreement",
+    "arm": "warm",
+    "refused": null,
+    "profile": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      0.5,
+      1.0,
+      1.0,
+      0.5,
+      0.5,
+      0.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ]
+  },
+  "smears": [
+    {
+      "arm": "cold",
+      "value": null,
+      "withheld": "the interior null returned a width of 7.0 cells where the truth has no transition, so the profile estimator is measuring the field's own structure rather than the smear, and every smear number on this rung would be contaminated (E6's third row)",
+      "denominator": 52,
+      "reading": null
+    },
+    {
+      "arm": "warm",
+      "value": null,
+      "withheld": "the interior null returned a width of 7.0 cells where the truth has no transition, so the profile estimator is measuring the field's own structure rather than the smear, and every smear number on this rung would be contaminated (E6's third row)",
+      "denominator": 52,
+      "reading": null
+    },
+    {
+      "arm": "n2",
+      "value": null,
+      "withheld": "the interior null returned a width of 7.0 cells where the truth has no transition, so the profile estimator is measuring the field's own structure rather than the smear, and every smear number on this rung would be contaminated (E6's third row)",
+      "denominator": 52,
+      "reading": null
+    }
+  ],
+  "instrument": {
+    "estimator": "majority-run (> 1/2 of the parallel line)",
+    "smear_subject": "selected candidate",
+    "map_name": "selected candidate agreement",
+    "floor_cells": 1.0,
+    "majority_threshold": 0.5,
+    "reach_cells": 32.0,
+    "coarse_stride": 8,
+    "spiral_bound": 4,
+    "candidates": [
+      "white",
+      "white + matern12",
+      "white + matern32"
+    ],
+    "candidate_spec_hashes": [
+      "6aa2199c9b35b7d0",
+      "6442e0d4573a6854",
+      "eb62e0c295bd7541"
+    ],
+    "signal_terms": [
+      "constant",
+      "trend"
+    ],
+    "field_construction_version": 2,
+    "drawn_signal_terms": [
+      "trend"
+    ],
+    "drawn_signal_rise_sigmas": 16.0,
+    "criteria": [
+      "aic"
+    ],
+    "algorithm_version": "2",
+    "draw_method": "cholesky",
+    "seed": 20260830,
+    "audit_seed": 20260831,
+    "n_time": 24,
+    "n_normal": 26,
+    "n_parallel": 2,
+    "boundary_index": 13,
+    "null_line_offset_cells": 12,
+    "within_regime_range": 0.5,
+    "rung_sources": {
+      "coherence_length": "chosen for detectability: 2x the coarse stride, so a coarse neighbour is well inside one correlation length and the warm start has something to exploit",
+      "contrast": "chosen for detectability: 3x the within-regime range, so the step dominates the smooth variation and the smear estimator has an edge it can resolve"
+    },
+    "is_a_smoke_run": true,
+    "cost_is_an_upper_bound": "the budget is priced at the COLD rate, so a run finishing early is the bound behaving and not an error",
+    "n2_excluded": 0,
+    "n2_exhausted_spiral": 0,
+    "n2_inadmissible": 0,
+    "n2_zero_distance": 0
+  },
+  "iterations": {
+    "cold_per_point": 61.42307692307692,
+    "cold_ok_total": 3021.0,
+    "cold_ok_per_point": 58.09615384615385,
+    "warm_per_point": 41.96153846153846,
+    "warm_ok_total": 2049.0,
+    "warm_ok_per_point": 39.40384615384615,
+    "pass1_ok_total": 174.0,
+    "pass1_points": 4.0
+  },
+  "ratios": {
+    "n1_over_cold": 0.9934027777777777,
+    "self_over_cold": 0.03815469996531391,
+    "saving_pass2_only": 0.32174776564051644,
+    "saving_net_of_pass1": 0.26415094339622647
+  },
+  "checks": {
+    "n1_cells_compared": 149,
+    "self_cells_compared": 149,
+    "self_started_from_cells": 153,
+    "saving_refused": null,
+    "cold_arm_reproduces_the_run_store": {
+      "identical": true,
+      "cells_compared": 153,
+      "cells_differing": 0,
+      "ok_in_the_arm_only": 0,
+      "ok_in_the_store_only": 0
+    },
+    "warm_arm_reproduces_pass_2_store": {
+      "identical": true,
+      "cells_compared": 152,
+      "cells_differing": 0,
+      "ok_in_the_arm_only": 0,
+      "ok_in_the_store_only": 0
+    },
+    "self_arm_agrees_with_cold_selection": 1.0,
+    "fine_points_sourcing_themselves": 0
+  },
+  "strata": {
+    "seed": 20260831,
+    "kappa_boundaries": [
+      67108864.0,
+      4503599627370496.0
+    ],
+    "margin_boundaries": [
+      2.0,
+      10.0
+    ],
+    "min_stratum_members": 30,
+    "unreachable_kappa_bins": [
+      "kappa_2^26_to_2^52",
+      "kappa_ge_2^52"
+    ],
+    "cell_strata": [
+      {
+        "candidate": "6aa2199c9b35b7d0",
+        "candidate_index": 0,
+        "lint_flagged": false,
+        "kappa": "kappa_lt_2^26",
+        "members": 52,
+        "max_abs_delta_loglik": {
+          "name": "max_abs_delta_loglik",
+          "scope": "candidate=6aa2199c9b35 kappa=kappa_lt_2^26",
+          "value": 2.2737367544323206e-12,
+          "denominator": 52,
+          "withheld": null
+        },
+        "max_parameter_distance": {
+          "name": "max_parameter_distance_se",
+          "scope": "candidate=6aa2199c9b35 kappa=kappa_lt_2^26",
+          "value": 1.1622524511915714e-06,
+          "denominator": 52,
+          "withheld": null
+        },
+        "mean_signed_trend": {
+          "name": "mean_signed_trend_difference",
+          "scope": "candidate=6aa2199c9b35 kappa=kappa_lt_2^26",
+          "value": -1.5372318802502168e-15,
+          "denominator": 52,
+          "withheld": null
+        },
+        "per_term_parameter_distance": [
+          {
+            "name": "max_parameter_distance_se[white[0].sigma]",
+            "scope": "candidate=6aa2199c9b35 kappa=kappa_lt_2^26",
+            "value": 1.1622524511915714e-06,
+            "denominator": 52,
+            "withheld": null
+          }
+        ]
+      },
+      {
+        "candidate": "6aa2199c9b35b7d0",
+        "candidate_index": 0,
+        "lint_flagged": false,
+        "kappa": "kappa_2^26_to_2^52",
+        "members": 0,
+        "max_abs_delta_loglik": {
+          "name": "max_abs_delta_loglik",
+          "scope": "candidate=6aa2199c9b35 kappa=kappa_2^26_to_2^52",
+          "value": null,
+          "denominator": 0,
+          "withheld": "no member carries this quantity"
+        },
+        "max_parameter_distance": {
+          "name": "max_parameter_distance_se",
+          "scope": "candidate=6aa2199c9b35 kappa=kappa_2^26_to_2^52",
+          "value": null,
+          "denominator": 0,
+          "withheld": "no member carries this quantity"
+        },
+        "mean_signed_trend": {
+          "name": "mean_signed_trend_difference",
+          "scope": "candidate=6aa2199c9b35 kappa=kappa_2^26_to_2^52",
+          "value": null,
+          "denominator": 0,
+          "withheld": "no member carries this quantity"
+        },
+        "per_term_parameter_distance": [
+          {
+            "name": "max_parameter_distance_se[white[0].sigma]",
+            "scope": "candidate=6aa2199c9b35 kappa=kappa_2^26_to_2^52",
+            "value": null,
+            "denominator": 0,
+            "withheld": "no member carries this quantity"
+          }
+        ]
+      },
+      {
+        "candidate": "6aa2199c9b35b7d0",
+        "candidate_index": 0,
+        "lint_flagged": false,
+        "kappa": "kappa_ge_2^52",
+        "members": 0,
+        "max_abs_delta_loglik": {
+          "name": "max_abs_delta_loglik",
+          "scope": "candidate=6aa2199c9b35 kappa=kappa_ge_2^52",
+          "value": null,
+          "denominator": 0,
+          "withheld": "no member carries this quantity"
+        },
+        "max_parameter_distance": {
+          "name": "max_parameter_distance_se",
+          "scope": "candidate=6aa2199c9b35 kappa=kappa_ge_2^52",
+          "value": null,
+          "denominator": 0,
+          "withheld": "no member carries this quantity"
+        },
+        "mean_signed_trend": {
+          "name": "mean_signed_trend_difference",
+          "scope": "candidate=6aa2199c9b35 kappa=kappa_ge_2^52",
+          "value": null,
+          "denominator": 0,
+          "withheld": "no member carries this quantity"
+        },
+        "per_term_parameter_distance": [
+          {
+            "name": "max_parameter_distance_se[white[0].sigma]",
+            "scope": "candidate=6aa2199c9b35 kappa=kappa_ge_2^52",
+            "value": null,
+            "denominator": 0,
+            "withheld": "no member carries this quantity"
+          }
+        ]
+      },
+      {
+        "candidate": "6aa2199c9b35b7d0",
+        "candidate_index": 0,
+        "lint_flagged": false,
+        "kappa": "kappa_undefined",
+        "members": 0,
+        "max_abs_delta_loglik": {
+          "name": "max_abs_delta_loglik",
+          "scope": "candidate=6aa2199c9b35 kappa=kappa_undefined",
+          "value": null,
+          "denominator": 0,
+          "withheld": "no member carries this quantity"
+        },
+        "max_parameter_distance": {
+          "name": "max_parameter_distance_se",
+          "scope": "candidate=6aa2199c9b35 kappa=kappa_undefined",
+          "value": null,
+          "denominator": 0,
+          "withheld": "no member carries this quantity"
+        },
+        "mean_signed_trend": {
+          "name": "mean_signed_trend_difference",
+          "scope": "candidate=6aa2199c9b35 kappa=kappa_undefined",
+          "value": null,
+          "denominator": 0,
+          "withheld": "no member carries this quantity"
+        },
+        "per_term_parameter_distance": [
+          {
+            "name": "max_parameter_distance_se[white[0].sigma]",
+            "scope": "candidate=6aa2199c9b35 kappa=kappa_undefined",
+            "value": null,
+            "denominator": 0,
+            "withheld": "no member carries this quantity"
+          }
+        ]
+      },
+      {
+        "candidate": "6442e0d4573a6854",
+        "candidate_index": 1,
+        "lint_flagged": false,
+        "kappa": "kappa_lt_2^26",
+        "members": 33,
+        "max_abs_delta_loglik": {
+          "name": "max_abs_delta_loglik",
+          "scope": "candidate=6442e0d4573a kappa=kappa_lt_2^26",
+          "value": 7.467807589998301,
+          "denominator": 33,
+          "withheld": null
+        },
+        "max_parameter_distance": {
+          "name": "max_parameter_distance_se",
+          "scope": "candidate=6442e0d4573a kappa=kappa_lt_2^26",
+          "value": 20.800266165428656,
+          "denominator": 33,
+          "withheld": null
+        },
+        "mean_signed_trend": {
+          "name": "mean_signed_trend_difference",
+          "scope": "candidate=6442e0d4573a kappa=kappa_lt_2^26",
+          "value": 0.004445860960833716,
+          "denominator": 33,
+          "withheld": null
+        },
+        "per_term_parameter_distance": [
+          {
+            "name": "max_parameter_distance_se[matern12[0].sigma]",
+            "scope": "candidate=6442e0d4573a kappa=kappa_lt_2^26",
+            "value": 20.800266165428656,
+            "denominator": 33,
+            "withheld": null
+          },
+          {
+            "name": "max_parameter_distance_se[matern12[0].rho]",
+            "scope": "candidate=6442e0d4573a kappa=kappa_lt_2^26",
+            "value": 3.155304480363529,
+            "denominator": 33,
+            "withheld": null
+          },
+          {
+            "name": "max_parameter_distance_se[white[0].sigma]",
+            "scope": "candidate=6442e0d4573a kappa=kappa_lt_2^26",
+            "value": 1.9320514259148058,
+            "denominator": 33,
+            "withheld": null
+          }
+        ]
+      },
+      {
+        "candidate": "6442e0d4573a6854",
+        "candidate_index": 1,
+        "lint_flagged": false,
+        "kappa": "kappa_2^26_to_2^52",
+        "members": 0,
+        "max_abs_delta_loglik": {
+          "name": "max_abs_delta_loglik",
+          "scope": "candidate=6442e0d4573a kappa=kappa_2^26_to_2^52",
+          "value": null,
+          "denominator": 0,
+          "withheld": "no member carries this quantity"
+        },
+        "max_parameter_distance": {
+          "name": "max_parameter_distance_se",
+          "scope": "candidate=6442e0d4573a kappa=kappa_2^26_to_2^52",
+          "value": null,
+          "denominator": 0,
+          "withheld": "no member carries this quantity"
+        },
+        "mean_signed_trend": {
+          "name": "mean_signed_trend_difference",
+          "scope": "candidate=6442e0d4573a kappa=kappa_2^26_to_2^52",
+          "value": null,
+          "denominator": 0,
+          "withheld": "no member carries this quantity"
+        },
+        "per_term_parameter_distance": [
+          {
+            "name": "max_parameter_distance_se[matern12[0].sigma]",
+            "scope": "candidate=6442e0d4573a kappa=kappa_2^26_to_2^52",
+            "value": null,
+            "denominator": 0,
+            "withheld": "no member carries this quantity"
+          },
+          {
+            "name": "max_parameter_distance_se[matern12[0].rho]",
+            "scope": "candidate=6442e0d4573a kappa=kappa_2^26_to_2^52",
+            "value": null,
+            "denominator": 0,
+            "withheld": "no member carries this quantity"
+          },
+          {
+            "name": "max_parameter_distance_se[white[0].sigma]",
+            "scope": "candidate=6442e0d4573a kappa=kappa_2^26_to_2^52",
+            "value": null,
+            "denominator": 0,
+            "withheld": "no member carries this quantity"
+          }
+        ]
+      },
+      {
+        "candidate": "6442e0d4573a6854",
+        "candidate_index": 1,
+        "lint_flagged": false,
+        "kappa": "kappa_ge_2^52",
+        "members": 0,
+        "max_abs_delta_loglik": {
+          "name": "max_abs_delta_loglik",
+          "scope": "candidate=6442e0d4573a kappa=kappa_ge_2^52",
+          "value": null,
+          "denominator": 0,
+          "withheld": "no member carries this quantity"
+        },
+        "max_parameter_distance": {
+          "name": "max_parameter_distance_se",
+          "scope": "candidate=6442e0d4573a kappa=kappa_ge_2^52",
+          "value": null,
+          "denominator": 0,
+          "withheld": "no member carries this quantity"
+        },
+        "mean_signed_trend": {
+          "name": "mean_signed_trend_difference",
+          "scope": "candidate=6442e0d4573a kappa=kappa_ge_2^52",
+          "value": null,
+          "denominator": 0,
+          "withheld": "no member carries this quantity"
+        },
+        "per_term_parameter_distance": [
+          {
+            "name": "max_parameter_distance_se[matern12[0].sigma]",
+            "scope": "candidate=6442e0d4573a kappa=kappa_ge_2^52",
+            "value": null,
+            "denominator": 0,
+            "withheld": "no member carries this quantity"
+          },
+          {
+            "name": "max_parameter_distance_se[matern12[0].rho]",
+            "scope": "candidate=6442e0d4573a kappa=kappa_ge_2^52",
+            "value": null,
+            "denominator": 0,
+            "withheld": "no member carries this quantity"
+          },
+          {
+            "name": "max_parameter_distance_se[white[0].sigma]",
+            "scope": "candidate=6442e0d4573a kappa=kappa_ge_2^52",
+            "value": null,
+            "denominator": 0,
+            "withheld": "no member carries this quantity"
+          }
+        ]
+      },
+      {
+        "candidate": "6442e0d4573a6854",
+        "candidate_index": 1,
+        "lint_flagged": false,
+        "kappa": "kappa_undefined",
+        "members": 15,
+        "max_abs_delta_loglik": {
+          "name": "max_abs_delta_loglik",
+          "scope": "candidate=6442e0d4573a kappa=kappa_undefined",
+          "value": 4.6661918065498185,
+          "denominator": 15,
+          "withheld": null
+        },
+        "max_parameter_distance": {
+          "name": "max_parameter_distance_se",
+          "scope": "candidate=6442e0d4573a kappa=kappa_undefined",
+          "value": 106.83299749598685,
+          "denominator": 15,
+          "withheld": null
+        },
+        "mean_signed_trend": {
+          "name": "mean_signed_trend_difference",
+          "scope": "candidate=6442e0d4573a kappa=kappa_undefined",
+          "value": null,
+          "denominator": 15,
+          "withheld": "15 members is below the 30-member minimum; the mean's standard error scales as 1/sqrt(n) for the same reason a rate's does, so the count is reported in place of the mean"
+        },
+        "per_term_parameter_distance": [
+          {
+            "name": "max_parameter_distance_se[matern12[0].sigma]",
+            "scope": "candidate=6442e0d4573a kappa=kappa_undefined",
+            "value": 42.89514796528446,
+            "denominator": 8,
+            "withheld": null
+          },
+          {
+            "name": "max_parameter_distance_se[matern12[0].rho]",
+            "scope": "candidate=6442e0d4573a kappa=kappa_undefined",
+            "value": 106.83299749598685,
+            "denominator": 9,
+            "withheld": null
+          },
+          {
+            "name": "max_parameter_distance_se[white[0].sigma]",
+            "scope": "candidate=6442e0d4573a kappa=kappa_undefined",
+            "value": 44.48687654502452,
+            "denominator": 9,
+            "withheld": null
+          }
+        ]
+      },
+      {
+        "candidate": "eb62e0c295bd7541",
+        "candidate_index": 2,
+        "lint_flagged": false,
+        "kappa": "kappa_lt_2^26",
+        "members": 26,
+        "max_abs_delta_loglik": {
+          "name": "max_abs_delta_loglik",
+          "scope": "candidate=eb62e0c295bd kappa=kappa_lt_2^26",
+          "value": 8.023898205803903,
+          "denominator": 26,
+          "withheld": null
+        },
+        "max_parameter_distance": {
+          "name": "max_parameter_distance_se",
+          "scope": "candidate=eb62e0c295bd kappa=kappa_lt_2^26",
+          "value": 36.77455769083793,
+          "denominator": 26,
+          "withheld": null
+        },
+        "mean_signed_trend": {
+          "name": "mean_signed_trend_difference",
+          "scope": "candidate=eb62e0c295bd kappa=kappa_lt_2^26",
+          "value": null,
+          "denominator": 26,
+          "withheld": "26 members is below the 30-member minimum; the mean's standard error scales as 1/sqrt(n) for the same reason a rate's does, so the count is reported in place of the mean"
+        },
+        "per_term_parameter_distance": [
+          {
+            "name": "max_parameter_distance_se[matern32[0].sigma]",
+            "scope": "candidate=eb62e0c295bd kappa=kappa_lt_2^26",
+            "value": 36.77455769083793,
+            "denominator": 26,
+            "withheld": null
+          },
+          {
+            "name": "max_parameter_distance_se[matern32[0].rho]",
+            "scope": "candidate=eb62e0c295bd kappa=kappa_lt_2^26",
+            "value": 8.674494177089485,
+            "denominator": 26,
+            "withheld": null
+          },
+          {
+            "name": "max_parameter_distance_se[white[0].sigma]",
+            "scope": "candidate=eb62e0c295bd kappa=kappa_lt_2^26",
+            "value": 3.6306074652475626,
+            "denominator": 26,
+            "withheld": null
+          }
+        ]
+      },
+      {
+        "candidate": "eb62e0c295bd7541",
+        "candidate_index": 2,
+        "lint_flagged": false,
+        "kappa": "kappa_2^26_to_2^52",
+        "members": 0,
+        "max_abs_delta_loglik": {
+          "name": "max_abs_delta_loglik",
+          "scope": "candidate=eb62e0c295bd kappa=kappa_2^26_to_2^52",
+          "value": null,
+          "denominator": 0,
+          "withheld": "no member carries this quantity"
+        },
+        "max_parameter_distance": {
+          "name": "max_parameter_distance_se",
+          "scope": "candidate=eb62e0c295bd kappa=kappa_2^26_to_2^52",
+          "value": null,
+          "denominator": 0,
+          "withheld": "no member carries this quantity"
+        },
+        "mean_signed_trend": {
+          "name": "mean_signed_trend_difference",
+          "scope": "candidate=eb62e0c295bd kappa=kappa_2^26_to_2^52",
+          "value": null,
+          "denominator": 0,
+          "withheld": "no member carries this quantity"
+        },
+        "per_term_parameter_distance": [
+          {
+            "name": "max_parameter_distance_se[matern32[0].sigma]",
+            "scope": "candidate=eb62e0c295bd kappa=kappa_2^26_to_2^52",
+            "value": null,
+            "denominator": 0,
+            "withheld": "no member carries this quantity"
+          },
+          {
+            "name": "max_parameter_distance_se[matern32[0].rho]",
+            "scope": "candidate=eb62e0c295bd kappa=kappa_2^26_to_2^52",
+            "value": null,
+            "denominator": 0,
+            "withheld": "no member carries this quantity"
+          },
+          {
+            "name": "max_parameter_distance_se[white[0].sigma]",
+            "scope": "candidate=eb62e0c295bd kappa=kappa_2^26_to_2^52",
+            "value": null,
+            "denominator": 0,
+            "withheld": "no member carries this quantity"
+          }
+        ]
+      },
+      {
+        "candidate": "eb62e0c295bd7541",
+        "candidate_index": 2,
+        "lint_flagged": false,
+        "kappa": "kappa_ge_2^52",
+        "members": 0,
+        "max_abs_delta_loglik": {
+          "name": "max_abs_delta_loglik",
+          "scope": "candidate=eb62e0c295bd kappa=kappa_ge_2^52",
+          "value": null,
+          "denominator": 0,
+          "withheld": "no member carries this quantity"
+        },
+        "max_parameter_distance": {
+          "name": "max_parameter_distance_se",
+          "scope": "candidate=eb62e0c295bd kappa=kappa_ge_2^52",
+          "value": null,
+          "denominator": 0,
+          "withheld": "no member carries this quantity"
+        },
+        "mean_signed_trend": {
+          "name": "mean_signed_trend_difference",
+          "scope": "candidate=eb62e0c295bd kappa=kappa_ge_2^52",
+          "value": null,
+          "denominator": 0,
+          "withheld": "no member carries this quantity"
+        },
+        "per_term_parameter_distance": [
+          {
+            "name": "max_parameter_distance_se[matern32[0].sigma]",
+            "scope": "candidate=eb62e0c295bd kappa=kappa_ge_2^52",
+            "value": null,
+            "denominator": 0,
+            "withheld": "no member carries this quantity"
+          },
+          {
+            "name": "max_parameter_distance_se[matern32[0].rho]",
+            "scope": "candidate=eb62e0c295bd kappa=kappa_ge_2^52",
+            "value": null,
+            "denominator": 0,
+            "withheld": "no member carries this quantity"
+          },
+          {
+            "name": "max_parameter_distance_se[white[0].sigma]",
+            "scope": "candidate=eb62e0c295bd kappa=kappa_ge_2^52",
+            "value": null,
+            "denominator": 0,
+            "withheld": "no member carries this quantity"
+          }
+        ]
+      },
+      {
+        "candidate": "eb62e0c295bd7541",
+        "candidate_index": 2,
+        "lint_flagged": false,
+        "kappa": "kappa_undefined",
+        "members": 24,
+        "max_abs_delta_loglik": {
+          "name": "max_abs_delta_loglik",
+          "scope": "candidate=eb62e0c295bd kappa=kappa_undefined",
+          "value": 1.1369192431661759,
+          "denominator": 24,
+          "withheld": null
+        },
+        "max_parameter_distance": {
+          "name": "max_parameter_distance_se",
+          "scope": "candidate=eb62e0c295bd kappa=kappa_undefined",
+          "value": 350.0006274652093,
+          "denominator": 24,
+          "withheld": null
+        },
+        "mean_signed_trend": {
+          "name": "mean_signed_trend_difference",
+          "scope": "candidate=eb62e0c295bd kappa=kappa_undefined",
+          "value": null,
+          "denominator": 24,
+          "withheld": "24 members is below the 30-member minimum; the mean's standard error scales as 1/sqrt(n) for the same reason a rate's does, so the count is reported in place of the mean"
+        },
+        "per_term_parameter_distance": [
+          {
+            "name": "max_parameter_distance_se[matern32[0].sigma]",
+            "scope": "candidate=eb62e0c295bd kappa=kappa_undefined",
+            "value": 350.0006274652093,
+            "denominator": 17,
+            "withheld": null
+          },
+          {
+            "name": "max_parameter_distance_se[matern32[0].rho]",
+            "scope": "candidate=eb62e0c295bd kappa=kappa_undefined",
+            "value": 243.22338630066537,
+            "denominator": 9,
+            "withheld": null
+          },
+          {
+            "name": "max_parameter_distance_se[white[0].sigma]",
+            "scope": "candidate=eb62e0c295bd kappa=kappa_undefined",
+            "value": 51.51273208489786,
+            "denominator": 21,
+            "withheld": null
+          }
+        ]
+      }
+    ],
+    "point_strata": [
+      {
+        "candidate": "6aa2199c9b35b7d0",
+        "candidate_index": 0,
+        "lint_flagged": false,
+        "margin": "margin_lt_2",
+        "members": 6,
+        "selection_disagreement": {
+          "name": "selection_disagreement",
+          "scope": "winner=6aa2199c9b35 margin=margin_lt_2",
+          "value": null,
+          "denominator": 6,
+          "withheld": "6 members is below the 30-member minimum; a binomial rate over 30 has a standard error of ~9% at p = 0.5, so the count is reported in place of the rate"
+        },
+        "selection_move": {
+          "name": "selection_move",
+          "scope": "winner=6aa2199c9b35 margin=margin_lt_2",
+          "value": null,
+          "denominator": 6,
+          "withheld": "6 members is below the 30-member minimum; a binomial rate over 30 has a standard error of ~9% at p = 0.5, so the count is reported in place of the rate"
+        },
+        "selection_dropout": {
+          "name": "selection_dropout",
+          "scope": "winner=6aa2199c9b35 margin=margin_lt_2",
+          "value": null,
+          "denominator": 6,
+          "withheld": "6 members is below the 30-member minimum; a binomial rate over 30 has a standard error of ~9% at p = 0.5, so the count is reported in place of the rate"
+        },
+        "differing": 0,
+        "by_move": 0,
+        "by_dropout": 0,
+        "by_both_unavailable": 0
+      },
+      {
+        "candidate": "6aa2199c9b35b7d0",
+        "candidate_index": 0,
+        "lint_flagged": false,
+        "margin": "margin_2_to_10",
+        "members": 33,
+        "selection_disagreement": {
+          "name": "selection_disagreement",
+          "scope": "winner=6aa2199c9b35 margin=margin_2_to_10",
+          "value": 0.0,
+          "denominator": 33,
+          "withheld": null
+        },
+        "selection_move": {
+          "name": "selection_move",
+          "scope": "winner=6aa2199c9b35 margin=margin_2_to_10",
+          "value": 0.0,
+          "denominator": 33,
+          "withheld": null
+        },
+        "selection_dropout": {
+          "name": "selection_dropout",
+          "scope": "winner=6aa2199c9b35 margin=margin_2_to_10",
+          "value": 0.0,
+          "denominator": 33,
+          "withheld": null
+        },
+        "differing": 0,
+        "by_move": 0,
+        "by_dropout": 0,
+        "by_both_unavailable": 0
+      },
+      {
+        "candidate": "6aa2199c9b35b7d0",
+        "candidate_index": 0,
+        "lint_flagged": false,
+        "margin": "margin_ge_10",
+        "members": 0,
+        "selection_disagreement": {
+          "name": "selection_disagreement",
+          "scope": "winner=6aa2199c9b35 margin=margin_ge_10",
+          "value": null,
+          "denominator": 0,
+          "withheld": "the stratum is empty"
+        },
+        "selection_move": {
+          "name": "selection_move",
+          "scope": "winner=6aa2199c9b35 margin=margin_ge_10",
+          "value": null,
+          "denominator": 0,
+          "withheld": "the stratum is empty"
+        },
+        "selection_dropout": {
+          "name": "selection_dropout",
+          "scope": "winner=6aa2199c9b35 margin=margin_ge_10",
+          "value": null,
+          "denominator": 0,
+          "withheld": "the stratum is empty"
+        },
+        "differing": 0,
+        "by_move": 0,
+        "by_dropout": 0,
+        "by_both_unavailable": 0
+      },
+      {
+        "candidate": "6442e0d4573a6854",
+        "candidate_index": 1,
+        "lint_flagged": false,
+        "margin": "margin_lt_2",
+        "members": 0,
+        "selection_disagreement": {
+          "name": "selection_disagreement",
+          "scope": "winner=6442e0d4573a margin=margin_lt_2",
+          "value": null,
+          "denominator": 0,
+          "withheld": "the stratum is empty"
+        },
+        "selection_move": {
+          "name": "selection_move",
+          "scope": "winner=6442e0d4573a margin=margin_lt_2",
+          "value": null,
+          "denominator": 0,
+          "withheld": "the stratum is empty"
+        },
+        "selection_dropout": {
+          "name": "selection_dropout",
+          "scope": "winner=6442e0d4573a margin=margin_lt_2",
+          "value": null,
+          "denominator": 0,
+          "withheld": "the stratum is empty"
+        },
+        "differing": 0,
+        "by_move": 0,
+        "by_dropout": 0,
+        "by_both_unavailable": 0
+      },
+      {
+        "candidate": "6442e0d4573a6854",
+        "candidate_index": 1,
+        "lint_flagged": false,
+        "margin": "margin_2_to_10",
+        "members": 0,
+        "selection_disagreement": {
+          "name": "selection_disagreement",
+          "scope": "winner=6442e0d4573a margin=margin_2_to_10",
+          "value": null,
+          "denominator": 0,
+          "withheld": "the stratum is empty"
+        },
+        "selection_move": {
+          "name": "selection_move",
+          "scope": "winner=6442e0d4573a margin=margin_2_to_10",
+          "value": null,
+          "denominator": 0,
+          "withheld": "the stratum is empty"
+        },
+        "selection_dropout": {
+          "name": "selection_dropout",
+          "scope": "winner=6442e0d4573a margin=margin_2_to_10",
+          "value": null,
+          "denominator": 0,
+          "withheld": "the stratum is empty"
+        },
+        "differing": 0,
+        "by_move": 0,
+        "by_dropout": 0,
+        "by_both_unavailable": 0
+      },
+      {
+        "candidate": "6442e0d4573a6854",
+        "candidate_index": 1,
+        "lint_flagged": false,
+        "margin": "margin_ge_10",
+        "members": 0,
+        "selection_disagreement": {
+          "name": "selection_disagreement",
+          "scope": "winner=6442e0d4573a margin=margin_ge_10",
+          "value": null,
+          "denominator": 0,
+          "withheld": "the stratum is empty"
+        },
+        "selection_move": {
+          "name": "selection_move",
+          "scope": "winner=6442e0d4573a margin=margin_ge_10",
+          "value": null,
+          "denominator": 0,
+          "withheld": "the stratum is empty"
+        },
+        "selection_dropout": {
+          "name": "selection_dropout",
+          "scope": "winner=6442e0d4573a margin=margin_ge_10",
+          "value": null,
+          "denominator": 0,
+          "withheld": "the stratum is empty"
+        },
+        "differing": 0,
+        "by_move": 0,
+        "by_dropout": 0,
+        "by_both_unavailable": 0
+      },
+      {
+        "candidate": "eb62e0c295bd7541",
+        "candidate_index": 2,
+        "lint_flagged": false,
+        "margin": "margin_lt_2",
+        "members": 13,
+        "selection_disagreement": {
+          "name": "selection_disagreement",
+          "scope": "winner=eb62e0c295bd margin=margin_lt_2",
+          "value": null,
+          "denominator": 13,
+          "withheld": "13 members is below the 30-member minimum; a binomial rate over 30 has a standard error of ~9% at p = 0.5, so the count is reported in place of the rate"
+        },
+        "selection_move": {
+          "name": "selection_move",
+          "scope": "winner=eb62e0c295bd margin=margin_lt_2",
+          "value": null,
+          "denominator": 13,
+          "withheld": "13 members is below the 30-member minimum; a binomial rate over 30 has a standard error of ~9% at p = 0.5, so the count is reported in place of the rate"
+        },
+        "selection_dropout": {
+          "name": "selection_dropout",
+          "scope": "winner=eb62e0c295bd margin=margin_lt_2",
+          "value": null,
+          "denominator": 13,
+          "withheld": "13 members is below the 30-member minimum; a binomial rate over 30 has a standard error of ~9% at p = 0.5, so the count is reported in place of the rate"
+        },
+        "differing": 4,
+        "by_move": 4,
+        "by_dropout": 0,
+        "by_both_unavailable": 0
+      },
+      {
+        "candidate": "eb62e0c295bd7541",
+        "candidate_index": 2,
+        "lint_flagged": false,
+        "margin": "margin_2_to_10",
+        "members": 0,
+        "selection_disagreement": {
+          "name": "selection_disagreement",
+          "scope": "winner=eb62e0c295bd margin=margin_2_to_10",
+          "value": null,
+          "denominator": 0,
+          "withheld": "the stratum is empty"
+        },
+        "selection_move": {
+          "name": "selection_move",
+          "scope": "winner=eb62e0c295bd margin=margin_2_to_10",
+          "value": null,
+          "denominator": 0,
+          "withheld": "the stratum is empty"
+        },
+        "selection_dropout": {
+          "name": "selection_dropout",
+          "scope": "winner=eb62e0c295bd margin=margin_2_to_10",
+          "value": null,
+          "denominator": 0,
+          "withheld": "the stratum is empty"
+        },
+        "differing": 0,
+        "by_move": 0,
+        "by_dropout": 0,
+        "by_both_unavailable": 0
+      },
+      {
+        "candidate": "eb62e0c295bd7541",
+        "candidate_index": 2,
+        "lint_flagged": false,
+        "margin": "margin_ge_10",
+        "members": 0,
+        "selection_disagreement": {
+          "name": "selection_disagreement",
+          "scope": "winner=eb62e0c295bd margin=margin_ge_10",
+          "value": null,
+          "denominator": 0,
+          "withheld": "the stratum is empty"
+        },
+        "selection_move": {
+          "name": "selection_move",
+          "scope": "winner=eb62e0c295bd margin=margin_ge_10",
+          "value": null,
+          "denominator": 0,
+          "withheld": "the stratum is empty"
+        },
+        "selection_dropout": {
+          "name": "selection_dropout",
+          "scope": "winner=eb62e0c295bd margin=margin_ge_10",
+          "value": null,
+          "denominator": 0,
+          "withheld": "the stratum is empty"
+        },
+        "differing": 0,
+        "by_move": 0,
+        "by_dropout": 0,
+        "by_both_unavailable": 0
+      }
+    ],
+    "candidates": [
+      {
+        "candidate": "6aa2199c9b35b7d0",
+        "candidate_index": 0,
+        "lint_flagged": false,
+        "lint_findings": [],
+        "attempted": 52,
+        "cold_ok": 52,
+        "cold_failed": 0,
+        "cold_degenerate": 0,
+        "warm_degenerate": 0,
+        "both_ok": 52,
+        "rescue": {
+          "name": "rescue_rate over cold-failed cells",
+          "scope": "candidate=6aa2199c9b35",
+          "value": null,
+          "denominator": 0,
+          "withheld": "the stratum is empty"
+        },
+        "loss": {
+          "name": "loss_rate over cold-OK cells",
+          "scope": "candidate=6aa2199c9b35",
+          "value": 0.0,
+          "denominator": 52,
+          "withheld": null
+        },
+        "both_ok_fraction": {
+          "name": "both_ok_fraction over attempted cells",
+          "scope": "candidate=6aa2199c9b35",
+          "value": 1.0,
+          "denominator": 52,
+          "withheld": null
+        }
+      },
+      {
+        "candidate": "6442e0d4573a6854",
+        "candidate_index": 1,
+        "lint_flagged": false,
+        "lint_findings": [],
+        "attempted": 52,
+        "cold_ok": 50,
+        "cold_failed": 2,
+        "cold_degenerate": 2,
+        "warm_degenerate": 3,
+        "both_ok": 48,
+        "rescue": {
+          "name": "rescue_rate over cold-failed cells",
+          "scope": "candidate=6442e0d4573a",
+          "value": null,
+          "denominator": 2,
+          "withheld": "2 members is below the 30-member minimum; a binomial rate over 30 has a standard error of ~9% at p = 0.5, so the count is reported in place of the rate"
+        },
+        "loss": {
+          "name": "loss_rate over cold-OK cells",
+          "scope": "candidate=6442e0d4573a",
+          "value": 0.04,
+          "denominator": 50,
+          "withheld": null
+        },
+        "both_ok_fraction": {
+          "name": "both_ok_fraction over attempted cells",
+          "scope": "candidate=6442e0d4573a",
+          "value": 0.9230769230769231,
+          "denominator": 52,
+          "withheld": null
+        }
+      },
+      {
+        "candidate": "eb62e0c295bd7541",
+        "candidate_index": 2,
+        "lint_flagged": false,
+        "lint_findings": [],
+        "attempted": 52,
+        "cold_ok": 51,
+        "cold_failed": 1,
+        "cold_degenerate": 1,
+        "warm_degenerate": 1,
+        "both_ok": 50,
+        "rescue": {
+          "name": "rescue_rate over cold-failed cells",
+          "scope": "candidate=eb62e0c295bd",
+          "value": null,
+          "denominator": 1,
+          "withheld": "1 members is below the 30-member minimum; a binomial rate over 30 has a standard error of ~9% at p = 0.5, so the count is reported in place of the rate"
+        },
+        "loss": {
+          "name": "loss_rate over cold-OK cells",
+          "scope": "candidate=eb62e0c295bd",
+          "value": 0.0196078431372549,
+          "denominator": 51,
+          "withheld": null
+        },
+        "both_ok_fraction": {
+          "name": "both_ok_fraction over attempted cells",
+          "scope": "candidate=eb62e0c295bd",
+          "value": 0.9615384615384616,
+          "denominator": 52,
+          "withheld": null
+        }
+      }
+    ],
+    "points": {
+      "audited_points": 52,
+      "both_ranked": 52,
+      "ranked_fraction": {
+        "name": "both_ranked_fraction",
+        "scope": "all audited points",
+        "value": 1.0,
+        "denominator": 52,
+        "withheld": null
+      },
+      "cold_only_winner": 0,
+      "warm_only_winner": 0,
+      "no_margin": 0
+    },
+    "headlines": [
+      {
+        "name": "selection_disagreement",
+        "value": 0.0,
+        "stratum": "winner=6aa2199c9b35 margin=margin_2_to_10",
+        "withheld": null
+      },
+      {
+        "name": "selection_move",
+        "value": 0.0,
+        "stratum": "winner=6aa2199c9b35 margin=margin_2_to_10",
+        "withheld": null
+      },
+      {
+        "name": "selection_dropout",
+        "value": 0.0,
+        "stratum": "winner=6aa2199c9b35 margin=margin_2_to_10",
+        "withheld": null
+      },
+      {
+        "name": "max_abs_delta_loglik",
+        "value": 8.023898205803903,
+        "stratum": "candidate=eb62e0c295bd kappa=kappa_lt_2^26",
+        "withheld": null
+      },
+      {
+        "name": "max_parameter_distance_se",
+        "value": 350.0006274652093,
+        "stratum": "candidate=eb62e0c295bd kappa=kappa_undefined",
+        "withheld": null
+      },
+      {
+        "name": "mean_signed_trend_difference",
+        "value": 0.004445860960833716,
+        "stratum": "candidate=6442e0d4573a kappa=kappa_lt_2^26",
+        "withheld": null
+      },
+      {
+        "name": "rescue_rate",
+        "value": null,
+        "stratum": null,
+        "withheld": "every stratum withheld rescue_rate; there is no true number to quote, and a pooled one is not offered in its place"
+      },
+      {
+        "name": "loss_rate",
+        "value": 0.04,
+        "stratum": "candidate=6442e0d4573a",
+        "withheld": null
+      }
+    ],
+    "notes": [
+      "No pooled disagreement figure is emitted, on any metric, ever (D8). Nothing in this system consumes one -- \u00a711.2 attaches its only threshold to the iteration saving -- which was checked before the decision, so the withholding costs no decision rule anything. Each headline below is the WORST stratum and names the stratum it came from, which makes the quoted number a true one.",
+      "kappa bins kappa_2^26_to_2^52, kappa_ge_2^52 cannot be occupied by any cell this report covers. optimize.HESSIAN_COND_LIMIT is float(EPS) ** -0.5 = 67108864.0, which is the first kappa boundary, and a fit above it reports DEGENERATE_HESSIAN and is therefore outside the both-OK intersection. Zero members there is a fact about the outcome taxonomy, not about the field.",
+      "Candidate 6442e0d4573a's both-OK intersection is 0.9231 of attempted cells, so every per-cell disagreement figure for it is CONDITIONED ON SURVIVAL. If warm and cold disagree most on hard cells and hard cells fail more often, restricting to both-OK removes exactly the population where the disagreement lives.",
+      "Candidate eb62e0c295bd's both-OK intersection is 0.9615 of attempted cells, so every per-cell disagreement figure for it is CONDITIONED ON SURVIVAL. If warm and cold disagree most on hard cells and hard cells fail more often, restricting to both-OK removes exactly the population where the disagreement lives."
+    ]
+  }
+}

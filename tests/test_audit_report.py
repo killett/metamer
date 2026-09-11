@@ -38,6 +38,7 @@ from metamer.batch.audit_report import (
     kappa_bin,
     margin_bin,
     parameter_distance,
+    selection_decomposition,
     selection_margin,
 )
 from metamer.config.candidates import parse_candidate
@@ -917,3 +918,356 @@ def test_a_design_with_no_trend_column_reports_absence_and_not_zero():
     headline = next(h for h in report.headlines if h.name.startswith("mean_signed"))
     assert headline.value is None
     assert any("no trend column" in note for note in report.notes)
+
+
+# --------------------------------------------------------------------------
+# The move/dropout decomposition -- D9's two quantities, told apart
+# --------------------------------------------------------------------------
+
+
+def _committed_rule():
+    """`decompose` from the spike's committed addendum, imported by path.
+
+    **THE DEPENDENCY IS DELIBERATE AND IT IS THE POINT OF THE TEST.** The rule
+    shipped here is a PORT of that one, and the only thing that makes a port a
+    port is that the two agree. The suite already reads committed artifacts out
+    of `docs/superpowers/notes` for the same reason -- a recorded output is a
+    current claim -- and this reads the recorded RULE rather than its output.
+
+    **It fails rather than skips when the file is absent**, because a port
+    whose original has vanished is a rule nobody can check.
+    """
+    import importlib.util
+    import pathlib
+
+    path = pathlib.Path("docs/superpowers/notes/realdata-spike2-decompose.py")
+    assert path.exists(), (
+        f"{path} is the rule this module's decomposition was ported from; "
+        "without it the port cannot be checked against anything"
+    )
+    spec = importlib.util.spec_from_file_location("_spike2_decompose", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.decompose
+
+
+def test_the_decomposition_separates_a_move_from_a_dropout_on_a_fabricated_pair():
+    """(i2)'s positive control, on the committed construction.
+
+    Behaviour under test: the rule can report a MOVE. A point where both arms
+    had both candidates `OK` and ranked them differently is a move; a point
+    where one arm's winner was not `OK` in the other is a dropout.
+
+    Expected values determined independently: the construction and its counts
+    are the spike addendum's own `selftest` -- three points, one move by
+    construction, one dropout by construction, one identical -- not a reading
+    of this implementation. **`MOVE = 0` and "the rule cannot see a move" are
+    the same integer**, so the zero the real-data spike reported is worth
+    nothing unless this passes.
+
+    Bug this catches: a rule that classifies every difference as a dropout --
+    which is what the real-data population looks like, so the defect would be
+    invisible exactly where it was measured.
+    """
+    ok, bad = Outcome.OK.code, Outcome.DEGENERATE_HESSIAN.code
+    split = selection_decomposition(
+        cold_outcome=np.array([[ok, ok], [ok, ok], [ok, ok]], dtype=np.uint8),
+        cold_best=np.array([0, 0, 1]),
+        warm_outcome=np.array([[ok, ok], [bad, ok], [ok, ok]], dtype=np.uint8),
+        warm_best=np.array([1, 1, 1]),
+    )
+
+    assert int(split.differs.sum()) == 2
+    assert int(split.move.sum()) == 1
+    assert int(split.dropout.sum()) == 1
+    assert int(split.both_unavailable.sum()) == 0
+    # The move is point 0 and the dropout is point 1, not merely one of each.
+    assert split.move.tolist() == [True, False, False]
+    assert split.dropout.tolist() == [False, True, False]
+
+
+def test_the_ported_decomposition_agrees_with_the_committed_rule_point_for_point():
+    """The port is a port, checked against the rule it was ported from.
+
+    Behaviour under test: on a randomised population carrying all three kinds,
+    this module's vectorised rule returns the counts the spike's loop returns.
+
+    Expected values determined independently: they come from executing the
+    COMMITTED rule -- a different implementation, written first, which produced
+    the record -- rather than from any reasoning about this one.
+
+    Bug this catches: a vectorisation that reorders the branch. The committed
+    loop tests *both available* first, *neither available* second and assigns
+    the rest to dropout; a port that tested `not cold_pick_ok_in_other` first
+    would move every both-unavailable point into the dropout bin, which on the
+    real-data population is the difference between one finding and another.
+    """
+    decompose = _committed_rule()
+    rng = np.random.default_rng(20260911)
+    batch, n_cand = 400, len(_SPECS)
+    ok, bad = Outcome.OK.code, Outcome.DEGENERATE_HESSIAN.code
+
+    cold_outcome = np.where(rng.random((batch, n_cand)) < 0.7, ok, bad).astype(np.uint8)
+    warm_outcome = np.where(rng.random((batch, n_cand)) < 0.7, ok, bad).astype(np.uint8)
+    cold_best = rng.integers(-1, n_cand, size=batch)
+    warm_best = rng.integers(-1, n_cand, size=batch)
+
+    cold = _result(batch, outcome=cold_outcome, best_index=cold_best)
+    warm = _result(batch, outcome=warm_outcome, best_index=warm_best)
+    expected = decompose(cold, warm, "cross-check")
+    split = selection_decomposition(
+        cold_outcome=cold_outcome,
+        cold_best=cold_best,
+        warm_outcome=warm_outcome,
+        warm_best=warm_best,
+    )
+
+    assert int(split.live.sum()) == expected["points_compared"]
+    assert int(split.differs.sum()) == expected["points_differing"]
+    assert int(split.move.sum()) == expected["differ_by_move"]
+    assert int(split.dropout.sum()) == expected["differ_by_dropout"]
+    assert int(split.both_unavailable.sum()) == expected["differ_by_both_unavailable"]
+    # The fixture must carry all three kinds, or the agreement is vacuous.
+    assert expected["differ_by_move"] > 0
+    assert expected["differ_by_dropout"] > 0
+    assert expected["differ_by_both_unavailable"] > 0
+
+
+def test_the_three_kinds_are_disjoint_and_sum_to_the_differing_count():
+    """The arithmetic that makes a decomposition a decomposition.
+
+    Behaviour under test: every differing point lands in exactly one of the
+    three bins, and no agreeing or unranked point lands in any.
+
+    Expected value determined independently: it is an identity over sets, not a
+    reading -- `move | dropout | both == differs` and the three are pairwise
+    disjoint, over a population built to contain all three kinds.
+
+    Bug this catches: a point counted twice, or a point assigned to whichever
+    bin is tested first and silently dropped from the others. A comment cannot
+    fail; this can.
+    """
+    decompose = _committed_rule()  # only to guarantee the fixture is rich
+    rng = np.random.default_rng(7)
+    batch, n_cand = 300, len(_SPECS)
+    ok, bad = Outcome.OK.code, Outcome.DEGENERATE_HESSIAN.code
+    cold_outcome = np.where(rng.random((batch, n_cand)) < 0.6, ok, bad).astype(np.uint8)
+    warm_outcome = np.where(rng.random((batch, n_cand)) < 0.6, ok, bad).astype(np.uint8)
+    cold_best = rng.integers(-1, n_cand, size=batch)
+    warm_best = rng.integers(-1, n_cand, size=batch)
+    assert (
+        decompose(
+            _result(batch, outcome=cold_outcome, best_index=cold_best),
+            _result(batch, outcome=warm_outcome, best_index=warm_best),
+            "richness",
+        )["differ_by_both_unavailable"]
+        > 0
+    )
+
+    split = selection_decomposition(
+        cold_outcome=cold_outcome,
+        cold_best=cold_best,
+        warm_outcome=warm_outcome,
+        warm_best=warm_best,
+    )
+
+    assert np.array_equal(
+        split.move | split.dropout | split.both_unavailable, split.differs
+    )
+    assert not np.any(split.move & split.dropout)
+    assert not np.any(split.move & split.both_unavailable)
+    assert not np.any(split.dropout & split.both_unavailable)
+    assert int(
+        split.move.sum() + split.dropout.sum() + split.both_unavailable.sum()
+    ) == int(split.differs.sum())
+    assert not np.any(split.differs & ~split.live)
+
+
+def test_an_unranked_point_is_in_no_decomposition_bin():
+    """`-1` compares unequal to everything, and that is not a disagreement.
+
+    Behaviour under test: a point either arm did not rank is outside `live`,
+    outside `differs`, and outside all three kinds.
+
+    Expected value determined independently: `Ranking.best_index` uses `-1` for
+    *"a fit ran and no candidate won"*; `-1 != 0` is true, so a rule without a
+    membership mask calls every such point a disagreement. Three points, one of
+    them unranked in the warm arm, gives an expected `live` of 2 and `differs`
+    of 0 -- both arms select candidate 0 wherever they select anything.
+
+    Bug this catches: the membership mask dropped in the port. `_point_strata`
+    carries a deliberately redundant `both &` with a comment explaining exactly
+    this trap; the decomposition is a second place the trap exists and it did
+    not inherit the comment.
+    """
+    ok = Outcome.OK.code
+    split = selection_decomposition(
+        cold_outcome=np.full((3, 2), ok, dtype=np.uint8),
+        cold_best=np.array([0, 0, 0]),
+        warm_outcome=np.full((3, 2), ok, dtype=np.uint8),
+        warm_best=np.array([0, -1, 0]),
+    )
+
+    assert split.live.tolist() == [True, False, True]
+    assert int(split.differs.sum()) == 0
+    assert int(split.move.sum()) == 0
+    assert int(split.dropout.sum()) == 0
+    assert int(split.both_unavailable.sum()) == 0
+
+
+def test_a_point_stratums_decomposition_counts_are_ITS_OWN_and_sum_to_its_differing():
+    """The identity at the granularity the report publishes it, in TWO strata.
+
+    Behaviour under test: within one `margin x winner` stratum the three counts
+    sum to that stratum's `differing`, and they count that stratum's points
+    only.
+
+    Expected values determined independently: the fixture is built by hand in
+    two blocks of 30 points, both landing in the WEAK margin bin. The first
+    block's cold winner is candidate 0: 10 of them are moves by construction
+    (both arms have both candidates `OK` and pick differently), 10 are dropouts
+    by construction (the warm arm lost the candidate cold selected), 10 agree.
+    The second block's cold winner is candidate 1 and every point agrees. So
+    the expected counts are `differing = 20, by_move = 10, by_dropout = 10` in
+    the first stratum and **all zero in the second**, with pooled rates 20/30
+    and 0.0.
+
+    Bug this catches: the decomposition computed over the whole batch and
+    reported per stratum. **A single-stratum fixture cannot express it** --
+    `members & move` and `move` are the same set when every point is a member,
+    and a one-block version of this test let that mutant survive. The second
+    block is what makes the masking observable: unmasked, it would report ten
+    moves in a stratum that has none.
+    """
+    ok, bad = Outcome.OK.code, Outcome.DEGENERATE_HESSIAN.code
+    batch = 60
+    cold_outcome = np.full((batch, 2), ok, dtype=np.uint8)
+    warm_outcome = np.full((batch, 2), ok, dtype=np.uint8)
+    warm_outcome[10:20, 0] = bad  # the dropouts: cold's winner is gone in warm
+    cold_best = np.zeros(batch, dtype=np.int64)
+    cold_best[30:] = 1
+    warm_best = cold_best.copy()
+    warm_best[:20] = 1  # 10 moves, then 10 dropouts
+
+    report = _report(
+        _result(batch, outcome=cold_outcome, best_index=cold_best),
+        _result(batch, outcome=warm_outcome, best_index=warm_best),
+    )
+    strata = {
+        (s.candidate_index, s.margin): s for s in report.point_strata if s.members
+    }
+    first = strata[(0, MarginBin.WEAK)]
+    second = strata[(1, MarginBin.WEAK)]
+
+    assert (first.members, second.members) == (30, 30)
+    assert (first.differing, first.by_move, first.by_dropout) == (20, 10, 10)
+    assert first.by_both_unavailable == 0
+    assert first.by_move + first.by_dropout + first.by_both_unavailable == (
+        first.differing
+    )
+    assert first.selection_disagreement.value == pytest.approx(20 / 30)
+    assert first.selection_move.value == pytest.approx(10 / 30)
+    assert first.selection_dropout.value == pytest.approx(10 / 30)
+
+    # The second stratum agrees everywhere, so every count it carries is zero.
+    # This is the half that makes the per-stratum masking observable.
+    assert (second.differing, second.by_move, second.by_dropout) == (0, 0, 0)
+    assert second.by_both_unavailable == 0
+    assert second.selection_move.value == 0.0
+    assert second.selection_dropout.value == 0.0
+
+
+def test_the_floor_covers_the_move_and_dropout_rates_at_their_boundary():
+    """The 30-member floor is about the KIND of quantity, not about the field.
+
+    Behaviour under test: the two new rates withhold at 29 members and report
+    at 30, exactly as the pooled rate they sit beside does.
+
+    Expected values determined independently: `MIN_STRATUM_MEMBERS` is 30 and
+    the rule is stated about a rate -- a binomial rate over 30 draws has a
+    standard error of ~9%, which is the derivation. The fixture gives candidate
+    0 exactly 30 points and candidate 1 exactly 29, differing in nothing else.
+
+    Bug this catches: a new rate shipped past the floor because the floor was
+    applied where it was written rather than to every rate -- (h4), a rule
+    stated over "the metrics" checked against each kind. The counts must stay
+    present either way, since the count is what is reported INSTEAD.
+    """
+    batch = 59
+    best = np.zeros(batch, dtype=np.int64)
+    best[30:] = 1
+    report = _report(
+        _result(batch, best_index=best), _result(batch, best_index=best.copy())
+    )
+    strata = {
+        (s.candidate_index, s.margin): s for s in report.point_strata if s.members
+    }
+    thirty = strata[(0, MarginBin.WEAK)]
+    twenty_nine = strata[(1, MarginBin.WEAK)]
+    assert (thirty.members, twenty_nine.members) == (30, 29)
+
+    for quantity in (thirty.selection_move, thirty.selection_dropout):
+        assert quantity.value == 0.0
+        assert quantity.withheld is None
+        assert quantity.denominator == 30
+    for quantity in (twenty_nine.selection_move, twenty_nine.selection_dropout):
+        assert quantity.value is None
+        assert quantity.withheld is not None and "29 members" in quantity.withheld
+        assert quantity.denominator == 29
+    # Withheld or not, the counts are there: they are what replaces the rate.
+    assert (twenty_nine.differing, twenty_nine.by_move) == (0, 0)
+
+
+def test_the_decomposition_travels_with_the_pooled_rate_in_the_headlines():
+    """W12: the pooled rate cannot be quoted without what it decomposes into.
+
+    Behaviour under test: `headlines` carries a worst-stratum figure for the
+    move rate and the dropout rate beside the one for selection disagreement.
+
+    Expected value determined independently: §11.2's own inserted block --
+    *"the audit must report the decomposition, not the pooled rate"* -- and the
+    headline names are the three metric names.
+
+    Bug this catches: the decomposition computed, stored per stratum, and left
+    out of the one place a reader actually quotes from. That is (a2c) at the
+    headline: populated, and nothing acts on it.
+    """
+    report = _report(_result(40), _result(40))
+    names = [h.name for h in report.headlines]
+
+    assert "selection_disagreement" in names
+    assert "selection_move" in names
+    assert "selection_dropout" in names
+
+
+def test_the_per_arm_degenerate_counts_are_reported_for_every_candidate():
+    """W3: what the treatment moves is MEMBERSHIP, so membership is reported.
+
+    Behaviour under test: each candidate's `CandidateOutcomes` carries the
+    number of cells each arm refused with `DEGENERATE_HESSIAN`.
+
+    Expected values determined independently: the fixture refuses candidate 0
+    in 4 cold cells and 7 warm cells, counted by construction. Open question 23
+    is about exactly this quantity moving between arms, and `cold_failed`
+    aggregates every failure, so a taxonomy-wide count cannot show it.
+
+    Bug this catches: a start-dependent selectability change invisible on the
+    audit's own output, leaving a reader to infer it from an unexplained drop
+    in `both_ok_fraction` -- which is also consistent with a harder field.
+    """
+    batch = 20
+    ok, bad = Outcome.OK.code, Outcome.DEGENERATE_HESSIAN.code
+    cold_outcome = np.full((batch, 2), ok, dtype=np.uint8)
+    warm_outcome = np.full((batch, 2), ok, dtype=np.uint8)
+    cold_outcome[:4, 0] = bad
+    warm_outcome[:7, 0] = bad
+
+    report = _report(
+        _result(batch, outcome=cold_outcome), _result(batch, outcome=warm_outcome)
+    )
+    first = report.candidates[0]
+    second = report.candidates[1]
+
+    assert (first.cold_degenerate, first.warm_degenerate) == (4, 7)
+    assert (second.cold_degenerate, second.warm_degenerate) == (0, 0)

@@ -30,6 +30,32 @@ from tests.exit_criteria_2d import PHASE_2D_EXIT_CRITERIA, READINGS
 
 NOTES = pathlib.Path("docs/superpowers/notes")
 
+
+def _carries_a_stratum(document: Any) -> bool:
+    """Whether any KEY anywhere in the document names a stratum.
+
+    **THE WHOLE DOCUMENT, NOT ITS TOP LEVEL.** The form this replaced iterated
+    `for key in committed`, so a stratified reading nested under `checks` or
+    `instrument` -- which is exactly where one would naturally go -- passed it
+    unnoticed. A gate over a set that can grow must be written against the set
+    (c5), and a JSON document's key set grows downward.
+
+    Args:
+        document: Any decoded JSON value.
+
+    Returns:
+        True if a stratum reading is present anywhere.
+    """
+    if isinstance(document, dict):
+        return any(
+            "stratum" in str(key) or "strata" in str(key) or _carries_a_stratum(value)
+            for key, value in document.items()
+        )
+    if isinstance(document, list):
+        return any(_carries_a_stratum(item) for item in document)
+    return False
+
+
 #: The committed rung reports, by the construction they were drawn at.
 #: **BOTH, ALWAYS**: the finding is the contrast, and a suite that checked one
 #: would let the other rot.
@@ -502,11 +528,40 @@ def test_criterion_12_no_committed_report_carries_a_stratum(construction):
     """
     committed = _load(COMMITTED_REPORTS[construction])
 
-    assert "strata" not in committed
-    assert not any("stratum" in key or "strata" in key for key in committed), (
+    assert not _carries_a_stratum(committed), (
         "a committed report now carries a stratum reading, so criterion 12's "
         "reduced scope is out of date and the criterion can be re-evaluated"
     )
+
+
+def test_the_criterion_12_guard_finds_a_stratum_NESTED_rather_than_top_level():
+    """The guard is written against the document, not against its first level.
+
+    Behaviour under test: `_carries_a_stratum` returns True for a report whose
+    stratified reading sits under `checks` or `instrument`, and False for the
+    reports committed today.
+
+    Expected values determined independently: the currently-committed reports'
+    top-level keys are `rung, contaminated, null_line, smears, instrument,
+    iterations, ratios, checks` (+ `cost`), none of which contains the word;
+    the two negative fixtures below are hand-built to place it one and two
+    levels down.
+
+    Bug this catches: **the guard that shipped until 2026-09-11**, which
+    iterated `for key in committed` -- the TOP LEVEL only. A stratified reading
+    filed under any nested key passed it, so the reduced scope it exists to
+    protect would have gone stale silently. That is (c5) at a guard, and it is
+    the same defect shape the guard is guarding against.
+
+    **A guard nobody has seen fail is not a guard**, so this is the proof that
+    the widened form fires before it is relied on.
+    """
+    assert _carries_a_stratum({"checks": {"point_strata": [{"members": 3}]}})
+    assert _carries_a_stratum({"a": [{"b": {"selection_stratum": 1}}]})
+    assert _carries_a_stratum({"strata": None})
+    assert not _carries_a_stratum({"checks": {"n1_cells_compared": 4}})
+    for path in COMMITTED_REPORTS.values():
+        assert not _carries_a_stratum(_load(path)), path
 
 
 def test_criterion_14_open_question_21_is_still_open_in_the_record():

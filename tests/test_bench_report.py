@@ -21,9 +21,10 @@ from typing import Any
 import numpy as np
 import pytest
 
-from metamer.batch.audit_report import Quantity
+from metamer.batch.audit_report import Quantity, audit_report
 from metamer.bench import fields, report, smear
 from metamer.bench.smear import WidthReading
+from metamer.core.outcomes import Outcome
 
 _RUNG = fields.RUNGS["easy"]
 _REACH = 32.0
@@ -72,6 +73,7 @@ def _report(
     widths: dict[str, WidthReading] | None = None,
     cost: dict[str, float] | None = None,
     iterations: dict[str, float] | None = None,
+    strata: Any = None,
 ) -> report.RungReport:
     """A report assembled from constructed readings."""
     return report.build_report(
@@ -82,6 +84,7 @@ def _report(
         cost={"cold_seconds": 1.5} if cost is None else cost,
         iterations={"cold_per_point": 24.375} if iterations is None else iterations,
         denominator=36,
+        strata=strata,
     )
 
 
@@ -800,3 +803,298 @@ def test_a_fine_point_that_sources_itself_is_counted_and_a_coarse_one_is_not():
     offenders = report._self_sourced_fine_points(radius, (4, 4), 2)
 
     assert offenders == 1
+
+
+# ---------------------------------------------------------------------------
+# The audit's strata on a rung report -- W2, W10 and W1's top-level key
+# ---------------------------------------------------------------------------
+
+
+def _audit_report(batch: int = 40, *, differing: int = 0) -> Any:
+    """A real `AuditReport` over constructed arms, not a stand-in.
+
+    **CONSTRUCTED ARMS AND A REAL REPORT.** The lift under test walks whatever
+    `AuditReport.quantities()` returns, so a hand-built stand-in would test the
+    stand-in's shape; the point is that every quantity the SHIPPED report
+    produces arrives lifted.
+    """
+    from tests.test_audit_report import _arms, _result
+
+    ok = Outcome.OK.code
+    cold_best = np.zeros(batch, dtype=np.int64)
+    warm_best = cold_best.copy()
+    warm_best[:differing] = 1
+    outcome = np.full((batch, 2), ok, dtype=np.uint8)
+    return audit_report(
+        _arms(
+            _result(batch, outcome=outcome, best_index=cold_best),
+            _result(batch, outcome=outcome, best_index=warm_best),
+        ),
+        trend_column=1,
+    )
+
+
+def test_every_audit_quantity_on_a_rung_report_carries_the_rung_too():
+    """W2: E1's constraint 2 covers the audit's numbers or it covers nothing.
+
+    Behaviour under test: with an audit section attached, `quantities()` and
+    `withheld()` still return only `RungQuantity`.
+
+    Expected value determined independently: E1's constraint 2 is *"every
+    emitted number carries its rung"*, enforced by construction because D8's
+    own argument is that labelling a number does not stop it being quoted.
+    `audit_report` emits plain `Quantity`, so an unlifted section would break
+    the rule while every existing test in this module still passed.
+
+    Bug this catches: the audit's strata serialised straight into the rung
+    report, where some numbers carry their rung by construction and some carry
+    it by happening to sit in a file that names one. (h4) -- a rule stated over
+    "every emitted number" checked against each KIND of number.
+    """
+    built = _report(strata=_audit_report(batch=40, differing=8))
+
+    emitted = built.quantities() + built.withheld()
+    assert len(emitted) > len(_report().quantities() + _report().withheld())
+    for quantity in emitted:
+        assert isinstance(quantity, report.RungQuantity), quantity.name
+        assert quantity.rung is _RUNG
+        assert quantity.scope
+
+
+def test_a_quantity_added_to_the_audit_report_cannot_reach_a_rung_unlifted():
+    """W2/(c5): the lift is written against the SET, not against its members.
+
+    Behaviour under test: a quantity this module has never heard of, appearing
+    in `AuditReport.quantities()`, still arrives lifted.
+
+    Expected value determined independently: (c5) -- a gate over a set that can
+    grow must be written against the set. `AuditReport.quantities()` is that
+    set and it has grown twice already; the stand-in adds one more member and
+    the lift must cover it without being told.
+
+    Bug this catches: a lift enumerating `cell_strata`, `point_strata` and
+    `candidates` by hand. It passes every test here on the day it is written
+    and silently drops the next metric anybody adds -- which is exactly how the
+    criterion-12 guard came to check only a document's top level.
+    """
+
+    class _Grown:
+        """Only what the lift is allowed to depend on."""
+
+        def quantities(self) -> tuple[Quantity, ...]:
+            return (
+                Quantity(
+                    name="a_metric_invented_after_the_lift_was_written",
+                    scope="stratum=invented",
+                    value=0.25,
+                    denominator=4,
+                ),
+            )
+
+        def withheld(self) -> tuple[Quantity, ...]:
+            return ()
+
+    built = _report(strata=_Grown())
+    names = {q.name for q in built.quantities()}
+
+    assert "a_metric_invented_after_the_lift_was_written" in names
+    lifted = next(
+        q
+        for q in built.quantities()
+        if q.name == "a_metric_invented_after_the_lift_was_written"
+    )
+    assert isinstance(lifted, report.RungQuantity)
+    assert lifted.rung is _RUNG
+    assert lifted.value == 0.25 and lifted.denominator == 4
+
+
+def test_the_lift_changes_the_rung_and_nothing_else_about_a_quantity():
+    """The adapter adds a field; it does not restate the scope.
+
+    Behaviour under test: name, scope, value, denominator and withheld survive
+    the lift unchanged, for a quantity with a value and for a withheld one.
+
+    Expected values determined independently: the two source quantities are
+    written here by hand, and `RungQuantity`'s docstring says it *"adds one
+    required field and nothing else"* -- folding the rung into the scope string
+    would be the second spelling of one validator.
+
+    Bug this catches: a lift that rewrites the scope to `f"rung={rung.name}
+    {scope}"`, which makes two runs' strata incomparable and defeats the reason
+    the boundaries are recorded with the figures.
+    """
+    present = Quantity(
+        name="selection_move",
+        scope="winner=abc margin=margin_lt_2",
+        value=0.5,
+        denominator=8,
+    )
+    absent = Quantity(
+        name="selection_dropout",
+        scope="winner=abc margin=margin_ge_10",
+        value=None,
+        denominator=3,
+        withheld="3 members is below the floor",
+    )
+
+    class _Two:
+        def quantities(self) -> tuple[Quantity, ...]:
+            return (present, absent)
+
+        def withheld(self) -> tuple[Quantity, ...]:
+            return (absent,)
+
+    built = _report(strata=_Two())
+    # `quantities()` carries the ones with a value and `withheld()` the ones
+    # without -- a withheld quantity is absent from the first BY DEFINITION, so
+    # both surfaces are read or half the lift is untested.
+    valued = {q.name: q for q in built.quantities()}
+    silent = {q.name: q for q in built.withheld()}
+
+    assert valued["selection_move"].scope == present.scope
+    assert valued["selection_move"].value == 0.5
+    assert valued["selection_move"].denominator == 8
+    assert valued["selection_move"].withheld is None
+    assert isinstance(silent["selection_dropout"], report.RungQuantity)
+    assert silent["selection_dropout"].rung is _RUNG
+    assert silent["selection_dropout"].scope == absent.scope
+    assert silent["selection_dropout"].value is None
+    assert silent["selection_dropout"].denominator == 3
+    assert silent["selection_dropout"].withheld == "3 members is below the floor"
+
+
+def test_the_strata_are_inside_the_reproducible_record_under_that_exact_key():
+    """W10 and W1: deterministic, and named so the designed guard can see it.
+
+    Behaviour under test: `reproducible()` carries the audit section under the
+    top-level key `strata`, and the wall clock is still outside it.
+
+    Expected values determined independently: the strata read the COLD and WARM
+    arms only -- no N2 direction enters any of them -- so they carry no
+    randomness and belong on the deterministic side, where two runs of one rung
+    must agree byte for byte. The key name is `strata` because 2d's criterion
+    12 guard looks for that word, and routing around a designed guard is how a
+    reduced scope goes stale.
+
+    Bug this catches two ways: the strata left out of `reproducible()`, so two
+    runs could differ in them and still compare identical; and the section
+    filed under a key the criterion-12 reminder cannot see, which would let the
+    wiring land without the criterion ever being re-evaluated.
+    """
+    built = _report(strata=_audit_report(batch=40, differing=8))
+    record = built.reproducible()
+
+    assert "strata" in record
+    assert record["strata"] is not None
+    assert "cost" not in record
+    assert "point_strata" in record["strata"]
+    assert "seed" in record["strata"]
+    # A rung with no audit section says so rather than omitting the key: an
+    # absent key and a null are the same bytes to a reader who expected one.
+    assert _report().reproducible()["strata"] is None
+
+
+def test_a_rung_report_carries_the_unreachable_bins_and_the_membership_counts():
+    """W3: what the treatment moves is membership, so the rung report says so.
+
+    Behaviour under test: the serialised strata carry `unreachable_kappa_bins`
+    and, per candidate, the per-arm `DEGENERATE_HESSIAN` counts and the
+    intersection fraction.
+
+    Expected values determined independently: `HESSIAN_COND_LIMIT` is
+    `float(EPS) ** -0.5`, which IS D9's first boundary, so the two upper bins
+    cannot be occupied by any cell in the both-OK intersection -- the
+    stratification has ONE reachable bin on this population and a reader must
+    not read a single populated bin as the axis working.
+
+    Bug this catches: a rung report whose `κ` strata look populated and
+    informative while the axis is degenerate, with the start-dependence that
+    actually moved the map -- open question 23's subject -- nowhere on the page.
+    """
+    built = _report(strata=_audit_report(batch=40, differing=8))
+    record = built.reproducible()["strata"]
+
+    assert record["unreachable_kappa_bins"] == [
+        "kappa_2^26_to_2^52",
+        "kappa_ge_2^52",
+    ]
+    assert record["candidates"], "the membership counts are the W3 surface"
+    for entry in record["candidates"]:
+        assert "cold_degenerate" in entry
+        assert "warm_degenerate" in entry
+        assert "both_ok_fraction" in entry
+    assert any("no pooled" in note.lower() for note in record["notes"])
+
+
+def test_the_decomposition_reaches_the_rung_report_and_not_only_the_pooled_rate():
+    """W12: the two cannot come apart in the artifact a reader quotes from.
+
+    Behaviour under test: each serialised point stratum carries the three
+    counts beside the pooled rate, and the headlines carry both new metrics.
+
+    Expected values determined independently: the fixture gives 8 of 40 points
+    a different warm winner with every candidate `OK` in both arms, so all 8
+    are MOVES by construction -- `differing = 8`, `by_move = 8`,
+    `by_dropout = 0`.
+
+    Bug this catches: the decomposition computed in `audit_report`, dropped by
+    the serialiser, and a committed report carrying the pooled rate alone --
+    which is the exact defect this whole wiring exists to remove, surviving one
+    layer further out.
+    """
+    built = _report(strata=_audit_report(batch=40, differing=8))
+    record = built.reproducible()["strata"]
+
+    populated = [s for s in record["point_strata"] if s["members"]]
+    assert populated
+    assert sum(s["differing"] for s in populated) == 8
+    assert sum(s["by_move"] for s in populated) == 8
+    assert sum(s["by_dropout"] for s in populated) == 0
+    assert sum(s["by_both_unavailable"] for s in populated) == 0
+    for stratum in populated:
+        assert "selection_disagreement" in stratum
+        assert "selection_move" in stratum
+        assert "selection_dropout" in stratum
+
+    names = {h["name"] for h in record["headlines"]}
+    assert {"selection_disagreement", "selection_move", "selection_dropout"} <= names
+
+
+def test_the_drivers_positive_control_refuses_before_anything_is_fitted():
+    """W6: the control is true of the artifact, not of the test suite.
+
+    Behaviour under test: `decomposition_selftest` raises when the rule cannot
+    separate a move from a dropout, and the message says the count is a
+    statement about the instrument.
+
+    Expected value determined independently: (i2) -- `MOVE = 0` and "the rule
+    cannot see a move" are the same integer. The control's construction and its
+    expected `(differing, move, dropout) = (2, 1, 1)` come from the spike's
+    committed addendum, which is where the zero it guards was recorded.
+
+    Bug this catches: a broken decomposition rule shipping a `MOVE = 0` into a
+    committed report. `run_rung` is excluded from `pixi run test`, so the unit
+    tests of the rule never execute in the process that writes the number --
+    only an in-process refusal covers that, and only if it RAISES rather than
+    warns.
+    """
+    import metamer.batch.audit_report as audit_report_module
+
+    # It passes on the shipped rule, or the control is asserting nothing.
+    audit_report_module.decomposition_selftest()
+
+    original = audit_report_module.selection_decomposition
+    try:
+        audit_report_module.selection_decomposition = lambda **kwargs: (
+            audit_report_module.SelectionSplit(
+                live=np.ones(3, dtype=bool),
+                differs=np.array([True, True, False]),
+                move=np.zeros(3, dtype=bool),
+                dropout=np.array([True, True, False]),
+                both_unavailable=np.zeros(3, dtype=bool),
+            )
+        )
+        with pytest.raises(AssertionError, match="cannot separate a move"):
+            audit_report_module.decomposition_selftest()
+    finally:
+        audit_report_module.selection_decomposition = original

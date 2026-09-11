@@ -91,7 +91,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from metamer.batch.audit import Arm
-from metamer.batch.audit_report import Quantity
+from metamer.batch.audit_report import AuditReport, Quantity
 from metamer.bench import fields, n2map, smear
 from metamer.bench.arms import (
     arm_cost,
@@ -191,6 +191,11 @@ class RungReport:
         iterations: Iterations per arm. **Deterministic, so it is INSIDE
             `reproducible()`** -- measured 2026-08-31, the same fixture
             reproducing every digit a day later while its seconds moved 15%.
+        strata: §11.2's stratified audit over this rung's own arms, or None
+            where none was taken. **DETERMINISTIC, so it is inside
+            `reproducible()` too**: every quantity in it reads the COLD and
+            WARM arms only, and N2 -- the one place §11.3's traversal
+            independence can be lost -- enters none of them.
     """
 
     rung: Rung
@@ -202,12 +207,31 @@ class RungReport:
     iterations: Mapping[str, float]
     ratios: Mapping[str, float | None] = field(default_factory=dict)
     checks: Mapping[str, Any] = field(default_factory=dict)
+    strata: AuditReport | None = None
 
     def quantities(self) -> tuple[RungQuantity, ...]:
-        """Every quantity that carries a value."""
+        """Every quantity that carries a value, the audit's included."""
         return tuple(
-            entry.quantity for entry in self.smears if entry.quantity.value is not None
+            quantity
+            for quantity in self._every_quantity()
+            if quantity.value is not None
         )
+
+    def _every_quantity(self) -> tuple[RungQuantity, ...]:
+        """The smears and the audit's strata, all of them carrying this rung.
+
+        **WRITTEN AGAINST `AuditReport.quantities()`, NEVER AGAINST AN
+        ENUMERATION OF THE STRATUM KINDS** -- (c5). That set has grown twice
+        already, and a lift listing `cell_strata`, `point_strata` and
+        `candidates` by hand passes on the day it is written and silently drops
+        the next metric anybody adds.
+        """
+        lifted = [entry.quantity for entry in self.smears]
+        if self.strata is not None:
+            lifted.extend(
+                _lift(quantity, self.rung) for quantity in self.strata.quantities()
+            )
+        return tuple(lifted)
 
     def withheld(self) -> tuple[RungQuantity, ...]:
         """Every quantity withheld, each carrying its reason.
@@ -218,7 +242,7 @@ class RungReport:
         run -- and a reader supplies the more flattering of the two.
         """
         return tuple(
-            entry.quantity for entry in self.smears if entry.quantity.value is None
+            quantity for quantity in self._every_quantity() if quantity.value is None
         )
 
     def reproducible(self) -> Mapping[str, Any]:
@@ -251,7 +275,172 @@ class RungReport:
             "iterations": dict(self.iterations),
             "ratios": dict(self.ratios),
             "checks": dict(self.checks),
+            # **THE KEY IS `strata` AND THAT IS NOT A STYLE CHOICE.** 2d's
+            # criterion 12 is guarded by a test that refuses a committed report
+            # carrying that word, so that the reduced scope cannot go stale
+            # unnoticed. Filing this section under any other name would route
+            # around a guard designed to fire here.
+            #
+            # **None RATHER THAN AN ABSENT KEY**: silence and absence are the
+            # same bytes, and a reader who expected the section supplies the
+            # more flattering reading of a missing one.
+            "strata": None if self.strata is None else _strata_record(self.strata),
         }
+
+
+def _lift(quantity: Quantity, rung: Rung) -> RungQuantity:
+    """Give one audit quantity the rung it was measured on, and change nothing else.
+
+    **E1's CONSTRAINT 2 AND D8's CONSTRUCTION MEET HERE.** `audit_report` emits
+    plain `Quantity` -- it knows nothing about rungs -- and this report's rule
+    is that a number without a rung cannot be constructed. Serialising the
+    strata as plain dicts would satisfy every existing test while shipping a
+    report in which some numbers carry their rung by construction and some
+    carry it by sitting in a file that names one, which is the
+    "labelled, not constructed" position D8 rejects, one level out.
+
+    **THE SCOPE IS NOT REWRITTEN.** Folding the rung into the scope string
+    would be a second spelling of one validator, and it would make two runs'
+    strata incomparable -- which is the whole reason the boundaries are
+    recorded beside the figures.
+
+    Args:
+        quantity: One number from `AuditReport.quantities()`.
+        rung: The rung whose arms produced it.
+
+    Returns:
+        The same number, carrying its rung.
+    """
+    return RungQuantity(
+        name=quantity.name,
+        scope=quantity.scope,
+        value=quantity.value,
+        denominator=quantity.denominator,
+        withheld=quantity.withheld,
+        rung=rung,
+    )
+
+
+def _quantity_record(quantity: Quantity) -> Mapping[str, Any]:
+    """One number as plain data, withheld or not.
+
+    **THE REASON TRAVELS WITH THE ABSENCE.** A serialiser that emitted only
+    `value` would turn every withheld quantity into a `null` and lose the
+    sentence that distinguishes "below the floor" from "never computed".
+    """
+    return {
+        "name": quantity.name,
+        "scope": quantity.scope,
+        "value": quantity.value,
+        "denominator": quantity.denominator,
+        "withheld": quantity.withheld,
+    }
+
+
+def _strata_record(strata: AuditReport) -> Mapping[str, Any]:
+    """§11.2's audit as plain data, with every stratum present.
+
+    **EVERY STRATUM, INCLUDING THE EMPTY ONES, AND EVERY WITHHELD QUANTITY WITH
+    ITS REASON.** A serialiser that dropped the empty strata could not tell a
+    reader that a `kappa` bin was unreachable, which is half of D8's visibility
+    requirement and the whole of `unreachable_kappa_bins`.
+
+    **WRITTEN OUT FIELD BY FIELD RATHER THAN `asdict`.** The keys of a
+    committed artifact are part of it -- 2d's artifact register reads them --
+    so they are chosen here rather than inherited from whatever the dataclasses
+    happen to be called next year.
+
+    Args:
+        strata: The audit report over this rung's arms.
+
+    Returns:
+        The record.
+    """
+    return {
+        "seed": strata.seed,
+        "kappa_boundaries": list(strata.kappa_boundaries),
+        "margin_boundaries": list(strata.margin_boundaries),
+        "min_stratum_members": strata.min_stratum_members,
+        "unreachable_kappa_bins": [str(b) for b in strata.unreachable_kappa_bins],
+        "cell_strata": [
+            {
+                "candidate": cell.candidate,
+                "candidate_index": cell.candidate_index,
+                "lint_flagged": cell.lint_flagged,
+                "kappa": str(cell.kappa),
+                "members": cell.members,
+                "max_abs_delta_loglik": _quantity_record(cell.max_abs_delta_loglik),
+                "max_parameter_distance": _quantity_record(cell.max_parameter_distance),
+                "mean_signed_trend": _quantity_record(cell.mean_signed_trend),
+                "per_term_parameter_distance": [
+                    _quantity_record(q) for q in cell.per_term_parameter_distance
+                ],
+            }
+            for cell in strata.cell_strata
+        ],
+        "point_strata": [
+            {
+                "candidate": point.candidate,
+                "candidate_index": point.candidate_index,
+                "lint_flagged": point.lint_flagged,
+                "margin": str(point.margin),
+                "members": point.members,
+                # **THE POOLED RATE AND ITS DECOMPOSITION IN ONE OBJECT**, so
+                # neither can be quoted without the other. On real altimetry
+                # the pooled rate was 100% outcome flip and 0% re-ranking, so
+                # a report carrying only the first reports hysteresis about a
+                # number containing none of it.
+                "selection_disagreement": _quantity_record(
+                    point.selection_disagreement
+                ),
+                "selection_move": _quantity_record(point.selection_move),
+                "selection_dropout": _quantity_record(point.selection_dropout),
+                "differing": point.differing,
+                "by_move": point.by_move,
+                "by_dropout": point.by_dropout,
+                "by_both_unavailable": point.by_both_unavailable,
+            }
+            for point in strata.point_strata
+        ],
+        "candidates": [
+            {
+                "candidate": entry.candidate,
+                "candidate_index": entry.candidate_index,
+                "lint_flagged": entry.lint_flagged,
+                "lint_findings": list(entry.lint_findings),
+                "attempted": entry.attempted,
+                "cold_ok": entry.cold_ok,
+                "cold_failed": entry.cold_failed,
+                # Open question 23's own quantity, per arm. `cold_failed`
+                # aggregates every failure kind and cannot show it.
+                "cold_degenerate": entry.cold_degenerate,
+                "warm_degenerate": entry.warm_degenerate,
+                "both_ok": entry.both_ok,
+                "rescue": _quantity_record(entry.rescue),
+                "loss": _quantity_record(entry.loss),
+                "both_ok_fraction": _quantity_record(entry.both_ok_fraction),
+            }
+            for entry in strata.candidates
+        ],
+        "points": {
+            "audited_points": strata.points.audited_points,
+            "both_ranked": strata.points.both_ranked,
+            "ranked_fraction": _quantity_record(strata.points.ranked_fraction),
+            "cold_only_winner": strata.points.cold_only_winner,
+            "warm_only_winner": strata.points.warm_only_winner,
+            "no_margin": strata.points.no_margin,
+        },
+        "headlines": [
+            {
+                "name": headline.name,
+                "value": headline.value,
+                "stratum": headline.stratum,
+                "withheld": headline.withheld,
+            }
+            for headline in strata.headlines
+        ],
+        "notes": list(strata.notes),
+    }
 
 
 def _reading_record(reading: WidthReading | None) -> Mapping[str, Any] | None:
@@ -477,6 +666,7 @@ def build_report(
     arms: Sequence[str] = ARMS,
     ratios: Mapping[str, float | None] | None = None,
     checks: Mapping[str, Any] | None = None,
+    strata: AuditReport | None = None,
 ) -> RungReport:
     """Assemble one rung's report from readings that already exist.
 
@@ -502,6 +692,12 @@ def build_report(
         checks: The run's own cross-checks, each a fact the run determined.
             **Also reproducible**, and a check that moved between two runs of
             one rung is exactly what the byte-identity invariant is for.
+        strata: §11.2's stratified audit over this rung's arms, or None. **It
+            is NOT withheld on a contaminated rung**, unlike the widths: the
+            null fires on the SMEAR estimator reading the selection map, and
+            the strata are a different measurement over the same arms. A
+            contaminated rung is exactly when a reader wants to know whether
+            the selections moved.
 
     Returns:
         The report.
@@ -571,6 +767,7 @@ def build_report(
         iterations=dict(iterations),
         ratios={} if ratios is None else dict(ratios),
         checks={} if checks is None else dict(checks),
+        strata=strata,
     )
 
 
@@ -711,11 +908,22 @@ def run_rung(
     """
     import xarray as xr
 
+    from metamer.batch.audit_report import audit_report, decomposition_selftest
+    from metamer.batch.input import check_contract, open_input
     from metamer.batch.ragged import build_ragged_index, noise_extent
     from metamer.batch.run import run
     from metamer.batch.twopass import run_two_pass
     from metamer.batch.warmstart import coarse_ok, read_warm_starts, source_map
     from metamer.config.model import load
+    from metamer.core.lint import lint
+
+    # **(i2) FIRST, BEFORE ANY FIT AND BEFORE ANY GATE.** `MOVE = 0` is the
+    # comfortable reading of a clean decomposition, and "no selection was
+    # re-ranked" and "the rule cannot see a re-ranking" are the same integer.
+    # This module is excluded from `pixi run test` (E7), so a unit test of the
+    # rule never runs in the process that writes a committed report; only this
+    # does. It costs three fabricated points and no fit.
+    decomposition_selftest()
 
     out_dir.mkdir(parents=True, exist_ok=True)
     grid_shape = (n_normal, n_parallel)
@@ -738,6 +946,20 @@ def run_rung(
     # naming a seed the map did not use.
     audit_seed = int(config.audit.seed)
     n_models = len(config.candidates)
+
+    # **THE LINT IS RUN RATHER THAN SKIPPED**, and the difference is on the
+    # report: `lint_findings=None` prints "the lint was NOT run ... that is not
+    # the same as clean", which is honest and is choosing the caveat over the
+    # measurement. §11.2 names the lint as the cheap way to know whether the
+    # label-switching confound is even present, and this candidate set is three
+    # fixed specs.
+    sampling_interval = check_contract(
+        open_input(config.data_uri, config.variable)
+    ).median_dt
+    lint_findings = {
+        spec.spec_hash(): [finding.rule for finding in lint(spec, sampling_interval)]
+        for spec in config.process_specs()
+    }
 
     cost: dict[str, float] = {}
     iterations: dict[str, float] = {}
@@ -839,6 +1061,28 @@ def run_rung(
     n1_ratio = iteration_ratio(arm_cost(field_result.arms.results[Arm.N1]), cold_cost)
     self_ratio = iteration_ratio(ceiling.cost, cold_cost)
 
+    # **§11.2's STRATIFIED AUDIT, OVER ARMS THIS RUNG HAS ALREADY FITTED.**
+    # `field_arms` returns all four arms over every point of the field, so the
+    # strata cost arithmetic on arrays already in memory rather than a fit.
+    #
+    # **THE POPULATION IS A CENSUS AND NOT A SUBSAMPLE**, so §11.2's "stratify
+    # the subsample" question -- open question 21 -- is not answered here; it is
+    # not asked.
+    strata = audit_report(
+        field_result.arms,
+        # **THE SAME CONSTRUCTION `fit` USES, NOT AN INDEX.** `core.fit` gets
+        # the column from `signal.design_info(t, mask)`; assuming index 1 holds
+        # only for a particular design, and the failure mode is a seasonal
+        # amplitude reported as a trend.
+        trend_column=config.signal_spec().design_info(truth.t, mask).trend_column,
+        # **PER SPEC, KEYED BY `spec_hash` -- NOT FROM `identifiability_warnings`**,
+        # which returns a FLAT tuple across candidates and whose `Finding` carries
+        # no candidate identity, so the mapping is not reconstructible from it.
+        # The interval is the contract's `median_dt`: the median of REALIZED
+        # gaps, which is what the lint's own contract names.
+        lint_findings=lint_findings,
+    )
+
     selection = {
         "cold": _selection_map(cold_store, grid_shape),
         "warm": _selection_map(warm_store, grid_shape),
@@ -932,6 +1176,7 @@ def run_rung(
         checks=checks,
         denominator=n_normal * n_parallel,
         arms=arms,
+        strata=strata,
     )
 
 
