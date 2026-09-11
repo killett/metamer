@@ -3,10 +3,12 @@
 > ## THE SENTENCE A READER CAN CARRY
 >
 > **On real altimetry warm-starting saves 64.72% of cold iterations — more than 2c's 42.28% — but
-> PROXIMITY contributes only 4.36 of those points against 2c's 12.00, and warm-starting changes
-> the selected candidate at 34% of points where 2c's own pre-agreed stop was 10%.**
+> PROXIMITY contributes only 4.36 of those points against 2c's 12.00. The selected candidate
+> differs at 34% of points — and NOT ONE of those is a re-ranking: every single one is a candidate
+> that passed the conditioning gate in one arm and failed it in the other.**
 >
-> **The geometry buys 6.7% of the benefit and moves a third of the answers.**
+> **The geometry buys 6.7% of the benefit. Warm-starting does not move a single optimum's ranking
+> here; it changes which candidates survive.**
 >
 > Everything below supports that sentence. **It is one 2.1° box of subtropical open ocean.**
 
@@ -130,8 +132,8 @@ WOULD HAVE FAILED.** This box returns **65.74%**.
 **AND THE SELF ARM'S OUTCOME COLUMN SAYS WHERE TO LOOK.** It has the **most** `DEGENERATE_HESSIAN`
 cells of any arm — 133 against cold's 79 — the **fewest** `OK`, and it **loses 54 OK cells while
 gaining none.** A fit started at its own optimum stops almost immediately (9.4 iterations against
-57.6) and is classified degenerate more often. **Whether that is what moves its selections is not
-established by this run** and is the subject of the decomposition addendum below.
+57.6) and is classified degenerate more often. ~~**Whether that is what moves its selections is not
+established by this run**~~ — **ESTABLISHED BY THE ADDENDUM IN §9: it is the whole of it.**
 
 ---
 
@@ -202,22 +204,35 @@ what the simulated field said. **Its share of the benefit falls from 28% to 7%**
 cold-start difficulty component the first half found — the 30 — is worth far more on real data than
 it was on 2c's field.
 
-**AND THE SELECTION READING IS THE ONE THAT SHOULD DECIDE ANYTHING.** Warm-starting on real data
-moves the selected candidate at **34% of points**, where 2c authorized the mechanism at 10% and
-would have stopped at 10.4%. **A saving that moves a third of the answers is not "buying time and
-not bias"** — the sentence 2d earned on a simulated field does not transfer, and this run is why
-that sentence was written with "on a simulated field" attached.
+**AND THE SELECTION READING IS THE ONE THAT SHOULD DECIDE ANYTHING.** The selected candidate
+differs at **34% of points**, where 2c authorized the mechanism at 10% and would have stopped at
+10.4%.
 
-> ## THE THREE READINGS TOGETHER, WHICH IS THE ONLY HONEST WAY TO TAKE THEM
+> ~~**A saving that moves a third of the answers is not "buying time and not bias"** — the sentence
+> 2d earned on a simulated field does not transfer, and this run is why that sentence was written
+> with "on a simulated field" attached.~~
+>
+> **STRUCK 2026-09-10 BY THE ADDENDUM, AND LEFT STANDING BECAUSE IT IS THE READING A REPORT WITHOUT
+> THE DECOMPOSITION INVITES.** Not one of those points is a re-ranking. **In the sense §11.2 means
+> it — the optimizer landing at a different optimum and ranking the candidates differently —
+> warm-starting produced ZERO hysteresis on this box.** The sentence 2d earned transfers; what does
+> not transfer is the SELECTION MAP's stability, for a different reason, through a different
+> mechanism, with a different repair. See §9.
+
+> ## THE FOUR READINGS TOGETHER, WHICH IS THE ONLY HONEST WAY TO TAKE THEM
 >
 > 1. **Warm-starting saves a lot** — 64.72%, more than any simulated figure.
 > 2. **Almost none of that is the expensive geometry** — 6.7%, the rest is available from any
 >    converged start.
-> 3. **A third of the selections move**, and 15 of those 34 points move even from the exact answer.
+> 3. **It re-ranks nothing.** Zero moves, on every arm, including the most distant start.
+> 4. **It changes which candidates survive the conditioning gate**, at 34% of points — and 15 of
+>    those points change under the exact optimum as the start, so a chunk of it is the estimator
+>    rather than the warm start.
 >
-> **A reader taking only (1) would ship the two-pass architecture. A reader taking (1) and (2)
-> would ship the cheap variant. A reader taking all three would ask whether warm-starting is safe
-> here at all**, and that question is §11.2's, not this spike's.
+> **A reader taking (1) alone would ship the two-pass architecture. (1) and (2) would ship the
+> cheap variant. (3) would call warm-starting safe. (4) is the one that needs a decision**, and it
+> is not a decision about warm-starting: it is about whether a `DEGENERATE_HESSIAN` verdict that
+> depends on the starting point may govern which models are selectable.
 
 **CONSTRAINT 2, IN ITS OWN WORDS AND NOT A FOOTNOTE.** This is **2.125° × 2.125° of subtropical
 open North Atlantic: no land, no ice, no gaps, one regime**, and it is *narrower* than the first
@@ -243,3 +258,90 @@ is hysteresis.**
 it is being closed rather than recorded: `realdata-spike2-decompose.py` re-fits the four arms,
 **asserts the committed totals before reporting anything**, and writes the decomposition with the
 per-cell outcomes and per-point selections beside it. Its result appends to this verdict.
+
+---
+
+## 9. THE ADDENDUM: EVERY DISAGREEMENT IS A DROPOUT AND NOT ONE IS A RE-RANKING
+
+**Run 2026-09-10, `realdata-spike2-decompose.py`, and it reproduced all four arms exactly before
+reporting anything** — `cold` 16658, `warm` 5877, `random` 6603, `self` 2721, every total
+identical to the committed report. **That is the second exact reproduction of this measurement**
+and it is what makes the decomposition a decomposition *of that run* rather than a second one.
+
+**THE RULE, STATED BEFORE THE COUNTS.** A differing point is a **MOVE** when each arm's selected
+candidate was `OK` in the other arm too — both were available, and the optimizer ranked them
+differently. It is a **DROPOUT** when one arm's winner was not `OK` in the other and so could never
+have been selected there.
+
+| arm | points compared | differing | **MOVE** | DROPOUT | both unavailable |
+|---|---|---|---|---|---|
+| `warm` | 289 | 99 | **0** | 93 | 6 |
+| `random` | 289 | 111 | **0** | 105 | 6 |
+| `self` | 289 | 44 | **0** | 44 | 0 |
+
+> ## ZERO. ON EVERY ARM, INCLUDING THE MOST DISTANT START.
+>
+> **Wherever warm and cold had the same candidates available, they ranked them identically — at
+> every one of 289 points.** Every selection difference in this spike is a candidate that passed
+> the conditioning gate in one arm and failed it in the other.
+
+**AND A COUNT OF ZERO IS THE INSTRUMENT UNTIL PROVEN OTHERWISE** — (i2), and this one is a pure
+negative of exactly the comfortable kind. **The rule is run against a fabricated pair in which a
+move exists by construction, and the harness refuses if it does not find it**: three points, one
+re-ranked with both candidates available, one with the winner dropped, one identical. It returns
+`move = 1, dropout = 1`. **The self-test runs before the quiet gate on every invocation**, so the
+zero cannot be reported by an instrument that could not have found anything else.
+
+### WHAT THIS CHANGES, AND IT IS NOT A SOFTENING
+
+**IN THE SENSE §11.2 MEANS IT, WARM-STARTING PRODUCED NO HYSTERESIS ON THIS BOX.** §11.2's fear is
+written down precisely: *"initializing each point from its neighbour's answer biases every point
+toward its neighbour's answer, producing spatially smooth maps"* — a **different optimum**, ranked
+differently. **Zero points.** 2d's sentence — a warm start that saves iterations while moving no
+selected candidate is buying **time and not bias** — **transfers to real data in the ranking
+sense, and now has a positive-controlled zero behind it rather than a profile-level null.**
+
+**AND IT REPLACES ONE FINDING WITH A SHARPER AND LESS COMFORTABLE ONE.** The selected-model map
+still differs at 34% of points, and the mechanism is now named: **`DEGENERATE_HESSIAN` is
+start-dependent.** A cell's conditioning verdict depends on the path the optimizer took to get
+there, so which models are *selectable* at a point depends on how the fit was started.
+
+**THE EVIDENCE IS IN THE ARMS' OWN OUTCOME COLUMNS AND IT IS MONOTONE IN THE WRONG DIRECTION:**
+
+| arm | iterations per point | `DEGENERATE_HESSIAN` cells | dropout points |
+|---|---|---|---|
+| `cold` | 57.640 | 79 | — |
+| `warm` | 20.336 | 75 | 99 |
+| `random` | 22.848 | 94 | 111 |
+| `self` | **9.415** | **133** | 44 |
+
+**THE ARM THAT DOES THE LEAST WORK HAS THE MOST DEGENERATE CELLS.** `self` starts at the answer,
+converges in a sixth of cold's iterations, and is classified degenerate **68% more often than
+cold**. It gains no `OK` cell and loses 54. **A fit that stops sooner gets a worse-conditioned
+Hessian estimate**, and the taxonomy turns that into a refusal.
+
+> **THAT IS A FINDING ABOUT THE ESTIMATOR, NOT ABOUT WARM-STARTING, AND IT IS WHY THE CEILING ARM
+> EARNED ITS PLACE TWICE.** 44 of `warm`'s 99 dropout points are reachable with the exact optimum
+> as the start. **Any mechanism that makes fits converge faster will move this map** — a better
+> initializer, a looser gradient tolerance, a faster engine. Warm-starting is one instance of a
+> class, and the class is "anything that shortens the path to the optimum".
+
+### WHAT IS OWED, AND IT IS NOT THIS SPIKE'S
+
+- **`DEGENERATE_HESSIAN`'s START-DEPENDENCE IS A DEFECT WITH NO OWNER.** `optimize.hessian_condition`
+  is evaluated at the optimum, and the optimum is the same in both arms wherever both converged —
+  so the *condition number* should not depend on the start, and it does: median `κ` moves 2.53e6 →
+  2.90e6 → 3.52e6 → 2.59e6 across the arms and `kappa_above_limit` moves 48 → 37 → 46 → 71. **Why
+  is not established here.** The candidates are a finite-difference Hessian at a numerically
+  slightly different point, and a limit at `eps^-0.5` on a quantity whose own estimate is noisy at
+  that scale. **A gate whose verdict depends on the path is (i9) at a threshold rather than at a
+  fixture**, and the repair is not a wider limit — it is knowing what the quantity's own scatter is.
+- **§11.2's AUDIT SHOULD REPORT THE DECOMPOSITION, NOT THE POOLED RATE.** D9 already separates the
+  outcome flip from the selection disagreement and calls it *"a different quantity, with its own
+  denominators, reported separately"*. **On this data the pooled selection-disagreement rate is
+  100% outcome flip**, so a report that pools them says "hysteresis" about a number containing none.
+  That is (h4) at the audit's headline, and it is one of the two owed wirings' subjects.
+- **THE POINT-LEVEL BOTH-OK INTERSECTION**, which Q6's unit slip left unmeasured, is in
+  [`realdata-spike2-decomposition.json`](realdata-spike2-decomposition.json)'s per-cell outcomes
+  along with every arm's selection map. **The artifact now answers the question the main report
+  could not**, which is the whole point of closing the defect rather than recording it.

@@ -39,7 +39,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Any, TextIO
+from typing import Any, TextIO, cast
 
 import numpy as np
 from numpy.typing import NDArray
@@ -148,6 +148,61 @@ def decompose(cold: FitResult, other: FitResult, arm: str) -> dict[str, Any]:
     }
 
 
+def selftest() -> dict[str, Any]:
+    """(i2): prove `decompose` CAN report a move before trusting a zero.
+
+    **`MOVE = 0` IS A PURE NEGATIVE AND A PURE NEGATIVE NEEDS A POSITIVE
+    CONTROL.** "No selection was re-ranked" and "the rule cannot see a
+    re-ranking" are the same integer, and the second would be the more
+    comfortable reading of a clean result. **So the rule is run against a
+    fabricated pair where a move exists by construction, and the harness refuses
+    if it does not find it.**
+
+    Three points: one where both arms have both candidates `OK` and pick
+    differently -- a move by construction; one where the other arm lost the
+    candidate cold selected -- a dropout by construction; one identical.
+
+    Returns:
+        The control's counts, for the artifact.
+
+    Raises:
+        AssertionError: If the rule cannot distinguish the two.
+    """
+    import types
+
+    ok, bad = Outcome.OK.code, Outcome.DEGENERATE_HESSIAN.code
+
+    def fabricate(outcome: list[list[int]], best: list[int]) -> types.SimpleNamespace:
+        result = types.SimpleNamespace()
+        result.outcome = np.array(outcome)
+        result.ranking = types.SimpleNamespace(best_index=np.array(best))
+        return result
+
+    # **CAST, WITH THE REASON: `decompose` reads two attributes and a real
+    # `FitResult` cannot be built without running a fit, which is the thing this
+    # control exists to be independent of.** The stand-in carries exactly the
+    # `outcome` grid and the `ranking.best_index` the rule reads and nothing else.
+    cold = cast(FitResult, fabricate([[ok, ok], [ok, ok], [ok, ok]], [0, 0, 1]))
+    other = cast(FitResult, fabricate([[ok, ok], [bad, ok], [ok, ok]], [1, 1, 1]))
+    row = decompose(cold, other, "selftest")
+    if (
+        row["points_differing"] != 2
+        or row["differ_by_move"] != 1
+        or row["differ_by_dropout"] != 1
+    ):
+        raise AssertionError(
+            "the decomposition rule cannot separate a move from a dropout on a "
+            f"fabricated pair where both exist: {row}"
+        )
+    return {
+        "record": "selftest",
+        "differing": row["points_differing"],
+        "move": row["differ_by_move"],
+        "dropout": row["differ_by_dropout"],
+        "why": "a MOVE count of zero is the instrument until this passes",
+    }
+
+
 def main() -> int:
     """Re-fit the four arms, assert the committed totals, decompose."""
     out = Path(sys.argv[1])
@@ -175,6 +230,9 @@ def main() -> int:
                 "expected_totals": EXPECTED_TOTALS,
             },
         )
+        # **BEFORE THE GATE, BECAUSE IT COSTS NOTHING AND GATES EVERYTHING.**
+        emit(handle, selftest())
+
         reading = host.quiet_check()
         emit(handle, reading.as_record())
         if not reading.quiet:
