@@ -3231,6 +3231,35 @@ tests could not see.** `pixi run test-fast` would have shipped both.
   > REASON:** in the first, **staging changes what is CHECKED**; in the second, **staging changes
   > what SURVIVES.** Either alone reads as a quirk of one tool. Together they say the index is
   > where work becomes real, and everything before it is provisional in both senses.
+- **WHERE A TOOL REPORTS ON SOMETHING ELSE, ITS EXIT CODE DESCRIBES THE TOOL. READ THE SUBJECT'S
+  OWN STATUS.** Promoted 2026-09-11 on the **third** instance; the causes differ and the shape
+  does not, which is why it is one rule and not three notes:
+
+  | instance | what the wrapper said | what was true |
+  |---|---|---|
+  | `pixi run test && pixi run typecheck` | the chain's code reports the **first** failure | an earlier link's failure and a later link's **silence** are indistinguishable |
+  | `<measurement> \| tail -n 20` | the **pipe's** status is `tail`'s | the measurement underneath had failed |
+  | `gh run watch --exit-status` | **0** | the run was still `in_progress`; it returned early |
+
+  **A wrapper that returns early and a wrapper that returns success are indistinguishable from
+  the outside**, which is why the repair is never "check the exit code more carefully". **Poll
+  until the SUBJECT says it is finished, then read the subject's own verdict** — for CI that is
+  `until [ "$(gh run view <id> --json status --jq .status)" = completed ]; do sleep 60; done`
+  followed by reading `conclusion`. The same rule is why each verification step is run as its
+  own command and why a measurement's output is never piped through anything.
+- **AN AST COMPARISON CAN REPLACE A RE-RUN WHEN THE QUESTION IS WHETHER TWO TREES ARE THE SAME
+  PROGRAM.** The bullet above says a formatter touching `src/` invalidates the sweep that
+  preceded it, and that is true of the sweep's *subject*: `ruff-format` ran after a 65-minute
+  sweep on 2026-09-11 and rewrapped five lines, so the swept tree was no longer the shipping
+  tree. **The choice was between asserting that formatting cannot matter and measuring that the
+  two are the same program.** `ast.dump(ast.parse(...))` of `git show :<path>` against the
+  working tree, file by file — the index holds exactly what was swept — settles it in seconds.
+
+  > **THE LIMIT IS STATED WITH THE RULE, BECAUSE IT IS WHAT KEEPS IT HONEST.** It establishes
+  > that the swept tree and the shipping tree are **the same program**. It does not establish
+  > that the sweep would pass again — **and neither does a re-run**, which makes exactly the same
+  > claim about a different pair of trees. It is **not** a licence for a semantic change: the
+  > moment the ASTs differ, the sweep is owed.
 - **Oracles must not share a derivation path** — see (j).
 - **A QUANTITY ASSUMED TO CANCEL IN A RATIO MUST BE MEASURED TO CANCEL**, because the
   assumption is precisely what a ratio cannot reveal. This is the cancellation rule (a)
