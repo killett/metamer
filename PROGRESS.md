@@ -4,7 +4,7 @@
 
 1. **Branch `main`, everything on it, every commit pushed by a hook** — https://github.com/killett/metamer. **A SHA here is stale the moment the next commit lands, so nothing here names one:** `git log --oneline -8` is the authority.
 2. **DONE:** Phase 1 (0–18), Phase 2 preliminaries P0–P4, **Phase 2a (0–13)**, **Phase 2d (COMPLETE 2026-09-06 — 13 met / 1 reduced scope / 3 failed)**, **Phase 2b (COMPLETE 2026-08-19 — 10 met / 4 reduced scope / 2 FAILED)**, **Phase 2c's brainstorm (D1–D12)**, and **Phase 2c (COMPLETE 2026-08-29 — 10 met / 2 reduced scope / 0 failed; Tasks 0–4 on 2026-08-24, Task 5 on 2026-08-27, Task 6 on 2026-08-28, Tasks 7–8 on 2026-08-29)**. The modelling sub-phase was decided against 2026-08-22 and **re-decided on closed facts 2026-08-23: it does not open.** Sections below carry each; **none is restated here.**
-3. **NEXT ACTION: THE TWO OWED WIRINGS, THEN 2e — AND WIRING ONE NOW HAS A MEASURED SUBJECT.** **THE REAL-DATA SPIKE IS COMPLETE: first half 2026-09-07, second half 2026-09-10.** Both verdicts are [`realdata-spike-verdict.md`](docs/superpowers/notes/realdata-spike-verdict.md) and [`realdata-spike2-verdict.md`](docs/superpowers/notes/realdata-spike2-verdict.md); the sections are [here](#the-real-data-spikes-first-half-is-done-2026-09-07) and [here](#the-real-data-spikes-second-half-is-done-2026-09-10). **Nothing from either is restated here.** **WIRING ONE — `batch.audit` over a rung's arms — IS NO LONGER TIDY-UP:** the second half measured a pooled selection-disagreement rate that is **100% outcome flip and 0% re-ranking**, so an audit that pools the two reports "hysteresis" about a number containing none. That is (h4) at the audit's headline. PHASE 2d IS CLOSED 2026-09-06 (13 met / 1 reduced / 3 failed; the close is [here](#phase-2d-is-closed-2026-09-06--13-met--1-met-with-reduced-scope--3-failed-plus-2bs-two-inherited-failures-and-2cs-one) and carries the one sentence 2d is). TASK 8 IS DONE 2026-09-06 (the README figure: one rung, two constructions, every arm at the floor, the saving beside it) AND TASK 5b IS DONE, 2026-09-05, AND THE PRE-DECIDED STOP FIRED** — on field construction version 2 at 2c's difficulty (42.08 cold iterations per point against the 43.94 the stop was stated against), with conditioning comparable to version 1's, **warm equals cold in selection at every index: the width is at the 1-cell floor on cold, warm and N2 alike, and no row of any profile crosses a half.** **AND THE SAVING APPEARED AT 2c's OWN SIZE — 41.81% of pass-2 iterations, 39.75% net of pass 1, against 2c's 42.28%** — while moving no selected candidate anywhere. **The prepared conclusion is now a measurement: a warm start that saves two fifths of the iterations while moving no selected candidate is buying TIME and not BIAS.** The verdict is [`phase2d-difficulty-rung-verdict.md`](docs/superpowers/notes/phase2d-difficulty-rung-verdict.md) and nothing from it is restated here. **NO FURTHER RUNGS**, by the branch Task 1 wrote. The field builder's defect is repaired (version 2), version 1 stays constructible and byte-guarded, and **the three-rung null stands as the signal-free half of the contrast that is the finding.** **TASKS 6 AND 7 STAY DECIDED AGAINST.**
+3. **NEXT ACTION: WIRING ONE — A DRIVER THAT RUNS `batch.audit` OVER A RUNG'S ARMS — AND IT IS URGENT RATHER THAN TIDY-UP.** Its brief, the two things the spike added to it, and the pieces already built that it reuses are in [WIRING ONE](#wiring-one--what-the-next-session-needs-written-2026-09-10). **Its pre-flight is NOT written and is owed at the start of the session that does it.** After it: the selection-map report, then 2e, whatever the design doc says it is. **THE REAL-DATA SPIKE IS COMPLETE — first half 2026-09-07, second half 2026-09-10 — AND ITS FOUR READINGS ONLY MAKE SENSE TOGETHER: warm-starting saves 64.72% of cold iterations on real altimetry; 6.7% of that is the two-pass GEOMETRY and the rest is available from any converged start; ZERO of 289 points was re-ranked, on every arm, positive-controlled; and the selected candidate differs at 34% of points, ENTIRELY by candidates passing the conditioning gate in one arm and failing it in the other, of which 15 points are reachable from the exact optimum as the start.** A reader taking the first alone ships the two-pass architecture; the first two ship the cheap variant; the third calls warm-starting safe; **the fourth is the one needing a decision and it is not a decision about warm-starting — it is open question 23.** Verdicts: [first half](docs/superpowers/notes/realdata-spike-verdict.md), [second half](docs/superpowers/notes/realdata-spike2-verdict.md); sections [here](#the-real-data-spikes-first-half-is-done-2026-09-07) and [here](#the-real-data-spikes-second-half-is-done-2026-09-10). **PHASE 2d IS CLOSED 2026-09-06 (13 met / 1 reduced / 3 failed), its close is [here](#phase-2d-is-closed-2026-09-06--13-met--1-met-with-reduced-scope--3-failed-plus-2bs-two-inherited-failures-and-2cs-one), and TASKS 6 AND 7 STAY DECIDED AGAINST.** **Nothing from any verdict is restated in this head.**
 4. ## THE STANDING LIMITATION ON EVERYTHING 2c DECIDED: **NO 2c NUMBER COMES FROM REAL DATA.** Warm-starting was authorized — and every decision after D1 inherits this — on a **simulated field whose spatial coherence is a construction parameter**. **The spatial coherence of real altimetry optima has never been measured.** Weaker coherence gives a **smaller** saving, and **§11.2's 30% threshold could fail on real data.** **THE NAMED CLOSER, not an open worry: a spike on a real gridded product — same three arms, same record-length lever.** **AND SINCE 2026-08-24 THERE IS A SECOND REGISTER OF IT: every 2c saving is a CEILING, not an estimate**, because the instrument searched with no effective spiral bound — see [what 2c's tasks inherit](#what-2cs-tasks-inherit-2026-08-24). **NARROWED 2026-09-07 AND NOT LIFTED.** The spike's **first half** is measured on CMEMS DUACS monthly SLA and the bound is gone: real cold difficulty is **above every fixture here**, so §11.2's 30% threshold is not refuted by difficulty and the coherence half is worth its cost. **NO NUMBER ABOUT WARM-STARTING STILL COMES FROM REAL ALTIMETRY** — what changed is that a number about real **difficulty** does, and that the ~30 of 2c's 42.28 points which are cold-start difficulty have MORE to work with on real data, not less. **MEASURED 2026-09-10: the 12.00 proximity points are worth 4.36 on real data — a third of their simulated size and a twentieth of their share of the benefit.** A distant converged optimum already gets 93.3% of what warm-starting saves. **AND THE SELECTION DISAGREEMENT IS NOT HYSTERESIS: zero re-rankings at 289 points on every arm**, positive-controlled. What moves the map is that `DEGENERATE_HESSIAN` is **start-dependent**, which is a defect with no owner. **THE STANDING LIMITATION IS NOW GEOGRAPHIC RATHER THAN SIMULATED:** both halves are one box of subtropical open ocean, and a saving there is a saving there.
 5. **Tests: 1388 passed, 0 failed, 0 INDETERMINATE — 2026-09-06, 5144.42 s (1:25:44).** **`pixi run test` is the full sweep and every end-of-task verification must run it; `test-fast` and `test-ci` are NOT evidence** — the full sweep has caught **eight** things a fast run could not, the most recent being a test whose own expected value was computed from a 1-based reading of `np.arange`. **Every run prints `RSS measurement validity`, including at zero**; a nonzero count is INDETERMINATE, neither pass nor fail.
 6. **Verify a fresh checkout with `pixi run test && pixi run typecheck && pixi run lint`**, plus `pixi run pre-commit run --all-files` before every commit. **AND `git add` A NEW FILE BEFORE THAT SWEEP, NEVER AT COMMIT TIME** — `--all-files` covers **tracked** files only, so an untracked new module makes every hook print `Passed` without being read. Measured 2026-08-24; it cost two full twenty-minute sweeps before it was noticed. **AND THE RULE HAS A SECOND FORM, PROMOTED 2026-08-31: STAGE ANYTHING A TOOL MAY RESTORE, NOT ONLY ANYTHING A HOOK MAY SKIP** — `git checkout -- <file>` restores **from the index**, so an unstaged edit in a file any tool touches is **silently reset to `HEAD`, with no error**. One changes what is CHECKED, the other changes what SURVIVES; the pair is in [the handoff](docs/superpowers/notes/phase1-to-phase2-handoff.md) and is not restated here.
@@ -57,6 +57,75 @@ What a cold session cannot re-derive, and which is therefore here rather than on
   on the both-OK intersection. **The audit's subject is narrower on the ocean than any fixture has
   shown**, and the box this was measured in is the easiest geography available: no land, no ice, no
   gaps.
+
+---
+
+## WIRING ONE — WHAT THE NEXT SESSION NEEDS (written 2026-09-10)
+
+**ITS PRE-FLIGHT IS NOT WRITTEN AND IS OWED BEFORE ANY CODE.** This section is the brief, not the
+audit of it.
+
+### WHAT IT IS
+
+**A driver that runs `batch.audit` over a rung's arms.** The strata, the withholding rules and the
+30-member floor are 2c's machinery; **2c built them and measured nothing with them, and 2d measured
+something and never invoked them.** Criterion 12 has **no reading at all** and a test asserts the
+absence, so **the day this lands criterion 12 fails and asks to be re-evaluated** — that is by
+design and is not a regression.
+
+### WHY IT IS URGENT RATHER THAN TIDY-UP, WHICH IS NEW SINCE 2026-09-10
+
+**The spike produced the population that makes pooling WRONG rather than merely imprecise.** On
+real altimetry the pooled selection-disagreement rate is **100% outcome flip and 0% re-ranking**,
+so an audit that pools the two **reports "hysteresis" about a number containing none of it.** D9
+already says they are different quantities with their own denominators; until the driver exists,
+nothing prints the decomposition, and §11.2's headline is a quantity the audit would not produce.
+(h4) at the audit's headline.
+
+### TWO ADDITIONS TO WHAT IT OWED
+
+1. **THE MOVE/DROPOUT DECOMPOSITION IS PART OF IT, WITH ITS POSITIVE CONTROL RUNNING BEFORE THE
+   QUIET GATE ON EVERY INVOCATION.** A `MOVE = 0` that cannot be distinguished from a broken rule is
+   the pure-negative failure, and this is its worked case — the comfortable reading of a clean
+   result. **Both pieces already exist and are committed**: `decompose()` and `selftest()` in
+   [`realdata-spike2-decompose.py`](docs/superpowers/notes/realdata-spike2-decompose.py). The
+   rule and its refusal are written there; **the audit needs them wired, not designed.** The rule:
+   a differing point is a **MOVE** when each arm's selected candidate was `OK` in the other too,
+   and a **DROPOUT** when one arm's winner was not `OK` in the other and so was never selectable
+   there. **A point can be neither and those are counted separately** rather than assigned to
+   whichever bin is tested first.
+2. **`κ` NOW HAS LIVE STRATA AND THEY ARE START-DEPENDENT, SO (j7)'s COLD-ARM BINDING IS DOING REAL
+   WORK FOR THE FIRST TIME.** D9 bins by the **cold** arm because the treatment can move a cell
+   between strata — **and that was decided when the two arms agreed.** They no longer do: see open
+   question 23's table. **Check that binding by the cold arm still holds when the treated arm's `κ`
+   differs materially**, which is a question the original decision never had to answer. It may
+   hold, it may need a second reported binning, and **the check is owed before a stratified number
+   is quoted** — not after.
+
+### WHAT IT CAN REUSE, SO NOTHING IS REBUILT
+
+- **The four-arm measurement reproduces exactly.** `realdata-spike2-harness.py` and its
+  decomposition addendum both returned `cold 16658 / warm 5877 / random 6603 / self 2721` on two
+  runs a day apart. **A driver can be validated against those integers** for ~4 h of compute.
+- **The shipped two-pass driver and an in-process warm arm return the same integer**, so a driver
+  built either way is comparable to the other — (j5) does not bite there.
+- **A control that costs ~1.2 h**: 2d's easy rung through `run_two_pass` reproduces
+  `warm_per_point = 24.463541666666668` and `warm_ok_total = 9394` to zero difference. **Check
+  `git log f409b7f..HEAD -- src/` first**; the equality holds only while that is empty.
+- **A real fixture in the tree's reach with no credentials and no dependency change** —
+  [`realdata-spike-fetch.py`](docs/superpowers/notes/realdata-spike-fetch.py) and the two committed
+  provenance records. **Do not `pixi add` anything to read it**; a re-solve is what the control's
+  equality is asserted under.
+
+### WHAT NOT TO DO
+
+- **Do not pool the two quantities**, which is the whole point above.
+- **Do not repair open question 23 on the way past.** It is the largest open question in the
+  project, its cause is not established, and a stratified audit is not the instrument that settles
+  it.
+- **Do not read the spike's geography as general.** Both halves are one box of subtropical open
+  ocean: no land, no ice, no gaps, one regime. **The audit exists to detect the failure elsewhere**
+  and §11.2 now says so in those words.
 
 ---
 
@@ -8085,6 +8154,41 @@ top. **So the question was genuinely open, and it is not answered by the 12 poin
 > bitwise identical *regardless of memory budget, tile size, thread count and traversal order*,
 > and this puts three of those four inside the answer.
 
+#### D1's PRICE IS RE-MEASURED ON REAL DATA, 2026-09-10 — AND IT IS A FIFTEENTH, NOT A HALF
+
+**D1's REASONING IS UNTOUCHED AND IS NOT REOPENED HERE.** The cheap variant seeds each tile from
+the previous tile's fits, so **tile geometry — hence `--memory-budget`, which is deliberately in
+neither hash — enters `θ̂`**, and §11.3 guarantees bitwise identity regardless of budget, tile
+size, thread count and traversal order. That trade is a guarantee against a percentage and the
+argument stands exactly as written above.
+
+**WHAT IS NEW IS THAT THE GUARANTEE NOW HAS A PRICE.** 2c's amendment put it as *"the expensive
+half buys the smaller half of the benefit"* — 12.00 points of 42.28, **28.4%**. Measured on real
+altimetry at the shipped stride and bound, on a geometry chosen to reproduce 2c's own warm radius
+to 1.8%:
+
+| | 2c, simulated, `N = 630` | real, `N = 396` |
+|---|---|---|
+| proximity — what the two-pass geometry adds | **12.00 points** | **4.36 points** |
+| its share of the total saving | **28.4%** | **6.7%** |
+
+**So 93.3% of what warm-starting saves is available with no coarse grid, no barrier, no spiral and
+no stride inside `fit_hash`** — from any distant converged optimum. The numbers and their
+preconditions are in
+[`realdata-spike2-verdict.md`](docs/superpowers/notes/realdata-spike2-verdict.md) and are not
+restated beyond this table.
+
+> **THIS IS NOT A DECISION TO REOPEN TODAY AND IT IS RECORDED SO THAT REOPENING IT WOULD BE DONE
+> ON EVIDENCE.** A later reader proposing the cheap variant now has to answer a **measured**
+> number rather than a preference, and a later reader defending the expensive one has to answer the
+> same number in the other direction. **A price that lives only in a spike's verdict is a price
+> nobody meets when the decision is next discussed**, which is the whole reason it is filed at the
+> decision.
+>
+> **AND THE MEASUREMENT'S LIMIT IS PART OF THE PRICE:** one 2.1° box of subtropical open ocean.
+> Proximity is worth more where optima are more coherent and less where they are less, and neither
+> bound is measured. **4.36 points is a price there.**
+
 #### D1 IS AMENDED, 2026-08-30: THE 42.28% IS REATTRIBUTED, AND THE DECISION SURVIVES THE REATTRIBUTION
 
 **D1 STANDS. The mechanism clears §11.2's 30% threshold and the wall clock agrees.** What moves is
@@ -11045,6 +11149,59 @@ question; compute/bandwidth roofline pair for cross-machine prediction) are in d
 ## Open questions
 
 Still open. **A new session must not assume these were settled.**
+
+23. **`DEGENERATE_HESSIAN` IS START-DEPENDENT, AND THIS IS THE LARGEST OPEN QUESTION IN THE
+    PROJECT.** Opened 2026-09-10 by the real-data spike's second half.
+
+    **THE READING, ON REAL ALTIMETRY, 289 POINTS, `N = 396`, `M = 3`, ONE THREAD, AT THE SHIPPED
+    FIT.** Four arms differing only in where the optimizer started:
+
+    | arm | iterations per point | `DEGENERATE_HESSIAN` cells of 867 | median `κ` | cells above `HESSIAN_COND_LIMIT` |
+    |---|---|---|---|---|
+    | `cold` | 57.640 | **79** | 2.53e6 | 48 |
+    | `warm` | 20.336 | **75** | 2.90e6 | 37 |
+    | `random` | 22.848 | **94** | 3.52e6 | 46 |
+    | `self` — starts AT the cold optimum | **9.415** | **133** | 2.59e6 | **71** |
+
+    **THE ARM THAT DOES THE LEAST WORK HAS THE MOST DEGENERATE CELLS.** `self` starts at the
+    answer, converges in a sixth of cold's iterations, and is refused **68% more often than cold** —
+    it gains no `OK` cell and loses 54.
+
+    **THIS IS NOT A WARM-STARTING FINDING AND THAT IS THE FRAMING THAT MATTERS.** Any mechanism that
+    **shortens the path to the optimum** moves which models are selectable: a better initializer, a
+    looser `GRAD_TOL`, a faster engine, a different objective. Warm-starting is one instance of a
+    class, and the class is large.
+
+    **AND `optimize.HESSIAN_COND_LIMIT` IS A FLOAT64-DERIVED CONSTANT GOVERNING SELECTABILITY,
+    WHICH NOTHING IN THE DESIGN EVER INTENDED.** It is `eps^(-1/2) = 2²⁶`, derived as *"where one
+    inversion has lost half its digits"* — a statement about arithmetic. Above it
+    `optimize_series` refuses `OK`, a refused candidate cannot be ranked, so **an arithmetic
+    threshold decides which noise models a point is allowed to select.** On a simulated field that
+    was invisible: 1 cell in 1152. On real data it is 79 in 867, and **which 79 depends on the
+    start.**
+
+    > **WHY THE CONDITION NUMBER MOVES IS NOT ESTABLISHED, AND IT IS NOT GIVEN A STORY.** The
+    > optimum is the same in both arms wherever both converged, so `cond(H)` at the optimum should
+    > not depend on the path — and it does. Candidates exist (a finite-difference Hessian evaluated
+    > at a numerically slightly different point; a limit at `eps^(-1/2)` on a quantity whose own
+    > estimate is noisy at that scale) and **none of them is measured.** **The temptation to explain
+    > this will be strong and a structural-sounding explanation is the most dangerous possible
+    > reading** — (a0)'s fifth register: tidy, mechanical, and it retires the question.
+
+    **WHAT WOULD CLOSE IT, IN THE ORDER THAT COSTS LEAST.** Measure the quantity's own scatter
+    before touching the threshold: take `cond(H)` at a fixed θ̂ reached by two different paths and
+    see whether the **estimate** moves or the **matrix** does. **The repair is not a wider limit**
+    — a threshold whose verdict depends on the path is (i9) at a threshold rather than at a
+    fixture, and widening it would trade a visible instability for an invisible one.
+
+    > **AND IT COMPOSES WITH (h3), WHICH IS WHY THE PAIR IS FILED TOGETHER.** (h3) established that
+    > D9's `κ` strata cut at `2²⁶` and `2⁵²` while `HESSIAN_COND_LIMIT` **is** `2²⁶` — the same
+    > argument reaching the same number — so the audit's upper bins are unreachable because the
+    > taxonomy filters that population out before the stratification runs. **That conclusion still
+    > holds.** What has changed is that the filtered population is now **both large and
+    > start-dependent**: on a simulated field it was 0.09% and fixed; on real data it is ~10% and it
+    > moves with the treatment. **A selection effect that the treatment can move is (j7) at the
+    > population rather than at a stratum**, and the two findings have to be read as one.
 
 22. **THE QUIET GATE READS `/proc/loadavg`, WHICH IS NOT ITS SUBJECT — MEASURED 2026-09-04, AND THE
     GATE IS NOT CHANGED ON THIS EVIDENCE.** Five one-minute windows on a container at rest

@@ -1342,6 +1342,43 @@ correct *if* the settings are really inside `fit_hash`, which is the thing to te
 than infer; and that the three `GOLDEN_*` constants move again and are **re-derived by hand
 and verified by reversal**, never regenerated from the failure.
 
+> ## §11.2's QUESTION IS ANSWERED AND THE ANSWER IS NO — MEASURED ON REAL ALTIMETRY, 2026-09-10
+>
+> **THE FEAR THIS SECTION IS BUILT ON IS STATED PRECISELY ABOVE:** *initializing each point from
+> its neighbour's answer biases every point toward its neighbour's answer, producing spatially
+> smooth maps.* That is a claim about the optimizer landing at a **different optimum** and ranking
+> the candidates differently.
+>
+> **IT DID NOT HAPPEN. Zero re-ranked points, on every arm — warm, distant-converged and
+> self — with a positive control proving the rule can report one.** 2d's sentence transfers: a warm
+> start that saves iterations while moving no selected candidate is buying **time and not bias**.
+>
+> **The numbers live in [`realdata-spike2-verdict.md`](../notes/realdata-spike2-verdict.md) and its
+> decomposition addendum and are not copied here**, per the one-copy rule.
+>
+> ### WHAT IT LICENSES AND WHAT IT DOES NOT
+>
+> **IT DOES NOT LICENSE REMOVING THE AUDIT.** The measurement is **one 2.1° box of subtropical open
+> ocean** — no land, no ice, no gaps, one regime — and **the audit is the thing that would detect
+> the failure somewhere else.** A mechanism measured safe in the easiest available geography is not
+> a mechanism measured safe. Deleting the detector on the strength of one clean box is the (i2)
+> failure one level up: the absence of a finding and the absence of a detector become the same
+> report.
+>
+> **IT DOES LICENSE WRITING THE FEAR AS MEASURED-ABSENT-HERE RATHER THAN AS A LIVE HAZARD**, and
+> that changes what run-level reporting has to emphasise. The audit's headline is no longer *"did
+> warm-starting smear the map"* — on real data it did not — but **which candidates were selectable**,
+> because that is where the selected-model map actually moved.
+>
+> ### AND THE POOLED RATE IS NOW KNOWN TO BE THE WRONG HEADLINE
+>
+> §11.2 names selection disagreement as *"binary, most interpretable, most directly about the
+> smoothness artifact"*. **On real data it is 100% outcome flip and 0% re-ranking**, so a pooled
+> figure reports *hysteresis* about a number containing none of it. D9 already separates the two
+> and calls the flip *"a different quantity, with its own denominators, reported separately"*.
+> **The audit must report the decomposition, not the pooled rate** — and until it does, the
+> quantity this section asks for is not the quantity it would print.
+
 ### 11.3 Reproducibility guarantee, with preconditions
 
 > For a given (data, config, metamer version), output is **bitwise identical** regardless

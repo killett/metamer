@@ -448,6 +448,24 @@ at `4` coarse steps and a run at `4` fine cells share a `fit_hash`, resume into 
 silence ambiguous, which is (a0)'s third register. The unit is fixed by the specification and the
 conversion (`max_fine_radius = spiral_bound * stride`) happens once, where it is named.
 
+##### AND THE SAME REGISTER AT A PREDICTION, SELF-CAUGHT 2026-09-10
+
+> **A PREDICTION AND THE INSTRUMENT THAT SCORES IT MUST BE IN THE SAME UNIT, AND A BAND IS EXACTLY
+> WHERE THAT GOES UNCHECKED.** A band reads as a statement about a quantity; it is a statement
+> about a quantity **in a unit**, and the instrument picks the unit later.
+
+**Worked instance: the real-data spike's second half, in its own predictions file.** Q6 predicted
+*"the both-`OK` intersection ≥ 85% **of points**"*; the harness reports **cells** — 725 of 867,
+83.6%. **The prediction and the reading are different quantities**, the verdict could not score it
+without saying which, and the point-level figure needed a separate run to obtain.
+
+**WHAT MAKES IT WORTH FILING IS WHERE IT HAPPENED.** The same file carries a register warning that
+a value's unit is part of its identity, and the same sub-phase had already used per-point-versus-
+per-cell as a worked example of exactly this. **The rule was present, understood and freshly
+argued, and the slip is two screens below it** — which is (j9)'s finding in a new place: what was
+missing was not care, it was **enforcement**. The cheap enforcement is one clause: **name the
+denominator in the prediction, in the same words the harness will use.**
+
 #### (a2d) AT A STORED ARTIFACT: THE PRODUCING CONFIGURATION IS PART OF THE ARTIFACT'S IDENTITY
 
 > **When a measurement is too expensive to re-run, its RECORDED OUTPUT becomes the thing later
@@ -479,6 +497,32 @@ the geometry — **and the suite fails if any of them no longer matches the curr
 that outlives its configuration goes on passing: the criterion keeps reporting green about a
 question nobody is asking any more. **The expensive measurement is what makes the artifact
 necessary; the instrument block is what makes it honest.**
+
+##### AND ITS COMPLEMENT: AN ARTIFACT MUST CARRY THE MAP THE HEADLINE WAS READ FROM
+
+> **A report that carries a RATE but not the per-unit array it was computed from cannot be
+> re-interrogated, and the question that needs it is always the one nobody asked in advance.**
+> The instrument block makes a stale report detectable; this makes a *current* report answerable.
+
+**2d's instance, and the cost is recorded there:** its rung report carries profiles and no selection
+maps, so *"warm-against-cold agreement at point level"* **is not in the artifact** and the differing
+points' positions and condition numbers **cannot be recovered without a ~4.4 h re-run.** Its own
+remedy is written down — *a report must carry the map the width was read from* — and it is one of
+two owed wirings.
+
+> **AND IT RECURRED IN THE DOCUMENT THAT CRITICISED IT, SELF-CAUGHT 2026-09-10, WHICH IS WHY THIS
+> IS A REGISTER AND NOT AN ANECDOTE.** The real-data spike's second half fixed 2d's exact hole — it
+> writes the per-point **selection map** for every arm — **and then reproduced a smaller version of
+> the same defect one level down:** it did not write the per-**cell** outcome, so its headline
+> *"the selected candidate differs at 34% of points"* could not be split into an optimum that moved
+> and a candidate that dropped out. **Those are different quantities and only one is hysteresis**,
+> and separating them cost a 2.1-hour re-run.
+>
+> **THE TELL IS SPECIFIC AND CHEAP TO CHECK: for each rate in a report, name the array it was
+> reduced from and ask whether that array is in the file.** A rate is a reduction, and the
+> reduction is where the alternative readings went. **Fixing the instance you were told about is
+> not the same as applying the rule**, and the second hole was written by the same hand in the same
+> sitting as the criticism of the first.
 
 #### AND (a2) AT THE INSTRUMENT: A GATE CAN BE BLIND BY CONSTRUCTION AND PASS EVERY TEST
 
