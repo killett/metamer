@@ -3247,6 +3247,14 @@ tests could not see.** `pixi run test-fast` would have shipped both.
   `until [ "$(gh run view <id> --json status --jq .status)" = completed ]; do sleep 60; done`
   followed by reading `conclusion`. The same rule is why each verification step is run as its
   own command and why a measurement's output is never piped through anything.
+
+  > **AND THE UNTIL-LOOP IS ROBUST TO THE WRAPPER *FAILING* AS WELL AS TO THE WRAPPER *LYING*,
+  > WHICH IS A SECOND AND INDEPENDENT PROPERTY.** A transient `gh run view` error yields an empty
+  > string, which is not `completed`, so the loop sleeps and retries; `gh run watch` exits on it.
+  > **Measured 2026-09-11 during the selection-map commit's verification** — the call returned
+  > `failed to get run: ... unexpected EOF` mid-wait and the loop carried on to read a green
+  > conclusion. The form was promoted for the lying case and this is the failing case, so it is
+  > recorded beside it rather than inferred from it.
 - **AN AST COMPARISON CAN REPLACE A RE-RUN WHEN THE QUESTION IS WHETHER TWO TREES ARE THE SAME
   PROGRAM.** The bullet above says a formatter touching `src/` invalidates the sweep that
   preceded it, and that is true of the sweep's *subject*: `ruff-format` ran after a 65-minute
