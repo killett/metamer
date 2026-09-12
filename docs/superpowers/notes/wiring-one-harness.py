@@ -51,6 +51,7 @@ from metamer.batch.audit_report import (
     decomposition_selftest,
 )
 from metamer.bench import fields, host, report
+from metamer.bench.report import decomposition_from_record
 
 #: The field's draw seed. **THE SAME ONE THE EASY RUNG'S SMOKE USED**, so this
 #: exercises the same field construction and any difference in what comes back
@@ -237,8 +238,55 @@ def smoke(handle: TextIO, directory: Path, seed: int, label: str) -> bool:
     )
 
     path = REPORT_PATH.with_name(f"wiring-one-smoke-{label}-report.json")
-    path.write_text(json.dumps(record, indent=2, default=str) + "\n")
-    emit(handle, {"record": "wrote", "branch": label, "path": str(path)})
+    text = json.dumps(record, indent=2, default=str) + "\n"
+    path.write_text(text)
+
+    # **U1 ON A REAL ARTIFACT: the tests prove the rule, this proves the FILE.**
+    # Re-read from disk rather than from the in-memory record, so the JSON
+    # round-trip is inside the check rather than beside it.
+    reread = json.loads(path.read_text())
+    round_trip = decomposition_from_record(reread["arm_arrays"])
+    in_memory = {
+        (st.candidate, str(st.margin)): (
+            st.differing,
+            st.by_move,
+            st.by_dropout,
+            st.by_both_unavailable,
+        )
+        for st in built.strata.point_strata
+        if st.members
+    }
+    emit(
+        handle,
+        {
+            "record": "wrote",
+            "branch": label,
+            "path": str(path),
+            "bytes": len(text.encode("utf-8")),
+            "arm_arrays_bytes": len(json.dumps(record["arm_arrays"]).encode("utf-8")),
+            "arms_in_the_artifact": sorted(reread["arm_arrays"]["per_arm"]),
+            "decomposition_round_trips": round_trip == in_memory,
+            "round_trip_strata": len(round_trip),
+            "kappa_nulls": sum(
+                1
+                for arm in reread["arm_arrays"]["per_arm"].values()
+                for row in arm["hessian_cond"]
+                for v in row
+                if v is None
+            ),
+        },
+    )
+    if round_trip != in_memory:
+        emit(
+            handle,
+            {
+                "record": "refused",
+                "why": "the decomposition does not round-trip through the artifact",
+                "from_file": {str(k): v for k, v in round_trip.items()},
+                "from_memory": {str(k): v for k, v in in_memory.items()},
+            },
+        )
+        return False
 
     # **REFUSE ON A WIRING FACT, NEVER MERELY REPORT IT.** A smoke that prints
     # `false` beside a green exit is a smoke nobody reads.

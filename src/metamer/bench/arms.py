@@ -282,11 +282,20 @@ class SelfArm:
         started_from: How many cells had a start at all. **A `self` arm over
             few cells is a ceiling over few cells**, and the count is what says
             so.
+        result: The fit itself. **KEPT RATHER THAN REDUCED, for the reason
+            `FieldArms` keeps its `AuditArms`**: `selected` and `cost` are two
+            reductions of this object and a consumer wanting a third -- the
+            per-cell outcome, or `hessian_cond` -- would otherwise have to
+            refit. **This arm is the one open question 23 most needs**: it
+            starts at the cold optimum, converges in a sixth of cold's
+            iterations, and is refused `DEGENERATE_HESSIAN` 68% more often.
+            Dropping it left the most extreme arm out of every artifact.
     """
 
     selected: NDArray[np.int16]
     cost: ArmCost
     started_from: int
+    result: FitResult
 
 
 def cold_arm(
@@ -371,6 +380,7 @@ def self_arm(
         selected=selected.astype(np.int16).reshape(n_normal, n_parallel),
         cost=arm_cost(result),
         started_from=int(valid.sum()),
+        result=result,
     )
 
 

@@ -16,12 +16,15 @@ and its evidence is a committed report, not a test.**
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import numpy as np
 import pytest
 
+from metamer.batch.audit import Arm
 from metamer.batch.audit_report import Quantity, audit_report
+from metamer.bench import arms as bench_arms
 from metamer.bench import fields, report, smear
 from metamer.bench.smear import WidthReading
 from metamer.core.outcomes import Outcome
@@ -74,6 +77,7 @@ def _report(
     cost: dict[str, float] | None = None,
     iterations: dict[str, float] | None = None,
     strata: Any = None,
+    arm_arrays: Any = None,
 ) -> report.RungReport:
     """A report assembled from constructed readings."""
     return report.build_report(
@@ -85,6 +89,7 @@ def _report(
         iterations={"cold_per_point": 24.375} if iterations is None else iterations,
         denominator=36,
         strata=strata,
+        arm_arrays=arm_arrays,
     )
 
 
@@ -1098,3 +1103,299 @@ def test_the_drivers_positive_control_refuses_before_anything_is_fitted():
             audit_report_module.decomposition_selftest()
     finally:
         audit_report_module.selection_decomposition = original
+
+
+# ---------------------------------------------------------------------------
+# The selection-map report: the estimator's subject, in the artifact
+# ---------------------------------------------------------------------------
+
+
+def _arm_arrays(batch: int = 40, *, differing: int = 0, dropouts: int = 0) -> Any:
+    """A real `arm_arrays_record` over constructed arms.
+
+    The first `differing` points select differently in the warm arm; of those,
+    the first `dropouts` are dropouts by construction -- the warm arm lost the
+    candidate cold selected -- and the rest are moves by construction.
+    """
+    from tests.test_audit_report import _arms, _result
+
+    ok, bad = Outcome.OK.code, Outcome.DEGENERATE_HESSIAN.code
+    cold_best = np.zeros(batch, dtype=np.int64)
+    warm_best = cold_best.copy()
+    warm_best[:differing] = 1
+    cold_outcome = np.full((batch, 2), ok, dtype=np.uint8)
+    warm_outcome = np.full((batch, 2), ok, dtype=np.uint8)
+    warm_outcome[:dropouts, 0] = bad
+
+    cold = _result(batch, outcome=cold_outcome, best_index=cold_best)
+    warm = _result(batch, outcome=warm_outcome, best_index=warm_best)
+    arms = _arms(cold, warm)
+    return report.arm_arrays_record(
+        arms=arms,
+        self_result=cold,
+        grid_shape=(batch, 1),
+        models=[spec.spec_hash() for spec in cold.candidates],
+        store_maps={"cold_store": np.asarray(cold_best, dtype=np.int16)},
+    )
+
+
+def test_the_decomposition_is_re_derivable_from_the_artifact_alone():
+    """U1: the arrays are a lookup, not a claim. The whole justification.
+
+    Behaviour under test: feeding the artifact's per-arm maps and outcomes back
+    through the SHIPPED `selection_decomposition` reproduces, per stratum, the
+    `differing` / `by_move` / `by_dropout` / `by_both_unavailable` counts the
+    report computed in memory.
+
+    Expected values determined independently: the report's counts come from
+    `audit_report`'s `_point_strata`, which walks `FitResult` objects; the
+    round-trip walks JSON-shaped lists. **Two paths, one answer** -- and the
+    fixture is built with 8 differing points of which 3 are dropouts by
+    construction and 5 are moves by construction, so the expected split is
+    known before either path runs.
+
+    Bug this catches: an artifact carrying arrays nobody can reconstruct the
+    finding from -- 142 KB spent on an argument rather than a lookup, which is
+    the exact failure the size question exists to prevent. **The rule is not
+    respelled here**: a second spelling would make this a comparison of the
+    artifact against itself.
+    """
+    batch, differing, dropouts = 40, 8, 3
+    from tests.test_audit_report import _arms, _result
+
+    ok, bad = Outcome.OK.code, Outcome.DEGENERATE_HESSIAN.code
+    cold_best = np.zeros(batch, dtype=np.int64)
+    warm_best = cold_best.copy()
+    warm_best[:differing] = 1
+    cold_outcome = np.full((batch, 2), ok, dtype=np.uint8)
+    warm_outcome = np.full((batch, 2), ok, dtype=np.uint8)
+    warm_outcome[:dropouts, 0] = bad
+    cold = _result(batch, outcome=cold_outcome, best_index=cold_best)
+    warm = _result(batch, outcome=warm_outcome, best_index=warm_best)
+    arms = _arms(cold, warm)
+
+    in_memory = audit_report(arms, trend_column=1)
+    record = report.arm_arrays_record(
+        arms=arms,
+        self_result=cold,
+        grid_shape=(batch, 1),
+        models=[spec.spec_hash() for spec in cold.candidates],
+        store_maps={},
+    )
+    round_trip = report.decomposition_from_record(record)
+
+    expected = {
+        (s.candidate, str(s.margin)): (
+            s.differing,
+            s.by_move,
+            s.by_dropout,
+            s.by_both_unavailable,
+        )
+        for s in in_memory.point_strata
+        if s.members
+    }
+    assert round_trip == expected
+    # The fixture must actually carry both kinds, or the agreement is vacuous.
+    assert sum(v[1] for v in expected.values()) == differing - dropouts
+    assert sum(v[2] for v in expected.values()) == dropouts
+
+
+def test_the_round_trip_fails_on_a_REORDERED_array_and_not_only_a_missing_one():
+    """U1's teeth. A round-trip that only catches absence is the pure negative.
+
+    Behaviour under test: permuting one arm's selection map -- same length,
+    same multiset of values, same keys present -- changes the re-derived
+    counts.
+
+    Expected value determined independently: the artifact records
+    `ARM_ARRAY_ORDER` because `field_arms`' own shape check catches a wrong
+    COUNT and not a wrong ORDER. If a permutation did not move these counts,
+    that documentation would be guarding nothing.
+
+    Bug this catches: a serialiser that writes the arrays in tile order, or a
+    reader that reshapes column-major. Both preserve every length and every
+    value and silently re-key the map -- and the first consumer to plot it gets
+    a picture, and a wrong one.
+    """
+    record = _arm_arrays(batch=40, differing=8, dropouts=3)
+    good = report.decomposition_from_record(record)
+
+    warm = dict(record["per_arm"][str(Arm.WARM)])
+    warm["selected"] = list(reversed(warm["selected"]))
+    permuted = dict(record)
+    permuted["per_arm"] = dict(record["per_arm"]) | {str(Arm.WARM): warm}
+
+    assert sorted(warm["selected"]) == sorted(
+        record["per_arm"][str(Arm.WARM)]["selected"]
+    ), "the permutation must preserve the multiset, or it is a content change"
+    assert report.decomposition_from_record(permuted) != good
+
+
+def test_the_round_trip_fails_on_a_TRUNCATED_array_and_says_so():
+    """U1's other tooth: a short array must not quietly decompose a prefix.
+
+    Behaviour under test: dropping the last entries of one arm's outcome grid
+    raises rather than returning counts over whatever aligned.
+
+    Expected value determined independently: numpy's own broadcasting rule --
+    an `(n-1, M)` outcome grid cannot be indexed by `n` rows -- so the failure
+    is structural rather than a length check somebody remembered to write.
+
+    Bug this catches: a truncated write that still parses. Counts over a prefix
+    are plausible, smaller than the truth, and wrong in the flattering
+    direction; nothing else in this module compares lengths.
+    """
+    record = _arm_arrays(batch=40, differing=8, dropouts=3)
+    warm = dict(record["per_arm"][str(Arm.WARM)])
+    warm["outcome"] = warm["outcome"][:-5]
+    truncated = dict(record)
+    truncated["per_arm"] = dict(record["per_arm"]) | {str(Arm.WARM): warm}
+
+    with pytest.raises(IndexError):
+        report.decomposition_from_record(truncated)
+
+
+def test_the_artifact_names_its_grid_shape_and_its_order():
+    """U2: a flat list has no order but the one it is documented to have.
+
+    Behaviour under test: the record carries `grid_shape` and `order`, and
+    reshaping a per-arm map by that shape round-trips to the grid.
+
+    Expected values determined independently: `field_arms` documents row-major
+    over `(n_normal, n_parallel)`; the shape is the one the record was built
+    with.
+
+    Bug this catches: a consumer reshaping column-major, or a grid shape absent
+    so the consumer guesses. `field_arms`' shape check catches a wrong count
+    and not a wrong order, so nothing upstream would notice.
+    """
+    record = _arm_arrays(batch=12)
+
+    assert record["grid_shape"] == [12, 1]
+    assert "row-major" in record["order"]
+    flat = record["per_arm"][str(Arm.COLD)]["selected"]
+    assert np.asarray(flat).reshape(record["grid_shape"]).shape == (12, 1)
+
+
+def test_the_two_selection_sentinels_survive_distinctly_and_are_named():
+    """U3: `-1` and `-2` are two facts, and in JSON they are two numbers.
+
+    Behaviour under test: a store map carrying both sentinels round-trips with
+    both intact, and the record names each.
+
+    Expected values determined independently: `store.SELECTED_UNSET` is -2 and
+    means "nothing wrote here"; -1 means "a fit ran and no candidate won".
+
+    Bug this catches: the two merged, or a consumer indexing the model axis
+    with either and getting a model. The vocabulary travels with the values
+    because a recorded value's meaning is part of its identity.
+    """
+    from tests.test_audit_report import _arms, _result
+
+    cold = _result(6)
+    arms = _arms(cold, cold)
+    record = report.arm_arrays_record(
+        arms=arms,
+        self_result=cold,
+        grid_shape=(6, 1),
+        models=[spec.spec_hash() for spec in cold.candidates],
+        store_maps={"cold_store": np.array([0, -1, -2, 1, -1, -2], dtype=np.int16)},
+    )
+
+    assert record["stores"]["cold_store"] == [0, -1, -2, 1, -1, -2]
+    assert record["selection"]["-1"] != record["selection"]["-2"]
+    assert "no candidate won" in record["selection"]["-1"]
+    assert "nothing wrote here" in record["selection"]["-2"]
+
+
+def test_every_arm_the_driver_fits_reaches_the_artifact():
+    """U4/(c5): written against the set of arms, not an enumeration of it.
+
+    Behaviour under test: the record's arm keys are exactly the audit's four
+    plus the ceiling arm.
+
+    Expected value determined independently: `Arm` is the audit's own
+    enumeration and `SELF_ARM` is the benchmark's fifth; both are read from the
+    shipped constants here rather than typed out.
+
+    Bug this catches: a sixth arm added later and silently absent from the
+    artifact -- which is exactly how `κ` for three of four arms came to be
+    computed by the fit and read by nothing.
+    """
+    record = _arm_arrays(batch=10)
+    expected = {str(arm) for arm in Arm} | {bench_arms.SELF_ARM}
+
+    assert set(record["per_arm"]) == expected
+    for arm in expected:
+        assert set(record["per_arm"][arm]) == {"selected", "outcome", "hessian_cond"}
+
+
+def test_the_kappa_array_is_full_precision_and_absence_is_null_not_zero():
+    """U5 and U6 together: the array OQ23 needs, and the fill that would ruin it.
+
+    Behaviour under test: a finite condition number round-trips to the exact
+    float, and a NaN one becomes `null`.
+
+    Expected values determined independently: `float.hex` round-trips exactly
+    for float64; `0.0` is the most well-conditioned value there is, so a zero
+    fill would read as the exact opposite of "no positive-definite Hessian".
+    The `kappa_undefined` bin was populated on both smoke seeds, so NaN is the
+    ordinary case here and not a corner.
+
+    Bug this catches two ways: `κ` truncated to six significant figures, which
+    halves the artifact by foreclosing the question it exists for; and NaN
+    written as `0.0`, which is (a0) -- a fill value a successful run can
+    produce.
+    """
+    from tests.test_audit_report import _arms, _result
+
+    awkward = 12345678.901234567
+    cond = np.full((4, 2), awkward)
+    cond[1, 0] = np.nan
+    cold = _result(4, hessian_cond=cond)
+    record = report.arm_arrays_record(
+        arms=_arms(cold, cold),
+        self_result=cold,
+        grid_shape=(4, 1),
+        models=[spec.spec_hash() for spec in cold.candidates],
+        store_maps={},
+    )
+    kappa = record["per_arm"][str(Arm.COLD)]["hessian_cond"]
+
+    assert kappa[0][0] == awkward
+    assert kappa[0][0].hex() == awkward.hex()
+    assert kappa[1][0] is None
+    assert json.loads(json.dumps(kappa))[1][0] is None
+
+
+def test_the_arrays_are_in_the_reproducible_record_and_add_no_other_key():
+    """U7: the task adds arrays and does not become a schema change.
+
+    Behaviour under test: `reproducible()` gains `arm_arrays` and nothing else,
+    and the section is None on a report that took no arrays.
+
+    Expected value determined independently: the committed reports' top-level
+    key set, plus `strata` from this session's wiring, plus `arm_arrays`.
+
+    Bug this catches: a new summary, ratio or check smuggled in beside the
+    arrays -- the task quietly becoming the schema change S1 says it is not.
+    Also catches the section being omitted rather than null, which a reader
+    cannot tell from a rung that never ran it.
+    """
+    built = _report(arm_arrays=_arm_arrays(batch=10))
+    record = built.reproducible()
+
+    assert set(record) == {
+        "rung",
+        "contaminated",
+        "null_line",
+        "smears",
+        "instrument",
+        "iterations",
+        "ratios",
+        "checks",
+        "strata",
+        "arm_arrays",
+    }
+    assert record["arm_arrays"] is not None
+    assert _report().reproducible()["arm_arrays"] is None

@@ -23,6 +23,7 @@ from typing import Any
 
 import pytest
 
+from metamer.batch import audit_report
 from metamer.bench import fields, report, smear
 from tests.exit_criteria_2b import PHASE_2B_EXIT_CRITERIA, Verdict
 from tests.exit_criteria_2c import PHASE_2C_EXIT_CRITERIA
@@ -269,7 +270,26 @@ def test_criterion_16_every_committed_block_matches_the_shipped_defaults(constru
     retroactively would make the register fail on the very artifact it protects.
     What is present is pinned; the absence is a dated fact.
     """
-    block = _load(COMMITTED_REPORTS[construction])["instrument"]
+    committed = _load(COMMITTED_REPORTS[construction])
+
+    # **THE ARM ARRAYS CARRY SHIPPED CONSTANTS TOO, AND THE REGISTER PINS THEM
+    # ON THE SAME RULE: what is present is pinned, absence is a dated fact.**
+    # The committed reports predate `arm_arrays`, so demanding it retroactively
+    # would make the register fail on the artifacts it protects. But a report
+    # that HAS the section carries `store.SELECTED_UNSET`'s meaning and
+    # `MARGIN_BINS`' names inside it, and if either moved, every map and every
+    # stratum key in that artifact would be misread while the report went on
+    # being cited. **(c5): this clause is added in the same commit as the
+    # section, because the enumeration is hand-written and (c5) has fired three
+    # times in this project.**
+    arrays = committed.get("arm_arrays")
+    if arrays is not None:
+        assert arrays["selection"] == dict(report.SELECTION_VOCABULARY)
+        assert arrays["margin_bins"] == [str(b) for b in audit_report.MARGIN_BINS]
+        assert arrays["order"] == report.ARM_ARRAY_ORDER
+        assert arrays["no_margin_code"] == len(audit_report.MARGIN_BINS)
+
+    block = committed["instrument"]
     shipped = {
         "draw_method": fields.DRAW_METHOD,
         "candidates": list(fields.CANDIDATES),
@@ -562,6 +582,57 @@ def test_the_criterion_12_guard_finds_a_stratum_NESTED_rather_than_top_level():
     assert not _carries_a_stratum({"checks": {"n1_cells_compared": 4}})
     for path in COMMITTED_REPORTS.values():
         assert not _carries_a_stratum(_load(path)), path
+
+
+def test_the_register_refuses_an_arm_arrays_section_whose_vocabulary_has_moved():
+    """The register's new clause fires, proved before it is relied on.
+
+    Behaviour: a report carrying an `arm_arrays` section whose selection
+    vocabulary or margin-bin names disagree with the shipped constants is
+    refused; one that agrees is accepted; one with no section is accepted.
+
+    Expected values determined independently: the shipped vocabulary is
+    `report.SELECTION_VOCABULARY` and the bin names are `MARGIN_BINS`; the
+    failing fixture below moves `-2`'s meaning, which is what would happen if
+    `store.SELECTED_UNSET` were renumbered.
+
+    Bug this catches: **the clause itself being vacuous.** No committed report
+    carries the section today, so the register's new assertions are a pure
+    negative -- they pass because there is nothing to check, which is
+    indistinguishable from passing because everything matches. This is their
+    positive control, and without it the first artifact to carry the section
+    would be pinned by assertions nobody had ever seen fail.
+
+    **(i2), AND THIS IS THE FOURTH TIME THE PAIRING HAS BEEN NEEDED HERE.** A
+    guard conditional on a condition nothing currently meets **asserts nothing
+    until something does**, and *a clause that cannot fire is indistinguishable
+    from one that would not fire.* The conditional form is right -- absence is
+    a dated fact, not a failure -- so the control is what makes it honest
+    rather than a rewrite of the clause.
+    """
+
+    def check(arrays: dict[str, Any] | None) -> bool:
+        if arrays is None:
+            return True
+        return (
+            arrays["selection"] == dict(report.SELECTION_VOCABULARY)
+            and arrays["margin_bins"] == [str(b) for b in audit_report.MARGIN_BINS]
+            and arrays["order"] == report.ARM_ARRAY_ORDER
+            and arrays["no_margin_code"] == len(audit_report.MARGIN_BINS)
+        )
+
+    good = {
+        "selection": dict(report.SELECTION_VOCABULARY),
+        "margin_bins": [str(b) for b in audit_report.MARGIN_BINS],
+        "order": report.ARM_ARRAY_ORDER,
+        "no_margin_code": len(audit_report.MARGIN_BINS),
+    }
+    assert check(good)
+    assert check(None), "absence is a dated fact, not a failure"
+    assert not check(good | {"selection": {"-1": "x", "-2": "y"}})
+    assert not check(good | {"margin_bins": ["margin_lt_2"]})
+    assert not check(good | {"no_margin_code": 99})
+    assert not check(good | {"order": "column-major"})
 
 
 def test_criterion_14_open_question_21_is_still_open_in_the_record():

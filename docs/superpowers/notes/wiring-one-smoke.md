@@ -21,6 +21,10 @@ never computes its widths, so only the clean branch exercises `build_report` wit
 strata; only the contaminated one exercises the decision to keep the strata when the widths are
 withheld.
 
+**RE-RUN 2026-09-11 WITH THE ARM ARRAYS ADDED, AND THE SELECTION COUNTS REPRODUCED EXACTLY** — see
+[the second run](#the-second-run-2026-09-11--the-arrays-and-a-free-reproduction) below. The sizes in
+this table are the FIRST run's and are superseded there; every other figure reproduced.
+
 | | contaminated (seed 20260830) | clean (seed 20260831) |
 |---|---|---|
 | wall clock | 531 s | 443 s |
@@ -118,7 +122,55 @@ unexplained, and not evidence about it either way at this size.
   that has a live differing set.
 - **They say nothing about open question 23**, whose subject is a population an order of magnitude
   larger than anything here.
-- **They are not a reproducibility check.** The two branches use different seeds, so neither is a
-  repeat of the other. The strata read the `COLD` and `WARM` arms only — no N2 direction enters any
-  of them — so they carry no randomness, which is the argument for putting them inside
-  `reproducible()` rather than a measurement that they are deterministic.
+- ~~**They are not a reproducibility check.** The two branches use different seeds, so neither is a
+  repeat of the other.~~ **SUPERSEDED 2026-09-11 BY THE SECOND RUN**, which re-ran both seeds in a
+  separate invocation and returned the selection counts to the integer. The argument — that the
+  strata read the `COLD` and `WARM` arms only, so no N2 direction enters them — is now a
+  measurement as well as an argument. **The line is struck rather than deleted**, because what it
+  says about the two BRANCHES is still true: they are different seeds and neither is a repeat of
+  the other.
+
+
+---
+
+## THE SECOND RUN, 2026-09-11 — THE ARRAYS, AND A FREE REPRODUCTION
+
+**THE SAME TWO SEEDS, THE SAME GEOMETRY, A SEPARATE INVOCATION, WITH `arm_arrays` ADDED.** What it
+establishes beyond the arrays themselves:
+
+- **THE SELECTION COUNTS REPRODUCED EXACTLY** — `differing / move / dropout` came back **4 / 4 / 0**
+  and **1 / 1 / 0**, the first run's figures to the integer. **The first run was explicitly NOT a
+  reproducibility check** and said so; this one is, and it is free. The strata read the `COLD` and
+  `WARM` arms only and no N2 direction enters them, which was the *argument* for putting them
+  inside `reproducible()`; this is the measurement.
+- **THE DECOMPOSITION ROUND-TRIPS THROUGH THE FILE, ON BOTH BRANCHES.** The report is written to
+  disk, **re-read from disk**, and fed back through the shipped `selection_decomposition` via
+  `decomposition_from_record`; the per-stratum counts match the ones computed in memory from
+  `FitResult` objects — 3 populated strata on one branch, 5 on the other. **The unit tests prove
+  the rule; this proves the file**, and the harness refuses rather than reports if it fails.
+- **ALL FIVE ARMS ARE IN THE ARTIFACT** — `cold`, `warm`, `n1`, `n2`, `self`. The ceiling arm is
+  there because `SelfArm` was changed to keep its `FitResult`; until 2026-09-11 it dropped it, and
+  an artifact built to answer open question 23 would have carried every arm but the one with **133
+  degenerate cells against cold's 79**.
+- **`κ` IS `null` ON 21.4% OF CELLS**, which is the `kappa_undefined` population arriving in the
+  file rather than in a bin count — and the reason the absence is `null` and never `0.0`, which
+  is the most well-conditioned value there is.
+
+### The size, measured, and the prediction it refutes
+
+| | contaminated | clean |
+|---|---|---|
+| whole report on disk | **89 970 B** | **93 332 B** |
+| of which `arm_arrays` (indented) | 42 784 B* | **42 784 B** |
+| `arm_arrays` compact | — | **14 544 B** |
+
+\* indented figure measured on the clean branch; the two differ only in their null counts.
+
+**THE PRE-FLIGHT'S 142 KB WAS WRONG TWICE AND THE CORRECTION IS AT ITS OWN S4**, not restated here.
+The short form: the estimate was compact JSON at 384 points, the artifact is `indent=2` at 52.
+**Scaled to the shipped 384 points the arrays are 107 KB compact and 316 KB indented.**
+
+> **THE AFFORDABILITY HALF OF THE `κ` ARGUMENT MOVED BY 2.2× AND THE STRUCTURAL HALF DID NOT.**
+> That is the payoff of recording *a store is one arm* as the reason and the byte count as a second
+> fact: the number that moved was the one that was not load-bearing. Had cost been the recorded
+> reason, this measurement would have reopened a settled decision.

@@ -61,6 +61,16 @@ this task.
 
 ---
 
+> ## THE ORDER OF S2 AND S3 IS CORRECTED, 2026-09-11, AND THE RETIRED FRAMING STAYS VISIBLE
+>
+> **S2 LEADS WITH COST AND S3 WITH STRUCTURE, AND THAT IS THE WRONG WAY ROUND.** The reason `κ`
+> per arm is not a store field is **structural — a store is one arm** — and the cost figure is a
+> second fact. **Stating cost as THE reason is the weaker record**, because it reopens the moment
+> somebody finds 120 MB affordable, and the structural reason never reopens. The shipped home for
+> the reason is `bench.report.arm_arrays_record`'s docstring, in that order. **Both sections stand
+> as written**: the arithmetic in S2 is correct and is what settles the *single-arm* store
+> question, which is a real and separate question that cost does decide.
+
 ## S3 — `κ` PER ARM CANNOT BE A STORE FIELD AT ALL, AND THAT IS WHY THE BENCHMARK IS WHAT OQ23 NEEDS
 
 **A store is one arm.** It records the run that produced it. Arms are experimental conditions that
@@ -96,6 +106,34 @@ float64 grid is rendered as decimal text.
 > compared against `HESSIAN_COND_LIMIT = 2²⁶` and OQ23 is a question about *why the value moves
 > between arms*; truncating the quantity whose movement is the open question is (a2d) at a
 > recorded value. **Full float64 repr, and the 61 KB saved is not worth the question it forecloses.**
+
+> ## THIS TABLE AND Q1 ARE SUPERSEDED BY MEASUREMENT, 2026-09-11 — AND Q1 WAS WRONG TWICE
+>
+> **THE ESTIMATE ABOVE IS COMPACT JSON AT 384 POINTS. THE ARTIFACT IS INDENTED JSON, AND THE
+> SMOKE RUNS AT 52.** Both errors are mine and neither is in the direction that flatters:
+>
+> | | | |
+> |---|---|---|
+> | (i) **Q1 quoted the 384-point figure "at the smoke geometry"** | the smoke is **26 × 2 = 52 points** | (a4) — a worked example applied to a case it was not recomputed for |
+> | (ii) **the table costs compact `json.dumps`** | the report is written `indent=2`, which is **2.94×** on nested numeric lists | the serialisation format, not the arrays, dominates |
+>
+> **MEASURED, and these are the numbers that stand:** the `arm_arrays` section is **14 544 B
+> compact / 42 784 B indented** at 52 points. Scaled to the shipped 384: **107 KB compact,
+> 316 KB indented.** Against the table's predicted 142 KB the *compact* projection is **35% LOW**,
+> because **21.4% of `κ` entries are `null`** — four characters where the table assumed an
+> eighteen-character float repr, which is the `kappa_undefined` population showing up in the file
+> size.
+>
+> **THE AFFORDABILITY HALF OF THE `κ` ARGUMENT MOVES BY 2.2× AND THE STRUCTURAL HALF DOES NOT** —
+> which is the whole value of having ordered them that way. 316 KB is still a benchmark artifact
+> and still trivially affordable, so nothing is decided differently; but the *number* was wrong by
+> more than a factor of two, and a decision resting on it alone would now be resting on a
+> superseded figure.
+>
+> **`indent=2` IS KEPT.** A compact arrays section inside an indented document would save 209 KB
+> at rung scale and would add a second serialisation path to this module. **Optimising against a
+> number I have just been wrong about, for a size that is not a problem, is the wrong trade** —
+> and the whole report stays two orders of magnitude under `check-added-large-files`' 2000 KB.
 
 ---
 
@@ -221,6 +259,14 @@ Asserting its magnitudes would manufacture the evidence the flag exists to deny.
   *Refuted upward* by anything over 500 KB, which would mean something field-sized is being written
   that the table in S4 does not account for. *Refuted downward* by anything under 100 KB, which
   would mean an array is missing.
+
+  > **SCORED 2026-09-11: REFUTED DOWNWARD, AND THE REFUTATION CLAUSE'S OWN READING WAS WRONG.**
+  > Measured **93 332 B** (clean) and **89 970 B** (contaminated), under the 100 KB floor — but the
+  > clause says that means *an array is missing*, and no array is missing: all five arms are
+  > present and the decomposition round-trips. **The clause was written against a band computed at
+  > 384 points for a run that happens at 52**, so it could not have been satisfied by a correct
+  > run. **A refutation clause is only as good as the quantity it is stated over**, and this one
+  > names the right direction over the wrong population. See the correction in S4.
 - **Q2 — the decomposition re-derived from the artifact reproduces the report's counts exactly**,
   because it is the same rule on the same arrays. *Refuted* by any difference, which would be a
   serialisation defect and is the single most valuable thing this task can find.
@@ -246,4 +292,15 @@ Asserting its magnitudes would manufacture the evidence the flag exists to deny.
   **subsample-or-region**, and that is a separate decision with its own memory-budget argument.
 
 **They are different answers because they are different objects**: a store records one arm, and the
-quantity OQ23 is about only exists where there are four.
+quantity OQ23 is about only exists where there are four. **That is the reason; the 240 MB is a
+second fact beside it.**
+
+**AND THE TWO ARTIFACTS DIVERGE DELIBERATELY.** The rung report gains the section through shipped
+code; **the committed spike reports do not gain it retroactively**, because the spike is closed and
+retrofitting them would need a four-hour refit to produce an artifact of a run that did not happen.
+**What converges is the BUILDER** — `arm_arrays_record` is shipped so the next harness needing
+per-arm arrays imports it rather than hand-rolling JSON, which is what the spike harness did and is
+why its report has maps and no outcomes. The artifact register's key-pinning gains the section's
+vocabulary in the same commit, conditional on the section being present, **with a positive control
+proving that clause fires** — it is otherwise a pure negative, since no committed report carries the
+section yet.

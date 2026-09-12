@@ -3260,6 +3260,21 @@ tests could not see.** `pixi run test-fast` would have shipped both.
   > that the sweep would pass again — **and neither does a re-run**, which makes exactly the same
   > claim about a different pair of trees. It is **not** a licence for a semantic change: the
   > moment the ASTs differ, the sweep is owed.
+- **WHEN AN ARTIFACT IS BUILT TO ANSWER A QUESTION, CHECK THAT IT CARRIES THE CASE THE QUESTION IS
+  ABOUT.** **An artifact complete in every other respect and missing its own subject reads as
+  complete** — nothing about it looks partial, and the gap surfaces only when somebody tries to
+  use it. This is (a2c)'s mechanism — the driver holds the value and does not persist it — with a
+  detection rule attached, and the mechanism has now produced four instances: `median_dt`
+  (computed, used, dropped), the source-index map (refused on size and the refusal not swept to
+  the gotcha), the spike report's per-cell **outcome** (a histogram in its place, which cost a
+  four-hour refit), and **`SelfArm` dropping its own `FitResult`.**
+
+  > **THE LAST ONE IS WHY THE RULE IS STATED SEPARATELY RATHER THAN AS A FIFTH (a2c) EXAMPLE.**
+  > The artifact under construction existed **to answer open question 23**, whose subject is
+  > `DEGENERATE_HESSIAN` moving between arms — and the arm it would have omitted is the `self`
+  > arm, which carries **133 degenerate cells against cold's 79**. Every other arm was present.
+  > **A check that the artifact is complete would have passed; only a check that it carries its
+  > own subject would have failed.**
 - **Oracles must not share a derivation path** — see (j).
 - **A QUANTITY ASSUMED TO CANCEL IN A RATIO MUST BE MEASURED TO CANCEL**, because the
   assumption is precisely what a ratio cannot reveal. This is the cancellation rule (a)

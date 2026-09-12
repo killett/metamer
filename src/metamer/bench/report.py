@@ -90,10 +90,18 @@ from typing import Any
 import numpy as np
 from numpy.typing import NDArray
 
-from metamer.batch.audit import Arm
-from metamer.batch.audit_report import AuditReport, Quantity
+from metamer.batch.audit import Arm, AuditArms
+from metamer.batch.audit_report import (
+    MARGIN_BINS,
+    AuditReport,
+    Quantity,
+    margin_bin,
+    selection_decomposition,
+    selection_margin,
+)
 from metamer.bench import fields, n2map, smear
 from metamer.bench.arms import (
+    SELF_ARM,
     arm_cost,
     iteration_ratio,
     same_iterations,
@@ -196,6 +204,13 @@ class RungReport:
             `reproducible()` too**: every quantity in it reads the COLD and
             WARM arms only, and N2 -- the one place §11.3's traversal
             independence can be lost -- enters none of them.
+        arm_arrays: The per-arm selection map, per-cell outcome and per-cell
+            `hessian_cond` -- the estimator's subject, in the artifact that
+            reports on it. **Named `arm_arrays` and not `arms` because `arm` is
+            already taken twice in this package**: `build_report(arms=...)` is
+            which arms a WIDTH is read from, and `batch.audit` uses it in the
+            experimental sense. One name per thing, declared rather than
+            collided.
     """
 
     rung: Rung
@@ -208,6 +223,7 @@ class RungReport:
     ratios: Mapping[str, float | None] = field(default_factory=dict)
     checks: Mapping[str, Any] = field(default_factory=dict)
     strata: AuditReport | None = None
+    arm_arrays: Mapping[str, Any] | None = None
 
     def quantities(self) -> tuple[RungQuantity, ...]:
         """Every quantity that carries a value, the audit's included."""
@@ -285,7 +301,220 @@ class RungReport:
             # same bytes, and a reader who expected the section supplies the
             # more flattering reading of a missing one.
             "strata": None if self.strata is None else _strata_record(self.strata),
+            # **INSIDE `reproducible()` BECAUSE EVERY ARRAY IN IT IS
+            # DETERMINISTIC.** Selections, outcomes and condition numbers are
+            # what the fits returned, and `fit` has no stochastic component.
+            # **None rather than an absent key**, for the reason the strata
+            # carry one: silence and absence are the same bytes.
+            "arm_arrays": self.arm_arrays,
         }
+
+
+#: How the per-arm arrays are laid out. **Row-major over `grid_shape`, which is
+#: the order `tiling.assemble_tile` returns series in and the order
+#: `SourceMap`'s rows are written against.** `n2map.field_arms` states the limit
+#: this constant exists to close: its shape check catches a wrong COUNT and not
+#: a wrong ORDER, so a permuted batch produces a silently mis-keyed map. **A
+#: flat list of integers in a JSON file has no order but the one it is
+#: documented to have**, so the documentation travels with the arrays.
+ARM_ARRAY_ORDER: str = (
+    "row-major over grid_shape; the order tiling.assemble_tile returns series "
+    "in and SourceMap's rows are written against"
+)
+
+#: What the two negative values in a selection map mean. **THEY ARE NOT ONE
+#: THING.** `-1` is "a fit ran and no candidate won" and `-2` is "nothing wrote
+#: here"; in JSON they are both just negative numbers, and a consumer that
+#: indexes a model axis with either gets a model. (a2d): a recorded value's
+#: meaning is part of its identity, so it is recorded beside the value.
+SELECTION_VOCABULARY: Mapping[str, str] = {
+    "-1": "a fit ran and no candidate won",
+    "-2": "nothing wrote here (store.SELECTED_UNSET)",
+}
+
+
+def _finite_or_none(values: NDArray[np.float64]) -> list[list[float | None]]:
+    """A float grid as plain data, with non-finite entries as `null`.
+
+    **`null` AND NOT `0.0`, AND THAT IS (a0) AT AN ARTIFACT.** `hessian_cond` is
+    NaN wherever the Hessian is not positive definite -- the `kappa_undefined`
+    bin, which the 2026-09-11 smoke found populated on both seeds, so it is the
+    ordinary case and not a corner. **Zero is the most well-conditioned value
+    there is**, so a fill of `0.0` would read as the exact opposite of what it
+    means. `json.dumps` would also emit a bare `NaN`, which is not JSON.
+    """
+    out: list[list[float | None]] = []
+    for row in np.asarray(values, dtype=np.float64):
+        out.append([float(v) if np.isfinite(v) else None for v in row])
+    return out
+
+
+def _arm_arrays(result: FitResult) -> Mapping[str, Any]:
+    """One arm's three arrays: what it selected, what it returned, how conditioned.
+
+    **THE FULL `float64` REPR FOR `hessian_cond`, NOT SIX SIGNIFICANT FIGURES.**
+    Six would halve the artifact. Open question 23 is a question about **why
+    this value moves between arms**, and truncating the quantity whose movement
+    is the open question forecloses it -- (a2d) at a recorded value. The 61 KB
+    is not worth the question.
+    """
+    return {
+        "selected": [int(v) for v in np.asarray(result.ranking.best_index).reshape(-1)],
+        "outcome": [
+            [int(v) for v in row] for row in np.asarray(result.outcome, dtype=np.uint8)
+        ],
+        "hessian_cond": _finite_or_none(np.asarray(result.hessian_cond)),
+    }
+
+
+def arm_arrays_record(
+    *,
+    arms: AuditArms,
+    self_result: FitResult,
+    grid_shape: tuple[int, int],
+    models: Sequence[str],
+    store_maps: Mapping[str, NDArray[np.int16]],
+) -> Mapping[str, Any]:
+    """The estimator's subject, put into the artifact that reports on it.
+
+    **THE DEFECT THIS CLOSES IS IN THE BENCHMARK ARTIFACTS AND NOT IN THE
+    SCHEMA.** §12.2 already carries `/selection/selected[y,x,c]` and
+    `/status/outcome[y,x,m]`, so a production run persists both; what drops
+    them is the benchmark, which reports in JSON and kept profiles. **`κ` is in
+    neither**, and it is the one this exists for.
+
+    **A HISTOGRAM IS NOT A MAP, AND THAT ONE MISSING ARRAY COST FOUR HOURS.**
+    `realdata-spike2-report.json` carries a per-arm selection map for every arm
+    and `outcome_counts` -- a histogram -- for the outcome, so *"warm selected a
+    different candidate"* could not be split into a move and a dropout without
+    refitting all four arms. **The same shape is the sharper half for `κ`**:
+    `kappa_median`, `kappa_max` and `kappa_above_limit` are exactly the
+    summaries that make open question 23 visible and exactly the ones that
+    cannot answer it -- OQ23's own table is built from those three. **A summary
+    that shows an effect and cannot decompose it is a specific failure mode,
+    and these are its two worked instances.**
+
+    **`κ` PER ARM CANNOT BE A PRODUCTION STORE FIELD IN ANY DTYPE, BECAUSE A
+    STORE IS ONE ARM.** That is the reason, and it is structural. A store
+    records the run that produced it; arms are experimental conditions that
+    exist only inside `audit.run_arms`, which fits one batch four ways in one
+    process. So the question is not affordability -- **the object does not
+    exist there.**
+
+    **THE COST REASON IS SECONDARY AND IS KEPT ONLY AS A SECOND FACT**: at 10^7
+    points `hessian_cond` in float64 is 240 MB against the 160 MB source-index
+    term Task 5 refused, and float32 is 120 MB. **Stating cost as THE reason
+    would have been the weaker record**, because it reopens the moment somebody
+    finds 120 MB affordable, and the structural reason never reopens. If a
+    single-arm `κ` is ever wanted in a store, §12.2's `/detail/` group is
+    already "subsample / region only" and that is the shape -- a separate
+    decision with its own memory-budget argument.
+
+    **THIS RECORD AND THE SPIKE'S DIVERGE DELIBERATELY, AND THE REASON IS THAT
+    RETROFITTING WOULD PRODUCE AN ARTIFACT OF A RUN THAT DID NOT HAPPEN.** Not
+    merely that the spike is closed: adding arrays to a committed report would
+    make it describe a four-hour refit that was never run under it. **That is
+    the same discipline as refusing to back-fill `field_construction_version`
+    into the version-1 rung report** -- see
+    `test_criterion_16_every_committed_block_matches_the_shipped_defaults`,
+    whose rule is *what is present is pinned; the absence is itself a dated
+    fact.* An artifact records what a run produced, and editing it to record
+    more is not an improvement to the artifact, it is a different artifact.
+
+    **WHAT CONVERGES IS THE BUILDER, AND THAT IS THE DURABLE HALF.** The spike
+    harness hand-rolled its JSON, which is exactly why its report has maps and
+    no outcomes; a shipped builder is what stops the next harness repeating
+    it.
+
+    Args:
+        arms: The audit's four arms, as `run_arms` returned them.
+        self_result: The ceiling arm's fit. **Not in `AuditArms`** -- it is a
+            fifth arm run by the benchmark, and it is the one OQ23 most needs.
+            **`SelfArm` DROPPED IT UNTIL 2026-09-11**, so an artifact built to
+            answer open question 23 would have carried every arm but the one
+            with **133 degenerate cells against cold's 79.** See `bench.arms`.
+        grid_shape: `(n_normal, n_parallel)`, so a reader can reshape.
+        models: `spec_hash` per model-axis position.
+        store_maps: `/selection/selected` read off each run store, by arm name.
+
+    Returns:
+        The record.
+    """
+    per_arm: dict[str, Any] = {
+        str(arm): _arm_arrays(result) for arm, result in arms.results.items()
+    }
+    per_arm[SELF_ARM] = _arm_arrays(self_result)
+    cold = arms.results[Arm.COLD]
+    return {
+        "grid_shape": list(grid_shape),
+        "order": ARM_ARRAY_ORDER,
+        "models": list(models),
+        "selection": dict(SELECTION_VOCABULARY),
+        # **THE MARGIN BIN PER POINT, FROM THE COLD ARM.** Without it the point
+        # strata are not reconstructible from the artifact and the round-trip
+        # below could only compare pooled counts -- which D8 does not emit, and
+        # rightly. With it the check is per stratum, which is stronger.
+        "margin_bin": [int(v) for v in margin_bin(selection_margin(cold.ranking))],
+        "margin_bins": [str(b) for b in MARGIN_BINS],
+        "no_margin_code": len(MARGIN_BINS),
+        "per_arm": per_arm,
+        "stores": {
+            name: [int(v) for v in np.asarray(grid).reshape(-1)]
+            for name, grid in store_maps.items()
+        },
+    }
+
+
+def decomposition_from_record(
+    record: Mapping[str, Any],
+) -> dict[tuple[str, str], tuple[int, int, int, int]]:
+    """Re-derive the per-stratum decomposition from the artifact alone.
+
+    **THIS IS WHAT MAKES THE ARRAYS A LOOKUP RATHER THAN A CLAIM.** The whole
+    justification for carrying them is that a later session can answer *"which
+    points moved, and at what condition number"* without refitting. That is a
+    testable proposition and it is tested: `tests/test_bench_report.py` feeds
+    the artifact back through here and compares against the counts the report
+    computed in memory by a different path.
+
+    **THE RULE IS THE SHIPPED `selection_decomposition` AND IS NOT RESPELLED
+    HERE.** A second spelling would make the round-trip a comparison of the
+    artifact against itself -- the tautology that a figure test in this project
+    already had, caught only by corrupting a report underneath it. The only
+    logic below is the stratum mask, and its membership term is `split.live`,
+    which also comes from the shipped rule.
+
+    Args:
+        record: The `arm_arrays` section of a rung report.
+
+    Returns:
+        `(candidate spec_hash, margin bin name)` -> `(differing, move, dropout,
+        both_unavailable)`, for every populated stratum.
+    """
+    per_arm = record["per_arm"]
+    cold, warm = per_arm[str(Arm.COLD)], per_arm[str(Arm.WARM)]
+    split = selection_decomposition(
+        cold_outcome=np.asarray(cold["outcome"], dtype=np.uint8),
+        cold_best=np.asarray(cold["selected"], dtype=np.int64),
+        warm_outcome=np.asarray(warm["outcome"], dtype=np.uint8),
+        warm_best=np.asarray(warm["selected"], dtype=np.int64),
+    )
+    cold_best = np.asarray(cold["selected"], dtype=np.int64)
+    margins = np.asarray(record["margin_bin"], dtype=np.int64)
+
+    out: dict[tuple[str, str], tuple[int, int, int, int]] = {}
+    for model, name in enumerate(record["models"]):
+        for code, binning in enumerate(record["margin_bins"]):
+            members = split.live & (cold_best == model) & (margins == code)
+            if not np.any(members):
+                continue
+            out[(name, binning)] = (
+                int(np.count_nonzero(members & split.differs)),
+                int(np.count_nonzero(members & split.move)),
+                int(np.count_nonzero(members & split.dropout)),
+                int(np.count_nonzero(members & split.both_unavailable)),
+            )
+    return out
 
 
 def _lift(quantity: Quantity, rung: Rung) -> RungQuantity:
@@ -667,6 +896,7 @@ def build_report(
     ratios: Mapping[str, float | None] | None = None,
     checks: Mapping[str, Any] | None = None,
     strata: AuditReport | None = None,
+    arm_arrays: Mapping[str, Any] | None = None,
 ) -> RungReport:
     """Assemble one rung's report from readings that already exist.
 
@@ -698,6 +928,10 @@ def build_report(
             the strata are a different measurement over the same arms. A
             contaminated rung is exactly when a reader wants to know whether
             the selections moved.
+        arm_arrays: From `arm_arrays_record`, or None. **Also not withheld on a
+            contaminated rung**, and for a stronger reason than the strata: a
+            firing null is a statement about the selection maps, so the maps
+            are the diagnosis E6 asks for.
 
     Returns:
         The report.
@@ -768,6 +1002,7 @@ def build_report(
         ratios={} if ratios is None else dict(ratios),
         checks={} if checks is None else dict(checks),
         strata=strata,
+        arm_arrays=arm_arrays,
     )
 
 
@@ -1083,6 +1318,23 @@ def run_rung(
         lint_findings=lint_findings,
     )
 
+    # **THE ESTIMATOR'S SUBJECT, KEPT.** Every array below was already in
+    # memory and was already being dropped -- the four audit arms' outcomes and
+    # condition numbers, the ceiling arm's fit, and the two store maps. `κ` for
+    # three of the four arms was computed by the fit and read by NOTHING, since
+    # `kappa_bin` reads the cold arm alone under (j7): (a2c), at the array open
+    # question 23 needs.
+    arm_arrays = arm_arrays_record(
+        arms=field_result.arms,
+        self_result=ceiling.result,
+        grid_shape=grid_shape,
+        models=[spec.spec_hash() for spec in specs],
+        store_maps={
+            "cold_store": _selection_map(cold_store, grid_shape),
+            "warm_store": _selection_map(warm_store, grid_shape),
+        },
+    )
+
     selection = {
         "cold": _selection_map(cold_store, grid_shape),
         "warm": _selection_map(warm_store, grid_shape),
@@ -1177,17 +1429,22 @@ def run_rung(
         denominator=n_normal * n_parallel,
         arms=arms,
         strata=strata,
+        arm_arrays=arm_arrays,
     )
 
 
 __all__ = [
     "ARMS",
+    "ARM_ARRAY_ORDER",
+    "SELECTION_VOCABULARY",
     "RungContaminated",
     "RungQuantity",
     "RungReport",
     "SmearEntry",
     "Saving",
+    "arm_arrays_record",
     "build_report",
+    "decomposition_from_record",
     "contamination_reason",
     "instrument_block",
     "null_is_clean",
