@@ -73,6 +73,35 @@ def _store(tmp_path: Path, *, n_time: int = 24, n_y: int = 2, n_x: int = 3) -> s
     return str(path)
 
 
+def _latlon_store(
+    tmp_path: Path, *, n_time: int = 24, n_y: int = 2, n_x: int = 3
+) -> str:
+    """The same store, with the spatial axes named as a real product names them.
+
+    **This passes stage 4a**, which requires three dimensions with `time` first
+    and says nothing about the other two -- and then dies inside the tiling path,
+    which takes the names literally. That is the open defect at PROGRESS head
+    item 9(a), and until 2e's Task 2 closes it, it is the only LIVE producer of
+    an unhandled exception this project has.
+    """
+    dataset = xr.Dataset(
+        {
+            "sla": (
+                ("time", "latitude", "longitude"),
+                np.zeros((n_time, n_y, n_x), dtype="float32"),
+            )
+        },
+        coords={
+            "time": _months(n_time),
+            "latitude": np.arange(n_y, dtype=float),
+            "longitude": np.arange(n_x, dtype=float),
+        },
+    )
+    path = tmp_path / "latlon.zarr"
+    dataset.to_zarr(path)
+    return str(path)
+
+
 def _config(tmp_path: Path, uri: str, extra: str = "", name: str = "c.toml") -> Path:
     path = tmp_path / name
     path.write_text(textwrap.dedent(_CONFIG.format(uri=uri)) + textwrap.dedent(extra))
@@ -991,6 +1020,15 @@ def test_code_one_has_no_producer_and_code_two_now_does(tmp_path):
     resumable". That producer is tested where the signal is,
     `tests/test_completion.py`, across a process boundary.
 
+    **RE-POINTED AGAIN AT 2e's TASK 1 (2026-09-12), AND THE REASON IS THE
+    OPPOSITE ONE.** ~~1 remains without a producer~~ is still true, but the
+    sentence it used to license -- *an observed 1 is CPython's unhandled
+    exception* -- is not: a crash now exits `INTERNAL_ERROR`. **So between this
+    task and 2e's Task 6, exit 1 is unreachable by construction**, which is a
+    stronger claim than "has no producer" and is pinned by
+    `test_exit_one_is_unreachable_until_the_failure_rate_threshold_exists`
+    below. **That test inverts at Task 6**; this one does not.
+
     What is still true and is what this asserts: **neither code arises from an
     ordinary run or from a rejected config**, so 1 remains without a producer
     and 2 is not reachable by accident.
@@ -1127,3 +1165,216 @@ def test_a_mismatched_observation_reaches_layer_3_through_the_runner(tmp_path):
         run(config, tmp_path / "out.zarr", observed_thread_limits={"openblas": 99})
     assert caught.value.layer is ValidationLayer.SEMANTIC
     assert "openblas" in str(caught.value)
+
+
+# --------------------------------------------------------------------------
+# The sixth exit code, and the collision it closes (2e Task 1)
+# --------------------------------------------------------------------------
+
+
+def test_an_unhandled_exception_exits_internal_error_and_keeps_its_traceback(tmp_path):
+    """Code 5, on the only LIVE producer this project has.
+
+    Expected values determined independently: measured on 2026-09-12 by running
+    the shipped entry point over a synthetic `latitude`/`longitude` store, which
+    exited **1** with `KeyError: 'y'` raised in `read_amplification` and reached
+    from `run.py`. That reproduces the reading recorded at PROGRESS head item
+    9(a) on 2026-09-07, taken twice -- once on a synthetic fixture and once on a
+    real DUACS store -- by a separate instrument.
+
+    **THIS TEST'S SUBJECT IS DESTROYED BY 2e's TASK 2**, which makes the tiling
+    path positional. It is written here, against a crash that exists today,
+    because a catch-all verified only against a deliberately raised exception is
+    a mechanism checked against a mutant nobody has seen in the wild -- (i2): a
+    pure negative needs a positive control. When Task 2 lands, the constructed
+    replacement inherits this docstring, and **"verified against a live producer
+    on 2026-09-12, `KeyError: 'y'` at `read_amplification`" is the dated fact
+    that keeps it from becoming a test of itself.**
+
+    Bug this catches: a catch-all placed above the staged clauses, which would
+    collapse exit 3 and exit 4 into 5 and make validation staging decorative;
+    and a catch-all that swallows the traceback, which leaves an operator a code
+    saying "a defect in metamer" and no way to find it.
+    """
+    result = _invoke(
+        str(_config(tmp_path, _latlon_store(tmp_path))),
+        str(tmp_path / "out.zarr"),
+    )
+
+    assert result.returncode == ExitCode.INTERNAL_ERROR
+    assert "Traceback" in result.stderr
+    assert "tiling.py" in result.stderr
+    assert "internal error" in result.stderr
+
+
+def test_a_crash_after_the_run_succeeds_also_exits_internal_error(
+    tmp_path, monkeypatch
+):
+    """The guard wraps `main`'s body, not merely the `try` around `run`.
+
+    Expected value determined independently: from the exit taxonomy -- a process
+    that raised and wrote no report did not complete, so it is code 5 whatever
+    part of `main` raised.
+
+    Bug this catches: **`except Exception` appended to the existing `try`
+    instead of wrapping the body.** That `try` spans the fit and its staged
+    handler and nothing else -- the identifiability warnings, the budget and
+    calibration warnings, the whole printed report block and the
+    `report.interrupted` branch all sit after it, about seventy lines, and
+    exactly the lines that format values computed elsewhere. The appended
+    version type-checks, and **it passes the live-producer test above**, because
+    that crash is inside `run`. Only a failure raised downstream of the handler
+    separates the two, which is what this constructs.
+
+    Exercised in-process because the injection point is a module attribute;
+    the CODE it asserts is still the one `main` returns, and every claim about
+    a real process's exit remains a subprocess test elsewhere in this file.
+
+    **PROVED TO BITE 2026-09-12, AGAINST THE MUTANT IT NAMES.** The appended
+    form was constructed and run: the live-producer test above **passed** and
+    this one **failed**, with `RuntimeError` escaping `main` at the
+    `for finding in report.warnings` line -- which under `sys.exit(main())` is
+    exit 1, the defect. **The pair is the evidence: one test cannot separate
+    the two placements and two can.**
+    """
+    from metamer import __main__ as entry
+
+    class _ReportThatFailsWhenFormatted:
+        @property
+        def warnings(self) -> Any:
+            raise RuntimeError("raised downstream of the staged handler")
+
+    monkeypatch.setattr(entry, "run", lambda *a, **k: _ReportThatFailsWhenFormatted())
+
+    code = entry.main(
+        [str(_config(tmp_path, _store(tmp_path))), str(tmp_path / "out.zarr")]
+    )
+
+    assert code == ExitCode.INTERNAL_ERROR
+
+
+def test_the_staged_codes_still_win_over_the_catch_all(tmp_path):
+    """Exit 3 and exit 4 survive the addition of a sixth code.
+
+    Expected values determined independently: design doc section 14.3 assigns 3
+    to layers 1-3 and 4 to layer 4, and that assignment is unchanged by this
+    task -- the sixth code is for events the staging does not describe.
+
+    Bug this catches: a catch-all that catches first, or the staged handler
+    removed on the grounds that "everything is covered now". Either collapses
+    the whole taxonomy into one code, and a user whose TOML has a typo is told
+    metamer has a defect.
+    """
+    absent = _invoke(str(tmp_path / "absent.toml"), str(tmp_path / "a.zarr"))
+
+    flat = xr.Dataset(
+        {"sla": (("time", "y"), np.zeros((6, 2), dtype="float32"))},
+        coords={"time": _months(6), "y": np.arange(2)},
+    )
+    flat.to_zarr(tmp_path / "flat.zarr")
+    contract = _invoke(
+        str(_config(tmp_path, str(tmp_path / "flat.zarr"), name="flat.toml")),
+        str(tmp_path / "b.zarr"),
+    )
+
+    assert absent.returncode == ExitCode.CONFIG_INVALID
+    assert contract.returncode == ExitCode.DATA_INVALID
+    assert "Traceback" not in contract.stderr
+
+
+def test_system_exit_paths_pass_through_the_catch_all_untouched():
+    """`--version` still exits 0 and a usage error still exits 3.
+
+    Expected values determined independently: `--version` is argparse's own
+    action and has always exited 0; the usage code is this project's own
+    override, asserted a few tests above for its own reasons.
+
+    Bug this catches: **`except BaseException` instead of `except Exception`.**
+    `SystemExit` and `KeyboardInterrupt` derive from `BaseException`, so the
+    wider catch turns a clean `--version` into "a defect in metamer" and makes
+    Ctrl-C report that the run did not finish -- converting the three paths that
+    are already correct into the one code that means a crash. Nothing else in
+    this file would notice: every other test asserts a code the wider catch also
+    produces.
+
+    **PROVED TO BITE 2026-09-12:** `except Exception` was widened to
+    `except BaseException` and this test failed on `--version`, which returned
+    `INTERNAL_ERROR` instead of `OK`. No other test in the suite changed
+    colour.
+    """
+    version = _invoke("--version")
+    usage = _invoke()
+
+    assert version.returncode == ExitCode.OK
+    assert usage.returncode == ExitCode.CONFIG_INVALID
+    assert version.returncode != ExitCode.INTERNAL_ERROR
+    assert usage.returncode != ExitCode.INTERNAL_ERROR
+
+
+def test_exit_one_is_unreachable_until_the_failure_rate_threshold_exists(tmp_path):
+    """Between 2e's Task 1 and its Task 6, no path returns 1.
+
+    **This is the only period in this project's history in which the assertion
+    can be made**, so it is made. Before Task 1, CPython produced 1 on every
+    crash; after Task 6, the failure-rate threshold produces it deliberately.
+
+    **"Every failing path" is enumerated rather than judged**, because the
+    phrase has no stopping condition otherwise and a test satisfying it with two
+    paths reads exactly like one satisfying it with six. The reachable
+    non-zero paths are: a usage error, the `--two-pass`/`--reuse-fits-from`
+    refusal, a staged failure at each of its two codes, and an unhandled
+    exception. **The two preemption paths are deliberately not repeated here** --
+    `tests/test_completion.py` already asserts that a SIGTERM'd run exits 2,
+    across a real process boundary, and asserting it again would duplicate an
+    expensive test to restate a claim it already makes.
+
+    Expected value determined independently: from the taxonomy -- 1 means
+    *completed with failures above threshold*, and no threshold is wired yet.
+
+    Bug this catches: a path reaching `COMPLETED_WITH_FAILURES` before anything
+    is meant to produce it. In a taxonomy where 1 has just stopped meaning
+    *crash*, that would make the store's most misleading code reachable with
+    nobody's intent behind it -- a script would resume from a run that never
+    finished.
+
+    **Task 6 inverts this test**: 1 becomes reachable, and only from the
+    threshold path. The pair is named at both ends so neither half is edited
+    alone.
+    """
+    flat = xr.Dataset(
+        {"sla": (("time", "y"), np.zeros((6, 2), dtype="float32"))},
+        coords={"time": _months(6), "y": np.arange(2)},
+    )
+    flat.to_zarr(tmp_path / "flat.zarr")
+    good = _config(tmp_path, _store(tmp_path))
+
+    codes = {
+        "usage error": _invoke().returncode,
+        "flag combination": _invoke(
+            str(good),
+            str(tmp_path / "a.zarr"),
+            "--two-pass",
+            "--reuse-fits-from",
+            str(tmp_path / "nowhere.zarr"),
+        ).returncode,
+        "config absent": _invoke(
+            str(tmp_path / "absent.toml"), str(tmp_path / "b.zarr")
+        ).returncode,
+        "contract violated": _invoke(
+            str(_config(tmp_path, str(tmp_path / "flat.zarr"), name="flat.toml")),
+            str(tmp_path / "c.zarr"),
+        ).returncode,
+        "unhandled exception": _invoke(
+            str(_config(tmp_path, _latlon_store(tmp_path), name="ll.toml")),
+            str(tmp_path / "d.zarr"),
+        ).returncode,
+    }
+
+    assert ExitCode.COMPLETED_WITH_FAILURES not in codes.values(), codes
+    assert codes == {
+        "usage error": ExitCode.CONFIG_INVALID,
+        "flag combination": ExitCode.CONFIG_INVALID,
+        "config absent": ExitCode.CONFIG_INVALID,
+        "contract violated": ExitCode.DATA_INVALID,
+        "unhandled exception": ExitCode.INTERNAL_ERROR,
+    }

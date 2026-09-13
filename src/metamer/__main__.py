@@ -11,16 +11,35 @@ evaluated its abort criterion and stopped. `_Parser` overrides `error` so a
 usage failure exits `CONFIG_INVALID`, which is what it is.
 
 **PYTHON EXITS 1 ON AN UNHANDLED EXCEPTION AND 1 MEANS "COMPLETED WITH FAILURES
-ABOVE THRESHOLD".** That collision is not fixable inside a taxonomy with no
-internal-error code, and it is harmless only while 1 has no producer -- in Phase
-2a any observed 1 is a crash, with a traceback to say so. Sub-phase 2e is where
-1 acquires a producer and where the two must be made distinguishable.
+ABOVE THRESHOLD".** ~~That collision is not fixable inside a taxonomy with no
+internal-error code, and it is harmless only while 1 has no producer.~~
+**CLOSED AT 2e's TASK 1, 2026-09-12:** `ExitCode.INTERNAL_ERROR` is the sixth
+code and `main` carries a catch-all, so a crash exits 5 and 1 is left to the
+failure-rate threshold that 2e's Task 6 wires.
+
+**THE CATCH-ALL WRAPS `main`'s WHOLE BODY, AND THAT IS NOT A STYLE CHOICE.** The
+`try` around `run` spans the fit and its staged handler and nothing else: the
+identifiability warnings, the budget and calibration warnings, the entire
+printed report block and the `report.interrupted` branch all sit AFTER it.
+Appending `except Exception` to that `try` type-checks, passes a test that
+crashes inside `run`, and **leaves every reporting path exiting 1** -- so the
+guard is an outer frame rather than another clause. There is a second,
+independent reason: `exit_code_for` raises `TypeError` on a non-staged type and
+is called from INSIDE the staged `except`, so the handler for the honest
+failures has its own crash path, and only an outer frame sees it.
+
+**IT CATCHES `Exception`, NEVER `BaseException`.** `_Parser.error` raises
+`SystemExit(ExitCode.CONFIG_INVALID)` and `--version` raises `SystemExit(0)`.
+A `BaseException` catch-all would report a clean `--version` as an internal
+error and swallow `KeyboardInterrupt` -- converting the paths that are already
+right into the one code that means the run did not finish.
 """
 
 from __future__ import annotations
 
 import argparse
 import sys
+import traceback
 from collections.abc import Sequence
 from typing import NoReturn
 
@@ -132,6 +151,37 @@ def _build_parser() -> _Parser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the command line and return its exit code.
+
+    **This docstring is true because of the catch-all below**, and it was false
+    before 2e's Task 1: an unhandled exception left `main` without returning, so
+    `sys.exit(main())` never ran and CPython supplied its own 1.
+
+    Args:
+        argv: Arguments, defaulting to `sys.argv[1:]`.
+
+    Returns:
+        One of `ExitCode`. Never raises `Exception`; `SystemExit` from argparse
+        and `KeyboardInterrupt` pass through untouched, which is what keeps
+        `--version`, `--help` and a usage error exiting as they already do.
+    """
+    try:
+        return _run(argv)
+    except Exception:
+        # THE TRACEBACK IS EMITTED, NOT MERELY PERMITTED -- (i2): an absence is
+        # not a signal. The CODE carries the fact that this was a crash and the
+        # TRACEBACK carries which one, so neither has to be inferred from the
+        # other. A caller that only reads the code still learns the right thing.
+        traceback.print_exc()
+        print(
+            "internal error: the run did not finish and no map was written; "
+            "this is a defect in metamer, not in your configuration or data",
+            file=sys.stderr,
+        )
+        return ExitCode.INTERNAL_ERROR
+
+
+def _run(argv: Sequence[str] | None) -> int:
+    """The command line proper, guarded by `main`.
 
     Args:
         argv: Arguments, defaulting to `sys.argv[1:]`.

@@ -55,12 +55,19 @@ def _write(tmp_path: Path, body: str, name: str = "c.toml") -> Path:
 # --------------------------------------------------------------------------
 
 
-def test_the_five_exit_codes_are_the_five_the_taxonomy_names():
+def test_the_six_exit_codes_are_the_six_the_taxonomy_names():
     """Every `ExitCode` member, enumerated by name against its declared value.
 
     Expected values come from the Phase 2 brainstorm's Q1, not from the code:
     0 clean, 1 completed with failures above threshold, 2 aborted early, 3
-    config/validation layers 1-3, 4 data-dependent layer 4.
+    config/validation layers 1-3, 4 data-dependent layer 4. **5 internal error,
+    added at 2e's Task 1 (2026-09-12) and APPENDED, never renumbered** -- design
+    doc section 14.3 carries the reason, which is that 1 and an unhandled
+    exception are opposite facts about a run.
+
+    ~~the five exit codes~~ **This test was renamed rather than edited in place**
+    so the rename appears in the history: a count in a test's own NAME is the
+    same hazard as a count in prose, and it has now moved once.
 
     Bug this catches: a member renumbered, added or dropped. The numbers are a
     published interface -- a shell script branching on them cannot be updated
@@ -75,12 +82,14 @@ def test_the_five_exit_codes_are_the_five_the_taxonomy_names():
     assert ExitCode.ABORTED_EARLY.value == 2
     assert ExitCode.CONFIG_INVALID.value == 3
     assert ExitCode.DATA_INVALID.value == 4
+    assert ExitCode.INTERNAL_ERROR.value == 5
     assert [member.name for member in ExitCode] == [
         "OK",
         "COMPLETED_WITH_FAILURES",
         "ABORTED_EARLY",
         "CONFIG_INVALID",
         "DATA_INVALID",
+        "INTERNAL_ERROR",
     ]
 
 

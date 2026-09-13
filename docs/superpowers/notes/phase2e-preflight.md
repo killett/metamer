@@ -269,3 +269,26 @@ being closed; path 2 and path 7 are not failures.
 
 **And the test is expected to invert at Task 6**, where path 8's code becomes reachable *only* from
 the threshold. The pair is named at both ends so neither half is edited alone.
+
+### THE LIVE PRODUCER, MEASURED BEFORE IT WAS CLOSED (2026-09-12)
+
+**Captured before any of Task 1's code existed**, because Task 2 destroys it and a control that is
+gone cannot be re-taken. A synthetic `latitude`/`longitude` store through the shipped entry point:
+
+    EXIT CODE: 1
+      File "/workspace/src/metamer/batch/run.py", line 1094, in run
+        amplification = read_amplification(handle, tiles[0])
+      File "/workspace/src/metamer/batch/tiling.py", line 907, in read_amplification
+        read *= _chunk_points(start, stop, by_dim[dim], sizes[dim])
+    KeyError: 'y'
+
+**This reproduces head item 9(a)'s 2026-09-07 reading** — same function, same key, same code — by
+a separate instrument on a separately built fixture, two days after the record was last touched.
+**The reading is not restated at the test**; the test carries the dated fact and this entry carries
+the traceback, which is the one place a later reader can check that the two agree.
+
+**After Task 1's catch-all, the same input exits 5 with the same traceback**, plus the line naming
+it a defect in metamer rather than in the user's configuration or data. Both halves were run; the
+`--version`, `--help`, no-args and missing-config paths were re-run beside them and still exit
+0, 0, 3 and 3 — the (k2) check that the catch is `Exception` and not `BaseException`, taken as a
+measurement rather than as a reading of the source.
