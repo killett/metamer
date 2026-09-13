@@ -104,8 +104,8 @@ def test_the_spatial_axes_are_taken_positionally_not_by_name():
     as above, on the differently named axes.
 
     **This asserts the decimation, not end-to-end support.** `tiling.py` takes
-    the literal names in four places, so a run over this input still fails in
-    assembly. That is pre-existing and named in the module docstring.
+    the literal names in three functions -- six occurrences in all -- so a run
+    over this input still fails in assembly. That is pre-existing and named in the module docstring.
     """
     handle = _handle(dims=("time", "latitude", "longitude"))
     parent = handle.dataset

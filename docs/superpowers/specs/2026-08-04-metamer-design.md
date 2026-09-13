@@ -2440,6 +2440,12 @@ of points and returns 0 is the failure mode this section exists to prevent.
 Per-tile tallies by taxonomy branch and by candidate on a `rich` progress display. At 10
 hours, discovering a config bug at hour 9 is the expensive outcome.
 
+**THE COUNTERS ARE 2e's AND THE `rich` DISPLAY IS PHASE 5's, AND THAT IS NOT A CONTRADICTION WITH
+THE SENTENCE ABOVE (2026-09-12).** §17's Phase 2/Phase 5 table gives Phase 2 *"plain lines"* and
+Phase 5 *"the `rich` progress display (§14.1)"*. The split is **computation versus interface**: 2e
+computes and emits the tallies, on plain lines; Phase 5 renders them. **Same resolution as §14.2's
+`metamer report`**, which is a computation 2f owns and a subcommand Phase 5 owns.
+
 **THE COUNTERS ARE POINT-GRANULARITY, ACCUMULATED AND DISPLAYED PER TILE, AND THEY ARE
 DISPLAY-ONLY — NO DECISION MAY READ THEM (2026-08-11).** A tile-granularity verdict is
 meaningless at ~10⁵ points per tile. More importantly the counters sit in **no decision
@@ -2478,6 +2484,22 @@ line in the report**, not a buried counter.
 
 `--no-early-abort` exists for datasets where high failure is genuinely expected.
 
+> **OPEN, AND OWNED BY SUB-PHASE 2e's TASK 6 (raised 2026-09-12): A ONE-PASS RUN HAS NO PASS 1,
+> AND THIS SECTION READS AS THOUGH EVERY RUN GETS AN EARLY ABORT.** With `warm_start.enabled =
+> false` the driver runs exactly one cold pass over the full grid, **with no coarse store written**
+> — so neither the stratified sample nor the barrier this section relies on exists. The only other
+> trigger is the geographically contiguous tile prefix that *"the abort is evaluated on pass 1, not
+> on a fixed prefix of tiles"* above rules out — *"on a global grid, a polar band or a single
+> basin"* — for reasons that stand. (**Cited by its sentence, not by a paragraph count**: a
+> positional citation is the part that goes stale, which §14 has already paid for.)
+>
+> **Three readings, and this section does not yet choose:** *(i)* the abort is two-pass-only and
+> says so; *(ii)* a one-pass run gets a decimated probe pass purely to have something to abort on;
+> *(iii)* the guarantee is weakened for one-pass runs and the weakening is stated. **2e's Task 6
+> takes the decision and replaces this note with the answer.** It is recorded as open rather than
+> resolved here because the task that documents a decision must not be the task that precedes
+> taking it.
+
 ### 14.2 End of run: a report derived from the store
 
 Computed **from the stored status arrays, not from carried counters**. The status arrays are
@@ -2486,10 +2508,75 @@ correctness free**: a resumed run's report covers the whole run because it reads
 store. Exposed as `metamer report <store>`, so it is regenerable, independently testable,
 and usable on someone else's store.
 
+**WHO SHIPS THAT, RESOLVED 2026-09-12 — AND §17's TABLE WAS NEVER DISAGREEING WITH THIS
+SENTENCE.** §17 puts `report` in Phase 5's *commands* row and this section names a command, which
+reads as a conflict and is not one: **§17 speaks about the command tree, this section speaks about
+the computation.** The three consequences above — regenerable, independently testable, usable on a
+foreign store — are properties of computing the report **from the store rather than from carried
+counters**, and they are lost if the computation is deferred.
+
+So: **sub-phase 2f ships the computation and a minimal entry point, `python -m metamer.report
+<store>`; Phase 5 ships the `metamer report` subcommand.** Module form rather than a
+`--report-only` flag on the run entry point, because such a flag would make `config` required-or-
+not depending on another flag — the argument-structure design `python -m` was chosen to defer.
+**A library function alone was refused:** "usable on someone else's store" is a claim about a user
+with a store and no config, and a function only this repo's test suite calls satisfies the letter
+and not the case this section exists for.
+
+**THE REPORT LEADS WITH SELECTABILITY, NOT WITH HYSTERESIS (amended 2026-09-12).** The
+real-data spike measured §11.2's fear **absent** — zero re-ranked points in 289, on every arm,
+positive-controlled — and measured a **different thing present**: the selected candidate differs at
+34% of points, **entirely by candidates passing the conditioning gate in one arm and failing it in
+the other**. A report built to emphasise hysteresis would emphasise the thing this project has
+measured as not happening, while the thing it did measure would have no headline at all.
+
+**And the decisive property is that selectability is visible from a SINGLE run's store, with no
+second arm anywhere.** The audit is a benchmark instrument; this is a property of any fit. A design
+surfacing it only under arm comparison hides it from every ordinary run — which is all the runs a
+user will do — and gives the audit section a concept that is not audit-specific, which is how a
+concept ends up with one consumer and no home.
+
 Contents:
+
+- **SELECTABILITY, per point, with its denominator stated.** This is the first section and it
+  answers *"how much choice did the selection actually have?"* — because **a point where eleven of
+  twelve candidates failed the conditioning gate returns a selection, the selection was nearly
+  forced, and every per-branch count reads clean.** That is the failure mode named at the top of
+  §14. Three distinct quantities, all already stored or derivable, and **no schema change**:
+
+  | quantity | source | granularity |
+  |---|---|---|
+  | **fits** | `/selection/n_valid`, stored | criterion-independent |
+  | **contention** — candidates actually in contention | `count(isfinite(/selection/delta_ic))` over the model axis | **per criterion** |
+  | **no winner** | `/selection/selected == -1` (`-2` is `SELECTED_UNSET`, *nothing wrote here*) | per criterion |
+
+  **These are three facts, not one.** `n_valid` counts **fits**; contention counts **rankable**
+  fits, and §10.2's rule makes them deliberately different — a fit can succeed and have no finite
+  criterion value and is ranked last rather than reclassified as a failure. **So `n_valid == 1` is
+  not "the selection was forced" and `n_valid == 0` is not "no survivor".** `isfinite(delta_ic)`
+  **is** rankability by construction, so contention needs no array added.
+
+  **The denominator excludes `INSUFFICIENT_DATA` and `NOT_APPLICABLE`**, as every rate here does.
+
+  **A caveat that belongs with the derivation and not only with the reader:** `delta_ic` is stored
+  **float32**, so a finite float64 value can overflow to `inf` on write and be miscounted as
+  unrankable. It bounds to catastrophically-bad candidates, it is a claim about the **derived count
+  only**, and it is worth a constructed test rather than a schema change.
 
 - Counts and rates per branch and per candidate, with the **eligible-point denominator
   stated explicitly** (excluding `INSUFFICIENT_DATA` / `NOT_APPLICABLE`).
+- **A dropped candidate gets its own row, and that row names its own denominator.**
+  `CANDIDATE_DROPPED` is a **decided skip** — eligible, and **not** a failure, alongside
+  `SCREENED_OUT` — so it does not enter the failure rate. Its denominator is **points where the
+  candidate was still live**, which is **per-candidate**, making it the first rate in this report
+  whose denominator differs between rows of one table. **The table says so at the row**, or a
+  reader compares two rows computed over different populations.
+
+  **The reason it cannot be folded into the failure rate:** a candidate dropped after failing 91%
+  of pass 1 has `CANDIDATE_DROPPED` written across every remaining point, so a rate computed over
+  those points reads ~100% — **dominated by the decision already taken about it, and louder than
+  the evidence that triggered it.** Where a run acts on a measurement and records the action in the
+  same field the measurement is computed from, the later measurement reports the action.
 - **A spatial clustering statistic on the failure indicator.** This carries the information:
   3% scattered is fine, 3% concentrated in the Southern Ocean is a finding, and a scalar
   rate cannot distinguish them. Specifics that matter:
@@ -2524,9 +2611,27 @@ root attrs.
 | 2 | aborted early — **resumable** |
 | 3 | config/validation error (layers 1–3) — resuming will not help |
 | 4 | data-dependent validation error (layer 4) |
+| 5 | **internal error — an unhandled exception. The run did not finish and no map was written** |
 
 A script that resumes on failure needs to distinguish "aborted, resumable" from "config
 rejected."
+
+**CODE 5 IS ADDED AT SUB-PHASE 2e, AND IT CLOSES A COLLISION RATHER THAN ADDING A FEATURE
+(2026-09-12).** Python reports an unhandled exception as exit **1**, and 1 above means *completed
+with failures above threshold*. **Those are opposite facts about a run** — one says it finished
+and the map is written, the other says it did not — so **a script resuming on 1 would resume from
+a crash that left nothing to resume.** While 1 had no producer the collision was harmless and any
+observed 1 was a crash; **2e wires the failure-rate threshold and gives 1 its producer**, so the
+two are separated in the same sub-phase that creates the hazard.
+
+**The weaker fallback was considered and refused:** holding the vocabulary at five and requiring
+every test asserting exit 1 to also assert the absence of a traceback. **That tests the symptom** —
+a traceback can be suppressed and an absence is not a signal — **and it leaves two different events
+sharing a code, which is the collision rather than a fix for it.** The fix is a distinct code plus a
+catch-all in `__main__`, and **the traceback is still printed**: the code carries the fact, the
+traceback carries the detail.
+
+**Adding a code is cheap; changing what 1 means after a caller branches on it is not.**
 
 **The final console line includes `fit_hash`, `compat_hash`, and the store path** — that is
 what a user needs to resume or regenerate the report, and what they will copy out of a
@@ -2813,7 +2918,7 @@ between *starting a run* and *operating a tool*:
 | entry point | **`python -m metamer <config.toml> <store>`, argparse, one screen, no framework** | the command tree via `console_scripts` |
 | validation | **the 1/2/3/4 staging as structure**, with only the checks Phase 2 can trigger | the rest of §13.2's layer-3 checks as they accrete |
 | exit codes | **all five, as an enum and a return value** (§14.3) | — |
-| commands | — | `validate --explain` with its projection provenance (§13.4), `report` (§14.2) |
+| commands | — (**but 2f ships `python -m metamer.report <store>`**, the computation and a minimal entry point — see §14.2) | `validate --explain` with its projection provenance (§13.4), the `report` **subcommand** (§14.2) |
 | display | plain lines | the `rich` progress display (§14.1) |
 
 **No production path constructs a `Config` inline.** `metamer.config.load(path)` is the only

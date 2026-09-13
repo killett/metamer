@@ -789,11 +789,19 @@ entry said: *"Checked: `assemble_tile` and `geometry_components` index positiona
 exposure is the decimation this task adds and not a pre-existing defect."*
 
 **That sentence was written before the code was read**, and it is false in the more important
-half: `tiling.py` uses the literal names in **four** places, including `assemble_tile`'s own
-`isel`. **The claim's consequence was the dangerous part** — it would have licensed writing a
-name-based decimation as *"consistent with the existing convention"*, becoming the fifth site,
-and it would have recorded a pre-existing defect as absent. What replaced it is four file-and-line
-references and a table of the two possible closers.
+half: `tiling.py` uses the literal names in **three functions — six occurrences in all**,
+including `assemble_tile`'s own `isel`. **The claim's consequence was the dangerous part** — it
+would have licensed writing a name-based decimation as *"consistent with the existing
+convention"*, becoming one more site, and it would have recorded a pre-existing defect as absent.
+What replaced it is the file-and-line references and a table of the two possible closers.
+
+> **AND THIS PASSAGE CARRIED ITS OWN UNCOUNTED NUMBER UNTIL 2026-09-12.** It said ~~four~~ places,
+> as did five other sites, because the entry that replaced the false *"checked"* enumerated three
+> call sites and then wrote *"four"* above them. **The sentence that demanded the grep was itself
+> quoting a figure nobody had counted** — which is the same failure one level up, and is why the
+> rule below is about the word doing the work rather than about that particular claim. **Cite such
+> a defect by FUNCTION: the by-line form has drifted the record twice and the by-function form
+> never has.**
 
 **The tell is the word doing the work.** *"Checked"*, *"verified"*, *"confirmed"* and
 *"already handled"* in one's own document are exactly where to demand the grep, because they are
@@ -2153,6 +2161,40 @@ D9's fixed-boundary rule forbids one level down.
 recorded per point, with the rung's parameters beside it, before any rung runs. **The same
 discipline as sourcing the plausibility values before the first fit**: in both cases the guard is
 not "do not tune", which is unenforceable, but "publish the thing that tuning would move".
+
+### (j7b) A RATE OVER A POPULATION THE RUN ITSELF WROTE INTO MEASURES THE RUN'S DECISION
+
+> **Where a run acts on a measurement and records the action in the same field the measurement is
+> computed from, the later measurement reports the action.** Check every rate's population for
+> outcomes the run itself assigned.
+
+**(j7)'s cousin, one level up.** (j7) is about a *treatment* moving a unit between strata; this is
+about a *decision* writing its own verdict into the field the verdict will later be read from. The
+strata are fine; the population is contaminated.
+
+**The worked case, 2026-09-12, found in 2e's brainstorm before the mechanism existed.** §14.1's
+early abort demotes a candidate that failed above threshold on pass 1 and writes
+`CANDIDATE_DROPPED` across every remaining point. §14.2's report then computes that candidate's
+failure rate **from the stored status arrays** — the same arrays the drop wrote into. So:
+
+1. the candidate fails **91%** of a coarse pass, which is the evidence;
+2. it is dropped, and the drop is recorded at every remaining point;
+3. the end-of-run rate reads **~100%**, which is the decision.
+
+**The reported number is larger than the evidence that produced it, and it is not a measurement of
+the candidate at all.** Worse than merely wrong: **the figure that looks like the strongest
+evidence is the one carrying the least**, so the contamination makes the claim more persuasive
+rather than less.
+
+**The repair is a classification, not an arithmetic fix.** A code the run assigns *because the run
+chose not to fit* is a **decided skip** — eligible, not a failure — and is reported in its own row
+with its own denominator, *points where the candidate was still live*. `SCREENED_OUT` was already
+classified that way; `CANDIDATE_DROPPED` was not, **and nothing noticed because nothing produced
+it**. Which is the second half of this entry:
+
+> **A classification that has never been exercised is a classification that has never been
+> checked.** Its first producer is its first audit, and that is the moment to look — not the moment
+> to trust the label.
 
 ### (h3) CHECK EVERY STRATUM BOUNDARY AGAINST THE FILTERS THE POPULATION HAS ALREADY PASSED THROUGH
 

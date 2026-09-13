@@ -1,6 +1,6 @@
 # Phase 2e — the run's own honesty
 
-**Status: AWAITING REVIEW. No code yet.** The head of
+**Status: APPROVED 2026-09-12, with four amendments applied. Task 0 in progress; no production code yet.** The four are recorded where they land rather than in a list here: Task 1's unreachability window is now a **test** and Task 6 inverts it; Task 2 states the handover that destroys Task 1's control; Task 0 records the one-pass gap as **open with a named owner** and Task 6 writes the answer; and Task 5 **defines** the policy vocabulary Task 6 binds against, so the coupling runs one way. The head of
 [`PROGRESS.md`](../../../PROGRESS.md) is the single source for this plan's status; when it and
 this line disagree, the head is right and this line is stale. Same shape as the 692/693 test
 count and the 2b table that said *"awaiting review"* for four days after approval.
@@ -180,41 +180,64 @@ controlled — and measured a **different thing present**: 34% of points selecti
 entirely by dropout, start-dependent. A report emphasising the first would emphasise what this
 project has shown does not happen, while the thing it did measure has no headline at all.
 
-**D15 — contention is derivable, so no schema change.** `n_valid` counts **fits**; contention
-counts **rankable** fits, and `criteria.py:349–351` makes them deliberately different — a fit can
-succeed with a non-finite criterion value (AICc at `n ≤ k+1`) and is *"ranked last, not
-reclassified as a failure"*. So **`n_valid == 1` is not "the selection was forced"** and
-**`n_valid == 0` is not "no survivor"**. All three facts are already reachable:
+**D15 — contention is derivable, so no schema change.** **Three distinct quantities answer to the
+word *selectability*, and the finding that they are three is (h4) in
+[the pre-flight](../notes/phase2e-preflight.md); the specification of all three — sources,
+granularity and denominators — is design doc §14.2 as of Task 0. Neither is restated here**, because
+a §14 figure has had two copies in this project before and they drifted.
 
-| quantity | where | granularity |
-|---|---|---|
-| fits | `/selection/n_valid`, stored | criterion-independent |
-| contention | `count(isfinite(/selection/delta_ic))` over `m` | **per criterion** |
-| no winner | `/selection/selected == -1` (`-2` is `SELECTED_UNSET`) | per criterion |
+What is this plan's and nobody else's is **why the section costs no schema change**:
+`isfinite(delta_ic)` **is** `rankable`, since `delta_ic = values − ic_best` and
+`rankable = scored & isfinite(values)`. Contention is therefore derivable from an array already
+stored — no array added, no compat break, and nothing 2a's *"the store cannot change after data
+exists"* has to absorb. **And `/selection/n_valid` currently has zero production readers**:
+`write.py:330` writes it, and the only `n_valid` reader in `src/` is `audit_report.py:355`, which
+reads the **in-memory** `Ranking`. **So 2f adds a reader, not a measurement.**
 
-`isfinite(delta_ic)` **is** `rankable`, because `delta_ic = values − ic_best` and `rankable =
-scored & isfinite(values)`. No array is added, no compat break, and nothing 2a's *"the store cannot
-change after data exists"* has to absorb. **`/selection/n_valid` currently has zero production
-readers** — `write.py:330` writes it and the only `n_valid` reader in `src/` is
-`audit_report.py:355`, which reads the **in-memory** `Ranking`. So 2f adds a reader, not a
-measurement.
-
-**The float32 caveat goes at the derivation, not only in a brief.** `delta_ic` is stored float32,
-so a finite float64 value can overflow to `inf` on write and be miscounted as unrankable. It is a
-claim about the **derived count only**, bounded to catastrophically-bad candidates, and it is
-worth a constructed test rather than a schema change — **a derived quantity with a known failure
-mode carries that mode where it is derived.**
+**The float32 caveat is recorded at §14.2 beside the derivation it qualifies**, per the rule that
+a derived quantity with a known failure mode carries that mode where it is derived — and it is
+2f's to test, with a constructed case rather than a schema change.
 
 ## The corrections this sub-phase owes
 
 Three, all of the same family, and all found by the pre-flight rather than by a test.
 
-1. **`decimate.py:32` says `tiling.py` takes the literal names *"in four places — the span tuples,
-   the `by_dim` lookups and `assemble_tile`'s own `isel`"*.** A count of **four** against an
-   enumeration of **three**, inside one sentence, against **six literal occurrences in three
-   functions** in the tree. **(c): enumerate, never count.** Corrected to name the three functions.
-2. **PROGRESS.md head item 9(a) repeats the "four places" figure.** Corrected at the same time, or
-   the two copies drift — which this project has already paid for.
+1. **THE "FOUR PLACES" CLAIM HAS SIX SITES, AND IT WAS ALREADY CORRECTED ONCE.** The count is four
+   against an enumeration of three inside one sentence, and against **six literal occurrences in
+   three functions** in the tree — `read_amplification` at 904–905, `assembly_spans` at 932–933,
+   `assemble_tile` at 974–975. **(c): enumerate, never count.** **Eight sites**, two of
+   them found only on a second sweep because they phrase the claim differently:
+   `decimate.py:32` · `PROGRESS.md:13` (head item 9(a)) · `PROGRESS.md:5511` · `PROGRESS.md:5970` ·
+   `PROGRESS.md:5978` · `phase2c-preflight.md:581` · `phase2c-preflight.md:599` ·
+   **`tests/test_decimate.py:107`** — plus two carrying the knock-on *"the fifth site"*,
+   `PROGRESS.md:5980` and `phase1-to-phase2-handoff.md:794`, **de-numbered rather than renumbered**
+   because the number is the part that keeps going stale. **All are corrected to name the three
+   functions**, because a by-line citation has already drifted the record twice and a by-function
+   one never has.
+
+   > **AND THE SWEEP ITSELF HAD TO BE WIDENED TWICE, WHICH IS THE ARGUMENT FOR THIS TASK's
+   > DELIVERABLE BEING A TEST RATHER THAN A CORRECTED LIST.** The pre-flight's first pass matched
+   > *"four places"* and *"four sites"* and returned six; two sites phrase the identical claim
+   > without either string. **A corrected list is a ninth site.** The enumeration test reads
+   > `tiling.py` and fails when the occurrence count moves, so the number has exactly one home and
+   > every prose mention becomes a pointer rather than a copy.
+
+   > **TWO OF THE SIX CARRY A SECOND CLAUSE THAT IS STILL TRUE, AND THE TWO HALVES MOVE AT
+   > DIFFERENT TASKS.** `decimate.py:32` and `tests/test_decimate.py:107` each say *"the literal
+   > names in four places"* **and** *"so a run over this input still fails in assembly"*. **The
+   > count is wrong today and Task 0 fixes it; the consequence is RIGHT today and Task 2 fixes
+   > it.** Splitting them is not pedantry: correcting the consequence at Task 0 would make the tree
+   > claim the defect is closed while it is open, and correcting the count at Task 2 would leave a
+   > known-false number standing for three tasks. **Each half moves at the task that makes it
+   > false.**
+2. **AND THE CORRECTION IS NOT NEW, WHICH IS THE MORE INSTRUCTIVE HALF.**
+   `realdata-spike-preflight.md:66` made it on **2026-09-07** — *"six literal occurrences at three
+   call sites today, at lines 904, 905, 932, 933, 974, 975"* — and **five sites still said four
+   five days later.** This is not a fresh (c) finding; it is a **finding that was already made and
+   did not propagate**, which is a different and worse failure. **A correction recorded only where
+   it was found is not a correction; it is a second version of the claim.** Task 0 therefore writes
+   the propagation fact beside the number, so the next reader learns the failure mode and not only
+   the count.
 3. **PROGRESS.md's phase table 2e row says 2e owns "`metamer report`".** It is **the only one of the
    four documents that names 2e**, and it is right about ownership and loose about scope. **Amended
    to name which half** — 2e owns the run-time half of §14; 2f owns §14.2's computation and
@@ -248,7 +271,9 @@ rather than a feature.
 ## Standing requirements for every task
 
 - **Run the pre-flight against the task brief before code**, and append the entry to
-  `phase2e-preflight.md` **before** the task, not after. The method lives in exactly one place —
+  [`phase2e-preflight.md`](../notes/phase2e-preflight.md) **before** the task, not after. **It has
+  already paid**: Task 0's entry found the correction list was a third of its true size and that the
+  same correction had been made five days earlier and had not propagated. The method lives in exactly one place —
   [the handoff](../notes/phase1-to-phase2-handoff.md) §1 — and is not restated here.
 - **`pixi run test` is the full sweep and every end-of-task verification runs it.** `test-fast` and
   `test-ci` are not evidence; the full sweep has caught eight things a fast run could not.
@@ -280,7 +305,7 @@ rather than a feature.
 | 2 | the tiling closer — positional throughout | 1 | pending |
 | 3 | `CANDIDATE_DROPPED` joins the decided skips | 0 | pending |
 | 4 | the live counters — point-granularity, display-only, plain lines | — | pending |
-| 5 | the abort verdict — a pure function of a pass-1 store | — | pending |
+| 5 | the abort verdict — a pure function of a pass-1 store | — (**defines** the policy vocabulary and the dropped-candidate set Task 6 binds against) | pending |
 | 6 | the abort action, the `CANDIDATE_DROPPED` producer, and the one-pass decision | 3, 5 | pending |
 | 7 | the 2e exit-criteria suite | all | pending |
 
@@ -303,8 +328,13 @@ changes either.
   measured §11.2's fear absent and a different thing present, and a report emphasising the first
   would emphasise what this project has shown does not happen. **The three quantities and their
   denominators are named**; the implementation is 2f's.
-- **§14.1 gains the resolution of its own display sentence** (D12) and, once Task 6 takes it, the
-  one-pass limitation.
+- **§14.1 gains the resolution of its own display sentence** (D12), and — **as an OPEN question
+  with a named owner, not as an answer** — the one-pass gap: *§14.1 evaluates the abort on pass 1,
+  a one-pass run has no pass 1, and what such a run does is decided at 2e's Task 6.* **Task 0 does
+  not take the decision and must not appear to.** Task 6 replaces the open note with the answer it
+  takes. **This is deliberate and the alternative was rejected:** a plan where an early task
+  documents a decision a later task takes is the shape that produces a stale document, and §14.1
+  stays honest at every point this way rather than only at the end.
 - **§14.3 gains `INTERNAL_ERROR`** as intent, with the collision it closes stated.
 - **D9's rule goes to the handoff §1**, with its worked instance. **Not restated in PROGRESS.md.**
 
@@ -343,9 +373,11 @@ crash that is real today.
 **Invariants.**
 
 - **The six codes are the six the taxonomy names**, enumerated member by member, never counted.
-- **`COMPLETED_WITH_FAILURES` still has no producer after this task.** It acquires one at Task 6.
-  Until then any observed 1 is still a crash — but now a crash exits `INTERNAL_ERROR`, so an
-  observed 1 is a **defect in this task**, which is a stronger statement than the one it replaces.
+- **`COMPLETED_WITH_FAILURES` IS UNREACHABLE BY CONSTRUCTION BETWEEN THIS TASK AND TASK 6, AND
+  THAT IS ASSERTED RATHER THAN NOTED.** It acquires its producer at Task 6. Until then a crash
+  exits `INTERNAL_ERROR`, so **an observed 1 is a defect in this task** — a stronger statement than
+  the one it replaces, and one that only holds inside this window. **This is the only period in the
+  project's history in which the assertion can be made, so it is made.**
 
 **Interfaces** (Tasks 6 and 7 bind against these):
 
@@ -372,6 +404,14 @@ crash that is real today.
 - *A `ValidationError` still exits 3 and an `InputContractError` still exits 4.* Catches a catch-all
   placed above the staged clauses, which would collapse the whole taxonomy into one code and pass
   every test that only checks the new one.
+- ***Exit 1 is unreachable: every failing path is run and none produces it.*** The window invariant
+  as an assertion. Catches a path that reaches `COMPLETED_WITH_FAILURES` before anything is
+  supposed to produce it — which, in a taxonomy where 1 has just stopped meaning *crash*, would
+  make the store's most misleading exit code reachable with nobody's intent behind it. **Cheap: it
+  runs the paths the other tests already construct and asserts one thing about all of them.**
+- **Task 6 inverts this exact test**, and the inversion is named here so the pair is visible from
+  either end: after Task 6, exit 1 **is** reachable, **and only from the threshold path.** A test
+  that flips from *"never"* to *"only from here"* is a stronger guard than either half alone.
 
 ---
 
@@ -395,6 +435,23 @@ end to end.
   the input.
 - **Nothing renames the input.** The geometry fingerprint continues to record the names the source
   file has.
+- **THIS TASK OWNS THE (a6) SWEEP FOR THE DESCRIPTIONS THAT SURVIVE THE FIX**, and the sweep is
+  Task 2's rather than Task 0's **because these descriptions are TRUE until this task lands** —
+  correcting them at Task 0 would make the tree claim the defect is closed while it is open. **This
+  task takes the CONSEQUENCE clauses only; Task 0 has already taken the COUNT in the same two
+  sentences.** Two known sites, and the sweep is not limited to them:
+  **`tests/test_decimate.py:106–108`**, whose docstring says *"this asserts the decimation, not
+  end-to-end support… a run over this input still fails in assembly"* — **sitting in a test, where a
+  stale comment reads as a specification of current behaviour and nothing that runs contradicts
+  it** — and **`decimate.py`'s module docstring**, whose *"THAT DOES NOT MEAN SUCH AN INPUT WORKS
+  END TO END"* paragraph becomes false at the same moment. **The two closers it names are no longer
+  open, and the paragraph says which one was taken and why.**
+- **THIS TASK DESTROYS TASK 1's POSITIVE CONTROL, AND THE HANDOVER IS A PRECONDITION ON LANDING
+  IT.** `tiling.py`'s `KeyError('y')` is the live producer Task 1's catch-all was verified against;
+  after this task it does not exist. **Task 1's constructed replacement, with its dated provenance,
+  must already be green before this task lands.** Stated here and not only at Task 1, because a
+  reader who opens only Task 2 sees an ordering with no reason attached — and that is how the
+  ordering gets reversed later by someone optimising for the shorter diff.
 
 **Invariants.**
 
@@ -423,6 +480,10 @@ end to end.
   which would give a plausible wrong number rather than an error.
 - *The enumeration test from Task 0 now finds zero name-dependent sites.* Catches the correction
   being applied to the documents and not to the tree.
+- *`tests/test_decimate.py`'s lat/lon test asserts the run completes end to end, not merely that the
+  decimation is right.* **The stale caveat turned into coverage rather than deleted.** Catches the
+  (a6) sweep being done with a text editor — the sentence removed and the weaker assertion left
+  standing, which reads as a fixed comment on an unfixed test.
 
 ---
 
@@ -524,7 +585,10 @@ failed — and the rule that decides that is written down where the next member 
   candidate set named.
 - **Thresholds are calibrated to catch bugs, not to second-guess science.** All candidates above 90%
   failure → **abort**, a config or data error. A single candidate above 90% → **abort by default**,
-  subject to the policy Task 6 wires.
+  subject to the policy — **whose vocabulary is defined HERE, not at Task 6.** The verdict cannot
+  choose between `abort` and `drop` without it, so `{abort, drop, continue}` is part of this task's
+  interface and Task 6 **binds its CLI flag against it**. **Task 5 therefore ships with no
+  dependency on Task 6**, and the coupling runs one way only.
 - **The rate is `Outcome.is_failure` over `Outcome.is_eligible`**, the definitions already shipped
   and already consumed by `audit_report.py:556–568`. **2e does not invent a second one.**
 - **The verdict names its own numbers** — per candidate: the failure count, the eligible
@@ -546,7 +610,11 @@ failed — and the rule that decides that is written down where the next member 
     class AbortVerdict: action: Literal["continue", "abort", "drop"];
                         candidates: tuple[str, ...]; rates: tuple[CandidateRate, ...];
                         threshold: float; reason: str
-    abort_verdict(pass1_store, *, threshold, policy) -> AbortVerdict
+    class CandidateFailurePolicy(StrEnum): ABORT; DROP; CONTINUE
+    abort_verdict(pass1_store, *, threshold, policy: CandidateFailurePolicy) -> AbortVerdict
+
+**`AbortVerdict.candidates` is also the dropped-candidate set Task 6's `run()` accepts.** Both
+types are defined at this task; nothing in this task's signature is defined by Task 6.
 
 **Tests, and the bug each catches.**
 
@@ -594,8 +662,10 @@ run's behaviour is decided rather than accidental.
 - **A SIGTERM during pass 1 still returns without entering the barrier**, with no verdict and no
   pass-2 report. The existing behaviour is unchanged: a preempted run is exit 2, and calling the
   barrier on it would raise a layer-3 error and exit 3.
-- **The one-pass decision is taken here**, from the three readings above, and **whichever is taken is
-  written into §14.1** — because §14.1 currently reads as though every run gets an early abort.
+- **The one-pass decision is taken here**, from the three readings above, and **whichever is taken
+  replaces Task 0's open note in §14.1** — Task 0 recorded the gap and named this task as its
+  owner; this task writes the answer. §14.1 currently reads as though every run gets an early
+  abort, and it must not still read that way when 2e closes.
 
 **Invariants.**
 
@@ -632,8 +702,12 @@ run's behaviour is decided rather than accidental.
   whole point of Task 1 is that they are different facts. Catches the collision being reintroduced
   by a later catch clause.
 - *A SIGTERM during pass 1 exits `ABORTED_EARLY` with no verdict computed.* Catches the barrier
-  being entered on an incomplete store, which Task 5 raises on and which would surface as exit 3 —
-  *"your configuration is wrong"* for a run that was preempted.
+  being entered on an incomplete store, which Task 5 raises on and which would surface as exit 3.
+  **The failure this catches is a WRONG DIAGNOSIS, not a wrong exit**: 3 means *your configuration
+  is wrong* and tells the operator to go and fix a file, for a run that was merely interrupted and
+  whose correct next action is to re-issue the identical command. **A resumable run reported as a
+  rejected one is the more expensive of the two mistakes**, because the cheap recovery is the one
+  it talks the reader out of.
 - *The one-pass behaviour matches the decision taken, in both directions* — if two-pass-only, a
   one-pass run performs no abort **and says so**; if a probe pass, it runs and its cost is asserted.
   Catches the decision being taken in a document and not in the code.
@@ -667,7 +741,8 @@ criterion stays **FAILED** and is not quietly re-scoped.
 | 14 | The drop's reported rate names its own denominator and excludes the dropped points | the row, and the denominator beside it |
 | 15 | `--no-early-abort` changes the decision and not the computation | the two stores, byte-for-byte |
 | 16 | `COMPLETED_WITH_FAILURES` and `INTERNAL_ERROR` are produced by different events | both exit codes, in one test |
-| 17 | A one-pass run's abort behaviour is the decided one, and §14.1 states it | the run's behaviour, **and the design doc's own sentence** |
+| 17 | Exit 1 is reachable, **and only from the threshold path** | the inversion of Task 1's unreachability test, **both directions** |
+| 18 | A one-pass run's abort behaviour is the decided one, and §14.1 states it | the run's behaviour, **and the design doc's own sentence** — with Task 0's open note **replaced**, not merely accompanied |
 
 **Two criteria are inherited rather than new, and 2e does not close them.**
 

@@ -578,11 +578,14 @@ spatial dims are named something else — the first such fixture in the project.
 
 **The first draft of this entry said "checked: `assemble_tile` and `geometry_components` index
 positionally, so the exposure is the decimation this task adds". That was wrong, and it was
-written before the code was read.** `tiling.py` uses the literal names in four places:
+written before the code was read.** `tiling.py` uses the literal names in **three functions, six occurrences in all** — **corrected
+2026-09-12 from "four places", which disagreed with the enumeration printed directly beneath it.
+This entry is where the count originated, and it was self-contradicting on the day it was
+written.** The `isel` line was also cited one line high and is corrected with it:
 
-    tiling.py:904-905   ("y", tile.y_start, tile.y_stop), ("x", tile.x_start, tile.x_stop)
-    tiling.py:932-933   _aligned_spans(..., by_dim["y"]) / by_dim["x"]
-    tiling.py:973-974   array.isel(y=slice(...), x=slice(...))
+    read_amplification   tiling.py:904-905   ("y", tile.y_start, ...), ("x", tile.x_start, ...)
+    assembly_spans       tiling.py:932-933   _aligned_spans(..., by_dim["y"]) / by_dim["x"]
+    assemble_tile        tiling.py:974-975   array.isel(y=slice(...), x=slice(...))
 
 **So the whole tiling and assembly path already requires the spatial dims to be literally `y` and
 `x`, while stage 4a accepts any names as long as `time` is first.** An input with
@@ -596,9 +599,9 @@ choosing between them is a scope decision:
 | closer | cost | what it says the contract is |
 |---|---|---|
 | **stage 4a enforces the names** | one refusal, one message | the contract is `("time", "y", "x")` literally, and the docstring's *"mapping to"* is the thing that is wrong |
-| **the tiling path goes positional** | four sites plus fixtures | the contract is positional as written, and `tiling.py` is the thing that is wrong |
+| **the tiling path goes positional** | three functions, six occurrences, plus fixtures | the contract is positional as written, and `tiling.py` is the thing that is wrong |
 
-**What Task 2 controls is not adding a fifth site**, so the decimation reads `array.dims[1]` and
+**What Task 2 controls is not adding ANOTHER site**, so the decimation reads `array.dims[1]` and
 `array.dims[2]`. That is the correct arithmetic under either closer and changes nothing for a
 `y`/`x` input, so it neither pre-empts the decision nor widens the exposure. **It does not make
 `latitude`/`longitude` inputs work** — tiling still refuses them — and this entry says so, because

@@ -29,14 +29,17 @@ the first input that does not. This one reads `array.dims[1]` and `array.dims[2]
 
 **THAT DOES NOT MEAN SUCH AN INPUT WORKS END TO END, AND THE HONEST STATEMENT IS
 HERE RATHER THAN IN A COMMIT MESSAGE.** `tiling.py` takes the literal names in
-four places -- the span tuples, the `by_dim` lookups and `assemble_tile`'s own
-`isel` -- so an input named otherwise still fails, deep in assembly, with a raw
-`xarray` error rather than the staged `InputContractError` that `input.py`
-requires of every stage-4a failure. **That is a pre-existing defect with two
+three functions -- `read_amplification`'s span tuples, `assembly_spans`'s
+`by_dim` lookups and `assemble_tile`'s own `isel` -- six occurrences in all.
+**Corrected 2026-09-12 from "four places", which disagreed with its own
+enumeration of three.** So an input named otherwise still fails, deep in
+assembly, with a raw `xarray` error rather than the staged
+`InputContractError` that `input.py` requires of every stage-4a failure. **That is a pre-existing defect with two
 possible closers** -- stage 4a enforces the names, or the tiling path goes
 positional -- **and choosing between them was not this task's decision.** What is
-in this module's control is not becoming the fifth site, which is why the
-arithmetic here is correct under either closer.
+in this module's control is not becoming ANOTHER site -- stated without a
+number, because the number is the part that has already gone stale twice --
+which is why the arithmetic here is correct under either closer.
 """
 
 from __future__ import annotations
