@@ -185,3 +185,87 @@ lands, and correcting it now would make the tree say the defect is closed while 
 Recorded here so the sweep is a task requirement rather than something noticed later. The plan's
 Task 2 gains it, and the same sweep covers `decimate.py`'s module docstring, whose *"THAT DOES NOT
 MEAN SUCH AN INPUT WORKS END TO END"* paragraph becomes false at the same moment.
+
+---
+
+## Plan Task 1 — `INTERNAL_ERROR` and the catch-all, audited before any code (2026-09-12)
+
+**THE BRIEF** is the plan's Task 1: append `INTERNAL_ERROR` to `ExitCode`, add a catch-all in
+`__main__`, keep the staged catches' precedence, and assert that exit 1 is unreachable until Task 6.
+**Five findings, and the first two change where the catch-all goes.**
+
+### (c) ENUMERATE THE EXIT PATHS — AND THE EXISTING `try` COVERS ONLY A THIRD OF `main`
+
+**`main()`'s exit paths, enumerated rather than counted:**
+
+| # | path | code today |
+|---|---|---|
+| 1 | argparse usage error → `_Parser.error` | `SystemExit(3)` |
+| 2 | `--version` / `--help` | `SystemExit(0)` |
+| 3 | `--two-pass` with `--reuse-fits-from` → `parser.error` | `SystemExit(3)` |
+| 4 | two-pass, pass 1 stopped short, pass 2 never started | `return ABORTED_EARLY` |
+| 5 | staged failure → `exit_code_for(error)` | `return` 3 or 4 |
+| 6 | `report.interrupted` after a full pass | `return ABORTED_EARLY` |
+| 7 | clean | `return OK` |
+| 8 | **anything else — propagates out of `main`, `sys.exit(main())` never runs** | **Python's 1** |
+| 9 | **`TypeError` from `exit_code_for` raised INSIDE the `except` clause** | **Python's 1** |
+
+**THE FINDING: `try` STARTS AT `run` AND ENDS AT THE `except`. EVERYTHING AFTER IT IS UNPROTECTED.**
+The identifiability warnings, the budget and calibration warnings, the whole printed report block,
+`max(warm.radius_histogram, default=0)`, the `init_rungs` join and the `report.interrupted` branch
+are **all outside it** — roughly seventy lines, and precisely the lines that format values computed
+elsewhere.
+
+**So the catch-all must WRAP `main`'s body, not extend the existing `except` clause.** Appending
+`except Exception` to the existing `try` is the obvious edit, it type-checks, it passes a test that
+crashes inside `run`, **and it leaves every reporting path exiting 1.** **Nest, don't append.**
+
+### (c2) THE STAGED HANDLER HAS ITS OWN CRASH PATH, WHICH IS PATH 9
+
+`exit_code_for` is documented to **raise `TypeError` if the exception is not one of the staged
+types**, and it is called *from inside* `except (ValidationError, InputContractError)`. An
+exception raised in an except clause propagates. **The handler for the honest failures can itself
+crash**, and only an outer `try` sees it. (c2) asks whether dispatching on exception type actually
+discriminates; here it does, and the discriminator is the thing that can fail.
+
+### (k2) THE CATCH MUST BE `Exception`, NEVER `BaseException` — AND THE VOCABULARY SAYS WHY
+
+`_Parser.error` raises **`SystemExit(ExitCode.CONFIG_INVALID)`** and `--version` raises
+`SystemExit(0)`; both are `BaseException`, not `Exception`. **A catch-all on `BaseException` would
+convert `--version` into an internal error and swallow `KeyboardInterrupt`** — turning the two
+paths that work correctly today into the one code that means *the run did not finish*. The narrow
+catch is not a stylistic preference here; it is what keeps paths 1–3 intact.
+
+### WHERE IT GOES: INSIDE `main`, NOT AT `if __name__ == "__main__"`
+
+Both placements produce the right exit code. The tiebreaker is `main`'s own docstring — *"Returns:
+One of `ExitCode`"* — which is **false today** for paths 8 and 9 and stays false under the
+call-site placement. Wrapping `main`'s body makes the docstring true, keeps `sys.exit(main())`
+trivial, and leaves the behaviour reachable from an in-process call as well as a subprocess.
+**The traceback is still printed explicitly**, so the code carries the fact and the traceback
+carries the detail — (i2): an absence is not a signal, so the detail must be emitted rather than
+merely permitted.
+
+### (k2) WHERE IT IS TESTED IS ALREADY DECIDED, AND THE RECORD SAYS SO
+
+`tests/test_runner.py`'s module docstring: *"**An exit code is a property of a PROCESS**, so every
+exit-code assertion runs `python -m metamer` in a subprocess and reads `returncode`. Calling
+`main()` in-process tests the mapping function — worth doing, and not the same claim: `sys.exit`
+semantics, argparse's own exits **and an unhandled traceback** are all invisible to an in-process
+call."*
+
+**This was written before 2e existed and it decides Task 1's test placement without re-deriving
+it.** The live-producer test, the unreachability test and the staged-precedence test are all
+**subprocess** tests. An in-process `main()` call may test the mapping and must not be the evidence
+for any exit code.
+
+### (i2) "EVERY FAILING PATH" IS UNBOUNDED UNTIL IT IS ENUMERATED
+
+The plan's unreachability test says *"every failing path is run and none produces 1."* **Without
+the table above that sentence has no stopping condition**, and a test satisfying it with two paths
+would read identically to one satisfying it with seven. **The test runs paths 1, 3, 5 (both codes),
+4 and 6** — the reachable non-zero paths — and asserts none returns 1. Paths 8 and 9 are the ones
+being closed; path 2 and path 7 are not failures.
+
+**And the test is expected to invert at Task 6**, where path 8's code becomes reachable *only* from
+the threshold. The pair is named at both ends so neither half is edited alone.

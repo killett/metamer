@@ -363,11 +363,30 @@ crash that is real today.
 
 - **`ExitCode` gains `INTERNAL_ERROR`** at the next free value, **appended** — no member is
   renumbered, because the numbers are a published interface a shell script may already branch on.
-- **`__main__` gains a catch-all** that maps any exception not already staged to `INTERNAL_ERROR`,
-  **and the traceback is still printed.** A traceback can be suppressed and an absence is not a
-  signal — (i2) — so the code carries the fact and the traceback carries the detail.
+- **`__main__` gains a catch-all that WRAPS `main`'s BODY — it does not extend the existing `try`.**
+  **(c), from the pre-flight:** the existing `try` starts at `run` and ends at its `except`, so the
+  identifiability warnings, the budget and calibration warnings, the entire printed report block,
+  `max(warm.radius_histogram, default=0)`, the `init_rungs` join and the `report.interrupted` branch
+  — about seventy lines, and exactly the lines that format values computed elsewhere — **are outside
+  it.** Appending `except Exception` to the existing `try` is the obvious edit, it type-checks, it
+  passes a test that crashes inside `run`, **and it leaves every reporting path exiting 1.**
+  **Nest, don't append.**
+- **It catches `Exception`, NEVER `BaseException`.** `_Parser.error` raises
+  `SystemExit(ExitCode.CONFIG_INVALID)` and `--version` raises `SystemExit(0)`; both are
+  `BaseException`. **A `BaseException` catch-all would turn `--version` into an internal error and
+  swallow `KeyboardInterrupt`** — converting the paths that work correctly today into the one code
+  that means *the run did not finish*.
+- **It goes inside `main`, not at `if __name__ == "__main__"`.** Both give the right exit code; the
+  tiebreaker is `main`'s own docstring, *"Returns: One of `ExitCode`"*, which is **false today** and
+  stays false under the call-site placement.
+- **The traceback is still printed.** A traceback can be suppressed and an absence is not a
+  signal — (i2) — so the code carries the fact and the traceback carries the detail, and the detail
+  is **emitted** rather than merely permitted.
 - **The staged catches keep precedence.** `ValidationError` and `InputContractError` continue to
-  produce 3 and 4; the catch-all is the last clause, never the first.
+  produce 3 and 4; the catch-all is the outer clause, never the inner one. **And the staged handler
+  has its own crash path — (c2):** `exit_code_for` is documented to raise `TypeError` on a
+  non-staged type and is called *from inside* that `except` clause, so **the handler for the honest
+  failures can itself crash**, and only an outer `try` sees it.
 - **Argparse's usage error keeps exiting `CONFIG_INVALID`.** `_Parser.error` is unchanged.
 
 **Invariants.**
@@ -384,7 +403,11 @@ crash that is real today.
     class ExitCode(IntEnum): OK; COMPLETED_WITH_FAILURES; ABORTED_EARLY;
                              CONFIG_INVALID; DATA_INVALID; INTERNAL_ERROR
 
-**Tests, and the bug each catches.**
+**Tests, and the bug each catches.** **All exit-code assertions run in a SUBPROCESS**, which
+`tests/test_runner.py`'s module docstring already decided before 2e existed: *"an exit code is a
+property of a PROCESS… `sys.exit` semantics, argparse's own exits and an unhandled traceback are
+all invisible to an in-process call."* An in-process `main()` call may test the mapping and is not
+evidence for any code.
 
 - ***The live producer, before Task 2 closes it.*** A run against a `latitude`/`longitude` store
   exits `INTERNAL_ERROR` and prints a traceback naming `tiling.py`. **This is the positive
@@ -405,7 +428,11 @@ crash that is real today.
   placed above the staged clauses, which would collapse the whole taxonomy into one code and pass
   every test that only checks the new one.
 - ***Exit 1 is unreachable: every failing path is run and none produces it.*** The window invariant
-  as an assertion. Catches a path that reaches `COMPLETED_WITH_FAILURES` before anything is
+  as an assertion. **"Every failing path" is enumerated in the pre-flight and is not left to
+  judgement** — argparse usage error · the `--two-pass`/`--reuse-fits-from` refusal · a staged
+  failure at each of its two codes · two-pass pass-1 preemption · single-pass preemption. Without
+  the enumeration the sentence has no stopping condition, and a test satisfying it with two paths
+  reads identically to one satisfying it with six. Catches a path that reaches `COMPLETED_WITH_FAILURES` before anything is
   supposed to produce it — which, in a taxonomy where 1 has just stopped meaning *crash*, would
   make the store's most misleading exit code reachable with nobody's intent behind it. **Cheap: it
   runs the paths the other tests already construct and asserts one thing about all of them.**
