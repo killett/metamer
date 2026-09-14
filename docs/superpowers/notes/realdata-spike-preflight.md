@@ -66,7 +66,10 @@ a disagreement is a defect to report either way:
 - **`tiling.py`'s "four places" is six literal occurrences at three call sites today**, at lines
   904, 905, 932, 933, 974, 975; the record cites the `isel` at 973. That is line drift from later
   edits, not a substantive disagreement, and the record's claim — *the spatial dims must be
-  literally `y` and `x`* — holds exactly as written.
+  literally `y` and `x`* — held exactly as written **on 2026-09-07, and is CLOSED as of 2026-09-13
+  (2e Task 2): the path is positional and the count is zero.** This entry was the first site to
+  correct the "four places" figure, and **five other sites still said four five days later** — the
+  reason 2e's Task 0 made the number a test rather than a corrected list.
 
 ---
 
@@ -232,6 +235,12 @@ exception and **CPython exits 1**.
 > as *"harmless while 1 has no producer"*. **The first is a producer of the second.** It is
 > reachable today, by a user pointing the shipped CLI at an ordinary `latitude`/`longitude`
 > product — which is the one input the whole package exists for.
+>
+> **BOTH CLOSED 2026-09-13 BY 2e's TASKS 1 AND 2, AND THIS PARAGRAPH IS WHY THEY WERE SEQUENCED
+> THAT WAY.** Task 1 gave the crash its own code and Task 2 made the tiling path positional, **in
+> that order, because they compose**: this defect was the only live producer of an unhandled
+> exception the project had, so it was the positive control Task 1's catch-all was verified
+> against — and Task 2 destroyed it. Kept in its own tense.
 
 > ## MEASURED, 2026-09-07 — AND THE READING WAS RIGHT ABOUT THE MECHANISM AND ONE LINE OUT
 >

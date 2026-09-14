@@ -787,11 +787,7 @@ def create_store(
 
     coordinates = noise_param_coordinates(specs)
     labels = tuple(model_label(spec) for spec in specs)
-    spatial = {
-        axis: values
-        for axis, values in _spatial_values(attrs).items()
-        if len(values) in {shape.n_y, shape.n_x}
-    }
+    spatial = _spatial_values(attrs, n_y=shape.n_y, n_x=shape.n_x)
 
     root = zarr.create_group(store=str(destination))
     root.attrs.update({key: attrs[key] for key in sorted(attrs)})
@@ -917,24 +913,86 @@ def _write_axis_labels(
             )
 
 
-def _spatial_values(attrs: Mapping[str, Any]) -> dict[str, list[float]]:
-    """Read the grid coordinate values out of the provenance components.
+def _spatial_values(
+    attrs: Mapping[str, Any], *, n_y: int, n_x: int
+) -> dict[str, list[float]]:
+    """Read the grid coordinate values, keyed by THIS STORE's axis names.
 
     **One source, not two.** The values are already in `geometry_components`,
     which the fingerprint is computed from, so taking them from anywhere else
     would let the store's coordinates disagree with the geometry its `fit_hash`
     rests on.
 
+    **THE KEYS ARE THE STORE's, NOT THE INPUT's, AND THAT IS A CORRECTION
+    (2026-09-12).** `geometry_components["spatial_coordinates"]` is keyed by the
+    INPUT's dimension names, which is right for provenance -- the fingerprint
+    must record what the source file actually says. But every data array in this
+    store declares `dimension_names = ("y", "x", ...)`, the store's own schema,
+    so writing the coordinates under the input's names leaves the data's axes
+    **with no coordinates at all** and the coordinates attached to nothing. On a
+    `latitude`/`longitude` input that store opens as FIVE dimensions rather than
+    three, and a reader of `outcome(y, x, m)` cannot say where any point is.
+
+    **This is a latent defect made reachable rather than a new one.** It has been
+    here since 2a; nothing reconciled the two namings because no input could
+    produce a store with different ones -- every fixture used `("time", "y",
+    "x")`, and anything else crashed in the tiling path. **A schema that has
+    never been exercised has never been checked**, and 2e's Task 2 is the first
+    thing that exercises it.
+
+    **THE MAPPING IS POSITIONAL, AND THE PREVIOUS LENGTH TEST WAS NOT.** The
+    caller used to keep an axis when `len(values)` matched `n_y` or `n_x`, which
+    **cannot tell the two axes apart on a square grid** and therefore answered a
+    positional question with a coincidence -- the same fault this sub-phase just
+    removed from `tiling.py`, one module over. The input's own dimension order
+    is in `geometry_components`, so position is available and is used: `dims[1]`
+    is this store's `y` and `dims[2]` is its `x`.
+
     Args:
         attrs: Root provenance.
+        n_y: Rows the store declares.
+        n_x: Columns the store declares.
 
     Returns:
-        Axis name to its values; empty when the input declares no grid
-        coordinates, which is legal and is recorded in attrs.
+        `"y"` and/or `"x"` to their values. Empty when the input declares no
+        grid coordinates, which is legal and is recorded in attrs; an axis whose
+        coordinate length disagrees with the store's extent is omitted rather
+        than written under a name it does not describe.
     """
     components = attrs.get("geometry_components", {})
-    spatial = components.get("spatial_coordinates", {}) if components else {}
-    return {str(axis): list(values) for axis, values in spatial.items()}
+    if not components:
+        return {}
+    by_input_name = components.get("spatial_coordinates", {}) or {}
+    input_dims = _input_dims(components)
+
+    written: dict[str, list[float]] = {}
+    for axis, extent, position in (("y", n_y, 1), ("x", n_x, 2)):
+        if position >= len(input_dims):
+            continue
+        values = by_input_name.get(str(input_dims[position]))
+        if values is None or len(values) != extent:
+            continue
+        written[axis] = list(values)
+    return written
+
+
+def _input_dims(components: Mapping[str, Any]) -> tuple[str, ...]:
+    """The fitted variable's dimension names, in the input's own order.
+
+    Args:
+        components: The geometry fingerprint's parts.
+
+    Returns:
+        The dimension names, or empty when the components do not carry them.
+    """
+    arrays = components.get("arrays", {}) or {}
+    variables = components.get("variable", []) or []
+    for name in (*variables, *sorted(arrays)):
+        entry = arrays.get(str(name), {})
+        dims = entry.get("dims") or ()
+        if len(dims) == 3:
+            return tuple(str(dim) for dim in dims)
+    return ()
 
 
 def _create_completion(root: zarr.Group, shape: StoreShape) -> None:

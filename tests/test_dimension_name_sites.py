@@ -1,9 +1,11 @@
 """The one machine-readable home for "how name-dependent is the input path?".
 
 **THIS FILE EXISTS BECAUSE THE NUMBER LIVED IN PROSE AND DRIFTED.** Eight
-documents stated how many places `tiling.py` requires the spatial dimensions to
-be literally `y` and `x`. All eight said *four*; the tree has said *six, in
-three functions* since before any of them was written. The correction was made
+documents stated how many places `tiling.py` required the spatial dimensions to
+be literally `y` and `x`. All eight said *four*; the tree had said *six, in
+three functions* since before any of them was written. **The count is now ZERO
+-- 2e's Task 2 made the path positional -- and this file is what keeps it
+there.** The correction was made
 once, in `realdata-spike-preflight.md` on 2026-09-07, and **five other sites
 still said four five days later** -- a correction recorded only where it was
 found is not a correction, it is a second version of the claim.
@@ -76,39 +78,35 @@ def _source_of(module: object) -> str:
     return Path(module.__file__).read_text(encoding="utf-8")  # type: ignore[attr-defined]
 
 
-def test_the_tiling_path_is_name_dependent_in_three_functions_and_six_places():
-    """The enumeration eight documents cite, asserted against the file.
+def test_the_tiling_path_addresses_its_spatial_axes_by_position():
+    """Zero sites. The defect that eight documents described is closed.
 
-    Expected values determined independently: read off `tiling.py` by hand at
-    lines 904-905 (`read_amplification`'s span tuples), 932-933
-    (`assembly_spans`' `by_dim` lookups) and 974-975 (`assemble_tile`'s own
-    `isel` keywords) -- and cross-checked against `realdata-spike-preflight.md`,
-    which arrived at the same six by a separate reading on 2026-09-07.
+    **RENAMED, NOT EDITED, AT 2e's TASK 2 (2026-09-12.)** It was
+    `test_the_tiling_path_is_name_dependent_in_three_functions_and_six_places`
+    and asserted `{"read_amplification": 2, "assembly_spans": 2,
+    "assemble_tile": 2}` -- six occurrences at lines 904-905, 932-933 and
+    974-975, hand-counted and cross-checked against `realdata-spike-preflight.md`,
+    which reached the same six by a separate reading on 2026-09-07. **A count in
+    a test's NAME is the same hazard as a count in prose**, so the rename is the
+    record of the change rather than a silent edit of the expected value.
 
-    Bug this catches: a fourth name-dependent site added to the tiling path, or
-    one removed, while every prose statement of the figure goes on saying six.
-    That drift has already happened twice by hand, in opposite directions -- the
-    count said four against an enumeration of three, and a line citation aged by
-    one -- which is why the number now has exactly one home.
+    Expected value determined independently: from the contract. Stage 4a
+    requires three dimensions with `time` first and says nothing about the other
+    two names -- its own message calls the contract *"three, mapping to (time,
+    y, x)"* -- so the correct number of literal spatial-name sites downstream of
+    it is zero, and was zero before anybody counted.
 
-    **Enumerated by FUNCTION, never by line.** The by-line form has drifted the
-    record twice; the by-function form never has.
+    Bug this catches: a name-based site reintroduced into the tiling path, which
+    would restore a defect that took two documents' worth of correcting to
+    describe accurately and which fails only on inputs no fixture in this
+    project had until 2e.
 
-    **This assertion is expected to become `{}` when the tiling path goes
-    positional, and that change is the deliverable, not a break.**
-
-    **PROVED TO BITE 2026-09-12, BEFORE BEING RECORDED AS A GUARD** -- (e2)'s
-    converse. Two constructed mutants of `tiling.py`'s source, neither applied
-    to the tree: a fourth name-dependent function appended gives
-    `{..., '_fifth_site': 2}`, and `assembly_spans` made positional drops its
-    key entirely. Both differ from the baseline, so this test fails in each
-    direction rather than only in the one that is easy to imagine.
+    **The `time` lookups are deliberately still here and are not sites.**
+    `time`-first is the contract, `input.py` enforces it, and this module's
+    docstring excludes it by construction -- so this assertion does not go to
+    zero by counting less.
     """
-    assert dimension_name_sites(_source_of(metamer.batch.tiling)) == {
-        "read_amplification": 2,
-        "assembly_spans": 2,
-        "assemble_tile": 2,
-    }
+    assert dimension_name_sites(_source_of(metamer.batch.tiling)) == {}
 
 
 def test_the_enumerator_reads_the_source_it_is_given():

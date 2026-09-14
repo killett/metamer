@@ -578,7 +578,9 @@ spatial dims are named something else — the first such fixture in the project.
 
 **The first draft of this entry said "checked: `assemble_tile` and `geometry_components` index
 positionally, so the exposure is the decimation this task adds". That was wrong, and it was
-written before the code was read.** `tiling.py` uses the literal names in **three functions, six occurrences in all** — **corrected
+written before the code was read.** `tiling.py` uses the literal names in **three functions, six occurrences in all** — **CLOSED
+2026-09-13 at 2e's Task 2: the tiling path is positional and the count is now zero. What follows is
+what it WAS.** **Corrected
 2026-09-12 from "four places", which disagreed with the enumeration printed directly beneath it.
 This entry is where the count originated, and it was self-contradicting on the day it was
 written.** The `isel` line was also cited one line high and is corrected with it:
@@ -599,7 +601,7 @@ choosing between them is a scope decision:
 | closer | cost | what it says the contract is |
 |---|---|---|
 | **stage 4a enforces the names** | one refusal, one message | the contract is `("time", "y", "x")` literally, and the docstring's *"mapping to"* is the thing that is wrong |
-| **the tiling path goes positional** | three functions, six occurrences, plus fixtures | the contract is positional as written, and `tiling.py` is the thing that is wrong |
+| **the tiling path goes positional** — **TAKEN 2026-09-13, 2e Task 2** | three functions, six occurrences, plus fixtures | the contract is positional as written, and `tiling.py` is the thing that is wrong |
 
 **What Task 2 controls is not adding ANOTHER site**, so the decimation reads `array.dims[1]` and
 `array.dims[2]`. That is the correct arithmetic under either closer and changes nothing for a

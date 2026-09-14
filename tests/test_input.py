@@ -455,6 +455,50 @@ def test_a_two_dimensional_variable_is_refused(tmp_path):
         batch_input.check_contract(batch_input.open_input(uri, "sla"))
 
 
+def test_two_spatial_dimensions_sharing_a_name_are_refused(tmp_path):
+    """`("time", "x", "x")` passes every other clause of the contract.
+
+    xarray permits duplicate dimension names -- it warns at construction and
+    allows it -- and this contract otherwise checks only that there are three
+    dimensions and that `time` is first. So such an input reached the tiling
+    path, and what happened there depended on how the tiling path addressed its
+    axes.
+
+    Expected value determined independently: measured on 2026-09-12, before 2e's
+    Task 2 made the tiling path positional. A name-keyed dict built from
+    `zip(dims, shape)` collapses three dimensions to **two** keys, and a
+    positional `isel({dims[1]: ..., dims[2]: ...})` builds a one-key dict in
+    which the first slice is **silently discarded**: an array of shape
+    `(12, 3, 3)` asked for `(12, 2, 1)` returned `(12, 1, 1)`.
+
+    **The two spatial extents are EQUAL here and that is forced, not chosen.**
+    `xr.Dataset` refuses inconsistent sizes for one dimension name, so an
+    unequal pair cannot be built, written or read -- the first draft of this
+    test used `(12, 2, 3)` and died in the fixture. The reachable witness is the
+    equal-extent one, and it reaches all the way: such a store writes through
+    `to_zarr` and reopens through `open_zarr` with its duplicate dims intact.
+
+    Bug this catches: exactly that silent wrong answer. Under the name-based
+    tiling path this input crashed loudly, so the refusal was not needed; the
+    positional rewrite is what makes it necessary, which is why the check landed
+    in the same task rather than being filed. **A change that turns a crash into
+    a plausible number has made the system worse**, and nothing downstream of the
+    tile can tell.
+
+    It is also open question 20's second answer -- a uniformity shared by all
+    sixteen input fixtures and unconstrained by the contract -- and it was found
+    by trying to change something that depended on it, not by sweeping for it.
+    """
+    dataset = xr.Dataset(
+        {"sla": (("time", "x", "x"), np.zeros((12, 3, 3), dtype="float32"))},
+        coords={"time": _months(12)},
+    )
+    uri = _store(tmp_path, dataset)
+
+    with pytest.raises(batch_input.InputContractError, match="distinct"):
+        batch_input.check_contract(batch_input.open_input(uri, "sla"))
+
+
 def test_an_undecodable_time_axis_is_refused_naming_the_ambiguity(tmp_path):
     """A bare numeric time axis is a stage-4a error, not a guess.
 

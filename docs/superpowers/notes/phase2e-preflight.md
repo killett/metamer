@@ -292,3 +292,166 @@ it a defect in metamer rather than in the user's configuration or data. Both hal
 `--version`, `--help`, no-args and missing-config paths were re-run beside them and still exit
 0, 0, 3 and 3 — the (k2) check that the catch is `Exception` and not `BaseException`, taken as a
 measurement rather than as a reading of the source.
+
+---
+
+## Plan Task 2 — the tiling closer, audited before any code (2026-09-12)
+
+**THE BRIEF** is the plan's Task 2: make `tiling.py` take the spatial dimensions positionally in its
+three functions, leave `time` name-based, leave stage 4a's message unchanged so it becomes true, and
+sweep the descriptions the fix falsifies. **Four findings, and the first one adds a deliverable.**
+
+### (i5) AND (a2b) — THE POSITIONAL REWRITE INTRODUCES A SILENT WRONG ANSWER, AND THE CONTRACT DOES NOT STOP IT
+
+**Measured, 2026-09-12.** xarray **permits duplicate dimension names** — it warns at construction
+and allows it — and stage 4a checks only `ndim == 3` and `dims[0] == "time"`. **So an input with
+dims `("time", "x", "x")` passes the contract today.** On such an array:
+
+    dims                ('time', 'x', 'x')   shape (2, 3, 4)
+    {str(d): s for d, s in zip(dims, shape)}  ->  {'time': 2, 'x': 4}
+                                                  three dims collapse to two keys,
+                                                  and 'x' keeps the LAST value, 4, not 3
+    isel({dims[1]: y_slice, dims[2]: x_slice})  ->  {'x': x_slice}
+                                                  the y-slice is silently DROPPED
+    result shape        (12, 1, 1)  where (12, 2, 1) was asked for
+
+**CORRECTED THE SAME DAY, (a4) ON THIS ENTRY.** The first draft measured `(2, 3, 4)` and reported
+that the collapsed dict *"keeps the LAST value, 4, not 3"*. **That witness is unreachable**:
+`xr.Dataset` refuses inconsistent sizes for one dimension name, so an unequal pair cannot be built,
+written or read, and the test written from it died in its own fixture. **The reachable witness has
+EQUAL extents** — `(12, 3, 3)` — which removes the size-collapse half and leaves the slice-dropping
+half, measured above. **The mechanism is unchanged and the hazard is unchanged; one of the two
+symptoms was an artefact of an impossible fixture.** Such a store writes through `to_zarr` and
+reopens through `open_zarr` with its duplicate dims intact, so the path is real end to end.
+
+**TODAY THIS FAILS LOUDLY** — `by_dim["y"]` raises `KeyError`, which since Task 1 is exit 5 with a
+traceback. **Under the naive positional rewrite it succeeds and returns the wrong block.** That is
+a regression in the worst available direction: a crash becomes a plausible number, on a path where
+nothing downstream can tell.
+
+**SO TASK 2 GAINS A DELIVERABLE IT DID NOT HAVE: stage 4a refuses duplicate spatial dimension
+names**, with `InputContractError` and therefore exit 4. It belongs in this task rather than being
+filed, **because this task creates the hazard** — the check is not tidying, it is the precondition
+that makes the rewrite safe. (a2b): make the invalid value **unavailable** rather than caveated.
+
+**AND IT IS A SECOND INSTANCE OF OPEN QUESTION 20**, which asks what else is uniform across all
+sixteen input fixtures and unconstrained by the contract. The question named coordinate monotonic
+direction; **duplicate dimension names is a second answer, found by trying to close a different
+defect.** Recorded at the question, because the question's value is the list.
+
+### (a6) EVERY DESCRIPTION OF THIS DEFECT BECOMES FALSE AT ONCE, AND THERE ARE TEN
+
+Task 0 corrected the **count** at eight sites and left the **consequence** clauses standing, because
+they were true. This task falsifies all of them simultaneously. The sweep is therefore not two
+docstrings but every site that says the defect is open:
+
+`decimate.py`'s module docstring (*"THAT DOES NOT MEAN SUCH AN INPUT WORKS END TO END"*, and its
+two-closers paragraph, which now has an answer) · `tests/test_decimate.py:106-108` (*"this asserts
+the decimation, not end-to-end support"*) · `tests/test_runner.py`'s `_latlon_store` helper
+(*"the only LIVE producer"*) · PROGRESS head item 9(a)'s surviving half · `PROGRESS.md:5511` ·
+`PROGRESS.md:5970` · `PROGRESS.md:5978` · `phase2c-preflight.md`'s two entries ·
+`phase1-to-phase2-handoff.md:792`.
+
+**The lesson Task 0 paid for applies here and is why this list is written before the edit**: a
+correction recorded only where it was found is a second version of the claim.
+
+### THE HANDOVER IS A PRECONDITION, NOT A CONSEQUENCE
+
+Task 1's live-producer test asserts a `latitude`/`longitude` store exits `INTERNAL_ERROR` with
+`tiling.py` in the traceback. **This task makes that store run**, so the test stops describing
+anything. **Its constructed replacement must be green BEFORE this task's rewrite lands**, and it
+inherits the dated provenance — *verified against a live producer on 2026-09-12, `KeyError: 'y'` at
+`read_amplification`* — which is what keeps it from becoming a test of itself.
+
+### (i2) THE POSITIVE CONTROL IS INVARIANCE, NOT ABSENCE OF A CRASH
+
+*"The lat/lon store runs"* is a negative: it passes if the run does nothing interesting. **The
+positive control is that a renamed store produces the SAME FITS as the `y`/`x` store it was renamed
+from** — identical stored values, point for point. A positional rewrite that transposes the two
+spatial axes passes every "it runs" test, passes read-amplification arithmetic (which is symmetric
+in the two axes on a square tile), and returns a **plausible wrong map**.
+
+**And one thing must NOT be invariant, which is the same assertion from the other side:** the
+`geometry_hash` **differs** between the two stores, because `geometry_components` keys
+`spatial_coordinates` by the input's own dimension names. That is D1's fingerprint argument as a
+test — **if the hashes matched, the rename closer would have been taken by accident.**
+
+
+### THE FIX EXPOSES A SECOND DEFECT ONE LEVEL DOWN, AND IT IS A SCOPE DECISION (measured 2026-09-12)
+
+**With the tiling path positional, a `latitude`/`longitude` store runs to exit 0 for the first
+time — and the store it writes is not self-describing.**
+
+`store.py` declares every data array's `dimension_names` as `("y", "x", ...)`, which is **the output
+store's own schema** and is correct: metamer's product names its own axes. But it writes the
+**coordinate arrays** under the keys of `geometry_components["spatial_coordinates"]`, which are the
+**input's** dimension names. Nothing ever reconciled the two **because no input could previously
+produce a store with different ones.**
+
+Measured, same fits, two namings:
+
+| store | `status/outcome` dims | coordinate arrays | xarray sizes |
+|---|---|---|---|
+| `y`/`x` input | `('y','x','m')` | `m, x, y` | `{y:2, x:3, m:2}` — coherent |
+| `latitude`/`longitude` input | `('y','x','m')` | `latitude, longitude, m` | **`{y:2, x:3, m:2, latitude:2, longitude:3}`** |
+
+**Five dimensions instead of three.** The data array's `y` and `x` axes have **no coordinates at
+all**, and `latitude`/`longitude` are orphan dimensions attached to nothing. A downstream consumer
+— design doc section 1.1 names one — reads `outcome(y, x, m)` and cannot say where any point is.
+
+**The geometry hashes differ between the two runs** (`bfdeaf96…` against `fa9c528d…`), which is D1's
+fingerprint argument holding exactly as intended: the provenance records the input's real names.
+**So the information is not lost; it is in the attrs. What is wrong is the axis labelling.**
+
+**And the selection between the two coordinate arrays is by LENGTH, not position:**
+`if len(values) in {shape.n_y, shape.n_x}` — which on a square grid cannot tell the two axes apart
+and maps them by name alone. **That is the same defect class this task just removed from
+`tiling.py`**, one module over: a name-or-length guess standing where position is the truth.
+
+**THIS IS A CHANGE TO `store.py`, WHICH 2a FROZE, SO IT IS NOT TAKEN UNILATERALLY.** It is raised as
+a scope decision with the measurement beside it, exactly as the tiling closer was.
+
+### (a5) THE SWEEP WAS INCOMPLETE FOR THE THIRD TIME, AND THE PATTERN IS NOW THE FINDING
+
+The pre-flight listed **ten** sites describing this defect as open. The sweep found **twelve**:
+`realdata-spike-verdict.md:229` and `realdata-spike-preflight.md:231` both carry the
+*"dies in assembly without exit code 4"* phrasing, and neither contains any string the first two
+patterns matched.
+
+**Three times in one sub-phase, at three different scales:**
+
+| when | claimed | actual | what the pattern missed |
+|---|---|---|---|
+| Task 0, first pass | 2 sites | 6 | *"literally `y` and `x` in **four** places"* — no matching phrase |
+| Task 0, second pass | 6 sites | 8 | *"Four sites — the span tuples at…"* — a different sentence shape |
+| Task 2 | 10 sites | 12 | *"dies in assembly without exit code 4"* — a **consequence** phrasing, not a count |
+
+**The three misses are not the same miss.** The first two were paraphrases of a count; the third
+was the defect described by its **effect** rather than by its size, in documents that never
+mentioned a number at all. **A sweep built from the phrasings you already found cannot reach the
+phrasings you have not** — so each pass finds the near-synonyms of its own seed and stops.
+
+**THE STRUCTURAL ANSWER IS THE ONE TASK 0 ALREADY TOOK AND IT IS WORTH SAYING TWICE: the count has
+one machine-readable home and the prose points at it.** `tests/test_dimension_name_sites.py` cannot
+go stale, and no number of prose sites can make it wrong. **What prose still owns — "this defect is
+open" — has no such home**, which is why the third miss was the effect-phrasing rather than the
+count. The honest mitigation is to sweep by **subject** (`tiling`, `latitude`, `assembly`) rather
+than by remembered wording, and to expect the list to grow on the last pass.
+
+### TWO PROCESS SLIPS FROM TASK 2's VERIFICATION, BOTH WORKED INSTANCES OF RULES ALREADY WRITTEN
+
+**1. `pixi run test 2>&1 | tail -25` REPORTED EXIT CODE 0 WITH A TEST FAILING.** The code belonged
+to `tail`. This is the handoff §2 rule — *where a tool reports on something else, its exit code
+describes the tool* — which already has the `&&` chain and `gh run watch --exit-status` as
+instances. **This is its third, committed by the person who had just quoted it**, and it was caught
+only because the summary line *"1 failed, 1424 passed"* was read as text. **Had the failure been
+earlier in the output, `tail -25` would have hidden it and the exit code would have agreed.** Run
+the sweep to a file and read pytest's own status.
+
+**2. A KNOWN CONSEQUENCE WAS OBSERVED AND NOT ACTED ON.** While writing Task 2 it was noted, in
+writing, that `test_exit_one_is_unreachable…` used the `latitude`/`longitude` store as its crash
+path and that *"after the rewrite that store will run fine, so that entry breaks"* — and the fix
+was not made. It surfaced as the sweep's only failure, 69 minutes later. **The handover from a live
+control to a constructed one had TWO sites, not one**; the pre-flight's handover section named the
+live-producer test and stopped there. **(c) again: enumerate the consumers of the thing you are
+destroying, not just the one you were thinking about.**

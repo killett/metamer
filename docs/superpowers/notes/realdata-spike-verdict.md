@@ -230,6 +230,13 @@ written*.
 > *"harmless while 1 has no producer"*. **The first is a producer of the second**, it is reachable
 > today by pointing the shipped CLI at an ordinary gridded product, and a resuming script that
 > branches on 1 would resume from a crash that left nothing to resume.
+>
+> **BOTH ARE CLOSED, 2026-09-13, BY 2e's TASKS 1 AND 2 — AND THE COMPOSITION IS WHY THEY WERE
+> SEQUENCED THAT WAY.** Task 1 gave the crash its own code (`INTERNAL_ERROR`, 5) and Task 2 made
+> the tiling path positional. **The order was chosen BECAUSE they compose**: this defect was the
+> only live producer of an unhandled exception the project had, so it was the positive control
+> Task 1's catch-all was verified against — and Task 2 destroyed it. This paragraph is what made
+> that ordering; it is kept in its own tense.
 
 **THE SPIKE DID NOT FIX IT.** It fitted a renamed copy, and the un-renamed store's failure is the
 reading. Both closers — stage 4a enforces the names, or the tiling path goes positional — remain

@@ -103,9 +103,12 @@ def test_the_spatial_axes_are_taken_positionally_not_by_name():
     Expected values determined independently: the same Python-slice expectation
     as above, on the differently named axes.
 
-    **This asserts the decimation, not end-to-end support.** `tiling.py` takes
-    the literal names in three functions -- six occurrences in all -- so a run
-    over this input still fails in assembly. That is pre-existing and named in the module docstring.
+    ~~**This asserts the decimation, not end-to-end support.**~~ **Struck at
+    2e's Task 2, 2026-09-13: end-to-end support exists.** `tiling.py` addresses
+    its spatial axes by position, and a `latitude`/`longitude` store runs to
+    exit 0 -- asserted in `tests/test_runner.py`, which also checks that such a
+    run produces the same fits as the `y`/`x` store it was renamed from. What
+    this test still owns is the decimation arithmetic on non-default names.
     """
     handle = _handle(dims=("time", "latitude", "longitude"))
     parent = handle.dataset

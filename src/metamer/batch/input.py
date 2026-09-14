@@ -315,6 +315,29 @@ def check_contract(handle: InputHandle) -> ContractReport:
             f"variable {handle.variable!r} has dims {array.dims}; 'time' must be "
             "the first, so a tile is a contiguous spatial block of whole series"
         )
+    # THE TWO SPATIAL DIMENSIONS MUST HAVE DISTINCT NAMES, AND THIS CHECK EXISTS
+    # BECAUSE THE TILING PATH IS POSITIONAL. xarray permits duplicate dimension
+    # names; it warns at construction and allows the array, and such a store
+    # writes and reopens intact. Everything above this line accepts it. The
+    # tiling path then addresses its axes as `dims[1]` and `dims[2]`, and when
+    # those are the same string, a dict keyed by them holds ONE entry -- so the
+    # first slice is discarded and the second is applied to both axes.
+    # MEASURED 2026-09-12: shape (12, 3, 3) asked for (12, 2, 1) returned
+    # (12, 1, 1), with no error anywhere.
+    #
+    # **The name-based tiling path this replaced crashed loudly on the same
+    # input.** So the refusal is not tidying alongside the rewrite; it is the
+    # precondition that keeps the rewrite from turning a crash into a plausible
+    # number -- and (a2b) says make the invalid value unavailable rather than
+    # caveated. Open question 20's second answer: a uniformity every input
+    # fixture shares and the contract did not require.
+    if array.dims[1] == array.dims[2]:
+        raise InputContractError(
+            f"variable {handle.variable!r} has dims {array.dims}; the two "
+            "spatial dimensions must have distinct names, because a tile is "
+            "addressed by position and two axes sharing a name cannot be "
+            "sliced independently"
+        )
 
     t = decimal_year_axis(handle)
     # EVERY STAGE-4a FAILURE MUST BE AN `InputContractError`, INCLUDING THE ONES

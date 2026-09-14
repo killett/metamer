@@ -890,6 +890,7 @@ def read_amplification(handle: InputHandle, tile: Tile) -> float:
     """
     array = handle.dataset[handle.variable]
     chunks = chunk_shape(handle)
+    shape = tuple(int(size) for size in array.shape)
     sizes = {
         str(dim): int(size) for dim, size in zip(array.dims, array.shape, strict=True)
     }
@@ -900,11 +901,17 @@ def read_amplification(handle: InputHandle, tile: Tile) -> float:
     # dropped, because it stops cancelling the moment a time-chunked read lands.
     read = _chunk_points(0, sizes["time"], by_dim["time"], sizes["time"])
     used = sizes["time"]
-    for dim, start, stop in (
-        ("y", tile.y_start, tile.y_stop),
-        ("x", tile.x_start, tile.x_stop),
+    # THE SPATIAL AXES ARE ADDRESSED BY POSITION, AND `time` BY NAME. The
+    # contract requires `time` FIRST and says nothing about the other two names
+    # -- its own message calls itself "three, mapping to (time, y, x)" -- so
+    # reading them by name was the implementation disagreeing with the contract
+    # it is downstream of. Positional here, and stage 4a refuses two spatial
+    # dimensions sharing a name, which is what makes `1` and `2` addressable.
+    for axis, start, stop in (
+        (1, tile.y_start, tile.y_stop),
+        (2, tile.x_start, tile.x_stop),
     ):
-        read *= _chunk_points(start, stop, by_dim[dim], sizes[dim])
+        read *= _chunk_points(start, stop, chunks[axis], shape[axis])
         used *= stop - start
     return read / used
 
@@ -924,13 +931,12 @@ def assembly_spans(handle: InputHandle, tile: Tile) -> list[Tile]:
     Returns:
         The spans, in row-major order. They partition the tile exactly.
     """
-    array = handle.dataset[handle.variable]
     chunks = chunk_shape(handle)
-    by_dim = {str(dim): size for dim, size in zip(array.dims, chunks, strict=True)}
+    # Positional, for the reason given in `read_amplification`.
     return [
         Tile(y_start=y_from, y_stop=y_to, x_start=x_from, x_stop=x_to)
-        for y_from, y_to in _aligned_spans(tile.y_start, tile.y_stop, by_dim["y"])
-        for x_from, x_to in _aligned_spans(tile.x_start, tile.x_stop, by_dim["x"])
+        for y_from, y_to in _aligned_spans(tile.y_start, tile.y_stop, chunks[1])
+        for x_from, x_to in _aligned_spans(tile.x_start, tile.x_stop, chunks[2])
     ]
 
 
@@ -969,11 +975,17 @@ def assemble_tile(handle: InputHandle, tile: Tile) -> NDArray[np.float64]:
     width = tile.x_stop - tile.x_start
 
     for span in assembly_spans(handle, tile):
+        # POSITIONAL RATHER THAN `isel(y=..., x=...)`. Besides matching the
+        # contract, this form CANNOT collapse: a keyword or dict form keyed by
+        # `dims[1]` and `dims[2]` holds one entry when those names are equal,
+        # silently dropping the first slice. Stage 4a refuses that input, and
+        # this is the second line of defence rather than the only one.
         piece = (
-            array.isel(
-                y=slice(span.y_start, span.y_stop),
-                x=slice(span.x_start, span.x_stop),
-            )
+            array[
+                :,
+                span.y_start : span.y_stop,
+                span.x_start : span.x_stop,
+            ]
             .values.astype(np.float64)
             .reshape(n_time, -1)
             .T

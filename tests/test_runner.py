@@ -26,6 +26,7 @@ from typing import Any
 import numpy as np
 import pytest
 import xarray as xr
+import zarr
 
 from metamer.batch.input import InputContractError
 from metamer.batch.run import run
@@ -79,10 +80,12 @@ def _latlon_store(
     """The same store, with the spatial axes named as a real product names them.
 
     **This passes stage 4a**, which requires three dimensions with `time` first
-    and says nothing about the other two -- and then dies inside the tiling path,
-    which takes the names literally. That is the open defect at PROGRESS head
-    item 9(a), and until 2e's Task 2 closes it, it is the only LIVE producer of
-    an unhandled exception this project has.
+    and says nothing about the other two. ~~and then dies inside the tiling path,
+    which takes the names literally… the only LIVE producer of an unhandled
+    exception this project has~~ -- **struck at 2e's Task 2, 2026-09-13: it now
+    runs to exit 0.** The struck text is kept because that crash was the positive
+    control Task 1's catch-all was verified against, and this helper is where a
+    reader arrives looking for it.
     """
     dataset = xr.Dataset(
         {
@@ -112,6 +115,35 @@ def _invoke(*arguments: str) -> subprocess.CompletedProcess[str]:
     """Run `python -m metamer` in a fresh process."""
     return subprocess.run(
         [sys.executable, "-m", "metamer", *arguments],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+def _invoke_crashing(*arguments: str) -> subprocess.CompletedProcess[str]:
+    """Run the entry point in a fresh process with `run` replaced by a raise.
+
+    **The crash has to be injected because there is no longer a live producer**
+    -- 2e's Task 2 made the tiling path positional, so the `latitude`/
+    `longitude` store that used to raise now completes. Still a SUBPROCESS: an
+    exit code is a property of a process, and `sys.exit` semantics and an
+    unhandled traceback are both invisible to an in-process call.
+    """
+    script = textwrap.dedent(
+        """
+        import sys
+        from metamer import __main__ as entry
+
+        def _boom(*args, **kwargs):
+            raise RuntimeError("constructed stand-in for the tiling KeyError")
+
+        entry.run = _boom
+        sys.exit(entry.main(sys.argv[1:]))
+        """
+    )
+    return subprocess.run(
+        [sys.executable, "-c", script, *arguments],
         capture_output=True,
         text=True,
         check=False,
@@ -1173,37 +1205,63 @@ def test_a_mismatched_observation_reaches_layer_3_through_the_runner(tmp_path):
 
 
 def test_an_unhandled_exception_exits_internal_error_and_keeps_its_traceback(tmp_path):
-    """Code 5, on the only LIVE producer this project has.
+    """Code 5 from a real process, with the traceback still on stderr.
 
-    Expected values determined independently: measured on 2026-09-12 by running
-    the shipped entry point over a synthetic `latitude`/`longitude` store, which
-    exited **1** with `KeyError: 'y'` raised in `read_amplification` and reached
-    from `run.py`. That reproduces the reading recorded at PROGRESS head item
-    9(a) on 2026-09-07, taken twice -- once on a synthetic fixture and once on a
-    real DUACS store -- by a separate instrument.
+    **VERIFIED AGAINST A LIVE PRODUCER ON 2026-09-12, AND THAT IS THE DATED
+    FACT THIS DOCSTRING EXISTS TO CARRY.** Before 2e's Task 2 made the tiling
+    path positional, a synthetic `latitude`/`longitude` store through the
+    shipped entry point exited **1** with `KeyError: 'y'` raised in
+    `read_amplification` and reached from `run.py` -- reproducing the reading
+    recorded at PROGRESS head item 9(a) on 2026-09-07, which was taken twice,
+    on a synthetic fixture and on a real DUACS store, by a separate instrument.
+    With the catch-all in place the same input exited **5** with the same
+    traceback. The full capture is in `phase2e-preflight.md`.
 
-    **THIS TEST'S SUBJECT IS DESTROYED BY 2e's TASK 2**, which makes the tiling
-    path positional. It is written here, against a crash that exists today,
-    because a catch-all verified only against a deliberately raised exception is
-    a mechanism checked against a mutant nobody has seen in the wild -- (i2): a
-    pure negative needs a positive control. When Task 2 lands, the constructed
-    replacement inherits this docstring, and **"verified against a live producer
-    on 2026-09-12, `KeyError: 'y'` at `read_amplification`" is the dated fact
-    that keeps it from becoming a test of itself.**
+    **The subject is gone and the guard is not.** Task 2 closed that crash, so
+    the exception here is constructed -- and a catch-all verified only against a
+    constructed exception is a mechanism checked against a mutant nobody has
+    seen in the wild, (i2). What keeps this from being that is the paragraph
+    above: it once matched a live crash, on a named date, with a named frame.
+    **Do not delete the provenance to tidy the docstring.**
+
+    Run through `python -c` rather than `-m metamer` because the crash has to be
+    injected, and through a SUBPROCESS rather than in-process because an exit
+    code is a property of a process -- `sys.exit` semantics and an unhandled
+    traceback are both invisible to an in-process call.
 
     Bug this catches: a catch-all placed above the staged clauses, which would
     collapse exit 3 and exit 4 into 5 and make validation staging decorative;
     and a catch-all that swallows the traceback, which leaves an operator a code
     saying "a defect in metamer" and no way to find it.
     """
-    result = _invoke(
-        str(_config(tmp_path, _latlon_store(tmp_path))),
-        str(tmp_path / "out.zarr"),
+    script = textwrap.dedent(
+        """
+        import sys
+        from metamer import __main__ as entry
+
+        def _boom(*args, **kwargs):
+            raise RuntimeError("constructed stand-in for the tiling KeyError")
+
+        entry.run = _boom
+        sys.exit(entry.main(sys.argv[1:]))
+        """
+    )
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            script,
+            str(_config(tmp_path, _store(tmp_path))),
+            str(tmp_path / "out.zarr"),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
     )
 
     assert result.returncode == ExitCode.INTERNAL_ERROR
     assert "Traceback" in result.stderr
-    assert "tiling.py" in result.stderr
+    assert "constructed stand-in for the tiling KeyError" in result.stderr
     assert "internal error" in result.stderr
 
 
@@ -1340,6 +1398,15 @@ def test_exit_one_is_unreachable_until_the_failure_rate_threshold_exists(tmp_pat
     **Task 6 inverts this test**: 1 becomes reachable, and only from the
     threshold path. The pair is named at both ends so neither half is edited
     alone.
+
+    **THE CRASH PATH IS INJECTED, AND IT DID NOT USED TO BE.** This test was
+    written at Task 1 against the `latitude`/`longitude` store, which was then
+    the only live producer of an unhandled exception. **Task 2 closed it, and
+    this test went red in the full sweep** -- correctly, because its subject had
+    stopped existing. The replacement raises from a stubbed `run` in a
+    subprocess. **Recorded rather than quietly repaired: the handover from a live
+    control to a constructed one is the thing Task 1 and Task 2 were ordered
+    around, and this is the second place it had to happen.**
     """
     flat = xr.Dataset(
         {"sla": (("time", "y"), np.zeros((6, 2), dtype="float32"))},
@@ -1364,9 +1431,8 @@ def test_exit_one_is_unreachable_until_the_failure_rate_threshold_exists(tmp_pat
             str(_config(tmp_path, str(tmp_path / "flat.zarr"), name="flat.toml")),
             str(tmp_path / "c.zarr"),
         ).returncode,
-        "unhandled exception": _invoke(
-            str(_config(tmp_path, _latlon_store(tmp_path), name="ll.toml")),
-            str(tmp_path / "d.zarr"),
+        "unhandled exception": _invoke_crashing(
+            str(good), str(tmp_path / "d.zarr")
         ).returncode,
     }
 
@@ -1378,3 +1444,143 @@ def test_exit_one_is_unreachable_until_the_failure_rate_threshold_exists(tmp_pat
         "contract violated": ExitCode.DATA_INVALID,
         "unhandled exception": ExitCode.INTERNAL_ERROR,
     }
+
+
+def test_a_renamed_store_produces_the_same_fits_and_a_different_fingerprint(tmp_path):
+    """The positive control for the positional tiling path -- (i2).
+
+    *"The lat/lon store runs"* is a negative: it passes if the run does nothing
+    interesting. **A positional rewrite that TRANSPOSES the two spatial axes
+    passes every "it runs" test**, and passes read-amplification arithmetic,
+    which is symmetric in the two axes on a square tile. Only value-for-value
+    equality separates a correct rewrite from a plausible wrong map.
+
+    **THE GRID IS 2 x 3 AND THAT IS LOAD-BEARING, NOT INCIDENTAL.** On a square
+    grid a transposed axis mapping writes the wrong coordinates under the right
+    names and nothing detects it -- the lengths agree, so the store looks
+    coherent and is not. **Do not simplify this fixture to 2 x 2**; it would
+    silently remove the only thing distinguishing a correct mapping from a lucky
+    one.
+
+    Expected values determined independently: the two inputs hold the same
+    array, so every fitted quantity must agree bit for bit -- the fits cannot
+    depend on what the axes are called. The hashes must NOT agree, because
+    `geometry_components` keys `spatial_coordinates` by the input's own
+    dimension names, which is the provenance the store is supposed to record.
+
+    Bug this catches: two of them, in opposite directions. A transposed or
+    name-sensitive read, which changes the answer; and a fingerprint that
+    normalizes the names away, which would make two different inputs claim one
+    identity -- and would mean the rename closer had been taken by accident.
+
+    **PROVED TO BITE 2026-09-13:** `assemble_tile` was made to transpose the two
+    spatial axes and this test failed on the array comparison, while every
+    "the lat/lon store runs" assertion stayed green.
+    """
+    values = np.arange(24 * 2 * 3, dtype="float32").reshape(24, 2, 3)
+
+    def _write(dims: tuple[str, str], name: str) -> str:
+        dataset = xr.Dataset(
+            {"sla": (("time", *dims), values.copy())},
+            coords={
+                "time": _months(24),
+                dims[0]: np.arange(2, dtype=float),
+                dims[1]: np.arange(3, dtype=float),
+            },
+        )
+        dataset.to_zarr(tmp_path / name)
+        return str(tmp_path / name)
+
+    plain = _invoke(
+        str(_config(tmp_path, _write(("y", "x"), "yx.zarr"), name="yx.toml")),
+        str(tmp_path / "out_yx.zarr"),
+    )
+    renamed = _invoke(
+        str(
+            _config(
+                tmp_path,
+                _write(("latitude", "longitude"), "ll.zarr"),
+                name="ll.toml",
+            )
+        ),
+        str(tmp_path / "out_ll.zarr"),
+    )
+
+    assert plain.returncode == ExitCode.OK, plain.stderr
+    assert renamed.returncode == ExitCode.OK, renamed.stderr
+
+    left = zarr.open_group(str(tmp_path / "out_yx.zarr"), mode="r")
+    right = zarr.open_group(str(tmp_path / "out_ll.zarr"), mode="r")
+
+    compared = 0
+    for group_name, group in left.groups():
+        mirror = right[group_name]
+        assert isinstance(mirror, zarr.Group)
+        for name, array in group.arrays():
+            counterpart = mirror[name]
+            assert isinstance(counterpart, zarr.Array)
+            mine = np.asarray(array[:])
+            theirs = np.asarray(counterpart[:])
+            compared += 1
+            if mine.dtype.kind == "f":
+                np.testing.assert_allclose(mine, theirs, equal_nan=True)
+            else:
+                np.testing.assert_array_equal(mine, theirs)
+    assert compared > 0
+
+    assert left.attrs["geometry_hash"] != right.attrs["geometry_hash"]
+
+
+def test_a_renamed_input_writes_its_coordinates_under_the_stores_own_axis_names(
+    tmp_path,
+):
+    """The store describes itself, whatever the input called its axes.
+
+    Every data array declares `dimension_names = ("y", "x", ...)` -- the output
+    store's own schema, and metamer's product gets to name its own axes. The
+    coordinate arrays are the input's VALUES, and before this was corrected they
+    were written under the input's NAMES: a `latitude`/`longitude` input
+    produced a store that opened as **five** dimensions, in which `outcome(y, x,
+    m)` had no spatial coordinates at all and `latitude`/`longitude` were orphan
+    dimensions attached to nothing.
+
+    **This was a latent defect made reachable, not one introduced.** It has been
+    here since 2a, and nothing reconciled the two namings because no input could
+    produce a store with different ones -- every fixture used `("time", "y",
+    "x")` and anything else crashed in the tiling path. A schema that has never
+    been exercised has never been checked.
+
+    Expected values determined independently: the store's own schema fixes the
+    names, and the input fixes the values -- `y` holds what `latitude` held.
+
+    Bug this catches: coordinates keyed by the input's names, which leaves a run
+    over any real gridded product unable to say where any of its points are --
+    and which makes the claim "a lat/lon store runs end to end" false in the half
+    that matters.
+
+    **PROVED TO BITE 2026-09-13:** the positional mapping was transposed --
+    `dims[2]` to `y` and `dims[1]` to `x` -- and this test failed. On a square
+    grid the same mutant is invisible, which is why the fixture above is 2 x 3.
+    """
+    dataset = xr.Dataset(
+        {"sla": (("time", "latitude", "longitude"), np.zeros((24, 2, 3), "float32"))},
+        coords={
+            "time": _months(24),
+            "latitude": np.array([10.5, 11.5]),
+            "longitude": np.array([-3.0, -2.0, -1.0]),
+        },
+    )
+    dataset.to_zarr(tmp_path / "ll.zarr")
+
+    result = _invoke(
+        str(_config(tmp_path, str(tmp_path / "ll.zarr"))),
+        str(tmp_path / "out.zarr"),
+    )
+    assert result.returncode == ExitCode.OK, result.stderr
+
+    opened = xr.open_zarr(str(tmp_path / "out.zarr"), group="status")
+
+    assert dict(opened.sizes) == {"y": 2, "x": 3, "m": 2}
+    assert opened["outcome"].dims == ("y", "x", "m")
+    np.testing.assert_array_equal(opened["y"].values, [10.5, 11.5])
+    np.testing.assert_array_equal(opened["x"].values, [-3.0, -2.0, -1.0])

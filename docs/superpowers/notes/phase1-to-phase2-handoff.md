@@ -325,6 +325,22 @@ while design doc §12.8 assumes enforcement; `data_uri` standing in for the data
 that moving a file invalidated a valid resume *and* editing one in place permitted an
 invalid one.
 
+> **(a2)'s SECOND REGISTER, PROMOTED 2026-09-13: AN IDENTITY QUESTION ANSWERED BY A COINCIDENCE.**
+> Three instances now, and the shape is one question — *which thing is this?* — settled by a
+> property that merely happens to differ:
+>
+> | site | the question | the coincidence answering it |
+> |---|---|---|
+> | `tiling.py` | which axis is the row axis | **the name** `"y"`, which every fixture happened to use |
+> | `store.py` | which coordinate array labels which axis | **the length**, `len(values) in {n_y, n_x}` |
+> | 2c Task 0 | whether a start was valid | **truthiness**, and `bool(-1)` is `True` |
+>
+> **Each is correct until two things collide** — a product that names its axes otherwise, a square
+> grid, a sentinel of `-1`. **The repair is the same every time: answer the question with the thing
+> that actually determines it** — position, position, and an explicit boolean. **And the tell is
+> that the wrong answer is cheaper to write and reads more naturally**, which is why it survives
+> review: `by_dim["y"]` says what it means, and `chunks[1]` has to be understood.
+
 **CLASSIFY BEFORE YOU CHECK. EVERY HASHED FIELD IS ONE OF TWO KINDS, AND THE CHECK APPLIES
 TO ONLY ONE OF THEM:**
 
@@ -790,7 +806,8 @@ exposure is the decimation this task adds and not a pre-existing defect."*
 
 **That sentence was written before the code was read**, and it is false in the more important
 half: `tiling.py` uses the literal names in **three functions — six occurrences in all**,
-including `assemble_tile`'s own `isel`. **The claim's consequence was the dangerous part** — it
+including `assemble_tile`'s own `isel`. (**Closed 2026-09-13 at 2e's Task 2**; the past tense is
+correct for the story and the defect is gone.) **The claim's consequence was the dangerous part** — it
 would have licensed writing a name-based decimation as *"consistent with the existing
 convention"*, becoming one more site, and it would have recorded a pre-existing defect as absent.
 What replaced it is the file-and-line references and a table of the two possible closers.

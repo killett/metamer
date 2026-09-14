@@ -27,19 +27,23 @@ Every fixture in this repository happens to use `("time", "y", "x")`, so a
 decimation written as `isel(y=..., x=...)` passes the entire suite and raises on
 the first input that does not. This one reads `array.dims[1]` and `array.dims[2]`.
 
-**THAT DOES NOT MEAN SUCH AN INPUT WORKS END TO END, AND THE HONEST STATEMENT IS
-HERE RATHER THAN IN A COMMIT MESSAGE.** `tiling.py` takes the literal names in
-three functions -- `read_amplification`'s span tuples, `assembly_spans`'s
-`by_dim` lookups and `assemble_tile`'s own `isel` -- six occurrences in all.
-**Corrected 2026-09-12 from "four places", which disagreed with its own
-enumeration of three.** So an input named otherwise still fails, deep in
-assembly, with a raw `xarray` error rather than the staged
-`InputContractError` that `input.py` requires of every stage-4a failure. **That is a pre-existing defect with two
-possible closers** -- stage 4a enforces the names, or the tiling path goes
-positional -- **and choosing between them was not this task's decision.** What is
-in this module's control is not becoming ANOTHER site -- stated without a
-number, because the number is the part that has already gone stale twice --
-which is why the arithmetic here is correct under either closer.
+**IT DID NOT USED TO MEAN SUCH AN INPUT WORKED END TO END. IT DOES NOW --
+CLOSED AT 2e's TASK 2, 2026-09-13.** ~~`tiling.py` takes the literal names in
+three functions~~ (six occurrences, itself corrected 2026-09-12 from "four
+places", which disagreed with its own enumeration of three) ~~so an input named
+otherwise still fails, deep in assembly, with a raw `xarray` error rather than
+the staged `InputContractError` that `input.py` requires.~~ **The tiling path
+addresses its spatial axes by position, and a `latitude`/`longitude` store runs
+to exit 0.**
+
+**OF THE TWO CLOSERS THIS DOCSTRING NAMED -- stage 4a enforces the names, or the
+tiling path goes positional -- THE SECOND WAS TAKEN, AND THE DECIDING ARGUMENT
+WAS THE FINGERPRINT.** `geometry_components` keys `spatial_coordinates` by the
+input's own dimension names and runs downstream of `open_input`, so renaming at
+the adapter would have made the store assert a provenance its source file does
+not have. **This module's positional arithmetic, written while the choice was
+still open, is what the rest of the path now matches** -- which is the whole
+value of not having become another site.
 """
 
 from __future__ import annotations

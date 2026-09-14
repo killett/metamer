@@ -454,6 +454,16 @@ end to end.
   `by_dim` lookups, `assembly_spans`' `by_dim` lookups, and `assemble_tile`'s `isel`.
 - **`time` stays name-based.** `time`-first **is** the contract, `input.py:313` enforces it, and
   nothing here relaxes it.
+- **STAGE 4a REFUSES DUPLICATE SPATIAL DIMENSION NAMES, AND THIS TASK OWNS THAT CHECK BECAUSE IT
+  CREATES THE HAZARD.** **(i5), measured in the pre-flight:** xarray permits duplicate dimension
+  names and stage 4a checks only `ndim == 3` and `dims[0] == "time"`, so `("time", "x", "x")`
+  passes the contract today. On such an array a name-keyed dict collapses three dims to two keys
+  **and keeps the last value**, and `isel({dims[1]: y, dims[2]: x})` **silently drops the y-slice**
+  — measured, `(2, 3, 4)` sliced for `(2, 2, 1)` returns `(2, 1, 1)`. **Today that input crashes
+  loudly; under the naive rewrite it returns a plausible wrong block.** The refusal is
+  `InputContractError`, therefore exit 4, and it is the **precondition that makes the rewrite
+  safe** rather than tidying alongside it. (a2b): make the invalid value unavailable, not
+  caveated.
 - **Stage 4a's message is unchanged** — *"the contract is three, mapping to (time, y, x)"* — and
   **becomes true.** No amendment to §13.6 is needed, and that outcome is available only under this
   closer.
@@ -473,6 +483,15 @@ end to end.
   it** — and **`decimate.py`'s module docstring**, whose *"THAT DOES NOT MEAN SUCH AN INPUT WORKS
   END TO END"* paragraph becomes false at the same moment. **The two closers it names are no longer
   open, and the paragraph says which one was taken and why.**
+
+  > **TEN SITES, ENUMERATED IN THE PRE-FLIGHT, AND THEY ALL BECOME FALSE AT ONCE.** Task 0
+  > corrected the *count* at eight of them and left the *consequence* clauses standing because they
+  > were true; this task falsifies every one. The sweep is `decimate.py`'s docstring (two
+  > paragraphs) · `tests/test_decimate.py:106–108` · `tests/test_runner.py`'s `_latlon_store`
+  > helper · PROGRESS head item 9(a)'s surviving half · `PROGRESS.md:5511` · `PROGRESS.md:5970` ·
+  > `PROGRESS.md:5978` · `phase2c-preflight.md`'s two entries · `phase1-to-phase2-handoff.md:792`.
+  > **Written down before the edit, because Task 0 paid for the lesson that a correction recorded
+  > only where it was found is a second version of the claim.**
 - **THIS TASK DESTROYS TASK 1's POSITIVE CONTROL, AND THE HANDOVER IS A PRECONDITION ON LANDING
   IT.** `tiling.py`'s `KeyError('y')` is the live producer Task 1's catch-all was verified against;
   after this task it does not exist. **Task 1's constructed replacement, with its dated provenance,
@@ -498,6 +517,18 @@ end to end.
   provenance. This is D1's argument as an assertion.
 - *A `lat`/`lon` store and a `y`/`x` store both run, and their geometry hashes differ.* Catches a
   fingerprint that normalizes names away, which would make two different inputs claim one identity.
+  **This is D1's argument from the other side, and it must NOT be invariant** — matching hashes
+  would mean the rename closer had been taken by accident.
+- ***A renamed store produces the SAME FITS as the store it was renamed from, point for point.***
+  **The (i2) positive control, and the reason "it runs" is not enough**: *"the lat/lon store runs"*
+  is a negative that passes if the run does nothing interesting. **A positional rewrite that
+  TRANSPOSES the two spatial axes passes every "it runs" test** and passes read-amplification
+  arithmetic, which is symmetric in the two axes on a square tile — and returns a plausible wrong
+  map. Only value-for-value equality separates them.
+- *An input whose two spatial dims share a name is refused with `InputContractError` and exit 4.*
+  Catches the silent-wrong-answer path the rewrite would otherwise open: measured in the pre-flight
+  at `(2, 3, 4)` sliced for `(2, 2, 1)` returning `(2, 1, 1)`, with the y-slice gone and no error
+  anywhere. **Without this the task's own change makes a loud failure quiet.**
 - *A two-dimensional input and a `time`-last input are still refused with `InputContractError` and
   exit 4.* Catches positional access being mistaken for "no contract", which would turn a staged
   refusal into an `IndexError` and, after Task 1, into `INTERNAL_ERROR`.
