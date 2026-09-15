@@ -40,14 +40,19 @@ from __future__ import annotations
 import argparse
 import sys
 import traceback
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from typing import NoReturn
+
+import numpy as np
+from numpy.typing import NDArray
 
 from metamer import __version__
 from metamer.batch.input import InputContractError
 from metamer.batch.run import RunReport, run
+from metamer.batch.tiling import Tile
 from metamer.batch.twopass import run_two_pass
 from metamer.batch.validation import ExitCode, ValidationError, exit_code_for, layer_of
+from metamer.progress import LiveCounters
 
 
 class _Parser(argparse.ArgumentParser):
@@ -133,6 +138,16 @@ def _build_parser() -> _Parser:
         ),
     )
     parser.add_argument(
+        "--no-progress",
+        action="store_true",
+        dest="no_progress",
+        help=(
+            "suppress section 14.1's per-tile counters. They go to stderr and "
+            "are display-only -- nothing in the run reads them -- so this "
+            "changes what is printed and nothing about what is computed"
+        ),
+    )
+    parser.add_argument(
         "--two-pass",
         action="store_true",
         dest="two_pass",
@@ -203,6 +218,34 @@ def _run(argv: Sequence[str] | None) -> int:
             "at all; a recompute has no optimizer for a warm start to start"
         )
 
+    # SECTION 14.1's COUNTERS ARE CONSTRUCTED HERE, OUTSIDE `metamer.batch`,
+    # AND THAT IS THE ENFORCEMENT OF "NO DECISION MAY READ THEM". The run gets
+    # a callback returning None and never imports this type; see
+    # `metamer.progress` and `tests/test_progress.py`'s import boundary.
+    #
+    # STDERR, NOT STDOUT. The end-of-run report is stdout and is what a caller
+    # pipes; progress is transient and would corrupt it. Warnings already go
+    # here for the same reason.
+    counters = LiveCounters()
+    pass1_counters = LiveCounters()
+
+    def _progress(
+        target: LiveCounters, label: str
+    ) -> Callable[[Tile, NDArray[np.uint8], tuple[str, ...]], None]:
+        def record(
+            tile: Tile, outcome: NDArray[np.uint8], candidates: tuple[str, ...]
+        ) -> None:
+            target.record(tile, outcome, candidates)
+            for line in target.lines():
+                print(f"{label}{line}", file=sys.stderr)
+
+        return record
+
+    progress = None if arguments.no_progress else _progress(counters, "")
+    pass1_progress = (
+        None if arguments.no_progress else _progress(pass1_counters, "pass 1 ")
+    )
+
     pass1: RunReport | None = None
     pass1_seconds: float | None = None
     try:
@@ -213,6 +256,8 @@ def _run(argv: Sequence[str] | None) -> int:
                 memory_budget_gb=arguments.memory_budget,
                 calibrate=arguments.calibrate,
                 recalibrate=arguments.recalibrate,
+                on_tile_progress=progress,
+                on_pass1_tile_progress=pass1_progress,
             )
             pass1, pass1_seconds = two.pass1, two.pass1_seconds
             if two.pass2 is None:
@@ -242,6 +287,7 @@ def _run(argv: Sequence[str] | None) -> int:
                 reuse_fits_from=arguments.reuse_fits_from,
                 calibrate=arguments.calibrate,
                 recalibrate=arguments.recalibrate,
+                on_tile_progress=progress,
             )
     except (ValidationError, InputContractError) as error:
         # LAYER 4's TYPE CARRIES NO LAYER PREFIX OF ITS OWN, so the naming

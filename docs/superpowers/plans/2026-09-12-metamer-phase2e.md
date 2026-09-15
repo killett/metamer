@@ -635,8 +635,33 @@ failed — and the rule that decides that is written down where the next member 
 
 **Invariants.**
 
-- **No module outside the display imports the counters.** Enforced by construction, not by comment.
+- **`metamer.batch` NEVER IMPORTS THE COUNTERS**, asserted in a subprocess for the reason
+  `tests/test_core_isolation.py` already gives about its own boundary: in-process, the module is
+  already imported by the test file, so the check would measure the session rather than the import
+  graph. **The counters live outside `metamer.batch`, which makes §14.1's rule a property of the
+  import graph rather than of anyone's restraint.**
+- **The seam returns `None`**, so nothing the counters compute can flow back into the run even if a
+  later author wants it to. **Half of "no decision may read them" is carried by the type.**
 - **A resumed run's counters may be wrong and nothing depends on them.** Said once, in the code.
+
+**What the pre-flight added to this task** (2026-09-14):
+
+- **(j3): §14.1's "approximate under a resume" is EVIDENCE ABOUT THE IMPLEMENTATION, not a caveat.**
+  Counters computed by re-reading each tile's region would be **exact** under a resume — the store
+  holds every tile, including a previous process's. They are approximate only if **accumulated from
+  what this process fitted**, so the seam must carry the outcomes rather than a tile index.
+- **(b)/(c): TWO BRANCHES REACH THE SEAM AND ONLY ONE HAD THE OUTCOMES.** The recompute branch
+  replaces the fit with a read and `_recompute_tile` returned `None`, so a seam fed from
+  `result.outcome` would leave a `--reuse-fits-from` run **silently under-counting** — and a
+  display is exactly where an absence looks like a zero. `_recompute_tile` now returns the codes it
+  had already read for the status invariant, so both branches supply the same thing.
+- **A SECOND SEAM RATHER THAN A WIDER `on_tile_written`.** That one is documented as a
+  fault-injection seam and `test_completion.py` binds against it to preempt runs mid-tile; one seam
+  with two unrelated purposes is worse than two with one each — (a3).
+- **THE LABELS RIDE ON THE SEAM**, because `__main__` holds a config PATH and not a `Config`. The
+  alternatives were a second `config.load` purely for display or a second callback fired once; the
+  chosen one costs a tuple per tile and adds no machinery. **A later call with different labels is
+  refused**, because tallies already taken would be mislabelled and nothing would say so.
 
 **Tests, and the bug each catches.**
 

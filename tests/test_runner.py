@@ -1584,3 +1584,58 @@ def test_a_renamed_input_writes_its_coordinates_under_the_stores_own_axis_names(
     assert opened["outcome"].dims == ("y", "x", "m")
     np.testing.assert_array_equal(opened["y"].values, [10.5, 11.5])
     np.testing.assert_array_equal(opened["x"].values, [-3.0, -2.0, -1.0])
+
+
+def test_a_recompute_run_counts_its_tiles_and_does_not_report_an_empty_run(tmp_path):
+    """The progress seam is fed from both branches of the tile loop.
+
+    `run`'s loop either fits a tile or, under `--reuse-fits-from`, replaces the
+    fit with a read. **Only the first branch has a `FitResult`**, so a counter
+    seam fed from `result.outcome` alone would see nothing on a recompute --
+    and `_recompute_tile` returned `None` until 2e's Task 4 gave it the outcome
+    codes it had already read for the status invariant.
+
+    Expected values determined independently: a recompute writes the same
+    derived arrays over the same points as the source run, so the fit count the
+    display reports must match. Read off the source run's own progress line
+    rather than computed here -- the two runs cover one grid.
+
+    Bug this catches: silent under-counting on the recompute path. **A display
+    is exactly where an absence looks like a zero**: an operator watching a
+    `--reuse-fits-from` run would see `fits=0` beside a store filling up, and
+    the natural reading is that nothing is being written.
+
+    **PROVED TO BITE 2026-09-14:** the recompute branch was made to feed an
+    empty block -- the exact shape the seam would have had if
+    `_recompute_tile` had kept returning `None` -- and this test failed. Every
+    other runner test stayed green, including the ones that assert a recompute
+    writes a correct store.
+    """
+    uri = _store(tmp_path)
+    source_store = tmp_path / "source.zarr"
+    first = _invoke(str(_config(tmp_path, uri)), str(source_store))
+    assert first.returncode == ExitCode.OK, first.stderr
+
+    # THE SAME INPUT, DELIBERATELY. A recompute reads the source store's
+    # primitives; pointing it at a different input would be a different test
+    # (and a refusal, since the hashes would not match).
+    again = _invoke(
+        str(_config(tmp_path, uri, name="again.toml")),
+        str(tmp_path / "again.zarr"),
+        "--reuse-fits-from",
+        str(source_store),
+    )
+    assert again.returncode == ExitCode.OK, again.stderr
+
+    def _fits(stderr: str) -> int:
+        lines = [line for line in stderr.splitlines() if "progress:" in line]
+        assert lines, stderr
+        return max(
+            int(part.split("=")[1])
+            for line in lines
+            for part in line.split()
+            if part.startswith("fits=")
+        )
+
+    assert _fits(again.stderr) == _fits(first.stderr)
+    assert _fits(again.stderr) > 0

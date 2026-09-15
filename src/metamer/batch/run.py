@@ -74,7 +74,12 @@ from metamer.batch.decimate import decimated_handle
 from metamer.batch.geometry import geometry_components, geometry_hash
 from metamer.batch.input import ContractReport, InputHandle, open_input
 from metamer.batch.input import check_contract as check_input_contract
-from metamer.batch.ragged import RaggedIndex, build_ragged_index, noise_extent
+from metamer.batch.ragged import (
+    RaggedIndex,
+    build_ragged_index,
+    model_label,
+    noise_extent,
+)
 from metamer.batch.resume import check_resume, check_source
 from metamer.batch.store import (
     StoreShape,
@@ -280,7 +285,7 @@ def _recompute_tile(
     tile: Tile,
     *,
     config: Config,
-) -> None:
+) -> NDArray[np.uint8]:
     """Copy one tile's fits and rank them again under the requested criteria.
 
     **The invariant is checked on the block this path actually consumes**, with
@@ -290,11 +295,23 @@ def _recompute_tile(
     copied array: those are what the ranking reads, the rest were checked when
     the source was written, and exit criterion 4 checks a finished store whole.
 
+    **IT RETURNS THE OUTCOME CODES IT WROTE, AND THAT IS FOR THE PROGRESS SEAM
+    (2026-09-14).** The fit branch has `result.outcome` in hand; this branch
+    replaces the fit with a read, so without a return value the two branches
+    reach `on_tile_progress` carrying different things and a
+    `--reuse-fits-from` run would display counters that **silently
+    under-count** -- and a display is exactly where an absence looks like a
+    zero. The array is already in scope for `check_status_invariant`, so this
+    costs nothing.
+
     Args:
         source_path: The store being reused.
         store_path: The store being written.
         tile: The spatial block.
         config: The requested configuration.
+
+    Returns:
+        Per-(series, candidate) outcome codes, shape `(B, M)`.
 
     Raises:
         InvariantError: If the source's primitives violate the status/value
@@ -323,6 +340,7 @@ def _recompute_tile(
         columns,
         len(scores.labels),
     )
+    return np.asarray(scores.outcome, dtype=np.uint8)
 
 
 class TileModelKwargs(TypedDict):
@@ -534,6 +552,9 @@ def run(
     observed_thread_limits: Mapping[str, int] | None = None,
     engine: Engine | None = None,
     on_tile_written: Callable[[Tile], None] | None = None,
+    on_tile_progress: (
+        Callable[[Tile, NDArray[np.uint8], tuple[str, ...]], None] | None
+    ) = None,
     reuse_fits_from: Path | str | None = None,
     floor: FloorReport | None = None,
     max_iter: int | None = None,
@@ -563,6 +584,24 @@ def run(
             never wired in and a stub that is never reached are byte-identical
             in the test output. The write path is the first caller that can
             reach an engine, so the seam lands here.
+        on_tile_progress: Called after each tile with its per-(series,
+            candidate) outcome codes **and the candidate labels**, for section
+            14.1's live counters. **The labels ride on every call, which is
+            redundant and is the cheapest of the three options**: the caller is
+            `__main__`, which holds only a config PATH, so the alternatives were
+            a second `config.load` purely for display or a second callback fired
+            once at the start. Passing what this function already has costs a
+            tuple per tile and adds no machinery.
+            **A SECOND SEAM RATHER THAN A WIDER `on_tile_written`, DELIBERATELY
+            (2026-09-14).** That one is documented as a fault-injection seam and
+            `test_completion.py` binds against it to preempt a run mid-tile;
+            widening its signature would give one seam two unrelated purposes
+            and touch every binder. **It returns `None`, so nothing it computes
+            can flow back into this function** -- which is half of section
+            14.1's "no decision may read them", enforced by the type rather than
+            by a comment. The other half is an import boundary: the counters
+            live outside `metamer.batch` and `tests/test_progress.py` asserts
+            that this package never imports them.
         on_tile_written: Called between a tile's data write and its completion
             bit. **THE FAULT-INJECTION SEAM, AND IT IS THE ONLY WAY EXIT
             CRITERION 8 CAN BE DEMONSTRATED**: the property is that an
@@ -1228,12 +1267,25 @@ def run(
                         index=index,
                         has_trend=has_trend,
                     )
+                    outcome = result.outcome
                 else:
                     # THE FIT STEP IS REPLACED BY A READ, and nothing else about
                     # the loop changes -- same write path for /selection/, same
                     # bitmap, same ordering. `engine` is deliberately unused
                     # here, which is what the raising stub proves.
-                    _recompute_tile(reuse_fits_from, store_path, tile, config=config)
+                    outcome = _recompute_tile(
+                        reuse_fits_from, store_path, tile, config=config
+                    )
+                # BOTH BRANCHES REACH THIS WITH THE SAME THING, AND THAT IS THE
+                # POINT OF `_recompute_tile`'s RETURN VALUE. A seam fed only
+                # from the fit branch would leave a `--reuse-fits-from` run
+                # displaying counters that under-count silently.
+                if on_tile_progress is not None:
+                    on_tile_progress(
+                        tile,
+                        np.asarray(outcome, dtype=np.uint8),
+                        tuple(model_label(spec) for spec in specs),
+                    )
                 if on_tile_written is not None:
                     on_tile_written(tile)
                 # THE ONE SITE THAT SETS A BIT, AND IT IS REACHED ONLY BY

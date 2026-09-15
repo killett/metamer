@@ -55,6 +55,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TypedDict
 
+import numpy as np
+from numpy.typing import NDArray
+
 from metamer.batch.decimate import pass1_store_path
 from metamer.batch.run import RunReport, run
 from metamer.batch.tiling import Tile
@@ -154,6 +157,12 @@ def run_two_pass(
     observed_thread_limits: Mapping[str, int] | None = None,
     engine: Engine | None = None,
     on_tile_written: Callable[[Tile], None] | None = None,
+    on_tile_progress: (
+        Callable[[Tile, NDArray[np.uint8], tuple[str, ...]], None] | None
+    ) = None,
+    on_pass1_tile_progress: (
+        Callable[[Tile, NDArray[np.uint8], tuple[str, ...]], None] | None
+    ) = None,
     on_pass1_tile_written: Callable[[Tile], None] | None = None,
     floor: FloorReport | None = None,
     max_iter: int | None = None,
@@ -180,6 +189,14 @@ def run_two_pass(
         engine: Likelihood engine, passed to both passes.
         on_tile_written: Fault-injection seam for **pass 2**, called between a
             tile's data write and its completion bit.
+        on_tile_progress: Section 14.1's counter seam for **pass 2**, or for
+            the single pass when warm-starting is off.
+        on_pass1_tile_progress: The same seam for **pass 1**, and SEPARATE for
+            the same reason the written seam is: the two passes fit different
+            populations -- a coarse grid and the full one -- so one counter
+            across both would add tallies over incomparable point sets and
+            report a number describing neither. `__main__` labels pass 1's
+            lines.
         on_pass1_tile_written: The same seam for **pass 1**, separate because
             the two interruptions have different consequences and a test that
             could only reach one of them could not tell them apart: a kill in
@@ -225,7 +242,13 @@ def run_two_pass(
         # so a caller who switches warm-starting off gets the store they would
         # have got from `run` and no second directory beside it.
         started = time.perf_counter()
-        only = run(config_path, store_path, on_tile_written=on_tile_written, **shared)
+        only = run(
+            config_path,
+            store_path,
+            on_tile_written=on_tile_written,
+            on_tile_progress=on_tile_progress,
+            **shared,
+        )
         return TwoPassReport(
             pass1=None,
             pass2=only,
@@ -242,6 +265,7 @@ def run_two_pass(
         pass1_path,
         decimate=True,
         on_tile_written=on_pass1_tile_written,
+        on_tile_progress=on_pass1_tile_progress,
         **shared,
     )
     pass1_seconds = time.perf_counter() - started
@@ -264,6 +288,7 @@ def run_two_pass(
         config_path,
         store_path,
         warm_start_from=pass1_path,
+        on_tile_progress=on_tile_progress,
         on_tile_written=on_tile_written,
         **shared,
     )

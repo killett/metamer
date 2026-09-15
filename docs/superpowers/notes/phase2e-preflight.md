@@ -538,3 +538,70 @@ the conflation §12.5 was written to undo.** So §8.6 is stale and the code foll
 denominator of every failure rate this project computes. **A correction that cannot move a number
 and a correction that moves all of them are different acts**, and bundling them would let the
 second ride in on the first's evidence. Recorded here, raised as its own decision.
+
+---
+
+## Plan Task 4 — the live counters, audited before any code (2026-09-14)
+
+**THE BRIEF** is the plan's Task 4: point-granularity tallies by branch and by candidate,
+accumulated and displayed per tile, **display-only with no decision reading them**, plain lines
+rather than `rich`. **Four findings, and the third is a defect the brief would have shipped.**
+
+### THE STRUCTURAL ENFORCEMENT IS HALF FREE ALREADY, AND THE PRECEDENT FOR THE OTHER HALF IS IN THE TREE
+
+*"No decision may read them"* is the kind of claim a comment cannot hold. Two mechanisms exist:
+
+1. **The seam's type already forbids the run consuming a value.** `on_tile_written` is
+   `Callable[[Tile], None]` — it returns `None`, so nothing the callback computes can flow back
+   into `run`. **A counter hung off this seam cannot influence the run through its return value**,
+   whatever anybody later intends.
+2. **`tests/test_core_isolation.py` is the precedent for the rest**, and its own docstring supplies
+   the method: it asserts an import boundary **in a subprocess**, because *"inside the pytest
+   session every one of these is already imported by some other test module, so an in-process
+   check would pass against any core module at all — it would be measuring the session, not the
+   import graph."* **The same reasoning applies exactly**: a test that `metamer.batch` never
+   imports the counters must run in a fresh interpreter or it measures the test session.
+
+**So the counters live OUTSIDE `metamer.batch`** — the display layer owns them, `batch` never
+imports them, and the isolation test enforces it. That makes *"no decision may read them"* a
+property of the import graph rather than of anyone's restraint, which is what §14.1 asks for when
+it says the obvious future change *"will look like a free optimization"*.
+
+### (j3) §14.1's "APPROXIMATE UNDER A RESUME" IS EVIDENCE ABOUT THE IMPLEMENTATION, NOT A CAVEAT
+
+§14.1 says the counters' *"inevitable approximation under a resume"* is harmless. **That sentence
+settles a design question the brief leaves open.** If the counters were computed by re-reading each
+tile's region from the store they would be **exact** under a resume — the store holds every tile,
+including the ones a previous process wrote. **They are approximate only if they are ACCUMULATED
+from what this process fitted.**
+
+So the counters are carried, not re-read — **and therefore the seam must carry the outcomes**,
+because `on_tile_written(tile)` hands over a `Tile` and nothing else. An existing statement about a
+property constrained the implementation; (j3), at a design doc sentence rather than at a feature.
+
+### (b) AND (c) — TWO PATHS REACH THAT SEAM AND ONLY ONE OF THEM HAS THE OUTCOMES
+
+`run`'s tile loop has two branches. The fit branch computes `result` and calls `write_tile`; the
+recompute branch calls `_recompute_tile(...) -> None`, which **copies fits from the source store
+and re-ranks them**, and returns nothing. **Both then call `on_tile_written(tile)`.**
+
+**A seam widened to carry `result.outcome` is `None` on the recompute path**, so a
+`--reuse-fits-from` run would display counters that silently under-count — or, worse, read as
+though nothing failed. **The brief says nothing about this**, and the display is exactly where an
+absence looks like a zero.
+
+Two honest shapes, and the choice is Task 4's to take with the reason recorded: **widen
+`_recompute_tile` to return what it wrote**, so both branches supply the same thing; or **have the
+counters read the tile's region back from the store**, which is exact and costs a read per tile —
+and which **contradicts §14.1's "approximate under a resume"**, so taking it means amending that
+sentence rather than quietly diverging from it.
+
+### `on_tile_written` IS DOCUMENTED AS A FAULT-INJECTION SEAM, AND TESTS BIND AGAINST IT
+
+`run.py` calls it *"Called between a tile's data write and its completion"*; `twopass.py` calls it
+*"Fault-injection seam for pass 2"*. **Reusing it for display broadens a seam whose stated purpose
+is testing**, and `test_completion.py` binds against it to preempt runs mid-tile. Widening its
+signature touches every binder. **Whether the display gets this seam or its own is a decision, not
+a detail** — and the (a3) rule applies: defer the feature, declare the regime. A second seam with
+one caller is cheaper to reason about than one seam with two unrelated purposes, and the fault
+injectors must keep working either way.
