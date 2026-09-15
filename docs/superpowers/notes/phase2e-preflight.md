@@ -605,3 +605,89 @@ signature touches every binder. **Whether the display gets this seam or its own 
 a detail** — and the (a3) rule applies: defer the feature, declare the regime. A second seam with
 one caller is cheaper to reason about than one seam with two unrelated purposes, and the fault
 injectors must keep working either way.
+
+---
+
+## Plan Task 5 — the abort verdict, audited before any code (2026-09-14)
+
+**THE BRIEF** is the plan's Task 5: a pure function from a finished pass-1 store to
+`{continue, abort, drop}`, thresholds at 90%, the rate `is_failure` over `is_eligible`, the verdict
+naming its own numbers, and a refusal on an incomplete store. **Four findings, and the first is
+about the case §14.1 exists to catch.**
+
+### (a2b) AT A COUNT — A CANDIDATE WITH NO ELIGIBLE POINTS, AND THE NAIVE RATE SAYS "CONTINUE"
+
+The rate is `failed / eligible`. **When a candidate has zero eligible points that is `0/0`**, and
+the two obvious implementations both fail quietly:
+
+- `failed / eligible` raises `ZeroDivisionError` — a crash, which since Task 1 is exit 5, for a
+  store that is perfectly well-formed;
+- `np.divide(...)` or a guarded `0.0` gives `nan` or `0.0`, and **`nan > 0.90` is `False` and
+  `0.0 > 0.90` is `False`, so the verdict is `continue`.
+
+**THE SECOND IS THE DANGEROUS ONE, AND IT IS REACHABLE BY EXACTLY THE MISTAKE THIS SECTION EXISTS
+TO CATCH.** §14.1 calibrates its thresholds *"to catch **bugs**, not to second-guess science"* and
+names *"a config or data error"* as the thing an all-candidate failure indicates. **A config error
+that points the run at the wrong variable, or at a domain that is entirely land, yields
+`INSUFFICIENT_DATA` everywhere — which is `is_eligible = False` — so every candidate has an empty
+denominator and the abort reports nothing to abort on.** The run then proceeds through pass 2 at
+full cost and produces a store of nothing.
+
+**"Zero cases" is a claim about the INSTRUMENT until proven otherwise.** So the verdict must
+distinguish **"0% of a real population failed"** from **"there was no population"**, and the second
+is a finding in its own right rather than a quiet `continue`. Whether that is its own verdict value
+or a refusal is Task 5's to decide; **what is not available is letting it read as healthy.**
+
+### (i12) THE PER-CANDIDATE DENOMINATOR IS A FREEDOM NO FIXTURE HERE CAN EXERCISE
+
+Eligibility is a property of an outcome **code**, and codes live on the `(y, x, m)` axis — so each
+candidate has its **own** denominator, and two candidates' rates are over different populations.
+That is the same shape as Task 3's drop-row finding, and it means **the verdict must report each
+candidate's denominator beside its rate**, not one denominator for the table.
+
+**But in v1 those denominators are all equal, and that is an implementation property rather than a
+contract.** `fit.py` computes `design_info(t, mask)` **once, before the candidate loop**, so
+`INSUFFICIENT_DATA` and `RANK_DEFICIENT_X` are constant along the model axis — PROGRESS.md records
+this as 2a's *"design-derived outcomes are constant along the model axis"*, and it holds only until
+a joint signal × noise search lands (§19).
+
+**So every fixture this project owns will agree across candidates, and a test written on them
+cannot tell a per-candidate denominator from one shared denominator.** (i12): a uniform fixture set
+cannot test a freedom the contract leaves open. **The test must CONSTRUCT an outcome array whose
+eligibility differs by candidate** — `SCREENED_OUT` on one and not another — rather than fit
+anything, or the per-candidate half is asserted by a fixture that could not have contradicted it.
+
+### (c) THE THRESHOLD IS A BOUNDARY AND ITS SIDE MUST BE STATED, NOT INHERITED
+
+§14.1 says *"> 90% failure"* for both rows. **Strictly greater**, so a candidate at exactly 90.0%
+continues. That is a choice and it is invisible on any realistic fixture, which is why the plan
+already pairs 89.9% and 90.1% — and why the constructed fixture must hit **exactly** 0.90 as well,
+since that is the only point where the two readings of the sentence differ.
+
+### THE VERDICT's POPULATION IS THE COARSE GRID, AND THAT IS THE DESIGN RATHER THAN A LIMITATION
+
+Pass 1 fits a **decimated** grid, so the rate is over coarse points and is a **sample**. §14.1
+already anticipates this — the thresholds *"catch bugs, not second-guess science"*, and a candidate
+failing 95% of a global stratified sample is a capability or parameterization error whatever the
+sampling. **Worth stating at the verdict** so a later reader does not mistake the coarse rate for
+the run's failure rate: §14.2's report is computed from the full store and is the one that
+describes the run. Two numbers, two populations, and the verdict's is the smaller one.
+
+### THE `| tail` HAZARD A THIRD TIME, IN A THIRD FORM (2026-09-14)
+
+Handoff §2's rule — *where a tool reports on something else, its exit code describes the tool* —
+has a companion that this sub-phase has now demonstrated twice: **`| tail -N` also truncates what
+you READ, not only what the shell returns.**
+
+| instance | what was piped | what was hidden |
+|---|---|---|
+| Task 2 | `pixi run test 2>&1 \| tail -25` | the exit code was `tail`'s: **0 with a test failing** |
+| Task 5 | `pre-commit run --all-files \| tail -4` | **mypy's failure**, four lines above the cut |
+
+**Both were caught by something else** — the first by reading the summary line as text, the second
+by the commit hook refusing. **Neither was caught by the command that was supposed to check.**
+
+`pre-commit` prints one line per hook and the failures are in the middle, so `tail -N` shows the
+cheap hooks passing and hides the expensive one failing. **The fix is the same in both cases: do
+not pipe a checker through a truncating filter.** Run it to a file and read its status, or
+`grep -E 'Passed|Failed|error:'` so every hook's verdict is in the output whatever its position.
