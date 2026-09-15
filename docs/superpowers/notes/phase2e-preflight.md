@@ -455,3 +455,86 @@ was not made. It surfaced as the sweep's only failure, 69 minutes later. **The h
 control to a constructed one had TWO sites, not one**; the pre-flight's handover section named the
 live-producer test and stopped there. **(c) again: enumerate the consumers of the thing you are
 destroying, not just the one you were thinking about.**
+
+---
+
+## Plan Task 3 — `CANDIDATE_DROPPED` joins the decided skips, audited before any code (2026-09-14)
+
+**THE BRIEF** is the plan's Task 3 and decision D7: flip `CANDIDATE_DROPPED.is_failure` to `False`,
+keep it eligible, record the rule at `Outcome`. **Three findings, and the first one changes what
+this task IS.**
+
+### (a5) THE DESIGN DOC ALREADY DECIDED THIS, AND THE CODE HAS DISAGREED WITH IT SINCE 2a
+
+D7 was written as a decision with a recommendation. **It is not a decision. It is a correction.**
+
+Design doc §12.5 carries a table under the heading **"THE NON-FIT CODES ARE A GROUP, AND THE
+GROUPING IS WHAT §14.2's DENOMINATOR READS"** — so it is the authoritative classification, by its
+own declaration — and it says:
+
+| code | the store is saying | eligible? |
+|---|---|---|
+| `SCREENED_OUT` | a decision was taken not to fit this candidate | **legitimate non-fit** |
+| `CANDIDATE_DROPPED` | this candidate was demoted run-wide after early abort (§14.1) | **legitimate non-fit** |
+
+**The same cell value, for both.** And `Outcome.is_failure` excludes `SCREENED_OUT` and includes
+`CANDIDATE_DROPPED`. **The code and the design doc have contradicted each other since 2a**, in a
+table written specifically to settle this question, and nothing caught it **because the member has
+no producer.**
+
+**PROGRESS.md's precedence rule decides the rest:** *the design doc is authoritative on INTENT*. So
+Task 3 does not need D7's argument to justify the change — the argument was already made, one
+section away from where the plan looked. **The plan's own reasoning (§14.1's `NOT_ATTEMPTED` →
+`SCREENED_OUT` correction) was right and was the weaker of the two available.**
+
+**What this changes about the task:** the commit is *"the code catches up with §12.5"*, not
+*"a classification is reconsidered"*. **And the entry at `Outcome` should cite §12.5 rather than
+re-argue it**, or the project acquires a third statement of one rule.
+
+### THE ARGUMENT WAS ALSO ALREADY IN THE TEST SUITE, AT THE SIBLING MEMBER
+
+`tests/test_outcomes.py:117-134`, on `SCREENED_OUT`: *"a deliberate skip, like `NOT_ATTEMPTED`: the
+run chose not to fit, so counting it as a failure would make a **cheaper configuration report a
+worse failure rate**."*
+
+**That sentence is true of `CANDIDATE_DROPPED` word for word** — a dropped candidate is precisely a
+configuration made cheaper by a decision the run took. The reasoning sat beside the member that did
+not need it and was never applied to the member that did. **A classification that has never been
+exercised has never been checked**, and the check here was not even a measurement — it was reading
+the sibling's docstring.
+
+### (c) THE GUARDS THAT MOVE, ENUMERATED
+
+- **`tests/test_outcomes.py:26`, `test_every_real_failure_reports_is_failure`** — asserts
+  `{o for o in Outcome if o.is_failure} == failures` with `CANDIDATE_DROPPED` **listed explicitly**
+  in the expected set. **Set equality over the whole enum, which is the right shape**: it fails on
+  this change and would fail on any future member defaulting into the failure set. Amended
+  struck-not-deleted.
+- **`tests/test_outcomes.py:115`, `test_the_two_deferred_outcomes_are_skips_and_not_failures`** —
+  becomes *three* deferred outcomes. Renamed rather than edited, on the same rule as 2e's earlier
+  count-in-a-name.
+- **`audit_report.py:556-568`** consumes both properties through a lookup table and needs no
+  change; **that it needs none is the assertion** — a second place that classifies outcomes is a
+  second place that can disagree.
+
+### AND A LARGER DISAGREEMENT FOUND ON THE WAY, WHICH IS **NOT** TASK 3's TO FIX
+
+**`INSUFFICIENT_DATA` is classified three ways by three documents.**
+
+| source | says |
+|---|---|
+| design doc **§8.6** | *"A legitimate expected outcome, **excluded from every failure-rate denominator**"* |
+| design doc **§12.5** | *"**eligible**; its rate is a real statement about record coverage"* |
+| `Outcome.is_eligible` | **excluded** — follows §8.6 |
+
+**§12.5 is the later and more refined statement**: it explicitly separates land and permanent ice
+(`NOT_APPLICABLE`) from a genuinely thin record (`INSUFFICIENT_DATA`), says *"collapsing them makes
+the failure rate uninterpretable"*, and corrects §14.1's wording in the same passage. §8.6's row
+still describes `INSUFFICIENT_DATA` as *"too few valid samples — land, permanent ice"*, **which is
+the conflation §12.5 was written to undo.** So §8.6 is stale and the code follows the stale one.
+
+**THIS IS NOT TASK 3's, AND THE REASON IS NOT SCOPE TIDINESS.** Unlike `CANDIDATE_DROPPED`,
+`INSUFFICIENT_DATA` **has producers and occurs in real data**, so changing `is_eligible` moves the
+denominator of every failure rate this project computes. **A correction that cannot move a number
+and a correction that moves all of them are different acts**, and bundling them would let the
+second ride in on the first's evidence. Recorded here, raised as its own decision.

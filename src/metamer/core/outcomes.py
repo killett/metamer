@@ -44,20 +44,49 @@ class Outcome(StrEnum):
     def is_failure(self) -> bool:
         """Whether this outcome counts as a failure.
 
-        Excludes exactly OK, NOT_ATTEMPTED (deliberately skipped), and
-        INSUFFICIENT_DATA (expected) -- the denominator rule from design doc
-        section 8.6. Every other member, including ITER_CAP_SMALL_GRAD,
-        counts as a failure: design doc section 8.6 describes hitting the
+        Every member not excluded below is a failure, including
+        ITER_CAP_SMALL_GRAD: design doc section 8.6 describes hitting the
         iteration cap with a small gradient as "probably fine, flagged" --
         flagged, not excluded. Excluding it here would make a real (if mild)
         non-convergence invisible in the spatial failure map, which at 10^7
         series is the diagnostic that matters.
+
+        **THE DECIDED-SKIP GROUP IS SPECIFIED AT DESIGN DOC SECTION 12.5 AND IS
+        NOT RE-ARGUED HERE.** That section's non-fit grouping table carries the
+        rule -- *"the grouping is what section 14.2's denominator reads"* -- and
+        classifies `SCREENED_OUT` and `CANDIDATE_DROPPED` identically, as
+        **legitimate non-fits**. A code the run assigns *because the run chose
+        not to fit* is eligible and is not a failure. **A future member is
+        classified by that rule, at that section**; three statements of one rule
+        is how a count in this project reached twelve sites.
+
+        **`CANDIDATE_DROPPED` JOINED THE GROUP AT 2e's TASK 1 GROUPING PASS
+        (2026-09-14), AND THAT WAS A CORRECTION RATHER THAN A DECISION.** It sat
+        in the failure set from 2a while section 12.5 said otherwise, and
+        **nothing caught the disagreement because the member has no producer** --
+        2e's early abort is its first. A classification that has never been
+        exercised has never been checked. The argument was also already in the
+        suite, at the sibling: `SCREENED_OUT`'s test says counting a decided skip
+        as a failure "would make a *cheaper* configuration report a worse failure
+        rate", which is true of a dropped candidate word for word.
+
+        **The consequence that makes it matter** is that the early abort drops a
+        candidate *because* it failed, then writes `CANDIDATE_DROPPED` at every
+        remaining point -- so a rate computed over those points would report the
+        decision rather than the candidate, and would read louder than the
+        evidence that triggered it. See the handoff's (j7b).
+
+        **`INSUFFICIENT_DATA`'s exclusion follows section 8.6, which section 12.5
+        contradicts** -- open question 24, filed to 2f. It is left alone here
+        because it has producers: changing it re-baselines every failure rate,
+        which is a different act from a correction that cannot move a number.
         """
         return self not in {
             Outcome.OK,
             Outcome.NOT_ATTEMPTED,
             Outcome.INSUFFICIENT_DATA,
             Outcome.SCREENED_OUT,
+            Outcome.CANDIDATE_DROPPED,
             Outcome.NOT_APPLICABLE,
         }
 

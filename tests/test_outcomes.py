@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from metamer.core.outcomes import Outcome
 
 
@@ -27,13 +29,25 @@ def test_every_real_failure_reports_is_failure():
     """All genuine failure branches are counted as failures.
 
     Expected value determined independently by reading the taxonomy table in
-    design doc section 8.6 and listing the failure rows by hand. Per the
-    task-3 brief's correction 1, `is_failure` excludes exactly three members
-    -- OK, NOT_ATTEMPTED, INSUFFICIENT_DATA -- so the remaining nine members,
-    including ITER_CAP_SMALL_GRAD, are all failures. (The brief's original
-    text wrongly excluded ITER_CAP_SMALL_GRAD too; section 8.6 describes it
-    as "flagged", and something excluded from `is_failure` is not flagged
-    anywhere.)
+    design doc section 8.6 and listing the failure rows by hand, and the
+    non-fit grouping table in section 12.5 for the codes that are decisions
+    rather than verdicts. ITER_CAP_SMALL_GRAD IS a failure: section 8.6
+    describes it as "flagged", and something excluded from `is_failure` is not
+    flagged anywhere.
+
+    **~~`Outcome.CANDIDATE_DROPPED`~~ LEFT THIS SET AT 2e (2026-09-14), AND IT
+    WAS A CORRECTION RATHER THAN A DECISION.** Section 12.5's grouping table --
+    whose heading says it is what section 14.2's denominator reads -- has
+    classified `SCREENED_OUT` and `CANDIDATE_DROPPED` identically as
+    **legitimate non-fits** since 2a, and this set disagreed with it for four
+    sub-phases. **Nothing caught it because the member has no producer**; 2e's
+    early abort is its first.
+
+    Bug this catches: a new member defaulting into the failure set, which is
+    what one does if nothing decides otherwise -- and, in the other direction, a
+    real failure branch quietly leaving it. **Set equality over the whole enum
+    is the shape that catches both**, which is why this test is amended rather
+    than replaced.
     """
     failures = {
         Outcome.ITER_CAP_SMALL_GRAD,
@@ -44,7 +58,6 @@ def test_every_real_failure_reports_is_failure():
         Outcome.RANK_DEFICIENT_X,
         Outcome.ILL_CONDITIONED_X,
         Outcome.DEGENERATE_HESSIAN,
-        Outcome.CANDIDATE_DROPPED,
     }
     assert {o for o in Outcome if o.is_failure} == failures
 
@@ -113,8 +126,13 @@ def test_the_outcome_vocabulary_and_its_codes_are_enumerated():
     }
 
 
-def test_the_two_deferred_outcomes_are_skips_and_not_failures():
-    """`SCREENED_OUT` and `NOT_APPLICABLE` sit outside the failure rate.
+def test_the_three_deferred_outcomes_are_skips_and_not_failures():
+    """`SCREENED_OUT`, `CANDIDATE_DROPPED` and `NOT_APPLICABLE` sit outside it.
+
+    **RENAMED AT 2e, NOT EDITED IN PLACE (2026-09-14).** It was
+    `test_the_two_deferred_outcomes_are_skips_and_not_failures`; a count in a
+    test's name is the same hazard as a count in prose, and this project has
+    already paid for that once this sub-phase.
 
     Neither is reachable in 2a -- there is no screening block and no declared
     domain mask -- so the semantics are decided by the task that owns the
@@ -129,9 +147,21 @@ def test_the_two_deferred_outcomes_are_skips_and_not_failures():
     Catches either defaulting into the failure set, which is what a new member
     does if nothing decides otherwise: at 10^7 points a screened-out ocean
     basin would read as a catastrophic failure map.
+
+    **AND THE ARGUMENT ABOVE IS WHY `CANDIDATE_DROPPED` BELONGS HERE.** *"The
+    run chose not to fit, so counting it as a failure would make a cheaper
+    configuration report a worse failure rate"* is true of a dropped candidate
+    word for word -- a drop is exactly a configuration made cheaper by a
+    decision the run took. **That sentence sat beside the member that did not
+    need it and was never applied to the member that did**, because
+    `CANDIDATE_DROPPED` had no producer until 2e. (j4) at a classification: an
+    existing statement is evidence, and the sibling of the thing you are
+    classifying is where to look first.
     """
     assert Outcome.SCREENED_OUT.is_failure is False
     assert Outcome.SCREENED_OUT.is_eligible is True
+    assert Outcome.CANDIDATE_DROPPED.is_failure is False
+    assert Outcome.CANDIDATE_DROPPED.is_eligible is True
     assert Outcome.NOT_APPLICABLE.is_failure is False
     assert Outcome.NOT_APPLICABLE.is_eligible is False
 
@@ -160,3 +190,95 @@ def test_is_eligible_is_not_trivially_constant():
     """
     assert Outcome.INSUFFICIENT_DATA.is_eligible is False
     assert Outcome.OK.is_eligible is True
+
+
+def test_every_member_is_classified_by_both_properties_in_one_table():
+    """The whole taxonomy in one place, rather than two exclusion lists.
+
+    Expected values determined independently: design doc section 8.6's taxonomy
+    table for the fit verdicts, and section 12.5's non-fit grouping table -- the
+    one whose heading says it is what section 14.2's denominator reads -- for the
+    codes that are decisions rather than verdicts. Read off both by hand.
+
+    **The decided-skip group is the middle block and it is the one that keeps
+    being got wrong:** `NOT_ATTEMPTED`, `SCREENED_OUT` and `CANDIDATE_DROPPED`
+    are all "the run did not fit this, on purpose", all eligible, none a
+    failure. `INSUFFICIENT_DATA` and `NOT_APPLICABLE` are the other shape --
+    not failures and **not eligible either**, because they are not points the
+    rate is over.
+
+    Bug this catches: a new member landing in neither group or in both. The two
+    properties are implemented as separate exclusion sets, so a member added to
+    one and forgotten in the other is a single-line omission that reads as
+    complete -- and there is no single place, other than this table, where the
+    two can be seen together.
+
+    **`INSUFFICIENT_DATA`'s row follows section 8.6, which section 12.5
+    contradicts** -- open question 24, filed to 2f. This table pins what the code
+    does today so the question is about a known value.
+
+    **PROVED TO BITE 2026-09-14:** `CANDIDATE_DROPPED` was put back into the
+    failure set and FOUR tests failed -- this one, the set-equality guard, the
+    decided-skip guard, and the vectorised arithmetic in
+    `tests/test_audit_report.py`. **The fourth is the one that matters**: the
+    property and the lookup table are two things, and only that test asserts the
+    half that reaches a report.
+    """
+    expected = {
+        Outcome.OK: (False, True),
+        Outcome.ITER_CAP_SMALL_GRAD: (True, True),
+        Outcome.ITER_CAP_LARGE_GRAD: (True, True),
+        Outcome.DIAGNOSTIC_LIMIT: (True, True),
+        Outcome.TRUST_RADIUS_COLLAPSED: (True, True),
+        Outcome.NONFINITE_OBJECTIVE: (True, True),
+        Outcome.RANK_DEFICIENT_X: (True, True),
+        Outcome.ILL_CONDITIONED_X: (True, True),
+        Outcome.DEGENERATE_HESSIAN: (True, True),
+        Outcome.NOT_ATTEMPTED: (False, True),
+        Outcome.SCREENED_OUT: (False, True),
+        Outcome.CANDIDATE_DROPPED: (False, True),
+        Outcome.INSUFFICIENT_DATA: (False, False),
+        Outcome.NOT_APPLICABLE: (False, False),
+    }
+
+    assert {m: (m.is_failure, m.is_eligible) for m in Outcome} == expected
+
+
+def test_no_committed_report_carries_a_decided_skip():
+    """The "nothing moves" claim, as a check rather than an inference.
+
+    Moving `CANDIDATE_DROPPED` out of the failure set changes every rate
+    computed over a population containing it. **The claim that no committed
+    number moves rests on that population being empty**, which is a statement
+    about the artifacts and not about the enum -- and "zero cases" is a claim
+    about the instrument until something proves otherwise.
+
+    Expected value determined independently: `CANDIDATE_DROPPED` has no producer
+    in `src/` -- 2e's early abort is its first -- so no run that has ever
+    happened could have written one.
+
+    Bug this catches: a future committed artifact containing a decided-skip
+    outcome, which would silently make the reclassification retroactive and this
+    project's committed rates incomparable across it. **The right response to
+    this test failing is not to loosen it**; it is to recompute the artifact and
+    say so, because two rates computed under different denominators cannot be
+    quoted beside each other.
+
+    It scans every JSON under the notes directory rather than a list, because a
+    gate over a set that can GROW must be written against the set -- (c5).
+    """
+    skips = {
+        member.value
+        for member in Outcome
+        if not member.is_failure and member.is_eligible and member is not Outcome.OK
+    }
+    assert skips  # the group exists; an empty one would make this vacuous
+
+    notes = Path(__file__).resolve().parents[1] / "docs" / "superpowers" / "notes"
+    scanned = 0
+    for path in sorted(notes.glob("*.json")):
+        text = path.read_text(encoding="utf-8")
+        scanned += 1
+        for name in skips:
+            assert name not in text, f"{path.name} carries {name!r}"
+    assert scanned > 0, "no committed reports were scanned; the check is vacuous"

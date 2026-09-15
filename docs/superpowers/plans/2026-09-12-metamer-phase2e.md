@@ -94,6 +94,17 @@ list by name, and `tests/test_runner.py:1001–1009` pins reachability as `{OK, 
 Both get the **struck-not-deleted** amendment with the reason recorded at the test.
 
 **D7 — `CANDIDATE_DROPPED` joins the decided skips: out of the failure rate, in its own row.**
+
+> **AMENDED 2026-09-14 BY TASK 3's PRE-FLIGHT: THIS IS A CORRECTION, NOT A DECISION, AND THE
+> ARGUMENT BELOW IS THE WEAKER OF THE TWO AVAILABLE.** Design doc **§12.5** carries a non-fit
+> grouping table under the heading *"the grouping is what §14.2's denominator reads"* — so it is
+> the authoritative classification by its own declaration — and it has classified `SCREENED_OUT`
+> and `CANDIDATE_DROPPED` **identically, as legitimate non-fits, since 2a.** `Outcome.is_failure`
+> has contradicted it for four sub-phases, and nothing caught it **because the member has no
+> producer.** PROGRESS.md's precedence rule settles the rest: the design doc is authoritative on
+> intent. **So the task is "the code catches up with §12.5", the entry at `Outcome` CITES §12.5
+> rather than re-arguing it, and the reasoning below is kept only because it is what was believed
+> before the section was found.**
 `Outcome.is_failure` is `True` for it today and **has never been exercised, because nothing
 produces it** — `tests/test_exit_criteria.py:530` says so outright. 2e gives it its first
 producer, which makes 2e the first opportunity to find this. §14.1 already decided this once in
@@ -573,7 +584,16 @@ failed — and the rule that decides that is written down where the next member 
 - **No committed number moves.** Verified rather than inferred: no committed JSON artifact contains
   `candidate_dropped`, `is_failure` or any `is_failure`-derived field, and the only committed
   outcome histogram — `realdata-spike2-report.json` — contains exactly `{OK, DEGENERATE_HESSIAN}`.
-  **The set this reclassification partitions is empty in every committed store.**
+  **The set this reclassification partitions is empty in every committed store**, and that is now a
+  test rather than a one-off check, written against the directory rather than a list — (c5).
+- **`INSUFFICIENT_DATA` IS NOT TOUCHED, AND THE REASON IS A RULE RATHER THAN SCOPE.** Its
+  classification is contradicted between design doc §8.6 and §12.5, with the code following the
+  **stale** §8.6 — filed as **open question 24** to 2f, which owns §14.2's denominators, with a
+  dated superseded-note left at §8.6 itself because a reader looking for denominators reaches it
+  first. **A correction that cannot move a number and a correction that moves all of them are
+  different acts, and bundling would let the second ride in on the first's evidence.** Unlike
+  `CANDIDATE_DROPPED`, `INSUFFICIENT_DATA` has producers and occurs in real data, so moving it
+  re-baselines every failure rate the project computes.
 - **`audit_report.py`'s lookup table picks the change up automatically** and is not special-cased.
   A second place that classifies outcomes is a second place that can disagree.
 

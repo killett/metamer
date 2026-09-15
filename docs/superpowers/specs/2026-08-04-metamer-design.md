@@ -665,10 +665,31 @@ early-return in the fit driver, so this is Phase 1.
 | `NOT_ATTEMPTED` | ~~candidate skipped — screened out, capability-excluded, or cost-refused~~ **CORRECTED 2026-08-11: nothing wrote here.** A skip that was DECIDED is `SCREENED_OUT`; see §12.5's grouping table |
 | `SCREENED_OUT` | a decision was taken not to fit this candidate — screened out, capability-excluded, or cost-refused |
 | `CANDIDATE_DROPPED` | candidate abandoned run-wide by the early-abort demotion path (§14.1) |
-| `INSUFFICIENT_DATA` | too few valid samples — land, permanent ice. **A legitimate expected outcome, excluded from every failure-rate denominator.** |
+| `INSUFFICIENT_DATA` | ~~too few valid samples — land, permanent ice. **A legitimate expected outcome, excluded from every failure-rate denominator.**~~ **SUPERSEDED BY §12.5 ON BOTH POINTS, dated 2026-09-14 — see the note below.** |
 
 `INSUFFICIENT_DATA` fixes the denominator problem: without it, an ocean-only run on a
 global grid reports ~70% "failure" and the number becomes noise everyone learns to ignore.
+
+> **THIS ROW IS STALE AND §12.5 SUPERSEDES IT (noted 2026-09-14, open question 24).** §12.5's
+> non-fit grouping table — *"the grouping is what §14.2's denominator reads"* — separates land and
+> permanent ice, which are **`NOT_APPLICABLE`**, from a genuinely thin record, which is
+> `INSUFFICIENT_DATA` and which §12.5 calls **eligible**: *"its rate is a real statement about
+> record coverage"*, and *"collapsing them makes the failure rate uninterpretable"*. **The row
+> above still names land and permanent ice, which is the exact conflation §12.5 was written to
+> undo**, and it still calls the code excluded from every denominator, which §12.5 contradicts.
+>
+> **`Outcome.is_eligible` currently follows THIS row, not §12.5.** The disagreement is filed as
+> open question 24 and is **2f's**, because 2f owns §14.2's denominators and the correction should
+> land with a consumer rather than ahead of one.
+>
+> **It is a re-baselining, not a classification edit:** `INSUFFICIENT_DATA` has producers and
+> occurs in real data, so moving it into the denominator changes every failure rate the project
+> computes, and any artifact carrying a rate computed under the current rule becomes incomparable
+> to one computed after.
+>
+> **The note sits HERE and not only at §12.5 because a reader looking for denominators reaches
+> §8.6 first** — (a6): a description whose subject has moved is struck where it sits, not only
+> corrected where its successor lives.
 
 At 10^7 series nobody inspects individuals — **the map of which failure occurred where is
 itself the diagnostic.**

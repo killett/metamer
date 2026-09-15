@@ -23,6 +23,7 @@ from dataclasses import fields
 import numpy as np
 import pytest
 
+from metamer.batch import audit_report as audit_report_module
 from metamer.batch.audit import Arm, ArmStarts, AuditArms
 from metamer.batch.audit_report import (
     KAPPA_BINS,
@@ -1271,3 +1272,54 @@ def test_the_per_arm_degenerate_counts_are_reported_for_every_candidate():
 
     assert (first.cold_degenerate, first.warm_degenerate) == (4, 7)
     assert (second.cold_degenerate, second.warm_degenerate) == (0, 0)
+
+
+def test_a_dropped_candidate_is_outside_the_failure_rate_and_inside_the_denominator():
+    """The arithmetic through the vectorised tables, not the properties.
+
+    `audit_report` reads the taxonomy through code-indexed lookup tables rather
+    than through the enum (the module is imported under an alias here: this
+    file already imports a FUNCTION called `audit_report` from it), so the property and the behaviour are two things and
+    can come apart. This asserts the second.
+
+    Expected values determined independently by counting the constructed array
+    by hand: nine cells, of which two are `DEGENERATE_HESSIAN` (failures), three
+    are `CANDIDATE_DROPPED` (decided skips -- eligible, not failures), one is
+    `NOT_APPLICABLE` (out of domain, not eligible) and three are `OK`. So eight
+    cells are eligible and two of them failed.
+
+    Bug this catches: a lookup table built from a stale copy of the taxonomy --
+    hard-coded, cached at import from a previous definition, or indexed by
+    `range(len(Outcome))` rather than by the members' own codes. Any of those
+    leaves `Outcome.CANDIDATE_DROPPED.is_failure` reading `False` while the
+    array arithmetic still counts those cells as failures, which is precisely
+    the half that reaches a report.
+
+    **The numbers matter in a specific direction.** If a dropped candidate
+    counted as a failure, this candidate would read 5 failures in 8 -- and the
+    early abort writes `CANDIDATE_DROPPED` at every remaining point *because*
+    the candidate already failed, so the rate would report the decision rather
+    than the candidate. See the handoff's (j7b).
+    """
+    codes = np.array(
+        [
+            Outcome.OK.code,
+            Outcome.DEGENERATE_HESSIAN.code,
+            Outcome.CANDIDATE_DROPPED.code,
+            Outcome.CANDIDATE_DROPPED.code,
+            Outcome.OK.code,
+            Outcome.NOT_APPLICABLE.code,
+            Outcome.DEGENERATE_HESSIAN.code,
+            Outcome.CANDIDATE_DROPPED.code,
+            Outcome.OK.code,
+        ],
+        dtype=np.uint8,
+    )
+
+    eligible = audit_report_module._eligible(codes)
+    failed = audit_report_module._failed(codes)
+
+    assert int(eligible.sum()) == 8
+    assert int(failed.sum()) == 2
+    assert bool(eligible[2]) is True
+    assert bool(failed[2]) is False
