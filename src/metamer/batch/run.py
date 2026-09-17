@@ -564,6 +564,7 @@ def run(
     calibration_ladder: tuple[int, ...] | None = None,
     decimate: bool = False,
     warm_start_from: Path | str | None = None,
+    dropped: frozenset[str] = frozenset(),
 ) -> RunReport:
     """Validate a configuration, fit every tile, and write the store.
 
@@ -682,6 +683,15 @@ def run(
             rule; this parameter does not choose the path, because a caller that
             passed the same `store_path` for both passes would have pass 2
             resume pass 1's coarse store.
+        dropped: Candidate LABELS demoted by section 14.1's early abort. They
+            are not fitted anywhere in this run and are written as
+            `CANDIDATE_DROPPED` at every point. **They stay in the candidate
+            set**, so the store keeps its `M` columns and **neither `fit_hash`
+            nor `compat_hash` moves** -- a drop that altered the hashes would
+            make the resumed run refuse its own store and silently defeat
+            section 12.8's gate. A label the set does not contain is refused
+            rather than ignored: a demotion that names nothing drops nothing
+            and would report that it had.
         warm_start_from: A COMPLETE pass-1 store to warm-start every fit from --
             Phase 2c's pass 2 (D1, D12). **The barrier and the cross-store gate
             run before anything expensive**: pass 1 must be complete, and its
@@ -908,6 +918,18 @@ def run(
         columns = geometry.k_beta
         specs = geometry.specs
         index = geometry.index
+        labels = tuple(model_label(spec) for spec in specs)
+        unknown = sorted(dropped - set(labels))
+        if unknown:
+            raise ValidationError(
+                ValidationLayer.SEMANTIC,
+                f"cannot drop {unknown}: the candidate set is {list(labels)}. A "
+                "demotion naming a candidate that does not exist would drop "
+                "nothing and report that it had",
+            )
+        skip = frozenset(
+            position for position, label in enumerate(labels) if label in dropped
+        )
 
         # MEASURED AFTER THE OPEN AND BEFORE THE STORE, in a child of its own:
         # the input's handles, consolidated metadata and decompression buffers
@@ -1253,12 +1275,20 @@ def run(
                             x0=starts,
                             x0_valid=validity,
                             max_iter=iteration_cap,
+                            skip=skip,
                         )
                     # THE RUNG WAS COMPUTED AND DISCARDED UNTIL THIS TASK, which
                     # made `FitResult.init_rung` a populated field nothing acted
                     # on. It is the one reading that separates a warm run from a
                     # cold one without comparing two stores.
-                    rungs.update(str(value) for value in result.init_rung.ravel())
+                    # A DEMOTED CANDIDATE HAS NO RUNG, because it never
+                    # started; its cells stay None and are not counted as a
+                    # rung called "None".
+                    rungs.update(
+                        str(value)
+                        for value in result.init_rung.ravel()
+                        if value is not None
+                    )
                     write_tile(
                         store_path,
                         tile,

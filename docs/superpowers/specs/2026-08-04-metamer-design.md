@@ -2505,21 +2505,26 @@ line in the report**, not a buried counter.
 
 `--no-early-abort` exists for datasets where high failure is genuinely expected.
 
-> **OPEN, AND OWNED BY SUB-PHASE 2e's TASK 6 (raised 2026-09-12): A ONE-PASS RUN HAS NO PASS 1,
-> AND THIS SECTION READS AS THOUGH EVERY RUN GETS AN EARLY ABORT.** With `warm_start.enabled =
-> false` the driver runs exactly one cold pass over the full grid, **with no coarse store written**
-> — so neither the stratified sample nor the barrier this section relies on exists. The only other
-> trigger is the geographically contiguous tile prefix that *"the abort is evaluated on pass 1, not
-> on a fixed prefix of tiles"* above rules out — *"on a global grid, a polar band or a single
-> basin"* — for reasons that stand. (**Cited by its sentence, not by a paragraph count**: a
-> positional citation is the part that goes stale, which §14 has already paid for.)
+> **DECIDED 2026-09-16 AT SUB-PHASE 2e's TASK 6 — READING (i): THE EARLY ABORT IS TWO-PASS
+> ONLY, AND A ONE-PASS RUN HAS NONE.** With `warm_start.enabled = false` the driver runs one cold
+> pass over the full grid and writes no coarse store, so the stratified sample this section relies
+> on does not exist — and the only other trigger is the contiguous tile prefix ruled out above.
+> A decimated probe pass run purely to have something to judge was rejected: pass 1's other jobs
+> all exist because pass 1 exists for warm-starting, and a probe with one job pays a full coarse
+> fit for it. **The one-pass store records the absence**, as
+> `early_abort = {"evaluated": false, "reason": "one-pass run: …"}` in its root attrs.
 >
-> **Three readings, and this section does not yet choose:** *(i)* the abort is two-pass-only and
-> says so; *(ii)* a one-pass run gets a decimated probe pass purely to have something to abort on;
-> *(iii)* the guarantee is weakened for one-pass runs and the weakening is stated. **2e's Task 6
-> takes the decision and replaces this note with the answer.** It is recorded as open rather than
-> resolved here because the task that documents a decision must not be the task that precedes
-> taking it.
+> **THE LIMITATION IS LARGER THAN "NO ABORT", AND §14.3 CARRIES IT TOO.** Exit 1's producer is
+> this section's verdict (see §14.3), so **a one-pass run can reach neither code 2 by early abort
+> nor code 1 at all.** The consequence lives in the join between the two sections, which is why it
+> is stated in both.
+>
+> **AND ONE QUESTION THE DECISION LEFT OPEN.** A coarse sample with **no eligible point** holds no
+> evidence, and the verdict **refuses** — it aborts rather than continuing blind, naming
+> `--no-early-abort` as the lift. That is not the same as the input being empty: land on every
+> stride-aligned row empties the lattice while the fine grid carries data (2c's criterion-1
+> fixture is exactly that shape). **Whether no-evidence should abort or continue loudly is open**;
+> the abort is the conservative reading and is pinned by a test that says so.
 
 ### 14.2 End of run: a report derived from the store
 
@@ -2633,6 +2638,23 @@ root attrs.
 | 3 | config/validation error (layers 1–3) — resuming will not help |
 | 4 | data-dependent validation error (layer 4) |
 | 5 | **internal error — an unhandled exception. The run did not finish and no map was written** |
+
+**CODE 1 IS DEFINED HERE BECAUSE THIS TABLE NEVER DEFINED IT (sub-phase 2e, Task 6, 2026-09-16).**
+*"Completed with failures above threshold"* named no threshold and no population. The only
+threshold this design has is §14.1's, which decides a **drop**, so code 1 means: **a two-pass run
+whose early-abort verdict found a candidate above that threshold, and which completed anyway** —
+under `--on-candidate-failure=drop` or `continue`. It adds no second threshold and no science
+policy; a whole-run failure rate is §14.2's report, which is 2f's. **The rate behind code 1 was
+measured on the COARSE pass**, and the final console line says so — without that sentence code 1
+reads as a statement about the run, and it is a statement about a sample.
+
+**A ONE-PASS RUN CAN NEVER EXIT 1**, because it has no verdict (§14.1, reading (i)). A script
+branching on 1 will simply never see it from `warm_start.enabled = false`, and this table is where
+a script author looks.
+
+**Code 2 now has two producers and they are different facts:** a preemption (tiles outstanding;
+the same command finishes the job) and an early abort (pass 1 complete; the same command reaches
+the same verdict, and what lifts it is a different request). The final line says which.
 
 A script that resumes on failure needs to distinguish "aborted, resumable" from "config
 rejected."

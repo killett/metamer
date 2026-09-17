@@ -691,3 +691,72 @@ by the commit hook refusing. **Neither was caught by the command that was suppos
 cheap hooks passing and hides the expensive one failing. **The fix is the same in both cases: do
 not pipe a checker through a truncating filter.** Run it to a file and read its status, or
 `grep -E 'Passed|Failed|error:'` so every hook's verdict is in the output whatever its position.
+
+---
+
+## Plan Task 6 — the abort action and the one-pass decision, audited before any code (2026-09-15)
+
+**THE BRIEF** is the plan's Task 6: evaluate the verdict at the barrier, act on it, give
+`CANDIDATE_DROPPED` its first producer, wire `--on-candidate-failure` and `--no-early-abort`, give
+`COMPLETED_WITH_FAILURES` its producer, and take the one-pass decision. **Four findings, and the
+first two are coupled in a way neither section shows on its own.**
+
+### §14.3 NEVER DEFINES EXIT 1's THRESHOLD, AND THE PLAN INHERITED THE GAP
+
+The plan says *"a run that completes with a failure rate above threshold and was not aborted exits
+1"*. **Which threshold, over which population?** §14.3's table says *"completed with failures above
+threshold"* and the design doc says **nothing else, anywhere** — no number, no denominator, no
+per-candidate-versus-pooled. §14.1's 90% is a different quantity: it is evaluated on **pass 1's
+coarse grid** and is explicitly *"calibrated to catch bugs, not to second-guess science"*, with
+*"a 25% failure rate may be real"* said in the same paragraph.
+
+**So inventing a post-hoc rate threshold here would be inventing science policy in a sub-phase
+whose job is plumbing** — and §14.2's report, which is where a whole-run rate belongs, is **2f's**.
+
+**THE READING THAT NEEDS NO NEW NUMBER IS ALSO THE ONE §14.3's SENTENCE ALREADY DESCRIBES:** a run
+exits 1 when **the verdict found a candidate above the threshold and the run completed anyway** —
+which is precisely *completed, with failures above threshold, not aborted*. Both surviving policies
+produce it: `drop` demotes and finishes; `continue` keeps and finishes. `abort` produces 2. No
+candidate over the threshold produces 0. **The threshold keeps its stated purpose — it decides the
+drop — and the exit code reports that the drop happened**, rather than acquiring a second job
+nobody specified.
+
+**What must be said on the final line, because it is the honest caveat:** the rate that produced
+the code was measured on the **coarse** pass, not the finished grid.
+
+### AND THAT COUPLES THE EXIT CODE TO THE ONE-PASS DECISION, WHICH LIVES IN A DIFFERENT SECTION
+
+If exit 1's producer is the verdict, and a **one-pass run has no verdict** — which is reading (i),
+the expected survivor of the gap Task 0 filed — then **a one-pass run can never exit 1.** It has no
+early abort *and* no `COMPLETED_WITH_FAILURES`.
+
+**Neither section shows this.** §14.1 discusses the abort and §14.3 lists the codes, and the
+consequence lives in the join. **It is a consequence to DECLARE, not to discover**: a script that
+branches on 1 will simply never see it from `warm_start.enabled = false`, and the honest place to
+say so is §14.3's table beside code 1, not only §14.1's limitation note.
+
+### PURITY BOUGHT RESUME-CONSISTENCY, AND THAT IS WORTH ASSERTING RATHER THAN ASSUMING
+
+A resumed two-pass run re-enters the barrier and re-evaluates the verdict. **If the verdict could
+move between processes, a resume could drop a candidate the first process kept** — and pass 2's
+store would then hold `CANDIDATE_DROPPED` in some tiles and fits in others, for one candidate, with
+nothing recording why.
+
+It cannot move: Task 5 made the verdict a pure function of pass 1's store, and pass 1 is **complete
+and frozen** before the barrier is entered. **So the property follows from a decision already
+taken** — (j3) again, a design choice constraining a later one — and it is cheap to assert
+directly: the same store yields the same verdict, so the same tiles get the same treatment.
+
+### (c) WHAT "EVERY REMAINING POINT" MEANS, AND THE HASHES MUST NOT MOVE
+
+`CANDIDATE_DROPPED` goes to *"every remaining point"*. Two things that are not obvious:
+
+- **Pass 1's points keep their real outcomes.** The evidence for the drop lives there, and
+  overwriting it would destroy the only record of why the candidate was demoted — and would make
+  the run's own justification unreproducible from its artifacts.
+- **THE DROP MUST NOT CHANGE `fit_hash` OR `compat_hash`.** The candidate set is still **declared**;
+  what changed is that this run chose not to fit one of them, which is what the outcome code
+  records. A drop that altered the hashes would make the store incomparable to the same
+  configuration run on a quieter day, **and would silently defeat §12.8's resume gate** — the
+  resumed run would refuse its own store. The store schema keeps all `M` columns; only the codes
+  differ.

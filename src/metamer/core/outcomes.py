@@ -60,11 +60,12 @@ class Outcome(StrEnum):
         classified by that rule, at that section**; three statements of one rule
         is how a count in this project reached twelve sites.
 
-        **`CANDIDATE_DROPPED` JOINED THE GROUP AT 2e's TASK 1 GROUPING PASS
-        (2026-09-14), AND THAT WAS A CORRECTION RATHER THAN A DECISION.** It sat
-        in the failure set from 2a while section 12.5 said otherwise, and
-        **nothing caught the disagreement because the member has no producer** --
-        2e's early abort is its first. A classification that has never been
+        **`CANDIDATE_DROPPED` JOINED THE GROUP AT 2e's ~~TASK 1 GROUPING
+        PASS~~ TASK 3 (2026-09-14; the task number corrected 2026-09-16), AND THAT
+        WAS A CORRECTION RATHER THAN A DECISION.** It sat in the failure set from
+        2a while section 12.5 said otherwise, and **nothing caught the
+        disagreement because the member had no producer** -- 2e's Task 6 early
+        abort is its first, as of 2026-09-16. A classification that has never been
         exercised has never been checked. The argument was also already in the
         suite, at the sibling: `SCREENED_OUT`'s test says counting a decided skip
         as a failure "would make a *cheaper* configuration report a worse failure

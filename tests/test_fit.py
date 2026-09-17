@@ -1272,3 +1272,88 @@ def test_a_mask_of_the_wrong_shape_is_refused():
     y, t, signal, mask = _plain_batch(batch=3, n=120)
     with pytest.raises(ValueError, match="mask shape"):
         fit(y, t, signal, _candidates(), criterion=Criterion.AIC, mask=mask[:1])
+
+
+# --------------------------------------------------------------------------
+# A decided skip: section 14.1's demotion, at the fit
+# --------------------------------------------------------------------------
+
+
+def test_a_skipped_candidate_is_recorded_as_dropped_and_carries_no_values():
+    """`CANDIDATE_DROPPED` everywhere, and no number beside it.
+
+    Expected values determined independently from the status invariant in
+    design doc section 12.5: a non-`OK` cell carries NaN primitives, and a
+    demoted candidate is a decided non-fit, so every series says so and none
+    has a log-likelihood, a parameter count, a sample size or a start.
+
+    Bug this catches: the skip leaving the pre-filled `NOT_ATTEMPTED` in place.
+    That code means **nothing wrote here**, and section 14.1 already corrected
+    exactly that confusion once -- a store holding it cannot tell a demoted
+    candidate from a crash that never reached the cell.
+    """
+    y, t, signal, mask = _plain_batch()
+
+    result = fit(
+        y, t, signal, _candidates(), Criterion.AIC, mask=mask, skip=frozenset({1})
+    )
+
+    assert (result.outcome[:, 1] == Outcome.CANDIDATE_DROPPED.code).all()
+    assert np.isnan(result.loglik[:, 1]).all()
+    assert np.isnan(result.scores.k[:, 1]).all()
+    assert np.isnan(result.scores.n[:, 1]).all()
+    assert all(value is None for value in result.init_rung[:, 1])
+    assert (result.n_iter[:, 1] == 0).all()
+
+
+def test_skipping_one_candidate_leaves_the_others_bit_identical():
+    """A drop must not change the answers it exists to protect.
+
+    Expected values determined independently: the same fit without a skip. The
+    retained candidate's column is compared value for value against it, not
+    against anything this test computes.
+
+    Bug this catches: a skip that disturbs a neighbour -- an index shift that
+    writes candidate 0's results into column 1, or shared per-candidate state
+    left over from the skipped iteration. **Both would make the drop change the
+    fits of the candidates it was keeping**, which is the one thing a demotion
+    must never do.
+    """
+    y, t, signal, mask = _plain_batch()
+    whole = fit(y, t, signal, _candidates(), Criterion.AIC, mask=mask)
+
+    skipped = fit(
+        y, t, signal, _candidates(), Criterion.AIC, mask=mask, skip=frozenset({1})
+    )
+
+    np.testing.assert_array_equal(skipped.outcome[:, 0], whole.outcome[:, 0])
+    np.testing.assert_array_equal(skipped.loglik[:, 0], whole.loglik[:, 0])
+    np.testing.assert_array_equal(skipped.theta[:, 0], whole.theta[:, 0])
+    np.testing.assert_array_equal(skipped.n_iter[:, 0], whole.n_iter[:, 0])
+
+
+def test_a_skipped_candidate_costs_no_iterations_at_all():
+    """The saving is the point, so it is asserted rather than assumed.
+
+    Expected value determined independently: a candidate that is not fitted
+    runs zero optimizer iterations, and the unskipped fit of the same batch
+    shows that candidate normally runs more than zero -- so the assertion can
+    fail.
+
+    Bug this catches: fitting the candidate and relabelling it afterwards. That
+    implementation passes both tests above -- the codes say dropped and the
+    neighbour is untouched -- **and throws away the whole reason a run demotes
+    a failing candidate**, which is not paying for it at every remaining point.
+
+    **PROVED TO BITE 2026-09-16:** the skip was changed to fall through into the
+    fit; this test failed on the iteration count.
+    """
+    y, t, signal, mask = _plain_batch()
+    whole = fit(y, t, signal, _candidates(), Criterion.AIC, mask=mask)
+    assert (whole.n_iter[:, 1] > 0).all()
+
+    skipped = fit(
+        y, t, signal, _candidates(), Criterion.AIC, mask=mask, skip=frozenset({1})
+    )
+
+    assert int(skipped.n_iter[:, 1].sum()) == 0

@@ -152,6 +152,16 @@ class ExitCode(IntEnum):
     `INTERNAL_ERROR`, so an observed 1 is a DEFECT rather than a crash.** That is
     a stronger statement than the one it replaces, it holds only inside this
     window, and `tests/test_runner.py` pins it there.
+
+    **THE WINDOW CLOSED AT 2e's TASK 6 (2026-09-16).** `COMPLETED_WITH_FAILURES`
+    now has its producer, and **its definition is 2e's because design doc
+    section 14.3 never gave one**: a two-pass run whose early-abort verdict found
+    a candidate above section 14.1's threshold, and which completed anyway under
+    `--on-candidate-failure=drop` or `continue`. The rate behind it was measured
+    on the COARSE pass, and the final console line says so. **A one-pass run has
+    no verdict and therefore can never exit 1.** `tests/test_runner.py`'s
+    unreachability test was inverted to "only from the threshold" rather than
+    deleted.
     """
 
     OK = 0

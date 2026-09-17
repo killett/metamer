@@ -1062,8 +1062,10 @@ def test_code_one_has_no_producer_and_code_two_now_does(tmp_path):
     below. **That test inverts at Task 6**; this one does not.
 
     What is still true and is what this asserts: **neither code arises from an
-    ordinary run or from a rejected config**, so 1 remains without a producer
-    and 2 is not reachable by accident.
+    ordinary run or from a rejected config**, so 2 is not reachable by
+    accident. ~~1 remains without a producer~~ -- **struck at 2e's Task 6
+    (2026-09-16): 1's producer is the early-abort verdict on a two-pass run**,
+    which neither run here is.
 
     Bug this catches: a member deleted on the grounds that nothing produces it,
     and an ordinary clean run drifting onto a nonzero code.
@@ -1369,12 +1371,23 @@ def test_system_exit_paths_pass_through_the_catch_all_untouched():
     assert usage.returncode != ExitCode.INTERNAL_ERROR
 
 
-def test_exit_one_is_unreachable_until_the_failure_rate_threshold_exists(tmp_path):
-    """Between 2e's Task 1 and its Task 6, no path returns 1.
+def test_exit_one_comes_from_no_path_but_the_threshold(tmp_path):
+    """Every enumerated failing path avoids 1; only the threshold produces it.
 
-    **This is the only period in this project's history in which the assertion
-    can be made**, so it is made. Before Task 1, CPython produced 1 on every
-    crash; after Task 6, the failure-rate threshold produces it deliberately.
+    **INVERTED AT 2e's TASK 6 (2026-09-16), AS TASK 1 SAID IT WOULD BE.** This
+    was `test_exit_one_is_unreachable_until_the_failure_rate_threshold_exists`
+    and asserted ~~no path returns 1~~ -- true only between Task 1 and Task 6,
+    and made while it could be. **Task 6 gave 1 its producer**: the early-abort
+    verdict found a candidate above threshold and the run completed anyway. The
+    POSITIVE half now lives in `tests/test_early_abort.py`
+    (`test_the_verdict_reaches_the_process_exit_code`, the `drop` and `continue`
+    rows); this half is unchanged in its body and changed in its claim -- **the
+    paths below are every other non-zero path, so 1 comes from nowhere else.**
+    A test that flips from "never" to "only from here" is the pair; neither half
+    is edited alone.
+
+    Before Task 1, CPython produced 1 on every crash; after Task 6, the
+    threshold produces it deliberately.
 
     **"Every failing path" is enumerated rather than judged**, because the
     phrase has no stopping condition otherwise and a test satisfying it with two
@@ -1389,8 +1402,8 @@ def test_exit_one_is_unreachable_until_the_failure_rate_threshold_exists(tmp_pat
     Expected value determined independently: from the taxonomy -- 1 means
     *completed with failures above threshold*, and no threshold is wired yet.
 
-    Bug this catches: a path reaching `COMPLETED_WITH_FAILURES` before anything
-    is meant to produce it. In a taxonomy where 1 has just stopped meaning
+    Bug this catches: a path OTHER than the threshold reaching
+    `COMPLETED_WITH_FAILURES`. In a taxonomy where 1 has just stopped meaning
     *crash*, that would make the store's most misleading code reachable with
     nobody's intent behind it -- a script would resume from a run that never
     finished.

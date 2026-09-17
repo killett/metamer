@@ -133,6 +133,16 @@ def abort_verdict(
     to produce a store of nothing. **"Zero cases" is a claim about the
     instrument until proven otherwise**, so it aborts and says so.
 
+    **CORRECTED 2026-09-16: AN EMPTY COARSE SAMPLE DOES NOT IMPLY AN EMPTY
+    GRID.** ~~That is a config or data error~~ was the first wording, and 2c's
+    criterion-1 fixture refutes it: land on every stride-2 row leaves the
+    coarse lattice entirely masked while the odd rows carry data. The sample
+    then holds **no evidence**, which is what the refusal now says, and the
+    message names `--no-early-abort` as the lift when the lattice is known to
+    fall on masked cells. **Whether no-evidence should abort or continue
+    loudly is open** -- see PROGRESS.md -- and this abort is the conservative
+    reading until it is settled.
+
     Args:
         pass1_store: A finished pass-1 store.
         threshold: Failure rate above which a candidate counts as failing.
@@ -229,9 +239,10 @@ def _decide(
             threshold=threshold,
             reason=(
                 "no point in the coarse pass was eligible for any candidate, so "
-                "there is no failure rate to evaluate. That is a config or data "
-                "error -- an input whose values are all masked, or a domain "
-                "entirely outside the model's reach -- not a clean pass"
+                "the sample holds no evidence and the run is refused rather than "
+                "continued blind. Either the input is masked everywhere, or the "
+                "coarse lattice happens to fall only on masked cells; if the "
+                "second, --no-early-abort proceeds"
             ),
         )
 

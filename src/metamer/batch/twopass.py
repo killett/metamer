@@ -14,8 +14,11 @@ schema, because **pass 1's store IS the cache** -- which is why §11.1's
 DISABLING WARM-STARTING DOES NOT RUN PASS 1 AT ALL.
 ---------------------------------------------------
 `warm_start.enabled = false` makes this exactly one cold `run` over the full
-grid, with no coarse store written and no residue: byte-for-byte the run a
-caller would have got from `run(config, store)` directly. **Running pass 1
+grid, with no coarse store written and no residue: **array-for-array** the run a
+caller would have got from `run(config, store)` directly. ~~byte-for-byte~~ --
+**amended 2026-09-16 (2e Task 6):** the store's root attrs also carry
+`early_abort = {"evaluated": false, ...}`, which is how a one-pass store says it
+had no early abort rather than saying nothing. **Running pass 1
 anyway and then ignoring it would be worse than useless** -- it costs a
 `1/k²`-sized fit and leaves a permanent artifact whose only stated purpose is
 to be §11.2's cold reference for a comparison nobody asked for.
@@ -49,6 +52,7 @@ and closing it means keying the calibration on something narrower than
 
 from __future__ import annotations
 
+import json
 import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -56,8 +60,15 @@ from pathlib import Path
 from typing import TypedDict
 
 import numpy as np
+import zarr
 from numpy.typing import NDArray
 
+from metamer.batch.abort import (
+    DEFAULT_FAILURE_THRESHOLD,
+    AbortVerdict,
+    CandidateFailurePolicy,
+    abort_verdict,
+)
 from metamer.batch.decimate import pass1_store_path
 from metamer.batch.run import RunReport, run
 from metamer.batch.tiling import Tile
@@ -126,6 +137,23 @@ class TwoPassReport:
     pass2_seconds: float | None
     store_path: Path
     pass1_path: Path | None
+    verdict: AbortVerdict | None = None
+
+    @property
+    def aborted(self) -> bool:
+        """Whether section 14.1's early abort stopped the run before pass 2.
+
+        **DISTINCT FROM `interrupted`, THOUGH BOTH EXIT 2.** A preempted run has
+        tiles outstanding and the same command finishes it. An aborted run has
+        none -- pass 1 is complete -- and the same command reaches the same
+        verdict, because the verdict is a pure function of that store. What
+        lifts it is a different request: `--on-candidate-failure` or
+        `--no-early-abort`.
+
+        Returns:
+            True if the verdict said abort.
+        """
+        return self.verdict is not None and self.verdict.action == "abort"
 
     @property
     def interrupted(self) -> bool:
@@ -145,7 +173,7 @@ class TwoPassReport:
         if self.pass1 is not None and self.pass1.interrupted:
             return True
         if self.pass2 is None:
-            return self.pass1 is not None
+            return self.pass1 is not None and not self.aborted
         return self.pass2.interrupted
 
 
@@ -163,6 +191,9 @@ def run_two_pass(
     on_pass1_tile_progress: (
         Callable[[Tile, NDArray[np.uint8], tuple[str, ...]], None] | None
     ) = None,
+    early_abort: bool = True,
+    candidate_failure_policy: CandidateFailurePolicy = CandidateFailurePolicy.ABORT,
+    failure_threshold: float = DEFAULT_FAILURE_THRESHOLD,
     on_pass1_tile_written: Callable[[Tile], None] | None = None,
     floor: FloorReport | None = None,
     max_iter: int | None = None,
@@ -197,6 +228,14 @@ def run_two_pass(
             across both would add tallies over incomparable point sets and
             report a number describing neither. `__main__` labels pass 1's
             lines.
+        early_abort: Evaluate section 14.1's verdict between the passes.
+            False is `--no-early-abort`: **it disables a decision, not a
+            computation**, so pass 2 fits exactly what a `continue` verdict
+            would have let it fit.
+        candidate_failure_policy: What a single candidate above the threshold
+            does -- `--on-candidate-failure`.
+        failure_threshold: The strictly-greater rate the verdict compares
+            against.
         on_pass1_tile_written: The same seam for **pass 1**, separate because
             the two interruptions have different consequences and a test that
             could only reach one of them could not tell them apart: a kill in
@@ -249,6 +288,21 @@ def run_two_pass(
             on_tile_progress=on_tile_progress,
             **shared,
         )
+        # A ONE-PASS RUN HAS NO VERDICT, AND THE STORE SAYS SO RATHER THAN
+        # SAYING NOTHING. Section 14.1's decision (2e Task 6, reading i): the
+        # abort is evaluated on pass 1's stratified sample and nowhere else, so
+        # with no pass 1 there is no early abort -- and, because exit 1's
+        # producer is the verdict, no `COMPLETED_WITH_FAILURES` either.
+        _record_verdict(
+            store_path,
+            {
+                "evaluated": False,
+                "reason": (
+                    "one-pass run: warm_start.enabled = false writes no coarse "
+                    "store, so there is no stratified sample to evaluate"
+                ),
+            },
+        )
         return TwoPassReport(
             pass1=None,
             pass2=only,
@@ -283,6 +337,39 @@ def run_two_pass(
             pass1_path=pass1_path,
         )
 
+    # SECTION 14.1's VERDICT, BETWEEN THE PASSES AND NOWHERE ELSE. Pass 1 is
+    # complete here -- `first.interrupted` is False -- and the verdict refuses
+    # an incomplete store on its own account, matching the barrier `run` enters
+    # next. **It is re-evaluated on every resume and cannot move**: it is a pure
+    # function of pass 1's store, which is frozen, so a resumed pass 2 demotes
+    # exactly the candidates the first process demoted. Were that not so, one
+    # candidate could hold `CANDIDATE_DROPPED` in some tiles and fits in
+    # others, with nothing recording why.
+    verdict = (
+        abort_verdict(
+            pass1_path,
+            threshold=failure_threshold,
+            policy=candidate_failure_policy,
+        )
+        if early_abort
+        else None
+    )
+    if verdict is not None and verdict.action == "abort":
+        return TwoPassReport(
+            pass1=first,
+            pass2=None,
+            pass1_seconds=pass1_seconds,
+            pass2_seconds=None,
+            store_path=Path(store_path),
+            pass1_path=pass1_path,
+            verdict=verdict,
+        )
+
+    dropped = (
+        frozenset(verdict.candidates)
+        if verdict is not None and verdict.action == "drop"
+        else frozenset()
+    )
     started = time.perf_counter()
     second = run(
         config_path,
@@ -290,8 +377,10 @@ def run_two_pass(
         warm_start_from=pass1_path,
         on_tile_progress=on_tile_progress,
         on_tile_written=on_tile_written,
+        dropped=dropped,
         **shared,
     )
+    _record_verdict(store_path, _verdict_attrs(verdict, candidate_failure_policy))
     return TwoPassReport(
         pass1=first,
         pass2=second,
@@ -299,7 +388,69 @@ def run_two_pass(
         pass2_seconds=time.perf_counter() - started,
         store_path=Path(store_path),
         pass1_path=pass1_path,
+        verdict=verdict,
     )
+
+
+def _verdict_attrs(
+    verdict: AbortVerdict | None, policy: CandidateFailurePolicy
+) -> dict[str, object]:
+    """The verdict as provenance, for section 14.2's report to print.
+
+    **MEASURE IN THE PHASE THAT CAN, PRINT IN THE PHASE THAT SHOWS.** The rates
+    are recomputable from pass 1's store, which is permanent; the THRESHOLD and
+    the POLICY are command-line flags and exist nowhere else. Without this, 2f
+    could see `CANDIDATE_DROPPED` in the store and could not say which rule put
+    it there.
+
+    Args:
+        verdict: The verdict, or None when `--no-early-abort` was given.
+        policy: The policy the run was asked to apply.
+
+    Returns:
+        A JSON-serializable mapping. **The rates were measured on the COARSE
+        pass**, and the mapping says so, because a rate read out of the output
+        store is otherwise taken to describe the output store.
+    """
+    if verdict is None:
+        return {"evaluated": False, "reason": "--no-early-abort"}
+    return {
+        "evaluated": True,
+        "population": "pass 1 coarse grid",
+        "action": verdict.action,
+        "dropped": list(verdict.candidates) if verdict.action == "drop" else [],
+        "above_threshold": [
+            rate.candidate
+            for rate in verdict.rates
+            if rate.rate is not None and rate.rate > verdict.threshold
+        ],
+        "threshold": verdict.threshold,
+        "policy": policy.value,
+        "reason": verdict.reason,
+        "rates": [
+            {
+                "candidate": rate.candidate,
+                "failed": rate.failed,
+                "eligible": rate.eligible,
+                "rate": rate.rate,
+            }
+            for rate in verdict.rates
+        ],
+    }
+
+
+def _record_verdict(store_path: Path | str, value: dict[str, object]) -> None:
+    """Write the verdict into the output store's root attrs.
+
+    Args:
+        store_path: The output store.
+        value: What `_verdict_attrs` produced.
+    """
+    # THROUGH `json` DELIBERATELY: the round trip is what proves the mapping is
+    # serializable before it reaches the store, and its `Any` result is what
+    # zarr's `JSON` attribute type accepts.
+    root = zarr.open_group(str(store_path), mode="r+")
+    root.attrs["early_abort"] = json.loads(json.dumps(value))
 
 
 __all__ = ["TwoPassReport", "run_two_pass"]

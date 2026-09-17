@@ -47,6 +47,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from metamer import __version__
+from metamer.batch.abort import AbortVerdict, CandidateFailurePolicy
 from metamer.batch.input import InputContractError
 from metamer.batch.run import RunReport, run
 from metamer.batch.tiling import Tile
@@ -135,6 +136,29 @@ def _build_parser() -> _Parser:
             "measure even if the cache has an entry, and overwrite it. Implies "
             "--calibrate. The cache has no expiry -- time does not cause the "
             "change an expiry stands in for -- so this is the only override"
+        ),
+    )
+    parser.add_argument(
+        "--on-candidate-failure",
+        choices=[policy.value for policy in CandidateFailurePolicy],
+        default=CandidateFailurePolicy.ABORT.value,
+        dest="on_candidate_failure",
+        help=(
+            "what a single candidate failing above 90%% of the coarse pass "
+            "does (section 14.1): abort the run, drop the candidate and "
+            "continue, or keep it. Every candidate failing always aborts. A "
+            "run that drops or keeps such a candidate and finishes exits 1. "
+            "Two-pass runs only: a one-pass run has no coarse pass to judge"
+        ),
+    )
+    parser.add_argument(
+        "--no-early-abort",
+        action="store_true",
+        dest="no_early_abort",
+        help=(
+            "do not evaluate section 14.1's early abort at all, for data where "
+            "high failure is genuinely expected. It disables a decision, not a "
+            "computation: pass 2 fits what a clean verdict would have let it"
         ),
     )
     parser.add_argument(
@@ -248,6 +272,7 @@ def _run(argv: Sequence[str] | None) -> int:
 
     pass1: RunReport | None = None
     pass1_seconds: float | None = None
+    verdict: AbortVerdict | None = None
     try:
         if arguments.two_pass:
             two = run_two_pass(
@@ -258,8 +283,27 @@ def _run(argv: Sequence[str] | None) -> int:
                 recalibrate=arguments.recalibrate,
                 on_tile_progress=progress,
                 on_pass1_tile_progress=pass1_progress,
+                early_abort=not arguments.no_early_abort,
+                candidate_failure_policy=CandidateFailurePolicy(
+                    arguments.on_candidate_failure
+                ),
             )
             pass1, pass1_seconds = two.pass1, two.pass1_seconds
+            verdict = two.verdict
+            if two.aborted and two.verdict is not None:
+                # SECTION 14.1's ABORT. Exit 2 -- "aborted early, resumable" --
+                # and the message says what the same command would do, which is
+                # reach the same verdict: it is a pure function of a finished
+                # pass-1 store. What lifts it is a different REQUEST.
+                _print_verdict(two.verdict)
+                print(
+                    f"aborted early: {two.verdict.reason}. Pass 1 is complete "
+                    f"and kept at {two.pass1_path}; rerunning the same command "
+                    "reaches the same verdict. --on-candidate-failure=drop or "
+                    "--no-early-abort changes the request",
+                    file=sys.stderr,
+                )
+                return ExitCode.ABORTED_EARLY
             if two.pass2 is None:
                 # PASS 1 STOPPED SHORT AND PASS 2 NEVER STARTED. Exit 2, not 3:
                 # the store is resumable and the same command finishes it. This
@@ -364,6 +408,8 @@ def _run(argv: Sequence[str] | None) -> int:
         f"fit_hash={report.fit_hash}  compat_hash={report.compat_hash}  "
         f"store={report.store_path}"
     )
+    if verdict is not None:
+        _print_verdict(verdict)
     if report.interrupted:
         # EXIT 2 IS SECTION 14.3's "ABORTED EARLY -- RESUMABLE", and a preempted
         # run is exactly that: the completed tiles are on disk with their bits
@@ -375,7 +421,66 @@ def _run(argv: Sequence[str] | None) -> int:
             file=sys.stderr,
         )
         return ExitCode.ABORTED_EARLY
+    # EXIT 1's PRODUCER, DEFINED HERE BECAUSE THE DESIGN DOC NEVER DEFINED IT
+    # (2e Task 6). Section 14.3 says "completed with failures above threshold"
+    # and gives no threshold. The only one this project has is section 14.1's,
+    # which decides a DROP; so exit 1 means: **the verdict found a candidate
+    # above that threshold and the run completed anyway** -- under `drop` or
+    # `continue`. It adds no second threshold and no science policy; section
+    # 14.2's whole-run rates are 2f's. A one-pass run has no verdict and so
+    # can never exit 1.
+    if verdict is not None and _above_threshold(verdict):
+        print(
+            "completed with failures above threshold: "
+            + ", ".join(_above_threshold(verdict))
+            + f" failed above {verdict.threshold:.0%} of the COARSE pass -- a "
+            "sample of the grid, not the finished store, whose rates are "
+            "section 14.2's report",
+            file=sys.stderr,
+        )
+        return ExitCode.COMPLETED_WITH_FAILURES
     return ExitCode.OK
+
+
+def _above_threshold(verdict: AbortVerdict) -> list[str]:
+    """The candidates whose coarse-pass rate exceeded the threshold.
+
+    Args:
+        verdict: The early-abort verdict.
+
+    Returns:
+        Their labels, in store order.
+    """
+    return [
+        rate.candidate
+        for rate in verdict.rates
+        if rate.rate is not None and rate.rate > verdict.threshold
+    ]
+
+
+def _print_verdict(verdict: AbortVerdict) -> None:
+    """Print the verdict's numbers, one line per candidate, on stderr.
+
+    **EVERY RATE WITH ITS OWN DENOMINATOR**, because the denominators are per
+    candidate and a row without one invites a comparison between populations.
+
+    Args:
+        verdict: The early-abort verdict.
+    """
+    for rate in verdict.rates:
+        shown = "n/a" if rate.rate is None else f"{rate.rate:.1%}"
+        print(
+            f"early abort: {rate.candidate}: failed {rate.failed} of "
+            f"{rate.eligible} eligible coarse points ({shown})",
+            file=sys.stderr,
+        )
+    if verdict.action == "drop":
+        print(
+            "early abort: dropped "
+            + ", ".join(verdict.candidates)
+            + " -- written as candidate_dropped at every pass-2 point",
+            file=sys.stderr,
+        )
 
 
 if __name__ == "__main__":

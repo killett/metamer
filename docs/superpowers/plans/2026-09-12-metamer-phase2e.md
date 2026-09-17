@@ -1,6 +1,6 @@
 # Phase 2e — the run's own honesty
 
-**Status: APPROVED 2026-09-12, with four amendments applied. Task 0 in progress; no production code yet.** The four are recorded where they land rather than in a list here: Task 1's unreachability window is now a **test** and Task 6 inverts it; Task 2 states the handover that destroys Task 1's control; Task 0 records the one-pass gap as **open with a named owner** and Task 6 writes the answer; and Task 5 **defines** the policy vocabulary Task 6 binds against, so the coupling runs one way. The head of
+**Status: APPROVED 2026-09-12, with four amendments applied. Tasks 0–6 DONE; Task 7 (the exit-criteria suite) is next and not started.** The four are recorded where they land rather than in a list here: Task 1's unreachability window is now a **test** and Task 6 inverts it; Task 2 states the handover that destroys Task 1's control; Task 0 records the one-pass gap as **open with a named owner** and Task 6 writes the answer; and Task 5 **defines** the policy vocabulary Task 6 binds against, so the coupling runs one way. The head of
 [`PROGRESS.md`](../../../PROGRESS.md) is the single source for this plan's status; when it and
 this line disagree, the head is right and this line is stale. Same shape as the 692/693 test
 count and the 2b table that said *"awaiting review"* for four days after approval.
@@ -311,14 +311,14 @@ rather than a feature.
 
 | # | task | depends on | state |
 |---|---|---|---|
-| 0 | the corrections, and the §14 amendments | — | pending |
-| 1 | `INTERNAL_ERROR`, the catch-all, and the live producer as its control | 0 | pending |
-| 2 | the tiling closer — positional throughout | 1 | pending |
-| 3 | `CANDIDATE_DROPPED` joins the decided skips | 0 | pending |
-| 4 | the live counters — point-granularity, display-only, plain lines | — | pending |
-| 5 | the abort verdict — a pure function of a pass-1 store | — (**defines** the policy vocabulary and the dropped-candidate set Task 6 binds against) | pending |
-| 6 | the abort action, the `CANDIDATE_DROPPED` producer, and the one-pass decision | 3, 5 | pending |
-| 7 | the 2e exit-criteria suite | all | pending |
+| 0 | the corrections, and the §14 amendments | — | **DONE 2026-09-12** — eight sites, not three; the count now lives in a test |
+| 1 | `INTERNAL_ERROR`, the catch-all, and the live producer as its control | 0 | **DONE 2026-09-12** — wraps `main`'s body; the appended form was built and shown to miss seventy lines |
+| 2 | the tiling closer — positional throughout | 1 | **DONE 2026-09-13** — plus a duplicate-dims refusal and store coordinates keyed by position, both latent |
+| 3 | `CANDIDATE_DROPPED` joins the decided skips | 0 | **DONE 2026-09-14** — a §12.5 catch-up, not a decision; OQ24 filed to 2f |
+| 4 | the live counters — point-granularity, display-only, plain lines | — | **DONE 2026-09-14** — outside `metamer.batch`, import boundary asserted |
+| 5 | the abort verdict — a pure function of a pass-1 store | — (**defines** the policy vocabulary and the dropped-candidate set Task 6 binds against) | **DONE 2026-09-14** — an empty eligible population aborts |
+| 6 | the abort action, the `CANDIDATE_DROPPED` producer, and the one-pass decision | 3, 5 | **DONE 2026-09-16** — reading (i); exit 1 defined as the verdict's; one question left open (no-evidence abort) |
+| 7 | the 2e exit-criteria suite | all | **NEXT** — not started; wants a full window |
 
 **Task 1 before Task 2 is D4 and is not negotiable by convenience** — the ordering exists so the
 catch-all has a live producer to be verified against, and Task 2 destroys it.

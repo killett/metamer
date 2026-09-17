@@ -310,6 +310,7 @@ def fit(
     x0: NDArray[np.float64] | None = None,
     x0_valid: NDArray[np.bool_] | None = None,
     max_iter: int = DEFAULT_MAX_ITER,
+    skip: frozenset[int] = frozenset(),
 ) -> FitResult:
     """Fit a candidate set to a batch of series and rank the candidates.
 
@@ -346,6 +347,21 @@ def fit(
             permissive cast would turn the swap of two adjacent arguments into
             "every exhausted cell valid, every cell sourced from coarse index
             0 invalid", with no exception and the right shapes throughout.
+        skip: Candidate POSITIONS not to fit at all. Each is recorded as
+            `CANDIDATE_DROPPED` at every series, with NaN values, no start and
+            zero iterations -- design doc section 14.1's demotion, which pass 2
+            applies after the early-abort verdict names a candidate.
+
+            **THE CANDIDATE STAYS IN THE SET.** Its column still exists, its
+            gradient mode is still resolved, and the result still has `M`
+            columns: the set is part of fit identity, and what changed is that
+            this run chose not to fit one member -- which is what the outcome
+            code records. Removing it from `candidates` instead would change
+            the store's shape and its hashes, and a resumed run would then
+            refuse its own store.
+
+            **NOT FITTED, NOT FITTED-AND-RELABELLED.** The saving is the reason
+            a run demotes a candidate, so the skipped iterations never start.
         max_iter: Iteration cap per series. Call-level, so it cannot vary
             within a batch. Defaults to `optimize.DEFAULT_MAX_ITER`, which is
             the one place the production cap is written down -- see there for
@@ -438,10 +454,25 @@ def fit(
     trend = design.trend_column
     white_beta_var = design.unit_variance_beta_var
 
+    unknown = sorted(position for position in skip if not 0 <= position < n_cand)
+    if unknown:
+        raise ValueError(
+            f"skip names candidate positions {unknown}, but the set has "
+            f"{n_cand} candidates; a demotion naming a candidate that does not "
+            f"exist would drop nothing and report that it had"
+        )
+
     for c, spec in enumerate(candidates):
+        modes.append(resolve_gradient_mode(spec, objective))
+        if c in skip:
+            # A DECIDED NON-FIT. Every array is already NaN, `rung` is already
+            # None and `n_iter` already zero; only the code must be written,
+            # because the pre-filled one is `NOT_ATTEMPTED` -- "nothing wrote
+            # here" -- and that is the confusion section 14.1 corrected once.
+            outcome[:, c] = Outcome.CANDIDATE_DROPPED.code
+            continue
         state_space = StateSpace.from_spec(spec)
         obj = ConcentratedObjective(spec, state_space, engine, objective)
-        modes.append(resolve_gradient_mode(spec, objective))
         p = len(free_param_index(spec))
         var_gls = np.full(batch, np.nan)
         var_white = np.full(batch, np.nan)
