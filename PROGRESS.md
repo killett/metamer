@@ -4,9 +4,9 @@
 
 1. **Branch `main`, every commit pushed by a hook** — https://github.com/killett/metamer. **No SHA is named anywhere in this head**; `git log --oneline -8` is the authority.
 2. **DONE:** Phase 1, P0–P4, 2a, 2b, 2c, 2d, the real-data spike, wiring one, the selection-map report — and **2e Tasks 0–6 (2026-09-12 to 2026-09-16)**. Per-phase closes are in their sections; **none is restated here**.
-3. **NEXT ACTION: 2e TASK 7, the exit-criteria suite — 18 criteria, each naming its reading, plus 2e's close.** Plan: [`2026-09-12-metamer-phase2e.md`](docs/superpowers/plans/2026-09-12-metamer-phase2e.md); pre-flight: [`phase2e-preflight.md`](docs/superpowers/notes/phase2e-preflight.md). **Read [2e's handoff](#2e--handoff-after-task-6-2026-09-16) first** — it carries one open decision Task 7 must not settle by accident.
+3. **NEXT ACTION: 2e TASK 7, the exit-criteria suite — 18 criteria, each naming its reading, plus 2e's close.** Plan: [`2026-09-12-metamer-phase2e.md`](docs/superpowers/plans/2026-09-12-metamer-phase2e.md); pre-flight: [`phase2e-preflight.md`](docs/superpowers/notes/phase2e-preflight.md). **Read [2e's handoff](#2e--handoff-after-task-6-2026-09-16) first.** Its one open decision **was taken 2026-09-18 as (b), continue loudly** — applied as its own commit; the reasons are at design doc §14.1, the shape at the plan under Task 6.
 4. **After 2e: 2f, §14.2's report.** Less blocked than the ordering reads — it waits on two subjects to count, both now produced. Open question 24 is filed to it.
-5. **Tests: 1463 passed, 0 failed, 0 INDETERMINATE — 2026-09-16, 5981.83 s (1:39:41), exit code pytest's own.** `pixi run test` is the full sweep and the only end-of-task evidence. **The run an hour earlier on the IDENTICAL TREE took 1:40:14, had 5 above the diagnostic, and printed a floor ladder 32% low and non-monotonic — see the gotcha. Same code, same fixture, same box.** **AND THE EXIT CODE READ IS PYTEST's OWN.** A `pixi run test 2>&1 | tail -25` on the run before this one reported **exit 0 with a test failing** — the code was `tail`'s. Handoff §2's rule, third instance: *where a tool reports on something else, its exit code describes the tool.* **Run the sweep to a file and read its status; never pipe it.** **`pixi run test` is the full sweep and every end-of-task verification must run it; `test-fast` and `test-ci` are NOT evidence** — the full sweep has caught **eight** things a fast run could not, the most recent being a test whose own expected value was computed from a 1-based reading of `np.arange`. **Every run prints `RSS measurement validity`, including at zero**; a nonzero count is INDETERMINATE, neither pass nor fail.
+5. **Tests: 1465 passed, 0 failed, 0 INDETERMINATE — 2026-09-18, 5679.47 s (1:34:39), exit code pytest's own** (1463 on 2026-09-16, 1:39:41; the two added are (b)'s pair test and its subprocess headline test, and the two inverted kept their count). `pixi run test` is the full sweep and the only end-of-task evidence. **The run an hour earlier on the IDENTICAL TREE took 1:40:14, had 5 above the diagnostic, and printed a floor ladder 32% low and non-monotonic — see the gotcha. Same code, same fixture, same box.** **AND THE EXIT CODE READ IS PYTEST's OWN.** A `pixi run test 2>&1 | tail -25` on the run before this one reported **exit 0 with a test failing** — the code was `tail`'s. Handoff §2's rule, third instance: *where a tool reports on something else, its exit code describes the tool.* **Run the sweep to a file and read its status; never pipe it.** **`pixi run test` is the full sweep and every end-of-task verification must run it; `test-fast` and `test-ci` are NOT evidence** — the full sweep has caught **eight** things a fast run could not, the most recent being a test whose own expected value was computed from a 1-based reading of `np.arange`. **Every run prints `RSS measurement validity`, including at zero**; a nonzero count is INDETERMINATE, neither pass nor fail.
 6. **Verify a checkout with `pixi run test && pixi run typecheck && pixi run lint` and `pixi run pre-commit run --all-files`**; `git add` new files first. **Never pipe a checker through `tail`** — see the handoff.
 7. **The method is the pre-flight**, and it lives only in [the handoff doc](docs/superpowers/notes/phase1-to-phase2-handoff.md) §1; 2e added **(j7b)** and **(a2)'s second register**.
 8. **CI is verified per commit, by an until-loop on the run's own `status`** — never by position in `gh run list`, never by `gh run watch --exit-status`; one push per run.
@@ -22,16 +22,26 @@
 > [the pre-flight](docs/superpowers/notes/phase2e-preflight.md). **What follows is what a cold
 > session cannot re-derive, and nothing in it is restated elsewhere in this file.**
 
-### 1. ONE DECISION IS OPEN, AND TASK 7 MUST NOT SETTLE IT BY WRITING A CRITERION AROUND IT
+### 1. ~~ONE DECISION IS OPEN, AND TASK 7 MUST NOT SETTLE IT BY WRITING A CRITERION AROUND IT~~ — TAKEN 2026-09-18, (b)
 
-**A coarse sample with no eligible point: abort, or continue loudly?** The verdict currently
+~~**A coarse sample with no eligible point: abort, or continue loudly?** The verdict currently
 **aborts**, naming `--no-early-abort` as the lift. Task 5 wrote that as *"a config or data error"*;
 **2c's criterion-1 fixture refuted the wording** — land on every stride-2 row empties the coarse
 lattice while the odd rows carry data — so the reason now says *the sample holds no evidence*, and
 criterion 1 passes `early_abort=False` **with the scoping recorded at the call**. The abort is the
 conservative reading and is pinned by
 `test_an_empty_coarse_sample_aborts_even_when_the_fine_grid_has_data`, whose docstring says it is
-the test that changes if the question goes the other way. **Raise it with the user before Task 7.**
+the test that changes if the question goes the other way. **Raise it with the user before Task 7.**~~
+
+**TAKEN 2026-09-18: (b), continue loudly, with a third verdict outcome `no_evidence`.** The
+reasons are at design doc §14.1 (three: a gate reading the wrong subject, costs asymmetric the
+wrong way, and §14.1 had already decided it), the shape of the change is at the plan under Task 6,
+and the pre-flight entry enumerates the six consumers of `action` and the three mutants killed.
+**Criterion 1 is back on default settings** — the `early_abort=False` scoping was a workaround for
+wrong behaviour, and a correct mechanism needs no fixture to opt out. The two pinning tests are
+**inverted, not deleted**, and `test_an_empty_coarse_sample_continues_loudly_when_the_fine_grid_has_data`
+is the one named above under its new name. **Exit stays 0** for a no-evidence run, by exit 1's
+definition in §3 below, and §14.3 says so beside code 0.
 
 ### 2. THE ONE-PASS DECISION: READING (i), AND IT COSTS TWO EXIT CODES, NOT ONE
 

@@ -98,8 +98,16 @@ class CandidateRate:
 class AbortVerdict:
     """What section 14.1 says to do, and the numbers it says it from.
 
+    **FOUR OUTCOMES, NOT THREE, AND THE FOURTH IS NOT A KIND OF `continue`.**
+    *"Continued because there was nothing to judge"* and *"continued because
+    everything passed"* are different facts about a run, and the outcome
+    vocabulary exists because such facts get collapsed. `no_evidence` is
+    what the run does with an empty coarse sample (decided 2026-09-18, section
+    14.1): it proceeds, the final line says so, and the store's `early_abort`
+    attrs record it under this name.
+
     Attributes:
-        action: `"continue"`, `"abort"`, or `"drop"`.
+        action: `"continue"`, `"abort"`, `"drop"`, or `"no_evidence"`.
         candidates: The candidates to drop, empty unless `action` is `"drop"`.
         rates: Every candidate's rate, in store order, whatever the action.
         threshold: The rate compared against, carried so a reading is
@@ -107,7 +115,7 @@ class AbortVerdict:
         reason: One line naming why, for the final console line.
     """
 
-    action: Literal["continue", "abort", "drop"]
+    action: Literal["continue", "abort", "drop", "no_evidence"]
     candidates: tuple[str, ...]
     rates: tuple[CandidateRate, ...]
     threshold: float
@@ -122,26 +130,31 @@ def abort_verdict(
 ) -> AbortVerdict:
     """Decide section 14.1's early abort from a finished pass-1 store.
 
-    **AN EMPTY ELIGIBLE POPULATION IS A FINDING, NOT A CLEAN BILL.** The rate is
-    `failed / eligible`, and with no eligible points that is `0/0`: a naive
-    implementation either raises -- a crash, on a well-formed store -- or yields
-    `nan` or `0.0`, **both of which compare False against the threshold and read
-    as "continue"**. That case is reachable by exactly the mistake this section
-    exists to catch: a config pointing at the wrong variable, or at a domain
-    that is entirely land, gives `INSUFFICIENT_DATA` everywhere, every
-    denominator is empty, and the run would proceed through pass 2 at full cost
-    to produce a store of nothing. **"Zero cases" is a claim about the
-    instrument until proven otherwise**, so it aborts and says so.
+    **AN EMPTY ELIGIBLE POPULATION IS A FINDING, NOT A CLEAN BILL -- AND NOT
+    AN ABORT EITHER.** The rate is `failed / eligible`, and with no eligible
+    points that is `0/0`: a naive implementation either raises -- a crash, on a
+    well-formed store -- or yields `nan` or `0.0`, **both of which compare
+    False against the threshold and read as "continue"**. So the empty sample
+    is its own verdict, `no_evidence`, and it is never allowed to read as
+    healthy.
 
-    **CORRECTED 2026-09-16: AN EMPTY COARSE SAMPLE DOES NOT IMPLY AN EMPTY
-    GRID.** ~~That is a config or data error~~ was the first wording, and 2c's
-    criterion-1 fixture refutes it: land on every stride-2 row leaves the
-    coarse lattice entirely masked while the odd rows carry data. The sample
-    then holds **no evidence**, which is what the refusal now says, and the
-    message names `--no-early-abort` as the lift when the lattice is known to
-    fall on masked cells. **Whether no-evidence should abort or continue
-    loudly is open** -- see PROGRESS.md -- and this abort is the conservative
-    reading until it is settled.
+    **DECIDED 2026-09-18, (b): NO EVIDENCE CONTINUES LOUDLY.** ~~It aborts and
+    says so~~ was Task 5's reading (2026-09-14), on the argument that a config
+    pointing at the wrong variable, or at a domain that is entirely land, gives
+    `INSUFFICIENT_DATA` everywhere -- *"a config or data error"*. **2c's
+    criterion-1 fixture refuted the argument on 2026-09-16**: land on every
+    stride-2 row leaves the coarse lattice entirely masked while the odd rows
+    carry data, so an empty sample is a statement about the SAMPLE and not
+    about the run. Three reasons, recorded at section 14.1 and summarised
+    here: a gate reading the wrong subject is the shape open question 22 cost
+    this project to measure; a wrong abort is lifted only by `--no-early-abort`,
+    which disables the mechanism everywhere, while a wrong continue costs one
+    run that section 14.2's report then describes; and section 14.1 aborts on
+    near-total failure PATTERNS because those are essentially always config
+    errors -- an empty sample is no pattern at all. **The run proceeds to pass
+    2 with the fine grid unjudged, the final line carries the headline, and
+    the exit code is 0** because exit 1 is defined as the verdict finding a
+    candidate above threshold, and this verdict found none.
 
     Args:
         pass1_store: A finished pass-1 store.
@@ -230,19 +243,24 @@ def _decide(
     Returns:
         The verdict.
     """
+    # THE EMPTY GUARD COMES FIRST, AND ITS POSITION IS THE WHOLE DISTINCTION
+    # between "the sample holds no evidence" and "every candidate failed":
+    # with no judgeable candidate both `over` and `judgeable` are empty and
+    # `len(over) == len(judgeable)` is `0 == 0`. Below the all-over check this
+    # branch is unreachable and an empty sample aborts with the wrong reason.
     judgeable = [rate for rate in rates if rate.rate is not None]
     if not judgeable:
         return AbortVerdict(
-            action="abort",
+            action="no_evidence",
             candidates=(),
             rates=rates,
             threshold=threshold,
             reason=(
                 "no point in the coarse pass was eligible for any candidate, so "
-                "the sample holds no evidence and the run is refused rather than "
-                "continued blind. Either the input is masked everywhere, or the "
-                "coarse lattice happens to fall only on masked cells; if the "
-                "second, --no-early-abort proceeds"
+                "the sample holds no evidence and nothing was judged. The run "
+                "continues with the fine grid unjudged; section 14.2's report "
+                "is the only rate for it. Either the input is masked "
+                "everywhere, or the coarse lattice falls only on masked cells"
             ),
         )
 

@@ -2495,6 +2495,7 @@ parameterization error.
 |---|---|
 | **all candidates** > 90% failure | **abort** — config or data error |
 | **a single candidate** > 90% failure | **abort by default**, with `--on-candidate-failure={abort,drop,continue}` |
+| **no eligible point** in the coarse sample (added 2026-09-18) | **continue, loudly** — the verdict is `no_evidence`, a headline on the final line; not a failure pattern, so not a bug signal |
 
 **Demotion, not only termination.** Dropping a single failing candidate and continuing with
 the rest is often the useful action. A dropped candidate gets the distinct
@@ -2519,12 +2520,41 @@ line in the report**, not a buried counter.
 > nor code 1 at all.** The consequence lives in the join between the two sections, which is why it
 > is stated in both.
 >
-> **AND ONE QUESTION THE DECISION LEFT OPEN.** A coarse sample with **no eligible point** holds no
-> evidence, and the verdict **refuses** — it aborts rather than continuing blind, naming
-> `--no-early-abort` as the lift. That is not the same as the input being empty: land on every
-> stride-aligned row empties the lattice while the fine grid carries data (2c's criterion-1
-> fixture is exactly that shape). **Whether no-evidence should abort or continue loudly is open**;
-> the abort is the conservative reading and is pinned by a test that says so.
+> ~~**AND ONE QUESTION THE DECISION LEFT OPEN.** A coarse sample with **no eligible point** holds
+> no evidence, and the verdict **refuses** — it aborts rather than continuing blind, naming
+> `--no-early-abort` as the lift. Whether no-evidence should abort or continue loudly is open; the
+> abort is the conservative reading and is pinned by a test that says so.~~
+>
+> **DECIDED 2026-09-18 — (b): A COARSE SAMPLE WITH NO ELIGIBLE POINT CONTINUES LOUDLY, WITH ITS
+> OWN VERDICT `no_evidence`.** Task 6 shipped (a), the abort, and filed the question; (b) is
+> applied as its own commit before Task 7. Three reasons, so the record carries them and not only
+> the outcome:
+>
+> 1. **The abort was a gate reading the wrong subject.** An empty coarse sample is a statement
+>    about the SAMPLE, not the run — 2c's criterion-1 fixture proves it, with land on every
+>    stride-2 row emptying the lattice while the fine grid holds data. That is open question 22's
+>    shape, and this project measured what a gate reading the wrong subject costs.
+> 2. **The costs are asymmetric the wrong way.** A wrong abort stops a good run and its recovery
+>    is `--no-early-abort`, which disables the whole mechanism — so recovering from a false
+>    positive costs the protection everywhere else. A wrong continue costs one run that §14.2 then
+>    describes honestly.
+> 3. **This section had already decided it.** The thresholds are calibrated *"to catch bugs, not
+>    to second-guess science"*, aborting on near-total failure patterns because those are
+>    essentially always config errors. An empty sample is not a near-total pattern; it is no
+>    pattern. And Task 5's own justification for the abort — *"a config or data error"* — was
+>    disproved by criterion 1, and a justification going does not leave the behaviour standing.
+>
+> **What (b) requires, each shipped:** a THIRD verdict outcome, `no_evidence`, distinguishable
+> from `continue` — *"continued because there was nothing to judge"* and *"continued because
+> everything passed"* are different facts, and the outcome vocabulary exists because those get
+> collapsed; a headline on the final line, by this section's own rule for the drop; 2c's
+> criterion 1 back on default settings, because a correct mechanism needs no fixture to opt out
+> and the `early_abort=False` scoping was the tell; the abort-pinning tests inverted rather than
+> deleted, keeping their provenance; and the empty sample kept distinguishable from an all-failing
+> one where the verdict is computed — a `0/0` collapses them, which is the (a2b) finding that
+> opened the question. **The exit code is 0**, because §14.3 defines exit 1 as the verdict finding
+> a candidate above threshold and this verdict found none; the store's `early_abort.action`
+> records `no_evidence`.
 
 ### 14.2 End of run: a report derived from the store
 
@@ -2638,6 +2668,12 @@ root attrs.
 | 3 | config/validation error (layers 1–3) — resuming will not help |
 | 4 | data-dependent validation error (layer 4) |
 | 5 | **internal error — an unhandled exception. The run did not finish and no map was written** |
+
+**CODE 0 IS ALSO WHAT A TWO-PASS RUN EXITS WHEN ITS COARSE SAMPLE HELD NO EVIDENCE (2026-09-18).**
+The verdict is `no_evidence`, the final line carries the headline, and the store's `early_abort`
+attrs record it — but no candidate was above threshold, so code 1 (below) is not produced. A
+script that treats 0 as *judged clean* should read the headline or the attrs; §14.1 has the
+decision.
 
 **CODE 1 IS DEFINED HERE BECAUSE THIS TABLE NEVER DEFINED IT (sub-phase 2e, Task 6, 2026-09-16).**
 *"Completed with failures above threshold"* named no threshold and no population. The only

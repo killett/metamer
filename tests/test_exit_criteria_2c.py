@@ -123,14 +123,20 @@ def test_criterion_1_an_unwarmed_cell_matches_a_cold_run_on_disk():
         dataset.to_zarr(blank)
 
         config = _config(tmp_path, str(blank))
-        # `early_abort=False` IS SCOPED, NOT A LOOSENING, AND IT IS RECORDED AS
-        # SUCH (2e Task 6, 2026-09-16). This fixture's coarse pass is empty BY
-        # CONSTRUCTION -- that is how every cell is made to exhaust -- so
-        # section 14.1's verdict correctly declines to judge a sample with no
-        # evidence and refuses the run. This criterion's subject is what pass 2
-        # writes when nothing is warm-startable, not the early abort; the abort
-        # on exactly this shape is pinned in `tests/test_early_abort.py`.
-        warm = run_two_pass(config, tmp_path / "warm.zarr", early_abort=False)
+        # DEFAULT SETTINGS, RESTORED 2026-09-18. Between 2e's Task 6 and the
+        # no-evidence decision this call passed `early_abort=False`, because
+        # the verdict then ABORTED on an empty coarse sample and this fixture's
+        # coarse pass is empty BY CONSTRUCTION. That scoping was a workaround
+        # for wrong behaviour: a correct mechanism needs no fixture to opt out.
+        # Under (b) the empty sample is `no_evidence` and the run continues, so
+        # this criterion exercises the default path -- and the precondition
+        # below refuses to run if the fixture drifts off the empty-sample
+        # shape, which is what makes the comparison mean what it says.
+        warm = run_two_pass(config, tmp_path / "warm.zarr")
+        assert warm.verdict is not None and warm.verdict.action == "no_evidence", (
+            "this fixture must hold an empty coarse sample, or the comparison "
+            "below is not about exhaustion"
+        )
         assert warm.pass2 is not None and warm.pass2.warm_start is not None
         assert warm.pass2.warm_start.warm_started == 0, (
             "every cell must exhaust, or the comparison below is over an "

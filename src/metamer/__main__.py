@@ -481,6 +481,19 @@ def _print_verdict(verdict: AbortVerdict) -> None:
             + " -- written as candidate_dropped at every pass-2 point",
             file=sys.stderr,
         )
+    if verdict.action == "no_evidence":
+        # A HEADLINE, BY SECTION 14.1's OWN RULE FOR THE DROP. "Continued
+        # because there was nothing to judge" and "continued because everything
+        # passed" are different facts, and the per-candidate lines above show
+        # only `n/a`. Exit stays 0: exit 1 is the verdict finding a candidate
+        # above threshold, and this one found none (decided 2026-09-18).
+        print(
+            "early abort: no evidence -- no point in the coarse pass was "
+            "eligible for any candidate, so nothing was judged and the run "
+            "continued with the fine grid unjudged; section 14.2's report is "
+            "the only rate for it",
+            file=sys.stderr,
+        )
 
 
 if __name__ == "__main__":

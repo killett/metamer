@@ -1,6 +1,6 @@
 # Phase 2e — the run's own honesty
 
-**Status: APPROVED 2026-09-12, with four amendments applied. Tasks 0–6 DONE; Task 7 (the exit-criteria suite) is next and not started.** The four are recorded where they land rather than in a list here: Task 1's unreachability window is now a **test** and Task 6 inverts it; Task 2 states the handover that destroys Task 1's control; Task 0 records the one-pass gap as **open with a named owner** and Task 6 writes the answer; and Task 5 **defines** the policy vocabulary Task 6 binds against, so the coupling runs one way. The head of
+**Status: APPROVED 2026-09-12, with four amendments applied. Tasks 0–6 DONE, and the no-evidence decision taken 2026-09-18 as (b); Task 7 (the exit-criteria suite) is next and not started.** The four are recorded where they land rather than in a list here: Task 1's unreachability window is now a **test** and Task 6 inverts it; Task 2 states the handover that destroys Task 1's control; Task 0 records the one-pass gap as **open with a named owner** and Task 6 writes the answer; and Task 5 **defines** the policy vocabulary Task 6 binds against, so the coupling runs one way. The head of
 [`PROGRESS.md`](../../../PROGRESS.md) is the single source for this plan's status; when it and
 this line disagree, the head is right and this line is stale. Same shape as the 692/693 test
 count and the 2b table that said *"awaiting review"* for four days after approval.
@@ -316,8 +316,8 @@ rather than a feature.
 | 2 | the tiling closer — positional throughout | 1 | **DONE 2026-09-13** — plus a duplicate-dims refusal and store coordinates keyed by position, both latent |
 | 3 | `CANDIDATE_DROPPED` joins the decided skips | 0 | **DONE 2026-09-14** — a §12.5 catch-up, not a decision; OQ24 filed to 2f |
 | 4 | the live counters — point-granularity, display-only, plain lines | — | **DONE 2026-09-14** — outside `metamer.batch`, import boundary asserted |
-| 5 | the abort verdict — a pure function of a pass-1 store | — (**defines** the policy vocabulary and the dropped-candidate set Task 6 binds against) | **DONE 2026-09-14** — an empty eligible population aborts |
-| 6 | the abort action, the `CANDIDATE_DROPPED` producer, and the one-pass decision | 3, 5 | **DONE 2026-09-16** — reading (i); exit 1 defined as the verdict's; one question left open (no-evidence abort) |
+| 5 | the abort verdict — a pure function of a pass-1 store | — (**defines** the policy vocabulary and the dropped-candidate set Task 6 binds against) | **DONE 2026-09-14** — ~~an empty eligible population aborts~~ **`no_evidence` since 2026-09-18** |
+| 6 | the abort action, the `CANDIDATE_DROPPED` producer, and the one-pass decision | 3, 5 | **DONE 2026-09-16** — reading (i); exit 1 defined as the verdict's; ~~one question left open (no-evidence abort)~~ **decided 2026-09-18, (b) — see below Task 6** |
 | 7 | the 2e exit-criteria suite | all | **NEXT** — not started; wants a full window |
 
 **Task 1 before Task 2 is D4 and is not negotiable by convenience** — the ordering exists so the
@@ -814,6 +814,31 @@ run's behaviour is decided rather than accidental.
 - *The one-pass behaviour matches the decision taken, in both directions* — if two-pass-only, a
   one-pass run performs no abort **and says so**; if a probe pass, it runs and its cost is asserted.
   Catches the decision being taken in a document and not in the code.
+
+### The no-evidence decision, taken 2026-09-18 — (b), continue loudly
+
+Task 6 shipped (a) — an empty coarse sample **aborts** — and filed the question open. **(b) is
+taken**: the run continues with a third verdict outcome, `no_evidence`. **The reasons are recorded
+at design doc §14.1 and are not restated here**; what is this plan's is the shape of the change
+and what it did NOT touch.
+
+- **`AbortVerdict.action` gains `"no_evidence"`.** `twopass.py` needed no change: `aborted` is
+  `== "abort"`, the drop set is `== "drop"`, and `_verdict_attrs` records the action verbatim —
+  so the store carried the new verdict for free, and the enumeration in
+  [the pre-flight](../notes/phase2e-preflight.md) says which of six consumers changed (two).
+- **The headline** is `__main__`'s, beside the drop's, and **exit stays 0** as a consequence of
+  exit 1's definition rather than a choice made here. §14.3 says so beside code 0.
+- **2c's criterion 1 is back on default settings** with a precondition that the verdict was
+  `no_evidence`, so the fixture cannot drift off the empty-sample shape silently.
+- **Two tests inverted, none deleted**, both keeping the 2026-09-14 *"proved to bite"*
+  provenance — the mutant that returned `continue` fails the inverted tests too. A third test
+  binds `{no_evidence, abort}` to one fixture so the two sides cannot be edited apart.
+- **Three mutants killed before recording:** the empty guard reordered below the all-over check
+  (`0 == 0` → abort with the wrong reason), the empty branch returning `continue`, and the headline
+  branch removed.
+- **The mixed case — one candidate with no eligible point beside one failing everywhere — is
+  left as it stands** (the unjudged candidate is not judged); it is constructed-only in v1 and
+  this commit does not widen its scope to decide it.
 
 ---
 

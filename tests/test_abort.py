@@ -302,29 +302,38 @@ def test_a_decided_skip_is_in_the_denominator_and_not_in_the_numerator(
     assert verdict.action == "continue"
 
 
-def test_an_empty_eligible_population_aborts_rather_than_reading_as_clean(
+def test_an_empty_eligible_population_is_no_evidence_not_clean_and_not_abort(
     coarse_store, tmp_path
 ):
-    """0/0 is a finding about the instrument, not a clean pass.
+    """0/0 is a finding about the instrument -- and the finding is `no_evidence`.
 
     Expected value determined independently: with no eligible point there is no
     rate to compare, so "did any candidate exceed the threshold" has no answer
-    -- and the honest response to a question with no answer is not "no".
+    -- and the honest response to a question with no answer is not "no". Nor is
+    it "every candidate failed": that is a statement about a sample, and this
+    sample holds nothing. Section 14.1, decided 2026-09-18: the verdict is its
+    own third outcome and the run continues loudly.
 
-    Bug this catches: the two obvious `0/0` implementations, both of which are
-    silent. `failed / eligible` raises, which since 2e's Task 1 exits 5 on a
-    perfectly well-formed store; a guarded `nan` or `0.0` compares False
-    against the threshold and the verdict is **continue**.
+    **INVERTED 2026-09-18, NOT DELETED.** This test pinned reading (a) -- abort
+    -- from 2026-09-14, and (a) was decided against on 2026-09-18 for three
+    reasons recorded at section 14.1: the abort was a gate reading the wrong
+    subject (an empty coarse sample is a statement about the SAMPLE, and 2c's
+    criterion-1 fixture has land on every stride-2 row while the fine grid
+    holds data); a wrong abort is recovered only by `--no-early-abort`, which
+    disables the mechanism everywhere, while a wrong continue costs one run
+    that section 14.2 then describes; and section 14.1 aborts only on
+    near-total failure PATTERNS, and an empty sample is no pattern at all.
 
-    **And that case is reachable by exactly the mistake this section exists to
-    catch**: a config naming the wrong variable, or a domain entirely land,
-    gives `INSUFFICIENT_DATA` everywhere. Every denominator is empty, the abort
-    finds nothing to abort on, and the run spends pass 2 producing a store of
-    nothing.
+    Bug this catches: the two obvious `0/0` implementations, both silent.
+    `failed / eligible` raises, which since 2e's Task 1 exits 5 on a perfectly
+    well-formed store; a guarded `nan` or `0.0` compares False against the
+    threshold and the verdict is **continue** -- indistinguishable from a clean
+    pass. And the third, since 2026-09-18: the (a) abort still standing.
 
     **PROVED TO BITE 2026-09-14:** the empty-population branch was changed to
     return `continue` -- the exact shape a guarded `0.0` would produce -- and
-    this test failed while the other ten passed.
+    this test failed while the other ten passed. The inversion keeps that
+    mutant fatal: `continue` is still not `no_evidence`.
     """
     store = _copy(coarse_store, tmp_path)
     rows, columns, models = _shape(store)
@@ -333,10 +342,54 @@ def test_an_empty_eligible_population_aborts_rather_than_reading_as_clean(
 
     verdict = abort_verdict(store)
 
-    assert verdict.action == "abort"
-    assert "no point" in verdict.reason
+    assert verdict.action == "no_evidence"
+    assert verdict.candidates == ()
+    assert "no evidence" in verdict.reason
+    assert "--no-early-abort" not in verdict.reason, (
+        "nothing is blocked under (b); a message naming a lift is a wrong instruction"
+    )
     assert all(rate.rate is None for rate in verdict.rates)
     assert all(rate.eligible == 0 for rate in verdict.rates)
+
+
+def test_an_empty_sample_and_an_all_failing_sample_are_different_verdicts(
+    coarse_store, tmp_path
+):
+    """The case the abort exists for, and the case it must not mistake for it.
+
+    Expected values determined independently from section 14.1's table: every
+    candidate failing above 90% is the config-or-data-error row, `abort`; no
+    candidate with any eligible point is the no-evidence row, `no_evidence`.
+    Same store, two fills, and the two verdicts must differ.
+
+    Bug this catches: a collapse in EITHER direction, asserted as one
+    property. The empty guard placed AFTER the all-candidates check -- `_decide`
+    tests `len(over) == len(judgeable)`, and with no judgeable candidate both
+    are empty, so `0 == 0` reports "every candidate failed above 90%" for a
+    sample in which nothing was judged, the (a2b) collapse that opened this
+    question at Task 5 -- fails here on the `empty` key. And the abort's own
+    case going quiet -- an all-failing sample reading as `no_evidence` -- fails
+    here on the `failing` key. Each single-case test above guards one side;
+    this one binds both to one fixture so they cannot be edited apart.
+    """
+    rows, columns, models = _shape(coarse_store)
+
+    empty = _copy(coarse_store, tmp_path / "empty")
+    _set_outcomes(
+        empty,
+        [np.full((rows, columns), Outcome.INSUFFICIENT_DATA.code, np.uint8)] * models,
+    )
+    failing = _copy(coarse_store, tmp_path / "failing")
+    _set_outcomes(failing, [_plane((rows, columns), 1.0, fill=Outcome.OK)] * models)
+
+    actions = {
+        "empty": abort_verdict(empty).action,
+        "failing": abort_verdict(failing).action,
+    }
+
+    assert actions == {"empty": "no_evidence", "failing": "abort"}
+    assert abort_verdict(failing).candidates != ()
+    assert abort_verdict(empty).candidates == ()
 
 
 def test_each_candidate_carries_its_own_denominator(coarse_store, tmp_path):

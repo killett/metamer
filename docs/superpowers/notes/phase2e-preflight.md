@@ -760,3 +760,111 @@ directly: the same store yields the same verdict, so the same tiles get the same
   configuration run on a quieter day, **and would silently defeat §12.8's resume gate** — the
   resumed run would refuse its own store. The store schema keeps all `M` columns; only the codes
   differ.
+
+---
+
+## The no-evidence decision — (b), audited before any edit (2026-09-18)
+
+**THE BRIEF** is the decision the handoff left open after Task 6, now taken: **a coarse sample
+with no eligible point CONTINUES LOUDLY**, with a third verdict outcome `no_evidence`, a headline on
+the final line, 2c's criterion 1 back on default settings, the abort-pinning test inverted rather
+than deleted, and the empty sample kept distinguishable from an all-failing one where the verdict is
+computed. Applied as its own commit before Task 7. **Four findings, and the first is the one the
+brief asked for by name.**
+
+### (a2b) "EMPTY" AND "ALL FAILING" ARE ONE GUARD APART, AND THE GUARD'S POSITION IS THE WHOLE
+### DISTINCTION
+
+`_decide` filters `judgeable = [rate for rate in rates if rate.rate is not None]` and then tests
+`len(over) == len(judgeable)` for the all-candidates abort. **With no judgeable candidate both
+lists are empty and `0 == 0` is True** — so the only thing standing between *"the sample holds no
+evidence"* and *"every candidate failed above 90%, a config or data error"* is that the empty guard
+runs **first**. Move it below the all-over check and the two collapse into the abort, with the
+wrong reason on the final line. That is the (a2b) shape that opened this question at Task 5: a
+`0/0` that reads as something else. **The test for (b) therefore asserts the pair on one
+fixture as well as the empty case alone** — the same store, filled once with `INSUFFICIENT_DATA`
+and once with a 100% failing plane, must yield `{no_evidence, abort}` — so that a collapse in
+either direction, including the abort's own case going quiet, fails one test rather than two that
+can be edited apart. (Measured while proving the mutant: the reordered guard also fails the
+single-case test, since the action word changes; the pair test's value is the binding, not a
+unique kill.)
+
+**The mixed case is a freedom no fixture here can exercise, and it is left as it stands.** One
+candidate with no eligible point beside one failing everywhere gives `judgeable = [B]`,
+`over = [B]`, and the all-candidates abort — the unjudged candidate is simply not judged. In v1
+the denominators are equal across candidates (`design_info` runs once before the candidate loop,
+Task 5's (i12)), so the case is constructed-only; the behaviour is consistent with the two
+reachable cases and this commit does not widen its scope to decide it.
+
+### (c) THE CONSUMERS OF `action`, ENUMERATED — SIX SITES, TWO CHANGE, FOUR ARE VERIFIED NOT TO
+
+The handover in Task 2 had two sites and one was missed; the rule is *enumerate the consumers of
+the thing you are changing, not the salient one*. `rg -n '\.action\b|action =='` over `src/`:
+
+| site | reads | under `no_evidence` | changes? |
+|---|---|---|---|
+| `abort.py:110` | the `Literal` | must admit the fourth value | **yes** |
+| `abort.py:_decide` | produces it | the empty branch returns it | **yes** |
+| `twopass.py:156` `aborted` | `== "abort"` | False — the run continues | no, verified |
+| `twopass.py:357` | `== "abort"` | falls through to pass 2 | no, verified |
+| `twopass.py:370` `dropped` | `== "drop"` | empty set — nothing demoted | no, verified |
+| `twopass.py:420–421` `_verdict_attrs` | records `action` verbatim, `dropped` by `== "drop"` | writes `"no_evidence"` — **the store carries the verdict for free** | no, verified |
+| `__main__.py:477` `_print_verdict` | `== "drop"` for the headline | **no headline** — the brief's requirement is not met by the mechanism | **yes** |
+| `__main__.py:_above_threshold` | rates, not action | empty → exit 0 | no, verified |
+
+**So the exit code is 0, and that is a consequence of exit 1's definition rather than a choice
+made here.** Exit 1 is *the verdict found a candidate above threshold and the run completed anyway*
+(§14.3, Task 6); a no-evidence verdict found none. The fact lives in the headline and in the
+store's `early_abort.action`, and §14.3's table gets one sentence beside code 0 because a script
+author reads the code table, not §14.1.
+
+### (i2) "CONTINUES LOUDLY" HAS TWO HALVES AND EACH NEEDS ITS OWN POSITIVE CONTROL
+
+*Continues* is not proved by `aborted is False` — a verdict that raised, or a pass 2 that wrote
+nothing, both give that. The test asserts pass 2 **fitted**: `tiles_written > 0`, the output
+store's outcome array holds fitted codes, and `warm_started == 0` (the sample was empty, so nothing
+could seed). *Loudly* is a property of a process's stderr, so it is asserted in a **subprocess**
+against the real fixture with no injection — the `_INJECT` harness builds rates with twenty
+eligible points each and cannot express an empty sample without a second code path that would then
+be the thing under test. **The headline must not name `--no-early-abort`**: under (b) nothing is
+blocked and a message that sends the operator to a flag is a wrong instruction, so its absence is
+asserted, not merely its presence not required.
+
+### (a6) THE SITES THAT SAY "ABORTS", ENUMERATED BEFORE THE EDIT
+
+Swept by `no evidence|no-evidence|empty eligible population aborts|empty coarse sample|sample
+holds no|--no-early-abort` across the design doc, plan, pre-flight, PROGRESS.md, `src/` and
+`tests/`, and by the test names themselves:
+
+- design doc §14.1's *"AND ONE QUESTION THE DECISION LEFT OPEN"* paragraph — **replaced** by the
+  decision; the two-row response table gains the no-evidence row.
+- design doc §14.3 — one sentence beside code 0.
+- `abort.py` — `abort_verdict`'s *"CORRECTED 2026-09-16"* paragraph and `_decide`'s reason text,
+  which names `--no-early-abort` as a lift.
+- plan Task 5 and Task 6 rows (*"an empty eligible population aborts"*, *"one question left open"*).
+- PROGRESS.md handoff §1 — struck-not-deleted, the decision beside it.
+- `tests/test_abort.py::test_an_empty_eligible_population_aborts_rather_than_reading_as_clean` and
+  `tests/test_early_abort.py::test_an_empty_coarse_sample_aborts_even_when_the_fine_grid_has_data`
+  — both **inverted**, keeping the 2026-09-14 *"proved to bite"* provenance, which still holds:
+  the mutant that returned `continue` fails the inverted test too.
+- `tests/test_exit_criteria_2c.py` criterion 1's `early_abort=False` and the comment scoping it —
+  **reverted to the default path**, with a precondition that the verdict was `no_evidence` so the
+  fixture cannot silently stop exercising it.
+
+The Task 5 pre-flight entry above (*"whether that is its own verdict value or a refusal is Task
+5's to decide"*) is history and stands.
+
+### THE TEST PLAN, WITH THE BUG EACH CATCHES
+
+| test | behaviour | bug it catches | expected value's source |
+|---|---|---|---|
+| `test_abort.py`: empty population is `no_evidence`, not clean, not abort (inverted) | `0/0` → `no_evidence` with every rate `None` | the (a) abort still standing, or a guarded `0.0` reading as `continue` | §14.1's decision of 2026-09-18 |
+| `test_abort.py`: empty and all-failing are different verdicts | same store, two fills → `{no_evidence, abort}` | the empty guard placed after the all-over check, `0 == 0` collapsing them | the two §14.1 rows, plus the new one |
+| `test_early_abort.py`: empty coarse sample continues loudly (inverted) | `aborted` False, pass 2 fitted, attrs `action == "no_evidence"`, reason names no lift | the driver still returning before pass 2, or recording `continue` | the fixture's construction: even rows masked, stride 2 |
+| `test_early_abort.py`: a no-evidence run exits 0 with the headline (subprocess) | exit 0, stderr carries the headline, no traceback | `_print_verdict` without the branch — the mechanism runs and says nothing | §14.3's code 0 and the headline rule for the drop |
+| `test_exit_criteria_2c.py` criterion 1 on default settings | precondition `verdict.action == "no_evidence"`, then the existing equality | the workaround quietly kept, or the fixture drifting off the empty-sample shape | unchanged: the cold run |
+
+**Mutants to prove before recording:** the guard reordered (expect the pair test to fail with
+`abort`); the headline branch removed (expect the subprocess test to fail on stderr); the empty
+branch returning `continue` (expect the inverted unit test to fail — the 2026-09-14 provenance,
+re-run).

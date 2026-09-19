@@ -24,7 +24,6 @@ from metamer.batch.abort import (
     AbortVerdict,
     CandidateFailurePolicy,
     CandidateRate,
-    abort_verdict,
 )
 from metamer.batch.run import run
 from metamer.batch.twopass import run_two_pass
@@ -324,38 +323,94 @@ def test_a_second_process_reaches_the_same_verdict_on_the_same_store(tmp_path):
     np.testing.assert_array_equal(_outcome(second.store_path), codes)
 
 
-def test_an_empty_coarse_sample_aborts_even_when_the_fine_grid_has_data(tmp_path):
-    """The criterion-1 shape, pinned -- and the decision it pins is still open.
+def test_an_empty_coarse_sample_continues_loudly_when_the_fine_grid_has_data(
+    tmp_path,
+):
+    """The criterion-1 shape, pinned -- and the decision it pins is (b), taken.
 
     Masking every even row leaves a stride-2 coarse lattice with no eligible
     point while the odd rows carry data. The verdict then has **no evidence**,
-    and it refuses rather than continuing blind.
+    and the run continues to pass 2 with its own third outcome recorded.
 
-    Expected value determined independently: `abort_verdict` on the pass-1 store
-    this shape produces has an empty denominator for every candidate.
+    Expected value determined independently: `abort_verdict` on the pass-1
+    store this shape produces has an empty denominator for every candidate,
+    and the fine grid has 3 of 6 rows of data, so pass 2 has tiles to write
+    and nothing to warm-start them from.
 
-    **This is the conservative reading of a question that is open** (PROGRESS.md,
-    2e Task 6): whether a sample with no evidence should abort or continue
-    loudly. The first wording of the reason said such a store was "a config or
-    data error"; this fixture refutes that, and the reason now names the
-    alternative and `--no-early-abort` as its lift. **If the question is settled
-    the other way, this test is what changes, and it should change visibly.**
+    **INVERTED 2026-09-18, NOT DELETED.** This test pinned reading (a) -- the
+    abort -- from 2026-09-16, when its docstring said it was the test that
+    changes if the question goes the other way. It went the other way on
+    2026-09-18, for the reasons at section 14.1: an empty coarse sample is a
+    statement about the SAMPLE, and this fixture is the proof; a wrong abort
+    is recovered only by disabling the mechanism everywhere; and section 14.1
+    aborts on near-total failure patterns, of which an empty sample is none.
 
-    Bug this catches: the empty sample reading as clean -- `continue` with no
-    statement -- which is the silent failure section 14.1's thresholds exist to
-    prevent.
+    Bug this catches: the abort still standing; or the empty sample collapsed
+    into `continue`, which reads as a clean pass and is the silent failure
+    section 14.1's thresholds exist to prevent; or a reason that still names
+    `--no-early-abort` as a lift for a run that is not blocked.
     """
     config = _config(tmp_path, _input(tmp_path, masked_rows=slice(None, None, 2)))
 
     report = run_two_pass(config, tmp_path / "out.zarr")
 
-    assert report.aborted is True
+    assert report.aborted is False
+    assert report.interrupted is False
     assert report.verdict is not None
+    assert report.verdict.action == "no_evidence"
     assert all(rate.eligible == 0 for rate in report.verdict.rates)
     assert "no evidence" in report.verdict.reason
-    assert "--no-early-abort" in report.verdict.reason
-    assert report.pass1_path is not None
-    assert abort_verdict(report.pass1_path).action == "abort"
+    assert "--no-early-abort" not in report.verdict.reason
+    # CONTINUES, POSITIVELY: pass 2 fitted the fine grid and seeded nothing.
+    assert report.pass2 is not None
+    assert report.pass2.tiles_written > 0
+    assert report.pass2.warm_start is not None
+    assert report.pass2.warm_start.warm_started == 0
+    assert (_outcome(report.store_path) == Outcome.OK.code).any()
+    recorded = _early_abort(report.store_path)
+    assert recorded["evaluated"] is True
+    assert recorded["action"] == "no_evidence"
+    assert recorded["dropped"] == [] and recorded["above_threshold"] == []
+
+
+def test_a_no_evidence_run_exits_ok_with_the_headline_on_the_final_line(tmp_path):
+    """Loudly, in a real process: exit 0 and the headline on stderr.
+
+    Expected values determined independently: section 14.3 defines exit 1 as
+    the verdict finding a candidate above threshold, and a no-evidence verdict
+    found none, so the code is 0; section 14.1's rule for the drop -- a
+    headline line, not a buried counter -- applies to the third outcome by
+    the same argument. Run in a SUBPROCESS against the REAL fixture, with no
+    injected verdict, because the loudness is a property of the process and
+    the `_INJECT` harness cannot express an empty sample.
+
+    Bug this catches: the mechanism continuing and saying nothing -- the
+    verdict recorded in the store and absent from the terminal, which is where
+    an operator at hour nine is looking. Or the headline sending them to
+    `--no-early-abort`, which lifts nothing here.
+    """
+    config = _config(tmp_path, _input(tmp_path, masked_rows=slice(None, None, 2)))
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "metamer",
+            str(config),
+            str(tmp_path / "out.zarr"),
+            "--two-pass",
+            "--no-progress",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == ExitCode.OK, result.stderr
+    assert "Traceback" not in result.stderr
+    assert "early abort: no evidence" in result.stderr
+    assert "--no-early-abort" not in result.stderr
+    assert "aborted early" not in result.stderr
+    assert (tmp_path / "out.zarr").exists()
 
 
 def test_a_one_pass_run_has_no_verdict_and_says_so(tmp_path, monkeypatch):
