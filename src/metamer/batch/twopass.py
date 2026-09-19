@@ -427,11 +427,18 @@ def _verdict_attrs(
         "threshold": verdict.threshold,
         "policy": policy.value,
         "reason": verdict.reason,
+        # `fitted` IS RECORDED BECAUSE THE VERDICT WAS DECIDED ON IT
+        # (2026-09-19). Section 17's measure/print rule: a reader of this
+        # record must be able to see why `no_evidence` fired, and "no
+        # candidate had a fit verdict anywhere in the coarse sample" is not
+        # recoverable from `eligible` and `rate` -- a decided-skip sample
+        # shows a full `eligible` and a `rate` of 0.0 and is not evidence.
         "rates": [
             {
                 "candidate": rate.candidate,
                 "failed": rate.failed,
                 "eligible": rate.eligible,
+                "fitted": rate.fitted,
                 "rate": rate.rate,
             }
             for rate in verdict.rates

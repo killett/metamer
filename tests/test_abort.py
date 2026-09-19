@@ -334,6 +334,19 @@ def test_an_empty_eligible_population_is_no_evidence_not_clean_and_not_abort(
     return `continue` -- the exact shape a guarded `0.0` would produce -- and
     this test failed while the other ten passed. The inversion keeps that
     mutant fatal: `continue` is still not `no_evidence`.
+
+    **THE PREDICATE UNDER THIS FIXTURE MOVED ON 2026-09-19, AND THE FIXTURE
+    DID NOT.** This test pinned `no_evidence` while the gate asked
+    `eligible > 0`; the gate now asks `fitted > 0`, by
+    `Outcome.is_fit_verdict` and section 12.5's non-fit grouping table. **The
+    two predicates now genuinely differ**, so that this fixture still reaches
+    `no_evidence` is a fact to check and not a carry-over: it does, because
+    `INSUFFICIENT_DATA` is a non-fit under section 12.5 as well as ineligible
+    under section 8.6 -- it is in BOTH excluded sets, which is why it is the
+    one member that cannot tell the two predicates apart. **The member that
+    does tell them apart is `SCREENED_OUT`**, and the sibling test named for it
+    is the one that would have caught the old predicate. Checked green here
+    before and after the change, 2026-09-19.
     """
     store = _copy(coarse_store, tmp_path)
     rows, columns, models = _shape(store)
@@ -350,6 +363,65 @@ def test_an_empty_eligible_population_is_no_evidence_not_clean_and_not_abort(
     )
     assert all(rate.rate is None for rate in verdict.rates)
     assert all(rate.eligible == 0 for rate in verdict.rates)
+
+
+def test_a_coarse_sample_of_decided_skips_is_no_evidence_and_not_a_clean_pass(
+    coarse_store, tmp_path
+):
+    """`no_evidence` asks whether anything was FITTED, not whether anything was eligible.
+
+    Expected value determined independently: section 12.5's non-fit grouping
+    table says `SCREENED_OUT` is *"a decision was taken not to fit this
+    candidate"* and calls it a **legitimate non-fit** -- a decided skip, not a
+    verdict about a series. Section 14.1's 2026-09-18 decision says a sample
+    holding no evidence is not a pass. A sample in which every point is a
+    decided skip holds exactly as much evidence about the candidates as an
+    empty one: none. So the verdict is `no_evidence`.
+
+    **THIS IS THE DEFECT OPEN QUESTION 24's ARTIFACT CHECK FOUND, AND IT IS
+    INDEPENDENT OF THAT QUESTION'S ANSWER (2026-09-19).** The gate's subject is
+    *nothing was fitted*; it was asking *nothing was eligible*. The two
+    coincide only under section 8.6's reading of `INSUFFICIENT_DATA`, which
+    section 12.5 supersedes -- so the predicate was a proxy that agreed with
+    its subject in the common case and diverged exactly where the gate matters.
+    **The tell is a gate whose predicate names a different quantity from its
+    own reason string**, and this one's reason said "eligible" in section 8.6's
+    vocabulary. Same shape as open question 22's quiet gate reading the host's
+    `loadavg` because `loadavg` was available, and as the stall gate reading
+    time-waiting because PSI was available. Third instance; recorded as the
+    pattern at `Outcome.is_fit_verdict`.
+
+    Bug this catches: the shipped predicate, `rate is not None` -- which is
+    `eligible > 0`. `SCREENED_OUT` is eligible and is not a failure, so an
+    all-`SCREENED_OUT` coarse sample gives every candidate `0 / 20 = 0.0`, and
+    the verdict returns **`continue`, "no candidate failed above 90%"** -- a
+    clean pass reported over a sample in which no candidate was ever fitted.
+    The assertion below fails on that code and passes only when the gate reads
+    fits.
+
+    **REACHABILITY, STATED RATHER THAN IMPLIED:** `SCREENED_OUT` has no
+    producer today (section 12.5 lists the debiased Whittle engine and the
+    screening config block as what would give it one), so this plane is
+    constructed. That makes the defect unreachable in production **today** and
+    does not make the predicate right -- and open question 24's flip gives it a
+    reachable producer immediately, because `INSUFFICIENT_DATA` becomes
+    eligible while remaining a non-fit.
+    """
+    store = _copy(coarse_store, tmp_path)
+    rows, columns, models = _shape(store)
+    skipped = np.full((rows, columns), Outcome.SCREENED_OUT.code, np.uint8)
+    _set_outcomes(store, [skipped] * models)
+
+    verdict = abort_verdict(store)
+
+    assert verdict.action == "no_evidence"
+    assert verdict.candidates == ()
+    assert all(rate.fitted == 0 for rate in verdict.rates)
+    assert all(rate.eligible == rows * columns for rate in verdict.rates), (
+        "the point of this fixture is that the sample IS eligible and is still "
+        "not evidence; an eligible count of zero would make it a restatement "
+        "of the empty-population test"
+    )
 
 
 def test_an_empty_sample_and_an_all_failing_sample_are_different_verdicts(

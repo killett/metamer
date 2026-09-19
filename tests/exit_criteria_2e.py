@@ -202,8 +202,17 @@ PHASE_2E_EXIT_CRITERIA: tuple[ExitCriterion, ...] = (
         verdict=Verdict.MET,
         reading="both properties, enumerated",
         scope="",
+        # THE FIRST NAME MOVED ON 2026-09-19 AND THE VERDICT DID NOT. 2f's
+        # gate repair added a third property, `Outcome.is_fit_verdict`, to the
+        # one-table test, and a count in a name is renamed rather than edited
+        # -- so `..._by_both_properties_...` became
+        # `..._by_all_three_properties_...`. **Criterion 8's reading stays "both
+        # properties, enumerated"**, because that is what 2e read and a later
+        # sub-phase adding a column does not retroactively widen a met
+        # criterion. This edit keeps the name pointing at evidence that exists;
+        # it is not a re-reading.
         established_by=(
-            "test_every_member_is_classified_by_both_properties_in_one_table",
+            "test_every_member_is_classified_by_all_three_properties_in_one_table",
             "test_the_three_deferred_outcomes_are_skips_and_not_failures",
             "test_a_dropped_candidate_is_outside_the_failure_rate_and_inside_the_denominator",
         ),

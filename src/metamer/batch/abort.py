@@ -79,11 +79,27 @@ class CandidateRate:
     property and not a contract -- it holds until a joint signal x noise search
     lands -- which is why this is a field rather than a comment.
 
+    **`fitted` AND `eligible` ARE TWO COUNTS AND THE VERDICT READS THE FIRST
+    (2026-09-19).** `eligible` is the rate's denominator -- who is in the
+    failure-rate population. `fitted` is whether the store is making a fit
+    claim at all, by section 12.5's non-fit grouping table through
+    `Outcome.is_fit_verdict`. They differ on every decided skip:
+    `SCREENED_OUT` and `CANDIDATE_DROPPED` are eligible and are not fits, so a
+    sample can have a full denominator, a rate of exactly 0.0, and **no
+    evidence whatever**. Section 14.1's judgeability question is the second
+    one; it was asking the first until this field existed. `fitted <= eligible`
+    always, because every fit verdict is eligible under either reading of
+    `INSUFFICIENT_DATA`.
+
     Attributes:
         candidate: The label, as the store records it.
         failed: Eligible points this candidate failed, by `Outcome.is_failure`.
         eligible: Points where this candidate was a real candidate for fitting,
-            by `Outcome.is_eligible`.
+            by `Outcome.is_eligible`. **The rate's denominator, and not what
+            decides whether there is a rate to compare.**
+        fitted: Points where the store records a fit verdict for this
+            candidate, by `Outcome.is_fit_verdict`. **This is what
+            `no_evidence` reads.**
         rate: `failed / eligible`, or **None when `eligible` is zero** -- see
             `abort_verdict` on why that is not the same as zero.
     """
@@ -91,6 +107,7 @@ class CandidateRate:
     candidate: str
     failed: int
     eligible: int
+    fitted: int
     rate: float | None
 
 
@@ -208,13 +225,17 @@ def _rate_for(label: str, codes: NDArray[np.uint8]) -> CandidateRate:
         codes: Its `(y, x)` outcome codes.
 
     Returns:
-        The rate, with `rate=None` when nothing was eligible.
+        The rate, with `rate=None` when nothing was eligible, and `fitted`
+        counted separately because that is what judgeability reads.
     """
     eligible = 0
     failed = 0
+    fitted = 0
     values, counts = np.unique(codes, return_counts=True)
     for value, count in zip(values, counts, strict=True):
         member = Outcome.from_code(int(value))
+        if member.is_fit_verdict:
+            fitted += int(count)
         if member.is_eligible:
             eligible += int(count)
             if member.is_failure:
@@ -223,6 +244,7 @@ def _rate_for(label: str, codes: NDArray[np.uint8]) -> CandidateRate:
         candidate=label,
         failed=failed,
         eligible=eligible,
+        fitted=fitted,
         rate=None if eligible == 0 else failed / eligible,
     )
 
@@ -248,7 +270,18 @@ def _decide(
     # with no judgeable candidate both `over` and `judgeable` are empty and
     # `len(over) == len(judgeable)` is `0 == 0`. Below the all-over check this
     # branch is unreachable and an empty sample aborts with the wrong reason.
-    judgeable = [rate for rate in rates if rate.rate is not None]
+    #
+    # AND JUDGEABILITY IS `fitted`, NOT `rate is not None` (2026-09-19, open
+    # question 24's check). `rate is not None` is `eligible > 0`, which is a
+    # question about the failure-rate DENOMINATOR; this gate's question is
+    # whether the sample holds a fit to judge. The two agree only while
+    # `INSUFFICIENT_DATA` is out of the denominator -- section 8.6's reading,
+    # superseded by section 12.5 -- and they disagree today on any decided
+    # skip: an all-`SCREENED_OUT` sample has a full denominator and a rate of
+    # exactly 0.0, and returned `continue`, "no candidate failed above 90%",
+    # over a sample in which nothing was ever fitted. See
+    # `Outcome.is_fit_verdict` for the pattern this is the third instance of.
+    judgeable = [rate for rate in rates if rate.fitted > 0]
     if not judgeable:
         return AbortVerdict(
             action="no_evidence",
@@ -256,11 +289,12 @@ def _decide(
             rates=rates,
             threshold=threshold,
             reason=(
-                "no point in the coarse pass was eligible for any candidate, so "
+                "no point in the coarse pass was fitted for any candidate, so "
                 "the sample holds no evidence and nothing was judged. The run "
                 "continues with the fine grid unjudged; section 14.2's report "
-                "is the only rate for it. Either the input is masked "
-                "everywhere, or the coarse lattice falls only on masked cells"
+                "is the only rate for it. Either every coarse point was out of "
+                "domain or too thin to fit, or the candidates were all skipped "
+                "before any fit ran"
             ),
         )
 

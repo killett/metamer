@@ -101,6 +101,11 @@ def _verdict(action: str, labels: tuple[str, ...], over: int) -> AbortVerdict:
             candidate=label,
             failed=19 if index == over else 1,
             eligible=20,
+            # FITTED EQUALS ELIGIBLE HERE BECAUSE THIS FIXTURE PLANTS A JUDGED
+            # SAMPLE. The two counts differ only on decided skips, and a
+            # verdict injected to exercise the drop path has none; a `fitted`
+            # of zero would make every one of these verdicts `no_evidence`.
+            fitted=20,
             rate=0.95 if index == over else 0.05,
         )
         for index, label in enumerate(labels)
@@ -468,11 +473,11 @@ def _inject(path, **kwargs):
     group = zarr.open_group(str(path), mode="r")["status"]
     labels = tuple(str(v) for v in np.asarray(group["m"][:]).tolist())
     rates = tuple(
-        CandidateRate(label, 19 if i == OVER else 1, 20,
+        CandidateRate(label, 19 if i == OVER else 1, 20, 20,
                       0.95 if i == OVER else 0.05)
         for i, label in enumerate(labels)
     ) if OVER >= 0 else tuple(
-        CandidateRate(label, 1, 20, 0.05) for label in labels
+        CandidateRate(label, 1, 20, 20, 0.05) for label in labels
     )
     over = (labels[OVER],) if OVER >= 0 else ()
     return AbortVerdict(

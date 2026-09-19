@@ -92,6 +92,66 @@ class Outcome(StrEnum):
         }
 
     @property
+    def is_fit_verdict(self) -> bool:
+        """Whether the store is making a claim about a FIT at this cell.
+
+        **SECTION 12.5's NON-FIT GROUPING TABLE IS THE CLASSIFICATION AND IS
+        NOT RE-ARGUED HERE**, exactly as `is_failure` reads it. That table --
+        *"the store's status alphabet carries codes that are **not fit
+        verdicts**"* -- names five: `NOT_ATTEMPTED`, `SCREENED_OUT`,
+        `CANDIDATE_DROPPED`, `NOT_APPLICABLE` and `INSUFFICIENT_DATA`. The nine
+        members below are section 8.6's taxonomy, which is everything else.
+
+        **WRITTEN AS A POSITIVE MEMBERSHIP TEST, WHICH IS THE OPPOSITE
+        DIRECTION FROM ITS TWO SIBLINGS, DELIBERATELY.** `is_failure` and
+        `is_eligible` exclude from the whole enum, so a new member defaults
+        *into* them. Here that default is the dangerous one: every member added
+        to this taxonomy since Phase 1 has been a non-fit code, and a new
+        non-fit member defaulting into the fit set would silently become
+        evidence -- a sample a run never fitted would read as judged. So an
+        unknown member is **not** a fit verdict until someone says otherwise,
+        and `tests/test_outcomes.py`'s one-table test is what makes "otherwise"
+        a decision rather than an omission.
+
+        **WHY THIS EXISTS, AND IT IS NOT A CONVENIENCE (2026-09-19, open
+        question 24's artifact check).** Section 14.1's early-abort verdict
+        asks *"did this sample hold any evidence?"* and was asking
+        `is_eligible` -- *"is this point in a failure-rate denominator?"*.
+        Those are different questions that agree only while
+        `INSUFFICIENT_DATA` is excluded from denominators, which is section
+        8.6's reading and which section 12.5 supersedes. `SCREENED_OUT` and
+        `CANDIDATE_DROPPED` are eligible and are not fits, so the disagreement
+        is constructible today and becomes reachable the moment open question
+        24 lands.
+
+        **THE PATTERN, RECORDED HERE RATHER THAN AS A THIRD ANECDOTE.** This is
+        the third gate in this project caught keying on a proxy that was merely
+        *available*:
+
+        | gate | it read | its subject |
+        |---|---|---|
+        | the quiet gate (open question 22) | the host's `/proc/loadavg` | this container's CPU use |
+        | the stall gate | time spent waiting | memory pressure |
+        | this one | `is_eligible` | whether anything was fitted |
+
+        All three coincide with their subject in the common case and diverge
+        exactly where the gate matters. **The tell is a gate whose predicate
+        names a different quantity from its own reason string** -- section
+        14.1's said "eligible" while meaning "fitted".
+        """
+        return self in {
+            Outcome.OK,
+            Outcome.ITER_CAP_SMALL_GRAD,
+            Outcome.ITER_CAP_LARGE_GRAD,
+            Outcome.DIAGNOSTIC_LIMIT,
+            Outcome.TRUST_RADIUS_COLLAPSED,
+            Outcome.NONFINITE_OBJECTIVE,
+            Outcome.RANK_DEFICIENT_X,
+            Outcome.ILL_CONDITIONED_X,
+            Outcome.DEGENERATE_HESSIAN,
+        }
+
+    @property
     def code(self) -> int:
         """Stable integer code, for the batched arrays and the zarr schema."""
         return _CODES[self]

@@ -192,8 +192,8 @@ def test_is_eligible_is_not_trivially_constant():
     assert Outcome.OK.is_eligible is True
 
 
-def test_every_member_is_classified_by_both_properties_in_one_table():
-    """The whole taxonomy in one place, rather than two exclusion lists.
+def test_every_member_is_classified_by_all_three_properties_in_one_table():
+    """The whole taxonomy in one place, rather than three exclusion lists.
 
     Expected values determined independently: design doc section 8.6's taxonomy
     table for the fit verdicts, and section 12.5's non-fit grouping table -- the
@@ -207,11 +207,22 @@ def test_every_member_is_classified_by_both_properties_in_one_table():
     not failures and **not eligible either**, because they are not points the
     rate is over.
 
-    Bug this catches: a new member landing in neither group or in both. The two
-    properties are implemented as separate exclusion sets, so a member added to
-    one and forgotten in the other is a single-line omission that reads as
-    complete -- and there is no single place, other than this table, where the
-    two can be seen together.
+    Bug this catches: a new member landing in neither group or in both. The
+    properties are implemented as separate membership sets, so a member added to
+    one and forgotten in another is a single-line omission that reads as
+    complete -- and there is no single place, other than this table, where all
+    three can be seen together.
+
+    **THE THIRD COLUMN IS `is_fit_verdict`, ADDED 2026-09-19 (open question 24's
+    check).** Its expected values are section 12.5's non-fit grouping table read
+    off by hand: the five codes that table names -- `NOT_ATTEMPTED`,
+    `SCREENED_OUT`, `CANDIDATE_DROPPED`, `NOT_APPLICABLE` and
+    `INSUFFICIENT_DATA` -- are exactly the codes for which the store is making
+    no fit claim, and the remaining nine are section 8.6's fit verdicts. **It is
+    not `is_eligible`'s complement and not its negation**: `SCREENED_OUT` and
+    `CANDIDATE_DROPPED` are eligible and are not fit verdicts, which is the pair
+    that makes the two questions different and is why asking one in place of the
+    other is a defect rather than a style.
 
     **`INSUFFICIENT_DATA`'s row follows section 8.6, which section 12.5
     contradicts** -- open question 24, filed to 2f. This table pins what the code
@@ -225,23 +236,25 @@ def test_every_member_is_classified_by_both_properties_in_one_table():
     half that reaches a report.
     """
     expected = {
-        Outcome.OK: (False, True),
-        Outcome.ITER_CAP_SMALL_GRAD: (True, True),
-        Outcome.ITER_CAP_LARGE_GRAD: (True, True),
-        Outcome.DIAGNOSTIC_LIMIT: (True, True),
-        Outcome.TRUST_RADIUS_COLLAPSED: (True, True),
-        Outcome.NONFINITE_OBJECTIVE: (True, True),
-        Outcome.RANK_DEFICIENT_X: (True, True),
-        Outcome.ILL_CONDITIONED_X: (True, True),
-        Outcome.DEGENERATE_HESSIAN: (True, True),
-        Outcome.NOT_ATTEMPTED: (False, True),
-        Outcome.SCREENED_OUT: (False, True),
-        Outcome.CANDIDATE_DROPPED: (False, True),
-        Outcome.INSUFFICIENT_DATA: (False, False),
-        Outcome.NOT_APPLICABLE: (False, False),
+        Outcome.OK: (False, True, True),
+        Outcome.ITER_CAP_SMALL_GRAD: (True, True, True),
+        Outcome.ITER_CAP_LARGE_GRAD: (True, True, True),
+        Outcome.DIAGNOSTIC_LIMIT: (True, True, True),
+        Outcome.TRUST_RADIUS_COLLAPSED: (True, True, True),
+        Outcome.NONFINITE_OBJECTIVE: (True, True, True),
+        Outcome.RANK_DEFICIENT_X: (True, True, True),
+        Outcome.ILL_CONDITIONED_X: (True, True, True),
+        Outcome.DEGENERATE_HESSIAN: (True, True, True),
+        Outcome.NOT_ATTEMPTED: (False, True, False),
+        Outcome.SCREENED_OUT: (False, True, False),
+        Outcome.CANDIDATE_DROPPED: (False, True, False),
+        Outcome.INSUFFICIENT_DATA: (False, False, False),
+        Outcome.NOT_APPLICABLE: (False, False, False),
     }
 
-    assert {m: (m.is_failure, m.is_eligible) for m in Outcome} == expected
+    assert {
+        m: (m.is_failure, m.is_eligible, m.is_fit_verdict) for m in Outcome
+    } == expected
 
 
 def test_no_committed_report_carries_a_decided_skip():
