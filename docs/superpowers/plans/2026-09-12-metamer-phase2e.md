@@ -1,6 +1,6 @@
 # Phase 2e — the run's own honesty
 
-**Status: APPROVED 2026-09-12, with four amendments applied. Tasks 0–6 DONE, and the no-evidence decision taken 2026-09-18 as (b); Task 7 (the exit-criteria suite) is next and not started.** The four are recorded where they land rather than in a list here: Task 1's unreachability window is now a **test** and Task 6 inverts it; Task 2 states the handover that destroys Task 1's control; Task 0 records the one-pass gap as **open with a named owner** and Task 6 writes the answer; and Task 5 **defines** the policy vocabulary Task 6 binds against, so the coupling runs one way. The head of
+**Status: COMPLETE 2026-09-18 — 17 met / 1 reduced scope / 0 failed. Tasks 0–6 DONE by 2026-09-16; the no-evidence decision taken 2026-09-18 as (b); Task 7 DONE 2026-09-18. The close is in PROGRESS.md; the record is `tests/exit_criteria_2e.py`.** The four are recorded where they land rather than in a list here: Task 1's unreachability window is now a **test** and Task 6 inverts it; Task 2 states the handover that destroys Task 1's control; Task 0 records the one-pass gap as **open with a named owner** and Task 6 writes the answer; and Task 5 **defines** the policy vocabulary Task 6 binds against, so the coupling runs one way. The head of
 [`PROGRESS.md`](../../../PROGRESS.md) is the single source for this plan's status; when it and
 this line disagree, the head is right and this line is stale. Same shape as the 692/693 test
 count and the 2b table that said *"awaiting review"* for four days after approval.
@@ -318,7 +318,7 @@ rather than a feature.
 | 4 | the live counters — point-granularity, display-only, plain lines | — | **DONE 2026-09-14** — outside `metamer.batch`, import boundary asserted |
 | 5 | the abort verdict — a pure function of a pass-1 store | — (**defines** the policy vocabulary and the dropped-candidate set Task 6 binds against) | **DONE 2026-09-14** — ~~an empty eligible population aborts~~ **`no_evidence` since 2026-09-18** |
 | 6 | the abort action, the `CANDIDATE_DROPPED` producer, and the one-pass decision | 3, 5 | **DONE 2026-09-16** — reading (i); exit 1 defined as the verdict's; ~~one question left open (no-evidence abort)~~ **decided 2026-09-18, (b) — see below Task 6** |
-| 7 | the 2e exit-criteria suite | all | **NEXT** — not started; wants a full window |
+| 7 | the 2e exit-criteria suite | all | **DONE 2026-09-18** — 17 met / 1 reduced (14: the row is 2f's) / 0 failed; four readings taken as stated where the tasks had tested weaker |
 
 **Task 1 before Task 2 is D4 and is not negotiable by convenience** — the ordering exists so the
 catch-all has a live producer to be verified against, and Task 2 destroys it.
@@ -889,7 +889,7 @@ fixtures. **2e does not reopen the residency model and must not be read as havin
 
 ## What 2f inherits
 
-- **Two subjects to count**: dropped candidates, and a sixth exit code to print in the final line.
+- **Three subjects to count** (~~two~~, corrected 2026-09-18): dropped candidates, a sixth exit code to print in the final line, and **a `no_evidence` verdict** recorded in the store's `early_abort.action` — a run that continued with its coarse sample unjudged, which the report must say rather than fold into a clean pass.
 - **A run that opens an ordinary gridded product**, so a report can be pointed at this project's
   only real dataset rather than at a renamed copy.
 - **A decided-skip group with a rule**, so the report's rates partition outcomes the same way the
@@ -900,3 +900,8 @@ fixtures. **2e does not reopen the residency model and must not be read as havin
   §11.2's fear absent and a different thing present.
 - **`python -m metamer.report <store>` as the entry point**, in module form, with the command tree
   still Phase 5's.
+- **Criterion 14's row** — *points where the candidate was still live* — with its denominator defined
+  at §14.2 and shown computable from the two stores by `tests/test_exit_criteria_2e.py`; the reduction
+  closes when the row is printed.
+- **Open question 24**, whose first act is to check whether any committed artifact carries a rate
+  computed under the current `INSUFFICIENT_DATA` rule.

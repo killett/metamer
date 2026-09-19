@@ -868,3 +868,92 @@ The Task 5 pre-flight entry above (*"whether that is its own verdict value or a 
 `abort`); the headline branch removed (expect the subprocess test to fail on stderr); the empty
 branch returning `continue` (expect the inverted unit test to fail — the 2026-09-14 provenance,
 re-run).
+
+---
+
+## Plan Task 7 — the exit-criteria suite, audited before any edit (2026-09-18)
+
+**THE BRIEF** is the plan's Task 7: eighteen criteria, each naming its reading, in the shape 2b,
+2c and 2d used — `ExitCriterion` and `Verdict` imported from `tests/exit_criteria_2b.py`, no
+fourth enum member, FAILED plus a scope string where a criterion failed by construction, no exempt
+list; the inherited verdicts read out of their own records by number; then the close. **Five
+findings, and the first is the one that decides what this task builds.**
+
+### (a5) FOUR READINGS ARE STATED IN THE PLAN MORE STRONGLY THAN ANY TASK's TEST TOOK THEM
+
+The plan's third column is the reading a criterion is decided on. Checked against the tests each
+task actually shipped, four are stronger than their evidence:
+
+| # | the plan's reading | what the task's test read | gap |
+|---|---|---|---|
+| 1 | *the exit code, and the fitted point **count*** | Task 2 compared the two stores array for array | no count anywhere |
+| 4 | *the two numbers, same store, two namings* | no test renames a store for `read_amplification` at all | the invariance is asserted in a docstring only |
+| 15 | *the two stores, **byte-for-byte*** | Task 6 compared `status/outcome` and `primitives/log_lik` | two named arrays are not a store |
+| 16 | *both exit codes, **in one test*** | Task 6 has 1 in `test_early_abort.py` and 5 in `test_runner.py` | two tests can be edited apart |
+
+**The suite takes the readings as stated rather than softening the record to match the tests.**
+Each of the four gets a criterion test that reads what the plan named: the count off the store,
+the two numbers off two files, every file's bytes under both trees, and both codes from two
+subprocesses in one assertion. **Softening would have been the (a4) failure — "checked" in the
+plan's own column being a claim — and the plan's column is what the closing table quotes.**
+
+### (a5) CRITERION 14's SUBJECT IS A ROW, AND THE ROW IS 2f's — SO IT IS REDUCED, NOT MET
+
+*"The drop's reported rate names its own denominator and excludes the dropped points — the row,
+and the denominator beside it."* Task 3 fixed the denominator's definition (*points where the
+candidate was still live*, §14.2) and said in the same breath that *"the row itself is 2f's"*.
+The plan's own opening section draws the 2e/2f line as §17's measure/print rule. **So no row
+exists to read, and a criterion that reads a row cannot be MET without one.** What 2e can read off
+its stores — that the live population is pass 1's eligible set, that the recorded verdict's
+`eligible` equals it, and that it is strictly smaller than the pass-2 population the drop wrote
+into — is read, and the verdict is **MET WITH REDUCED SCOPE** with the reduction named as the
+section boundary. **Not FAILED**: nothing was measured and found wanting; the subject is owned
+elsewhere, which is 2c's criterion 12 shape and not 2d's criterion 14 shape.
+
+### (c) "BOTH DIRECTIONS" IN CRITERION 10 IS ENUMERATED, NOT INTERPRETED
+
+The reading says *the construction, both directions* and does not say which two. The plan's
+Task 4 invariants name them: **the import graph** (`metamer.batch` never imports the counters —
+a subprocess check, because in-session the module is already loaded by the test file) and **the
+seam's type** (`on_tile_progress` returns `None`, so nothing the counters compute has a way back
+in). The criterion test asserts both, and the record's `outside` says the first is the one with
+an outside.
+
+### (a6) THE NO-EVIDENCE DECISION HAS NO CRITERION, AND THE RECORD SAYS SO RATHER THAN LEAVING IT TO BE NOTICED
+
+The eighteen were approved 2026-09-12; the no-evidence question was opened 2026-09-16 and decided
+2026-09-18. **A nineteenth criterion written today would be a criterion written around a
+decision**, which is what the handoff warned Task 7 against in the other direction. The decision
+is pinned by its own tests and recorded at §14.1; the record's module docstring states the
+omission and why, so a reader counting criteria against behaviours finds the gap explained and not
+hidden. **Dr. Twinklebrane can reverse this by asking for a nineteenth.**
+
+### (c) THE INHERITED LIST GREW, AND IT IS ENUMERATED BY SUB-PHASE AND NUMBER
+
+2d's binder read three inherited verdicts (2b's 6 and 7, 2c's 11). 2e reads **seven**: those
+three plus 2d's 6, 11 and 14 FAILED and 12 reduced — each by number out of its own record, none
+copied. The brief lists them; the binder asserts them; a renumbering in any record fails loudly.
+
+### THE TEST PLAN, WITH THE BUG EACH CATCHES
+
+Six binders in 2d's shape (coverage, evidence exists, readings with no exempt list, scope and
+outside, inherited by number, serialisable), plus eight criterion tests:
+
+| criterion | test | bug it catches | expected value's source |
+|---|---|---|---|
+| 1 | a lat/lon store exits 0 and every point is fitted | a partial closure — exit 0 from a run that wrote nothing or fitted a subset | 3 × 4 × 2 = 24, by hand |
+| 3 | the fingerprint keys a lat/lon store by its own names | the rename closer taken by accident — `y`/`x` in the fingerprint | the input file's own coordinates, via xarray |
+| 4 | read amplification is one number under two namings | a transposed positional rewrite — on the non-square (12, 4, 8) chunking it reads 4.0 where the answer is 8.0 | 128 / 16, by hand |
+| 7 | the `INTERNAL_ERROR` guard carries its dated live producer | the provenance tidied out of the docstring — (i2) with nothing left to say the mechanism ever matched a live crash | the record: 2026-09-12, `read_amplification`, `KeyError: 'y'` |
+| 9 | every committed histogram recomputes unchanged | a committed report carrying `CANDIDATE_DROPPED`, making the reclassification retroactive | the pre-Task-3 rule against §12.5's, on each histogram; positive control: a real failure recounted |
+| 10 | the decision path cannot see the counters in either direction | a `batch` module importing the counters, or a seam widened to return a value | the dependency's direction |
+| 12 | a store and its ocean crop reach one verdict | a rate over all points — 12/20 = 0.6 continues where 12/12 drops | two real decimated runs; the pattern planted on the ocean only |
+| 14 | the live denominator is pass 1's and is computable | D9's loop — a denominator taken from the pass-2 store the drop wrote into | 3 × 3 = 9 coarse points, by hand; 36 in pass 2 |
+| 15 | `--no-early-abort` and a `continue` verdict write the same bytes | the flag changing anything written beside the fits — an array comparison names two arrays and a store has more | every file's bytes; the one permitted difference asserted present |
+| 16 | a thresholded run and a crashed run exit different codes | the collision reintroduced by a later catch clause | §14.3's 1 and 5, traceback only with 5, the caveat only with 1 |
+| 18 | the design doc states the one-pass decision and the open note is gone | the answer written beside the note rather than in its place | Task 0's own wording, asserted absent; Task 6's, asserted present |
+
+**Mutants to prove before recording** (three, each on a different criterion's subject): a
+`from metamer.progress import LiveCounters` in `abort.py` (criterion 10 must fail in the
+subprocess); the eligibility filter removed from `_rate_for` (criterion 12 must fail on the rates);
+exit 1's branch disabled in `__main__` (criterion 16 must fail on the code).
