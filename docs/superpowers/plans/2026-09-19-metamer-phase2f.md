@@ -1,0 +1,797 @@
+# Phase 2f — the report computed from the store
+
+**Design doc §14.2 only.** The computation and a minimal entry point,
+`python -m metamer.report <store>`; the `metamer report` subcommand is Phase 5's, and §14.2
+resolved that split on 2026-09-12 by the same measure/print rule §14.1 was split on. This plan
+implements §14.2; it re-argues none of it, and where it departs from §14.2 it says so at the
+departure and amends the section.
+
+## What 2f IS, and the property everything else serves
+
+**The report is computed from the stored status arrays, not from carried counters.** That is not a
+style preference: §14.2 names three consequences that follow from it and are lost without it —
+resumption correctness is free (a resumed run's report covers the whole run because it reads the
+whole store), the report is independently testable, and it is **usable on someone else's store**.
+
+The third is the sharpest and it constrains this sub-phase everywhere. A user with a store and no
+config must be able to run the report. So:
+
+- **The report never mutates its subject.** §14.2's own closing line asks for the scalar summary
+  in root attrs, and that requirement loses to the one the section leads with — see the amendments.
+- **The report's import graph excludes the fit path**, so a reader of a store does not need the
+  machinery that produced it.
+- **Every number says where it came from**, because a report read by someone who did not run the
+  run cannot be interpreted by knowing what was typed.
+
+## Why this plan has no code fences
+
+Same reason as 2a through 2e. A fenced block is read as the implementation and stops being
+reviewed as a specification. **Interfaces appear as signatures only where a later task binds
+against an earlier one.**
+
+## What 2f inherits, and what it does not own
+
+**Inherited and already in the tree:** stores with `/selection/delta_ic`, `n_valid` and `selected`;
+label coordinates on every group's `m` and `c`, and a `legend` with `flag_values` / `flag_meanings`
+on `/status/` — so a store labels itself and the foreign-store claim is real in the bytes.
+`early_abort` root attrs carrying action, threshold, policy, dropped candidates and the coarse
+rates. Three subjects to count that did not exist before 2e: dropped candidates, a sixth exit code,
+and a `no_evidence` verdict.
+
+**Not 2f's:** the subcommand tree (Phase 5), `--explain` (§13.4), the two-arm audit numbers (they
+are `audit_report.py`'s and already built — see amendment A2), and open question 23, which 2f gives
+an instrument to without taking.
+
+**Closed before this plan, not a task in it: open question 24.** Taken 2026-09-19 in two commits,
+gate then flip, with the artifact check as its evidence. Recorded under "the decisions this
+sub-phase was planned on", D1 and D2.
+
+---
+
+## The decisions this sub-phase was planned on
+
+### D1 — `no_evidence` reads whether anything was FITTED, and that is a defect OQ24's check found rather than a cost of taking OQ24
+
+§14.1's verdict asked `rate is not None`, which is `eligible > 0` — a question about the failure-rate
+**denominator**. Its subject is whether the coarse sample held a fit to judge. The two agree only
+while `INSUFFICIENT_DATA` is excluded from denominators, which is §8.6's reading and which §12.5
+supersedes; they disagree today on any decided skip. An all-`SCREENED_OUT` coarse sample gave every
+candidate `0 / 20 = 0.0` and the verdict returned **`continue`, "no candidate failed above 90%"** —
+a clean pass over a sample in which nothing was ever fitted. Reproduced red before the repair.
+
+**`Outcome.is_fit_verdict` is the repair**, reading §12.5's non-fit grouping table, which now has
+three consumers rather than a fourth statement of one rule. It is written as a **positive**
+membership test over §8.6's nine fit verdicts — the opposite direction from `is_failure` and
+`is_eligible`, which exclude from the whole enum — because every member added to this taxonomy
+since Phase 1 has been a non-fit code, so defaulting a new member *into* the fit set is the
+dangerous direction: a sample the run never fitted would read as judged.
+
+**THE PATTERN, RECORDED AS A PATTERN AND NOT AS A THIRD ANECDOTE.** Three gates in this project
+have keyed on a proxy that was merely *available*: the quiet gate reads the host's `/proc/loadavg`
+(open question 22) when its subject is this container's CPU use; the stall gate read time-waiting
+when its subject was memory pressure; this one read `is_eligible` when its subject was whether
+anything was fitted. **All three coincide with their subject in the common case and diverge exactly
+where the gate matters.** The tell is *a gate whose predicate names a different quantity from its
+own reason string* — §14.1's said "eligible" while meaning "fitted". The table lives at
+`Outcome.is_fit_verdict` and is not restated at each site.
+
+### D2 — `INSUFFICIENT_DATA` is eligible: §12.5 over §8.6, with the artifact check as evidence
+
+§8.6 called it *"excluded from every failure-rate denominator"* and described it as *"land,
+permanent ice"* — the exact conflation §12.5 was written to undo. §12.5 separates land and
+permanent ice (`NOT_APPLICABLE`, not eligible) from a genuinely thin record (`INSUFFICIENT_DATA`,
+**eligible**, *"its rate is a real statement about record coverage"*), and its heading declares it
+the classification §14.2's denominator reads. Precedence: the design doc is authoritative on intent
+and §12.5 is the later, more refined statement.
+
+**The artifact check, run 2026-09-19 before any edit, and the set is empty.** Sixteen outcome
+histograms across five committed artifacts; **zero carry `INSUFFICIENT_DATA` and zero carry
+`NOT_APPLICABLE`**. Exactly one committed family carries a denominator that reaches
+`Outcome.is_eligible` — `wiring-one-measured.jsonl`'s `attempted` / `both_ok_fraction`, out of
+`audit_report.CandidateOutcomes` — and there `attempted == audited_points == 52` on both branches
+for all three candidates, so nothing was excluded and the flip cannot move it. Every other
+committed rate uses a denominator that never reads the property: the spike harnesses use
+`iterations != ITERATIONS_UNSET`, five harnesses use `outcome != 8` (not `NOT_ATTEMPTED`), the
+phase2d records use the raw cell count. No committed prose quotes a numeric failure rate; no store,
+array or `.npy` is committed.
+
+**What does move, stated rather than elided:** one expected value inside 2e's own criterion-13 test,
+which computes `live == 9` with `is_eligible` as its denominator. Recomputed, and said so at the
+test. "No committed artifact moves, one test's expected value does" is the honest form of "the set
+is empty".
+
+**Gate before flip, in separate commits, and the order is the argument.** The gate repair is correct
+independent of OQ24 and provable independent of it: criterion 19's fixture keeps its producer under
+the *current* eligibility rule, so the repair goes green before the re-baselining exists. Two
+changes that could each explain a wrong number land separately.
+
+### D3 — the clustering graph's population is `is_fit_verdict`, which generalises §14.2's one stated exclusion
+
+§14.2 says `NOT_APPLICABLE` leaves the adjacency graph entirely, because land forms enormous
+contiguous blocks and would dominate the statistic with a spurious signal. **That argument is not
+about land.** Every non-fit code has the identical pathology: `CANDIDATE_DROPPED` covers 100% of
+pass 2 for a dropped candidate, a perfect single cluster; `SCREENED_OUT` will cover whatever the
+screening block selects, which is by construction coherent; `NOT_ATTEMPTED` on an interrupted run
+covers unwritten tiles, which are literal rectangles.
+
+So the graph is built over cells where the store records a fit verdict. **The predicate D1 added for
+the gate is the predicate the graph needs**, and the unfinished-store case (D6) therefore requires no
+special handling — which is the generalisation paying immediately.
+
+**The rates keep `is_eligible`.** Two populations, each named at its use. That is not one
+measurement stated twice: D1 established that they are different questions.
+
+### D4 — join-count, rook, index-space, no seam wrap
+
+**Join-count (BB) on the binary failure indicator**, reported as the raw count with the permutation
+null's median and quantiles and a z-score — not a bare coefficient, per §14.2. **Moran's I is
+refused**: on a 0/1 field it is a linear transform of the same quantity under the same weights, so
+choosing it would be choosing the form §14.2 says nobody can interpret.
+
+**Rook (4-neighbour), index-space, documented as such** — §14.2 fixes index-space; rook rather than
+queen because the statistic is about contiguous patches and queen's diagonal joins make the count
+more sensitive to grid anisotropy. **No wrap at the longitude seam**, stated with its bias
+quantified by Task 0 rather than asserted: every store this project has produced is a subset box,
+and detecting global coverage means interpreting the `x` coordinate, which is a data-dependent
+guess. A limitation with a measured magnitude; not an unexamined choice.
+
+### D5 — the null permutes labels among eligible points with the mask held fixed
+
+This is the load-bearing decision of the statistic. Holding the mask fixed preserves the
+missing-data geometry **and** the failure count, so the null asks **"is this arrangement unusual"**
+rather than **"is this rate unusual"**. The other permutation is the obvious one and it tests a
+different hypothesis. Said at the null, not only here.
+
+**999 permutations**, a stated constant: p = (1 + #{null ≥ observed}) / 1000, so the floor is 0.001.
+More permutations buy **resolution at the floor and nothing else** — power comes from the data, not
+the null's size — so 9999 is warranted only where a p sitting at the floor is load-bearing. **The
+seed is a stated constant, printed in the report, overridable by flag**, and once set it joins the
+do-not-move list: moving it changes every reported p.
+
+### D6 — an unfinished store is described, not refused
+
+§12.5's *"a finished store should hold none"* is a fact about finished stores, not a definition of
+this command's subject. The report's subject is a store; whether it is finished is a property the
+report **describes**.
+
+§14.1's motivating case decides it: that section exists because discovering at hour 9 that ten hours
+were wasted is the expensive outcome, so a report refusing to run on exactly the store that
+discovery produces would be the mechanism declining its own use case. A `--allow-incomplete` flag is
+worse than refusing: a flag whose only effect is to permit the common case trains the user to pass
+it always, at which point the default has no consumer and the caveat rides on a flag nobody reads.
+**And this project's whole reporting idiom is compute-and-qualify** — INDETERMINATE, withheld rates,
+the 30-member floor, "excluded is not missing". Refusing here would be the one place it inverts.
+
+**Completeness is read from `/completion/tiles`, never inferred from `NOT_ATTEMPTED`.** Two different
+questions — the bitmap says which tiles were written, the outcome says what a cell holds, and a tile
+can be complete with `NOT_ATTEMPTED` cells. 2a's data-then-bitmap invariant makes the bitmap
+authoritative. **A disagreement between the two is reported as a defect, never resolved silently.**
+
+`N` and `M` are **numbers in the record**, not a banner, so the markdown renders them beside every
+denominator and a quoted rate travels with its population.
+
+**The statistic on an unfinished store keeps its own word:** unwritten tiles are rectangles, so the
+eligible mask has rectangular holes — and because the null holds the mask fixed (D5), it correctly
+conditions on that geometry. The statistic is valid and its interpretation narrows to *"is the
+arrangement unusual given what was fitted"*, not *"given the domain"*. Stated, because a reader
+will otherwise take a z-score on a half-finished run as a statement about the field.
+
+### D7 — per candidate, with the aggregate as a second headline of a different kind
+
+The statistic is computed **per candidate** on `outcome[y,x,m]`. The point-level aggregate is `OK` if
+**any** candidate is `OK` (§12.5's rule), so an aggregate-only statistic reports "no clustering" for
+a store where one candidate fails in a coherent patch everywhere — and that geography is what §12.5
+calls a diagnostic. A statistic that cannot see the thing its section names is not the conservative
+choice.
+
+**Two headlines with different subjects, and the family is summarised by its maximum.** 2d settled
+max-over-strata rather than mean, because a mean can understate and a maximum cannot; that rule
+applies **within** the candidate family. It does not reach the aggregate, which is different in
+kind: a candidate's indicator says *this candidate failed here* (a selectability fact), the
+aggregate's says *no candidate produced a usable fit here* (a coverage fact — a hole in the output).
+The aggregate is **not** a member of the family and is not summarised by it.
+
+### D8 — per-branch statistics are a named capability with a trigger, not a deferral
+
+*"Is `DEGENERATE_HESSIAN` clustered?"* is open question 23's own question, and the maps already carry
+the geography per branch. So the per-branch statistic is **available on request** under one flag,
+documented as *"compute this when asking open question 23's question"*, carrying its own
+multiple-comparison caveat — because a family of tests reported without a correction invites reading
+the largest z as the finding. That gives OQ23 an instrument without 2f owing a correction on every
+ordinary run. **A closer, not a gap.**
+
+### D9 — maps are per branch because they are binary, and binary because the honest reduction is a fraction
+
+**§14.2's two halves are load-bearing together, and the amendment anyone would make breaks them.**
+The plan that was nearly written amended *"downsampled PNG map per branch"* to categorical
+per-candidate maps, colour = outcome, legend from the store's own `flag_meanings`. It is wrong:
+
+**A categorical code array has no honest arithmetic reduction.** Downsampling outcome codes by mean
+turns code 7 (`DEGENERATE_HESSIAN`) and code 11 (`ILL_CONDITIONED_X`) into code 9, which is
+`CANDIDATE_DROPPED` — a real, different, **valid-looking** code. A downsampled categorical map does
+not produce a wrong picture, it produces a **plausible** one.
+
+The obvious escape was checked rather than assumed: reuse `merge_outcomes` and `OUTCOME_PRECEDENCE`
+for the block reduction, as §12.5 did for the point aggregate. **It does not work** — that ladder
+holds six members and `DEGENERATE_HESSIAN` is not among them ("the outcomes *this module* can
+combine"), so it cannot rank the most common real failure, and inventing a second precedence is what
+§12.5 warns against by name.
+
+So a downsampled map must be **per branch**, because a per-branch map is binary and its honest block
+reduction is the **fraction** of the block carrying that code. §14.2 was right and the reason is now
+visible.
+
+**Map inventory:** one map per (branch present × candidate), plus one per branch for the point-level
+aggregate. Bounded by what occurred rather than by the 14-member alphabet — real stores so far show
+`{OK, DEGENERATE_HESSIAN, TRUST_RADIUS_COLLAPSED}`.
+
+**INVARIANT: map and statistic are never computed over different things.** The comparability rule,
+applied inside one report.
+
+**Colours.** Fractions do not cross zero → `viridis`; `n_valid` and iteration maps likewise
+sequential; anything crossing zero → `RdBu_r` with symmetric limits. **Fixed code-to-colour across
+runs**, or two reports are not comparable. No `cmocean` map applies and `cmcrameri` is not added for
+`batlow`: these are **diagnostics about fitting, not geophysical variables**, and a matplotlib
+built-in that is perceptually uniform and colourblind-safe does the job without a dependency inside
+an optional extra.
+
+### D10 — matplotlib behind a `[report]` extra, lazily imported, enforced by an import-graph test
+
+§14.2 requires the maps from the shipped entry point, so deferring them fails the section. Putting
+matplotlib in `[batch]` makes every headless compute node running a fit install a plotting stack,
+which is not what that extra means. So: a new `[report]` extra; `maps.py` the only importer and
+imported **inside the function**; the numbers path dependency-free, because that is the half that has
+to work on someone else's store.
+
+**This has a receipt.** `tests/test_readme_figure.py`'s docstring records that importing the figure
+generator dragged matplotlib into the suite, *"which is in the dev environment and not in the
+dependency set CI installs, so this file passed locally and failed in CI on its first push"*.
+
+**Enforcement is a subprocess import-graph test**, on `test_core_isolation.py`'s precedent — which
+exists because *"inside the pytest session every one of these is already imported by some other test
+module"*. Importing `metamer.report` pulls in neither matplotlib nor the fit path (`numba`,
+`metamer.core.fit`, `metamer.batch.run`). That measures the import graph rather than what happens to
+be installed, which is both stronger and cheaper than a second CI environment. **Note `import
+metamer.core` drags `core.fit` and every family**, so the report imports `metamer.core.outcomes` as
+a leaf.
+
+### D11 — the drop row: carried record primary, recomputed and asserted when pass 1 is present
+
+§14.2 reasons about *"a candidate dropped after failing 91% of pass 1 has `CANDIDATE_DROPPED`
+written across every **remaining** point"* — a mid-run drop. **2e implemented the drop between
+passes**: `dropped` goes into pass 2's `run`, so in the output store the candidate is
+`CANDIDATE_DROPPED` at **100%** of points and "points where the candidate was still live" is
+**zero** there.
+
+The row is computable anyway, and the reading is stated rather than hidden: **the row reports a
+decision the run took, and a decision's evidence is what the run saw when it took it** — which is
+not recoverable from the output store, because the mechanism overwrites the population it judged.
+That is the same reason pass 1 keeps its real outcomes.
+
+`early_abort.rates[]` is written into **pass 2's** root attrs, and `_verdict_attrs`' own docstring
+records that *"the rates are recomputable from pass 1's store, which is permanent; the THRESHOLD and
+the POLICY are command-line flags and exist nowhere else"*. So: **read the carried record as primary;
+when `out.pass1.zarr` is present, recompute from its arrays and assert agreement; label the number
+as carried when it is not.** A carried counter verified against the store whenever the store is
+there. "Computed from the store" is a claim about reproducibility, and a persisted decision record
+is reproducible.
+
+### D12 — the run records the resolved candidate table; the report reads it
+
+§14.2's *"per-candidate resolved engine, cost class, gradient mode, and objective"* is **not
+computable from the store**. Root attrs carry `engine` and `objective` run-level,
+`registry_version`, and `candidate_spec_hashes` — hashes, which are one-way. The only per-candidate
+identity is the `m` label, and `model_label` is `" + ".join(spec.labels())` with **no inverse
+anywhere in the tree**.
+
+**This is a missing record, not a wrong home**, and the distinction matters: a bullet whose home is
+wrong moves (A2); a bullet whose record is missing needs the record written, and deferring it only
+relocates the absence. **Deferring to Phase 5 does not work**, because `--explain` reads a config and
+a registry: the resolved engine, cost class and gradient mode are decided at run time by §4.2's
+capability intersection, so Phase 5 would have to re-resolve from the config — answering *"what would
+this config resolve to now"*, not *"what was run"* — or read a record that does not exist.
+
+**A label→spec inverse is refused explicitly, because it is the cheapest to reach and will be
+proposed again.** It is a permanent round-trip contract binding every future registry entry, bought
+for a printing convenience, **and it answers the wrong question**: an inverse recovers the spec, not
+what the run resolved it to, and the resolution depends on the engine capabilities at the time —
+exactly what is not recoverable.
+
+**So the run records it**, in the same shape and on the same rule as 2e's two instances: `threshold`
+and `policy` into `early_abort` attrs because they are flags existing nowhere else, and `fitted`
+into the persisted record because the verdict was decided on a quantity absent from its own record.
+**Third instance of §17's measure/print rule; it cites them rather than re-arguing.**
+
+Three constraints hold it:
+
+- **Absence is the answer for older stores.** A store written before the block carries no block and
+  the report says so; **nothing is back-filled**, because a back-fill makes an old store claim a
+  resolution nobody recorded — the same refusal as `field_construction_version` on a version-1
+  report, and the `calibration` / `decimation` precedent.
+- **Additive, and it moves no hash — confirmed, not assumed.** The three hashes hash `normalize(config)`
+  subset to allowlisted fields. The block records what was **resolved**, which is an output of
+  resolution and never a config field, so it cannot enter any payload. `hashing.py` supplies the
+  membership test — *"a field is fit-relevant if changing it can move `theta_hat` or `log_lik` for any
+  input"* — and the precedent by name: *"the audit's settings MEASURE a run; they are not inputs to
+  it, so they are outside this set."* The resolved table is that shape exactly. Provenance, not
+  identity, like `max_iter`, `floor`, `read_amplification` and `thread_limits` already in root attrs.
+- **The write-path touch is a stated deviation.** 2f's property is that **the report** reads and does
+  not mutate — and this is **the run** writing, which preserves it exactly. Said at the change,
+  because "2f touched the write path" will otherwise read as the property being broken.
+
+### D13 — exit codes: reuse `ExitCode`, and a report's code describes the report
+
+One published table, not a second. **Producible:** 0; 3 (usage, as `_Parser.error` already maps);
+4 (the store is unreadable, is not a metamer store, or carries an unknown `schema_version` — "data"
+is the store here); 5. **Not producible, each with its reason recorded:** 1 is defined as *a two-pass
+run whose verdict found a candidate above threshold and which completed anyway* — a property of a
+run, and the report is not a run; 2 is *aborted early, resumable*, and a report is not resumable.
+
+**THE RULE: a report's exit code describes the report, never the run it describes.** That is 2e's
+instrument finding 7 — *where a tool reports on something else, its exit code describes the tool* —
+for the fourth time, and **the first time it has been written down before something was bitten by
+it.** Its three earlier instances all cost a wrong reading first: the `&&` chain, the `| tail` pipe,
+the early-returning watcher.
+
+---
+
+## The §14.2 amendments this sub-phase owes
+
+**§14.2 has four bullets the store cannot answer as written, and they are three different defects.**
+All four were found by checking the section against the store rather than against itself.
+
+- **A1 — the scalar summary into root attrs: conflicting requirements, and the later one wins.**
+  §14.2's closing line asks the report to write its summary into the store's root attrs. §14.2's
+  lead property is that the report is **usable on someone else's store**. A report that mutates its
+  subject cannot be run on a store you do not own. The amendment strikes the attrs write and records
+  the conflict; **nothing is lost**, since the summary is in the report file and the store's own
+  arrays are what a consumer reads.
+- **A2 — the two audit bullets: wrong home.** *"§11.2 audit numbers: disagreement rates overall and
+  per difficulty stratum"* and *"mean iterations warm vs cold against the ≥30% threshold"* need two
+  arms. `python -m metamer.report <store>` takes one store by construction. They live in
+  `audit_report.py`, a benchmark instrument, already built and already wired — and §14.2 says where,
+  so a reader does not go looking for them in the report.
+- **A3 — the resolved candidate table: missing record.** D12. The section keeps the bullet; the run
+  gains the record.
+- **A4 — the drop row's population.** §14.2 describes a mid-run drop; the implemented mechanism
+  drops between passes. D11's reading is recorded at the bullet.
+
+And two clarifications that are not defects:
+
+- **A5 — the adjacency graph's population is every non-fit code**, not `NOT_APPLICABLE` alone (D3),
+  with §14.2's own argument extended rather than replaced.
+- **A6 — "downsampled" and "per branch" are load-bearing together** (D9), recorded at the bullet
+  because the amendment that breaks them is the one anyone would make.
+
+---
+
+## Standing requirements for every task
+
+- **Run the pre-flight against the task brief before code**, appending to
+  [`phase2f-preflight.md`](../notes/phase2f-preflight.md) **before** the task, not after. The method
+  lives in exactly one place — [the handoff](../notes/phase1-to-phase2-handoff.md) §1 — and is not
+  restated here.
+- **`pixi run test` is the full sweep and every end-of-task verification runs it**, to a file, read
+  on its own status. `test-fast` and `test-ci` are not evidence. **Never pipe a checker through a
+  truncating filter** — `| tail` has hidden a failing test, a failing hook and a wrapper's exit code
+  in three forms in 2e alone.
+- **`git add` a new file before `pre-commit run --all-files`**, which covers tracked files only, and
+  stage anything a tool may restore.
+- **Commit after every task; check CI after every push, by the until-loop on the run's own `status`
+  matched to HEAD's `headSha`** — never by position in `gh run list`, never by a wrapper's exit code.
+  **One push per run.** Red CI is the next task.
+- **No exit-criterion verdict from 2a–2e moves.** 2f adds a reader; it reopens no residency model
+  and closes no inherited failure. The inherited verdicts stay visible: **2b's 6 and 7 FAILED, 2c's
+  11 reduced, 2d's 6, 11 and 14 failed with 12 reduced, 2e's 14 reduced** — and 2e's 14 is the drop
+  row, which is 2f's Task 3.
+- **No task moves** `PUBLISHED_TILE_SIDE`, `resident_bytes_per_series`, `output_slot_bytes`,
+  `SVD_CHUNK_SERIES`, `HEADROOM_FRACTION`, `ALGORITHM_VERSION`, `FIELD_SEED`, `HESSIAN_COND_LIMIT`,
+  or any `Outcome` code. **2f adds no `Outcome` member.**
+- **The report never writes to the store it reads.** Task 4's write-path change is the run's, not the
+  report's, and says so.
+- **Every rate names its denominator at the row**, and every unavailable quantity names its reason
+  rather than reporting a zero.
+
+## Task index and dependencies
+
+| # | task | depends on | gates |
+|---|---|---|---|
+| 0 | the clustering spike — cost, calibration, floor, seam | — | **Tasks 5 and 6**; a cost 10× the assumed one re-plans them |
+| 1 | the reader, the import boundary, and completeness | — | every later task |
+| 2 | rates per branch and per candidate, with denominators | 1 | 3 |
+| 3 | the drop row, and 2e's criterion 14 | 2 | — |
+| 4 | the primitives sections, and the run's resolved-candidate record | 1 | — |
+| 5 | selectability — the section §14.2 leads with | 1 | — |
+| 6 | the clustering statistic and its null | 0, 1 | 7 |
+| 7 | the maps, the `[report]` extra, and the no-matplotlib path | 6 | — |
+| 8 | the entry point, the exit codes, and render-from-record | 1–7 | — |
+| 9 | open question 23's capability | 6, 7 | — |
+| 10 | the 2f exit-criteria suite | all | — |
+
+**Task 0 gates Tasks 5 and 6 and is not a formality.** 2d's Task 0 was a whole task and nearly
+collapsed the sub-phase; 2e's pre-flights changed the size or shape of five of eight tasks. **The
+prediction on the record is that 2f does not need open question 22's repair**, because every
+measurement that has cost this project days was a *fitting* measurement and 2f fits nothing — but
+that is a prediction, and P1 is what settles it.
+
+---
+
+## Task 0 — the clustering spike
+
+**Goal.** Price the permutation null, calibrate it in both directions, measure the seam, and measure
+the floor — **before** the statistic has an implementation to defend.
+
+**Predictions are committed to `phase2f-clustering-predictions.json` before the harness runs**, with
+refutation clauses in both directions. The harness writes `phase2f-clustering-measured.jsonl`; the
+verdict is `phase2f-clustering-verdict.md`.
+
+- **P1 — cost.** 999 permutations, rook graph, eligible fraction 0.7, at 64² / 256² / 1024².
+  **Refutation:** if 1024² exceeds 600 s, the permutation count or the implementation is re-planned
+  — not the sub-phase. **This is what decides whether 2f needs open question 22's repair.**
+- **P2 — negative control.** Failures placed by independent Bernoulli draws at the observed rate;
+  over 200 replicates the rejection rate at α = 0.05 lands in **[0.02, 0.09]**. **Below it the null
+  is mis-specified and conservative; above it the statistic over-rejects. Both directions fail the
+  task.**
+- **P3 — positive control.** A planted contiguous patch of the **same total count** rejects at the
+  p-floor in ≥ 95% of replicates. **P2 and P3 together are the instrument's calibration**, and
+  numeric bands on both are what make a null result readable.
+- **P4 — the seam.** A genuine cluster straddling the antimeridian, wrapped against not: the bias
+  **quantified**, not asserted.
+- **P5 — the floor.** The smallest eligible-point count at which P2's calibration breaks. **The floor
+  is measured, not picked** — which is where 2d's 30-member floor was weaker, that number coming from
+  a binomial SE argument and this one from where the calibration actually fails.
+- **P6 — the zero-edge mask.** A checkerboard eligible mask must come back **unavailable with its
+  reason**, not as a number. (i12): the fixture is asserted able to express clustering before any
+  assertion about clustering.
+- **Reproducibility** in iterations: same seed → identical z three times. **Cost in seconds.**
+- **The quiet-host check gates P1 only**, and P2–P6 are marked host-independent explicitly, the way
+  the real-data spike marked `seconds_are_the_contaminated_half`.
+- **The control that reproduces a committed number exactly:** a constructed store carrying the
+  real-data spike's committed `real_ct` histogram — `{OK: 809, DEGENERATE_HESSIAN: 91}` — must make
+  the report's own counter produce 91 and 809 before it produces any new number.
+
+**Exit.** The verdict names each prediction met or refuted, and says in one sentence whether Tasks 5
+and 6 proceed as planned.
+
+---
+
+## Task 1 — the reader, the import boundary, and completeness
+
+**Behaviour.** `metamer.report.reader` opens a finished store **read-only** and returns a labelled
+view: the status, selection and primitive arrays; the `m` and `c` labels; the root attrs; and the
+completion state as `(complete_tiles, total_tiles)` read from `/completion/tiles`. An unknown
+`schema_version` is refused with `ExitCode.DATA_INVALID` and a message naming the version it found
+and the versions it knows.
+
+**Invariants.**
+
+- **The store is never opened for writing**, anywhere in `metamer.report`.
+- **Completeness comes from the bitmap, never from `NOT_ATTEMPTED`** (D6), and a disagreement — a
+  complete tile holding `NOT_ATTEMPTED` where no candidate was screened, or an incomplete tile
+  holding fit verdicts — is **reported as a defect in the report itself**, not resolved.
+- **The import graph excludes matplotlib and the fit path** (D10).
+
+**Interface Tasks 2–8 bind against.** `read_store(path) -> StoreView`, where `StoreView` exposes
+`outcome`, `delta_ic`, `selected`, `n_valid`, `iterations`, `model_labels`, `criterion_labels`,
+`attrs`, `completion`.
+
+**Tests, each with the bug it must catch.**
+
+- A store written by the current writer round-trips every array and both label axes — catches a
+  reader keyed on a group name the writer does not use, which no unit test of the writer can see.
+- An unknown `schema_version` exits `DATA_INVALID` and names both versions — catches a reader that
+  silently reads a future layout and reports numbers off misaligned axes.
+- A directory that is not a zarr store, and a zarr store that is not a metamer store, both exit
+  `DATA_INVALID` — catches a bare `KeyError` escaping as `INTERNAL_ERROR`, which tells a script the
+  report is broken when the input is.
+- **The import-graph test, in a subprocess**: importing `metamer.report` leaves `matplotlib`,
+  `numba`, `metamer.core.fit` and `metamer.batch.run` absent from `sys.modules` — catches the
+  convenience import that makes the report unusable where a store is readable, which is the failure
+  `test_readme_figure.py` records CI already having had once.
+- A store with an incomplete bitmap reports `(N, M)` with `N < M` and does not raise — catches a
+  reader that treats incompleteness as an error, which is D6 inverted.
+- A complete tile holding `NOT_ATTEMPTED` is reported as a disagreement — catches the silent
+  resolution, which would let a partially-written tile read as a screened candidate.
+
+---
+
+## Task 2 — rates per branch and per candidate, with denominators
+
+**Behaviour.** Counts and rates per taxonomy branch and per candidate, each rate carrying **its own
+denominator at the row**. The eligible-point denominator is `Outcome.is_eligible` — which after D2
+includes `INSUFFICIENT_DATA` and excludes `NOT_APPLICABLE` only. `NOT_ATTEMPTED` is out of every
+denominator: it is the absence of information.
+
+**Invariants.**
+
+- **`branch` means taxonomy branch** — an `Outcome` member — as `progress.py`'s `by_branch` and §14.1
+  already fix it. Not a candidate.
+- Counts over all branches present sum to the cell count; **rates do not sum to 1** and the table
+  says why.
+- Every rate's denominator is a number in the record, beside it.
+- The incompleteness `(N, M)` is a field, rendered beside every denominator (D6).
+
+**Tests, each with the bug it must catch.**
+
+- A constructed store with a planted histogram reproduces each count exactly, including
+  `{OK: 809, DEGENERATE_HESSIAN: 91}` from the committed real-data spike — catches an off-by-one in
+  the per-branch tally and ties the counter to a number already in the tree.
+- A store containing `INSUFFICIENT_DATA` produces a failure rate whose denominator **includes** it —
+  catches a regression to §8.6's rule, which is the whole of D2.
+- A store containing `NOT_APPLICABLE` produces a denominator that **excludes** it — catches the
+  collapse §12.5 says makes the failure rate uninterpretable.
+- A store containing `NOT_ATTEMPTED` excludes it from every denominator while still **counting** it
+  in the branch table — catches "excluded means missing", which would make an interrupted run's
+  report silently describe a smaller grid.
+- Two candidates with different eligible populations produce two different denominators — catches a
+  shared denominator, which invites a comparison that is not available.
+
+---
+
+## Task 3 — the drop row, and 2e's criterion 14
+
+**Behaviour.** `CANDIDATE_DROPPED` gets its own row, outside the failure rate, with its own
+denominator named at the row (D11). The `early_abort` attrs are read for action, threshold, policy
+and the coarse rates; when `out.pass1.zarr` is present beside the store, the rates are **recomputed
+from its arrays and asserted to agree**; when it is absent the number is **labelled as carried**.
+
+**This closes 2e's criterion 14**, which was met with reduced scope because the row was 2f's.
+
+**Invariants.**
+
+- The row's denominator is **never** the pass-2 population, where a dropped candidate is
+  `CANDIDATE_DROPPED` at 100% and the rate reads ~100% — dominated by the decision already taken.
+- A one-pass store (`early_abort.evaluated == false`, reason naming the one-pass run) and a
+  `--no-early-abort` store print their own line, not an empty drop row.
+- **A `no_evidence` verdict prints as itself** — a run that continued with its coarse sample unjudged
+  — and is never folded into a clean pass.
+
+**Tests, each with the bug it must catch.**
+
+- A store from a real two-pass drop shows the row with the coarse denominator, and the recomputation
+  from pass 1 agrees exactly — catches a row computed over pass 2, which is the ~100% reading §14.2
+  names.
+- The same store with `out.pass1.zarr` removed still prints the row, labelled carried — catches a
+  report that fails on a store someone else shipped without its pass-1 sibling.
+- A tampered `early_abort.rates[]` disagreeing with pass 1's arrays is **reported as a defect** —
+  catches an assertion that trusts the carried record when the evidence is present to check it.
+- A `no_evidence` store prints its own line and no clean-pass line — catches the collapse 2e's
+  no-evidence decision was taken to prevent, reintroduced at the printing layer.
+- A one-pass store prints neither a drop row nor a verdict rate — catches a report inventing a
+  verdict a one-pass run cannot have reached.
+
+---
+
+## Task 4 — the primitives sections, and the run's resolved-candidate record
+
+**Behaviour.** Two halves, and the first is a **write-path change made by the run, not the report**
+(D12). `store.py` gains an additive root-attrs block recording, per candidate: label, spec hash,
+resolved engine, cost class, gradient mode, objective. The report prints it, and prints
+*"not recorded by the run that wrote this store"* when the block is absent. The second half is
+single-store computable and cheap: the `n_valid` distribution (§10.2), the iteration histogram from
+`iterations[y,x,m]`, and the resolved config, all three hashes, profile name and calibration
+provenance.
+
+**Invariants.**
+
+- **The block moves no hash** — asserted, not assumed (D12).
+- **Nothing is back-filled.** An older store's silence is the answer.
+- `n_valid`'s `-1` (unset) and `iterations`' `65535` (no fit ran) are excluded from their
+  distributions and **counted separately**, because a fill value counted as a datum is the defect
+  §12.5's fill table exists to prevent.
+
+**Tests, each with the bug it must catch.**
+
+- A store written before the block reports its absence and every other section still renders —
+  catches a report that requires the newest writer, which breaks the foreign-store property.
+- The three hashes of a store carrying the block equal those of the same config without it —
+  catches the block reaching a hash payload, which would invalidate every existing store's resume.
+- `n_valid == -1` and `iterations == 65535` appear in neither distribution — catches a histogram with
+  a spike at the fill value, which reads as a real population.
+- The recorded resolved engine differs from the run-level `engine` attr for a candidate whose
+  capability intersection narrows it — catches a block that records the **request** rather than the
+  **resolution**, which is the whole reason the bullet exists.
+
+---
+
+## Task 5 — selectability, the section §14.2 leads with
+
+**Behaviour.** Three quantities, all stored or derivable, no schema change: **fits** from
+`/selection/n_valid` (criterion-independent); **contention** as `count(isfinite(delta_ic))` over the
+model axis, **per criterion**; **no winner** as `selected == -1`, per criterion. Denominators
+excluding `NOT_APPLICABLE`, stated.
+
+**This section leads the report**, per §14.2's 2026-09-12 amendment: the real-data spike measured
+§11.2's hysteresis fear **absent** — zero re-ranked points in 289, positive-controlled — and measured
+selectability differences **present**. A report leading with hysteresis would lead with the thing
+this project has measured as not happening.
+
+**Invariants.**
+
+- **These are three facts, not one.** `n_valid` counts **fits**; contention counts **rankable** fits,
+  and §10.2's rule makes them deliberately different — a fit can succeed and have no finite criterion
+  value and is ranked last rather than reclassified. **So `n_valid == 1` is not "the selection was
+  forced" and `n_valid == 0` is not "no survivor"**, and the report never says either.
+- **`selected == -2` is `SELECTED_UNSET`** — *nothing wrote here* — and is never counted as a
+  no-winner.
+- `n_valid` is `int16` with `-1` for unset; a negative count is not a count.
+
+**Tests, each with the bug it must catch.**
+
+- A constructed point where every fit is `OK` and one criterion cannot rank it shows `n_valid`
+  unchanged and contention lower **for that criterion only** — catches contention computed off
+  `n_valid`, which is the conflation §14.2 devotes a paragraph to. §12.5 names the construction:
+  under REML `n = n_obs − design_rank`, so `n_obs = 6` against a rank-4 design gives `n = 2`, HQIC
+  undefined and AIC fine.
+- A store with `selected == -2` somewhere reports it as unwritten, not as no-winner — catches
+  `bool(-1)`-shaped identity-by-coincidence, which 2e's instrument finding 3 names.
+- **The float32 caveat, as a constructed test**: a `delta_ic` finite in float64 that overflows to
+  `inf` on write is counted **unrankable**, and the report states the caveat — catches a contention
+  count quietly biased by the storage dtype, which §14.2 says is worth a test rather than a schema
+  change.
+- A point where eleven of twelve candidates failed the conditioning gate returns a selection and
+  **every per-branch count reads clean**, while selectability shows the near-forced choice — catches
+  the exact failure mode §14 names at its top, and is the reason this section exists.
+
+---
+
+## Task 6 — the clustering statistic and its null
+
+**Behaviour.** Join-count (BB) on the binary failure indicator, rook adjacency in index space, over
+the `is_fit_verdict` population (D3), per candidate with the aggregate as a second headline of a
+different kind (D7), against a permutation null that holds the eligible mask fixed (D5). Reported as
+raw count, null median and quantiles, z, and p — never a bare coefficient.
+
+**Invariants.**
+
+- **Map and statistic are computed over the same population** (D9's invariant).
+- The three degenerate cases are **unavailable with their reason**, never a z of 0: no failures to
+  arrange; every eligible point failing, so one arrangement exists; and no adjacent eligible pair, so
+  adjacency is undefined on this mask.
+- Below Task 0's measured floor the statistic is unavailable and names the floor.
+- The seed and the permutation count are in the record.
+
+**Tests, each with the bug it must catch.**
+
+- A planted contiguous patch rejects and a Bernoulli field does not, on the same failure count —
+  catches a statistic measuring the **rate** rather than the **arrangement**, which is the null
+  choice D5 exists to make.
+- A store whose failures are confined to one candidate shows that candidate clustered and the
+  aggregate clean — catches an aggregate-only statistic, which is why (b) was refused, and it fails
+  on the `OK`-if-any rule directly.
+- A checkerboard eligible mask returns unavailable naming zero edges — catches a graph built without
+  checking it has any, which would divide by zero or return a spurious z.
+- A candidate with zero failures returns unavailable naming *no failures to arrange* — catches a z of
+  0 reading as "no clustering found", which is (a2b).
+- The same seed gives an identical z twice and a different seed gives a z within the null's own SE —
+  catches an unseeded null, which makes every reported p irreproducible.
+- `NOT_APPLICABLE`, `CANDIDATE_DROPPED`, `SCREENED_OUT` and `NOT_ATTEMPTED` cells are all absent from
+  the graph — catches the graph built on `is_eligible`, under which a dropped candidate's 100%
+  coverage is a perfect cluster.
+
+---
+
+## Task 7 — the maps, the `[report]` extra, and the no-matplotlib path
+
+**Behaviour.** One PNG per (branch present × candidate) plus one per branch for the point-level
+aggregate; the value at a downsampled block is the **fraction** of that block's cells carrying the
+code (D9). `viridis`; fixed code-to-colour; legend from the store's own `flag_meanings`. matplotlib
+behind `[report]`, imported inside the function (D10).
+
+**Invariants.**
+
+- **No arithmetic is ever applied to outcome codes.** The reduction is over a binary indicator.
+- Without matplotlib the report emits **every number** and states in the report file that maps were
+  not drawn and which extra draws them.
+- The map's population matches the statistic's.
+
+**Tests, each with the bug it must catch.**
+
+- Downsampling a block of mixed codes produces a fraction in [0, 1] per branch and **never a code** —
+  catches the mean-of-codes defect directly: `mean(7, 11) == 9 == CANDIDATE_DROPPED`, a real,
+  different, valid-looking code.
+- With matplotlib made unimportable the report exits 0, emits the JSON and markdown, and names the
+  extra — catches a hard dependency smuggled in, which is D10's receipt.
+- The set of maps equals the set of (branch present × candidate) pairs the statistic covers —
+  catches map and statistic drifting onto different populations.
+- The same branch has the same colour across two stores with different branch sets — catches a
+  palette assigned from what is present, which makes two reports incomparable.
+
+---
+
+## Task 8 — the entry point, the exit codes, and render-from-record
+
+**Behaviour.** `python -m metamer.report <store>` writes markdown, JSON and PNGs beside the store, or
+to `--out <dir>`. **Writability is checked up front**, before the permutation null runs. The markdown
+is **rendered from the JSON record**, on `bench/report.py`'s precedent, so "the same numbers as JSON"
+is structural rather than promised.
+
+**Invariants.**
+
+- Exit codes per D13, with 1 and 2 not producible and the reason recorded.
+- No write to the store, asserted byte-for-byte.
+- Every number in the markdown exists in the record.
+
+**Tests, each with the bug it must catch.**
+
+- Running the report leaves the store **byte-for-byte identical** — catches any write, including an
+  attrs write reintroduced by convenience, which is A1's whole subject.
+- An unwritable output directory fails **before** the statistic runs — catches a report that computes
+  for minutes and then cannot save, which is the one failure that wastes the user's time entirely.
+- A usage error exits 3 and an unreadable store exits 4 — catches the two collapsing into 5, which
+  tells a script the report is broken when the input is.
+- Every numeric token in the markdown appears in the JSON — catches a rendered number computed at
+  render time, which is how two artifacts of one run come to disagree.
+- The report runs on a store built by a **different** process with no config present — catches any
+  dependence on the config, which is the foreign-store property.
+
+---
+
+## Task 9 — open question 23's capability
+
+**Behaviour.** One flag computes the per-branch statistic and the per-branch-per-candidate maps,
+documented as *"compute this when asking open question 23's question"*, and prints its own
+multiple-comparison caveat (D8).
+
+**Invariants.** Off by default. The caveat is printed by the capability, not left to the reader. **It
+does not reason about why a member fires** — 2e's contribution to OQ23 was deliberately negative and
+2f's is an instrument, not a story. Why the condition number moves is **not established**.
+
+**Tests.** The flag produces a statistic per branch present and the caveat text; without it neither
+appears — catches a capability that leaks into the default report, which would owe a correction on
+every run.
+
+---
+
+## Task 10 — the 2f exit-criteria suite
+
+`tests/exit_criteria_2f.py` and `tests/test_exit_criteria_2f.py`, in 2e's shape: **every criterion
+names its reading**, names the tests that establish it, and names what it is driven from or why no
+outside exists. The binding test takes readings from somewhere the implementing task's test did not.
+
+**And it does not reuse 2e's criterion-9 helper**, whose reach is keyed on one spelling
+(`outcome_counts`) and one extension (`.json`) and reaches 8 of the 16 committed histograms. OQ24's
+check was written independently for that reason.
+
+---
+
+## Exit criteria
+
+| # | criterion | reading |
+|---|---|---|
+| 1 | `python -m metamer.report <store>` produces a report from a store with no config present | the exit code, and the report file's existence and section set |
+| 2 | The report never writes to the store | the store's bytes, before and after |
+| 3 | `metamer.report`'s import graph excludes matplotlib and the fit path | the subprocess's `sys.modules`, by name |
+| 4 | The failure-rate denominator includes `INSUFFICIENT_DATA` and excludes `NOT_APPLICABLE` | the denominator on a store constructed to contain both |
+| 5 | No committed artifact's rate moved under D2 | the sixteen committed histograms and the one eligibility-derived denominator, recomputed |
+| 6 | `no_evidence` reads whether anything was fitted | the verdict on an all-`SCREENED_OUT` coarse store, against the same store all-`INSUFFICIENT_DATA` |
+| 7 | Every rate carries its own denominator | the record's fields, per row |
+| 8 | The drop row is outside the failure rate and names the coarse population | the row and its denominator, on a real two-pass drop |
+| 9 | The drop row survives a missing pass-1 store, labelled carried | the row, with the sibling removed |
+| 10 | Selectability's three quantities are three facts | `n_valid`, contention and no-winner on a point where every fit is `OK` and one criterion cannot rank it |
+| 11 | A float32 overflow is counted unrankable and the caveat is stated | the contention count, and the report's text |
+| 12 | The clustering statistic measures arrangement, not rate | the two stores of equal failure count, planted and Bernoulli |
+| 13 | The adjacency graph excludes every non-fit code | the graph's node count against `is_fit_verdict` on a store carrying all four |
+| 14 | Degenerate cases are unavailable with their reason | the three constructed masks, each naming its own reason |
+| 15 | The null is reproducible from its recorded seed | two runs' z, and the seed in the record |
+| 16 | Maps and statistic cover the same population | the two sets, compared |
+| 17 | No arithmetic reaches an outcome code | the downsampled block's values against the code space |
+| 18 | The report runs without matplotlib and says so | the exit code, the JSON, and the report's own sentence |
+| 19 | An unfinished store is described, not refused | `(N, M)` in the record, the exit code, and a denominator beside a rate |
+| 20 | Completeness comes from the bitmap | a store whose bitmap and outcomes disagree, reported as a defect |
+| 21 | The run records the resolved candidate table and it moves no hash | the block, and the three hashes with and without it |
+| 22 | A report's exit code describes the report | the codes produced across usage, unreadable-store and internal-error cases, and 1 and 2 absent |
+| 23 | The markdown is rendered from the record | every numeric token in the markdown, found in the JSON |
+
+---
+
+## What 2f does not settle
+
+- **Open question 23** gets an instrument and no story. Why `cond(H)` moves is not established, and
+  its closer is unchanged: measure `cond(H)`'s own scatter at a fixed θ̂ reached by two paths before
+  touching `HESSIAN_COND_LIMIT`. The repair is not a wider limit.
+- **Open question 20's second half** — coordinate monotonic direction — stays open and unowned.
+- **Open question 22's repair** is unowned unless Task 0's P1 refutes its prediction.
+- **The standing geographic limitation.** Every real-data number in this project is one box of
+  subtropical open ocean — no land, no ice, no gaps. A saving there is a saving there, and no report
+  produced from it is evidence about a global run.
