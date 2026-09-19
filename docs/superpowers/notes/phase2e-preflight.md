@@ -919,7 +919,14 @@ seam's type** (`on_tile_progress` returns `None`, so nothing the counters comput
 in). The criterion test asserts both, and the record's `outside` says the first is the one with
 an outside.
 
-### (a6) THE NO-EVIDENCE DECISION HAS NO CRITERION, AND THE RECORD SAYS SO RATHER THAN LEAVING IT TO BE NOTICED
+### (a6) ~~THE NO-EVIDENCE DECISION HAS NO CRITERION, AND THE RECORD SAYS SO RATHER THAN LEAVING IT TO BE NOTICED~~ — SUPERSEDED THE SAME DAY: IT IS THE NINETEENTH, BY DECISION
+
+> **Dr. Twinklebrane took the addition on 2026-09-18 after the suite landed without it.** The
+> restraint below was right as restraint — an implementer's addition during the close is scope
+> drift unless it is a decision — and the decision was then taken, with the three properties that
+> make it criterion-shaped recorded at the record's docstring and in the close. The reasoning below
+> is kept because it is what made the addition a decision rather than a default.
+
 
 The eighteen were approved 2026-09-12; the no-evidence question was opened 2026-09-16 and decided
 2026-09-18. **A nineteenth criterion written today would be a criterion written around a

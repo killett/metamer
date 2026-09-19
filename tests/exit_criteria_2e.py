@@ -1,4 +1,4 @@
-"""Phase 2e's eighteen exit criteria, as values, with their verdicts and readings.
+"""Phase 2e's nineteen exit criteria, as values, with their verdicts and readings.
 
 **THE SHAPE IS 2b's, 2c's AND 2d's, AND THE VOCABULARY IS IMPORTED RATHER THAN
 RESPELLED.** `ExitCriterion` and `Verdict` come from `tests.exit_criteria_2b`;
@@ -26,13 +26,21 @@ that the row's denominator is DEFINED and COMPUTABLE from the stores a
 two-pass run leaves; what it does not establish is a row, because none is
 printed yet.
 
-**THE NO-EVIDENCE DECISION (2026-09-18) HAS NO CRITERION OF ITS OWN, AND THAT
-IS STATED RATHER THAN LEFT TO BE NOTICED.** The eighteen were approved on
-2026-09-12, before the question was opened; the decision is pinned by its own
-tests (`tests/test_abort.py`, `tests/test_early_abort.py`) and recorded at
-design doc section 14.1. Adding a nineteenth criterion after the fact would
-be a criterion written around a decision, which is the shape the handoff
-warned Task 7 against in the other direction.
+**THE NINETEENTH IS THE NO-EVIDENCE DECISION, AND WHY IT IS NINETEENTH RATHER
+THAN FOLDED INTO AN EXISTING ONE IS RECORDED HERE.** The eighteen were approved
+as a set on 2026-09-12, before the question existed, and a criterion added by
+the implementer during the close reads as scope drift unless the addition is a
+decision. This one was -- taken by Dr. Twinklebrane on 2026-09-18, after the
+suite was first written without it and the omission stated. Three properties
+make it criterion-shaped: it was taken on evidence (2c's criterion 1 proving
+the coarse sample can be empty while the grid holds data); it changed shipped
+behaviour (abort -> continue loudly); and it has a reading no other criterion
+covers -- the run continues to pass 2, the final line names the verdict, and
+**the exit code is 0**. That last reading is the load-bearing one: it is the
+only place where *"continued because there was nothing to judge"* and
+*"continued because everything passed"* are asserted to produce the SAME code
+for DIFFERENT reasons, which is a claim about the exit vocabulary rather than
+about the mechanism.
 
 **IT IS NOT THE CLOSE.** The closing table with its reasoning is in
 `PROGRESS.md`. What is here is the part a test can hold.
@@ -64,6 +72,7 @@ READINGS = (
     "both exit codes, in one test",
     "the inversion of Task 1's unreachability test, both directions",
     "the run's behaviour, and the design doc's own sentence",
+    "the pass-2 store, the final line and the exit code -- 0 for a different reason than a clean pass",
 )
 
 #: A criterion about the shape of code has no outside to be driven from and
@@ -375,6 +384,33 @@ PHASE_2E_EXIT_CRITERIA: tuple[ExitCriterion, ...] = (
         outside=(
             "the design document on disk, read as text; and the one-pass store's "
             "root attrs, which record that no verdict was evaluated"
+        ),
+    ),
+    ExitCriterion(
+        number=19,
+        statement=(
+            "A coarse sample with no eligible point continues loudly as its own "
+            "verdict, `no_evidence`, and exits 0 for a different reason than a "
+            "clean pass"
+        ),
+        verdict=Verdict.MET,
+        reading=(
+            "the pass-2 store, the final line and the exit code -- 0 for a "
+            "different reason than a clean pass"
+        ),
+        scope="",
+        established_by=(
+            "test_criterion_19_no_evidence_and_a_clean_pass_exit_zero_for_different_reasons",
+            "test_an_empty_coarse_sample_continues_loudly_when_the_fine_grid_has_data",
+            "test_a_no_evidence_run_exits_ok_with_the_headline_on_the_final_line",
+            "test_an_empty_eligible_population_is_no_evidence_not_clean_and_not_abort",
+            "test_an_empty_sample_and_an_all_failing_sample_are_different_verdicts",
+        ),
+        outside=(
+            "two `python -m metamer` subprocesses -- one over the empty-sample "
+            "fixture with the real verdict, one under an injected clean verdict "
+            "-- read on their exit codes, their stderr, and the `early_abort` "
+            "attrs of the two stores they wrote"
         ),
     ),
 )

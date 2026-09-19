@@ -1,7 +1,7 @@
 """Phase 2e's exit criteria: the record bound to the tree, and the readings taken outside.
 
 **THE SUITE IS AN INDEPENDENT CHECK, NOT A ROLL-UP.** A criterion satisfied by
-re-running the implementing task's own test verifies nothing new. The eight
+re-running the implementing task's own test verifies nothing new. The nine
 criterion tests here read their subject from somewhere the implementing test
 did not: a process exit code, a store's bytes, a document's text, a docstring
 parsed off disk, a committed artifact, or a second store built to differ from
@@ -91,17 +91,17 @@ def _attrs(store: pathlib.Path) -> dict[str, Any]:
 
 
 def test_the_record_covers_every_criterion_exactly_once():
-    """Eighteen criteria, numbered 1 to 18, each once.
+    """Nineteen criteria, numbered 1 to 19, each once.
 
     Expected value determined independently: the plan's own table has eighteen
-    rows.
+    rows, and the nineteenth was added by decision on 2026-09-18.
 
     Bug this catches: a criterion dropped during editing -- which reads, from
     the closing table, exactly like a criterion that was never written.
     """
     numbers = [criterion.number for criterion in PHASE_2E_EXIT_CRITERIA]
 
-    assert sorted(numbers) == list(range(1, 19))
+    assert sorted(numbers) == list(range(1, 20))
     assert len(set(numbers)) == len(numbers)
 
 
@@ -132,7 +132,7 @@ def test_every_criterion_names_evidence_that_exists():
 
 
 def test_every_criterion_names_a_reading_with_no_exempt_list():
-    """All eighteen, not a listed subset.
+    """All nineteen, not a listed subset.
 
     Expected values determined independently: `READINGS` is the plan's own
     third column.
@@ -191,7 +191,7 @@ def test_the_inherited_verdicts_are_read_out_of_their_own_records_by_number():
     assert by_number_2d[12].verdict is Verdict.MET_WITH_REDUCED_SCOPE
 
     # And 2e's own record does not claim any of them: numbers are per sub-phase.
-    assert max(c.number for c in PHASE_2E_EXIT_CRITERIA) == 18
+    assert max(c.number for c in PHASE_2E_EXIT_CRITERIA) == 19
 
 
 def test_the_record_is_serialisable_so_the_closing_table_cannot_drift_from_it():
@@ -220,7 +220,7 @@ def test_the_record_is_serialisable_so_the_closing_table_cannot_drift_from_it():
     )
 
     assert json.loads(payload)[0]["number"] == 1
-    assert len(json.loads(payload)) == 18
+    assert len(json.loads(payload)) == 19
 
 
 # ---------------------------------------------------------------------------
@@ -795,3 +795,77 @@ def test_criterion_18_the_design_doc_states_the_one_pass_decision_and_the_open_n
     assert "A ONE-PASS RUN CAN NEVER EXIT 1" in section_14_3
     assert "does not yet choose" not in text
     assert "replaces this note with the answer" not in text
+
+
+# ---------------------------------------------------------------------------
+# Criterion 19 -- the same code for different reasons
+# ---------------------------------------------------------------------------
+
+
+def test_criterion_19_no_evidence_and_a_clean_pass_exit_zero_for_different_reasons(
+    tmp_path,
+):
+    """Two runs exit 0; the stores and the final lines say which reason each had.
+
+    Expected values determined independently from section 14.3 as amended
+    2026-09-18: exit 1 is the verdict finding a candidate above threshold, and
+    neither of these verdicts found one, so both are 0. The first run is the
+    empty-sample fixture -- every even row masked, stride 2, so the coarse
+    lattice has no eligible point while the odd rows carry data -- under the
+    REAL verdict; the second is the same shape of run under an injected clean
+    verdict. Only the first carries the headline, and the two stores record
+    `no_evidence` and `continue` respectively.
+
+    Bug this catches: the exit vocabulary collapsing the two reasons in either
+    direction -- `no_evidence` given its own non-zero code (a script would then
+    treat a run with a complete map as failed or resumable), or the verdict
+    recorded as `continue` so the store cannot say the sample held nothing.
+    This is the one place the same-code-different-reason claim is asserted,
+    so it is asserted on both halves in one test.
+
+    **PROVED TO BITE 2026-09-18:** `__main__` was given a branch returning 1
+    for a `no_evidence` verdict and this test failed on the pair of codes
+    while the clean half stayed 0.
+    """
+    masked = _abort_config(
+        tmp_path,
+        _abort_input(tmp_path, masked_rows=slice(None, None, 2)),
+        name="m.toml",
+    )
+    no_evidence = _invoke(
+        str(masked), str(tmp_path / "no_evidence.zarr"), "--two-pass", "--no-progress"
+    )
+    clean = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            _INJECT,
+            "continue",
+            "-1",
+            str(
+                _abort_config(tmp_path, _abort_input(tmp_path / "full"), name="c.toml")
+            ),
+            str(tmp_path / "clean.zarr"),
+            "--two-pass",
+            "--no-progress",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert (no_evidence.returncode, clean.returncode) == (ExitCode.OK, ExitCode.OK), (
+        no_evidence.stderr,
+        clean.stderr,
+    )
+    assert "Traceback" not in no_evidence.stderr and "Traceback" not in clean.stderr
+    assert "early abort: no evidence" in no_evidence.stderr
+    assert "early abort: no evidence" not in clean.stderr
+    recorded = {
+        "no_evidence": _early_abort(tmp_path / "no_evidence.zarr"),
+        "clean": _early_abort(tmp_path / "clean.zarr"),
+    }
+    assert recorded["no_evidence"]["action"] == "no_evidence"
+    assert recorded["clean"]["action"] == "continue"
+    assert all(rate["eligible"] == 0 for rate in recorded["no_evidence"]["rates"])
+    assert bool(completed_tiles(tmp_path / "no_evidence.zarr").all())

@@ -3,10 +3,10 @@
 ## Start here (cold-start summary)
 
 1. **Branch `main`, every commit pushed by a hook** — https://github.com/killett/metamer. **No SHA is named anywhere in this head**; `git log --oneline -8` is the authority.
-2. **DONE:** Phase 1, P0–P4, 2a, 2b, 2c, 2d, the real-data spike, wiring one, the selection-map report — and **Phase 2e (COMPLETE 2026-09-18 — 17 met / 1 reduced scope / 0 failed; Tasks 0–6 by 2026-09-16, the no-evidence decision and Task 7 on 2026-09-18)**. Per-phase closes are in their sections — [2e's is here](#phase-2e-is-closed-2026-09-18--17-met--1-met-with-reduced-scope--0-failed-plus-2bs-two-inherited-failures-2cs-one-reduction-and-2ds-three-failures-and-one-reduction); **none is restated here**.
+2. **DONE:** Phase 1, P0–P4, 2a, 2b, 2c, 2d, the real-data spike, wiring one, the selection-map report — and **Phase 2e (COMPLETE 2026-09-18 — 18 met / 1 reduced scope / 0 failed over nineteen criteria, the nineteenth added by decision; Tasks 0–6 by 2026-09-16, the no-evidence decision and Task 7 on 2026-09-18)**. Per-phase closes are in their sections — [2e's is here](#phase-2e-is-closed-2026-09-18--18-met--1-met-with-reduced-scope--0-failed-plus-2bs-two-inherited-failures-2cs-one-reduction-and-2ds-three-failures-and-one-reduction); **none is restated here**.
 3. **NEXT ACTION: 2f — §14.2's report, computed from the store, with `python -m metamer.report <store>` as its entry point.** Brainstorm and plan first, in 2e's shape. Start from [what 2f inherits](#what-2f-inherits) at the foot of 2e's close — three subjects to count, criterion 14's row, and **open question 24, whose first act is an artifact check**. The 2e plan is [`2026-09-12-metamer-phase2e.md`](docs/superpowers/plans/2026-09-12-metamer-phase2e.md) and its record is `tests/exit_criteria_2e.py`.
 4. **2f is not blocked**: stores, `/selection/delta_ic` and `audit_report.py` exist, and the subjects it waits on to count are now produced. Open question 24 is filed to it.
-5. **Tests: 1482 passed, 0 failed, 0 INDETERMINATE — 2026-09-18, 4615.41 s (1:16:55), exit code pytest's own** (1465 an hour earlier the same day after the no-evidence decision; 1463 on 2026-09-16; the seventeen added are 2e's exit-criteria suite). `pixi run test` is the full sweep and the only end-of-task evidence. **The run an hour earlier on the IDENTICAL TREE took 1:40:14, had 5 above the diagnostic, and printed a floor ladder 32% low and non-monotonic — see the gotcha. Same code, same fixture, same box.** **AND THE EXIT CODE READ IS PYTEST's OWN.** A `pixi run test 2>&1 | tail -25` on the run before this one reported **exit 0 with a test failing** — the code was `tail`'s. Handoff §2's rule, third instance: *where a tool reports on something else, its exit code describes the tool.* **Run the sweep to a file and read its status; never pipe it.** **`pixi run test` is the full sweep and every end-of-task verification must run it; `test-fast` and `test-ci` are NOT evidence** — the full sweep has caught **eight** things a fast run could not, the most recent being a test whose own expected value was computed from a 1-based reading of `np.arange`. **Every run prints `RSS measurement validity`, including at zero**; a nonzero count is INDETERMINATE, neither pass nor fail.
+5. **Tests: 1483 passed, 0 failed, 0 INDETERMINATE — 2026-09-18, 5745.87 s (1:35:45), exit code pytest's own** (1482 earlier the same day with eighteen criteria, 1465 after the no-evidence decision, 1463 on 2026-09-16; the one added last is criterion 19's test). `pixi run test` is the full sweep and the only end-of-task evidence. **The run an hour earlier on the IDENTICAL TREE took 1:40:14, had 5 above the diagnostic, and printed a floor ladder 32% low and non-monotonic — see the gotcha. Same code, same fixture, same box.** **AND THE EXIT CODE READ IS PYTEST's OWN.** A `pixi run test 2>&1 | tail -25` on the run before this one reported **exit 0 with a test failing** — the code was `tail`'s. Handoff §2's rule, third instance: *where a tool reports on something else, its exit code describes the tool.* **Run the sweep to a file and read its status; never pipe it.** **`pixi run test` is the full sweep and every end-of-task verification must run it; `test-fast` and `test-ci` are NOT evidence** — the full sweep has caught **eight** things a fast run could not, the most recent being a test whose own expected value was computed from a 1-based reading of `np.arange`. **Every run prints `RSS measurement validity`, including at zero**; a nonzero count is INDETERMINATE, neither pass nor fail.
 6. **Verify a checkout with `pixi run test && pixi run typecheck && pixi run lint` and `pixi run pre-commit run --all-files`**; `git add` new files first. **Never pipe a checker through `tail`** — see the handoff.
 7. **The method is the pre-flight**, and it lives only in [the handoff doc](docs/superpowers/notes/phase1-to-phase2-handoff.md) §1; 2e added **(j7b)** and **(a2)'s second register**.
 8. **CI is verified per commit, by an until-loop on the run's own `status`** — never by position in `gh run list`, never by `gh run watch --exit-status`; one push per run.
@@ -120,7 +120,7 @@ Full sweep **before the commit**: the figures are head item 5's and are not rest
 
 ---
 
-### PHASE 2e IS CLOSED, 2026-09-18 — 17 MET / 1 MET WITH REDUCED SCOPE / 0 FAILED, PLUS 2b's TWO INHERITED FAILURES, 2c's ONE REDUCTION, AND 2d's THREE FAILURES AND ONE REDUCTION
+### PHASE 2e IS CLOSED, 2026-09-18 — 18 MET / 1 MET WITH REDUCED SCOPE / 0 FAILED, PLUS 2b's TWO INHERITED FAILURES, 2c's ONE REDUCTION, AND 2d's THREE FAILURES AND ONE REDUCTION
 
 > ## THE SENTENCE A READER CAN CARRY
 >
@@ -161,6 +161,7 @@ below is the reasoning; the record is the part a test can hold**, and neither re
 | 16 | `COMPLETED_WITH_FAILURES` and `INTERNAL_ERROR` are produced by different events | **MET** | both exit codes, in one test |
 | 17 | Exit 1 is reachable, and only from the threshold path | **MET** | the inversion of Task 1's unreachability test, both directions |
 | 18 | A one-pass run's abort behaviour is the decided one, and §14.1 states it | **MET** | the run's behaviour, and the design doc's own sentence |
+| 19 | A coarse sample with no eligible point continues loudly as its own verdict, `no_evidence`, and exits 0 for a different reason than a clean pass | **MET** (added 2026-09-18, by decision) | the pass-2 store, the final line and the exit code — 0 for a different reason than a clean pass |
 
 **FOUR READINGS WERE TAKEN AS THE PLAN STATED THEM, NOT AS THE TASKS HAD TESTED THEM.** Criteria
 1, 4, 15 and 16 name a count, a pair of numbers, bytes, and one test where the implementing tasks
@@ -183,11 +184,19 @@ THEM.** 2b's criteria 6 and 7 stay **FAILED**; 2c's 11 stays **REDUCED**; 2d's 6
 **FAILED** and its 12 stays **REDUCED**. 2e reopens no residency model, re-cuts no boundary and
 re-runs no rung.
 
-**THE NO-EVIDENCE DECISION HAS NO CRITERION, DELIBERATELY.** The eighteen were approved on
-2026-09-12; the question opened at Task 6 and was decided on 2026-09-18 as (b). It is pinned by
-its own tests and recorded at §14.1; the record's docstring names the omission. A nineteenth
-criterion is available on request and was not written by default, because a criterion written
-around a decision is what the handoff warned this task against.
+**THE NINETEENTH IS THE NO-EVIDENCE DECISION, AND IT IS NINETEENTH RATHER THAN FOLDED INTO AN
+EXISTING ONE FOR A RECORDED REASON.** The eighteen were approved as a set on 2026-09-12, before the
+question existed, and a criterion added by the implementer during the close reads as scope drift
+unless the addition is a decision. The suite was first written without it, the omission stated, and
+Dr. Twinklebrane took the decision on 2026-09-18. Three properties make it criterion-shaped: it was
+taken on evidence (2c's criterion 1 proving the sample can be empty while the grid holds data); it
+changed shipped behaviour (abort → continue loudly); and it has a reading no other criterion covers —
+the run continues to pass 2, the final line names the verdict, and **the exit code is 0**. The last
+is the load-bearing reading: it is the only place where *"continued because there was nothing to
+judge"* and *"continued because everything passed"* are asserted to produce the same code for
+different reasons, which is a claim about the exit vocabulary rather than about the mechanism. The
+criterion test runs both halves in one test and reads the two stores' recorded actions beside the
+two codes; its mutant — `no_evidence` given its own non-zero code — is named at the test.
 
 ### WHAT 2e MEASURED, AND WHAT IT DID NOT
 
@@ -9757,7 +9766,7 @@ and the calibration tile both behave differently under it.
 | **2b** | calibration tile, `--memory-budget` default, RSS validated at 2–3 tile sizes | **gated by open question 12** — it measures in a child process |
 | **2c** | two-pass warm start, nearest-valid spiral, `/warmstart/` read, determinism | **inherits exit criterion 2 and must keep it green** |
 | **2d** | **design doc §16.2 item 6** — hysteresis on simulated *fields*, and the boundary-smearing width. **The section number is part of the row, added 2026-08-30**: this row named the deliverable with no section for nineteen days, and D4's constraint 3 supplied the wrong one (§11.2) in the meantime | needs 2c to audit |
-| **2e** | **§14.1 and §14.3 — the run's own honesty**: the sixth exit code `INTERNAL_ERROR` with its catch-all, the tiling closer, the live counters, the early abort, and the mechanism producing `CANDIDATE_DROPPED`. **AMENDED 2026-09-12 to name which half** — it read *"reporting, `metamer report`, clustering, early abort…"*, which is right about ownership and loose about scope, and it was **the only one of four documents that named 2e at all**, so it is amended rather than struck | needs every branch to exist | **CLOSED 2026-09-18 — 17 met / 1 reduced / 0 failed.**
+| **2e** | **§14.1 and §14.3 — the run's own honesty**: the sixth exit code `INTERNAL_ERROR` with its catch-all, the tiling closer, the live counters, the early abort, and the mechanism producing `CANDIDATE_DROPPED`. **AMENDED 2026-09-12 to name which half** — it read *"reporting, `metamer report`, clustering, early abort…"*, which is right about ownership and loose about scope, and it was **the only one of four documents that named 2e at all**, so it is amended rather than struck | needs every branch to exist | **CLOSED 2026-09-18 — 18 met / 1 reduced / 0 failed, over nineteen criteria.**
 | **2f** | **§14.2 — the report**: computed from the store, leading with selectability, the spatial clustering statistic with its permutation null, the PNG maps, and `python -m metamer.report <store>`. **The `metamer report` SUBCOMMAND stays Phase 5's** — computation versus interface. **Less blocked than the ordering reads**: stores, `/selection/delta_ic` and `audit_report.py` all exist today, and what 2f waits on is two subjects to count | needs 2e's two subjects |
 
 - **MEASURE IN THE PHASE THAT CAN, PRINT IN THE PHASE THAT SHOWS — a rule, in design doc

@@ -1,6 +1,6 @@
 # Phase 2e — the run's own honesty
 
-**Status: COMPLETE 2026-09-18 — 17 met / 1 reduced scope / 0 failed. Tasks 0–6 DONE by 2026-09-16; the no-evidence decision taken 2026-09-18 as (b); Task 7 DONE 2026-09-18. The close is in PROGRESS.md; the record is `tests/exit_criteria_2e.py`.** The four are recorded where they land rather than in a list here: Task 1's unreachability window is now a **test** and Task 6 inverts it; Task 2 states the handover that destroys Task 1's control; Task 0 records the one-pass gap as **open with a named owner** and Task 6 writes the answer; and Task 5 **defines** the policy vocabulary Task 6 binds against, so the coupling runs one way. The head of
+**Status: COMPLETE 2026-09-18 — 18 met / 1 reduced scope / 0 failed, over nineteen criteria (the nineteenth added by decision on 2026-09-18). Tasks 0–6 DONE by 2026-09-16; the no-evidence decision taken 2026-09-18 as (b); Task 7 DONE 2026-09-18. The close is in PROGRESS.md; the record is `tests/exit_criteria_2e.py`.** The four are recorded where they land rather than in a list here: Task 1's unreachability window is now a **test** and Task 6 inverts it; Task 2 states the handover that destroys Task 1's control; Task 0 records the one-pass gap as **open with a named owner** and Task 6 writes the answer; and Task 5 **defines** the policy vocabulary Task 6 binds against, so the coupling runs one way. The head of
 [`PROGRESS.md`](../../../PROGRESS.md) is the single source for this plan's status; when it and
 this line disagree, the head is right and this line is stale. Same shape as the 692/693 test
 count and the 2b table that said *"awaiting review"* for four days after approval.
@@ -318,7 +318,7 @@ rather than a feature.
 | 4 | the live counters — point-granularity, display-only, plain lines | — | **DONE 2026-09-14** — outside `metamer.batch`, import boundary asserted |
 | 5 | the abort verdict — a pure function of a pass-1 store | — (**defines** the policy vocabulary and the dropped-candidate set Task 6 binds against) | **DONE 2026-09-14** — ~~an empty eligible population aborts~~ **`no_evidence` since 2026-09-18** |
 | 6 | the abort action, the `CANDIDATE_DROPPED` producer, and the one-pass decision | 3, 5 | **DONE 2026-09-16** — reading (i); exit 1 defined as the verdict's; ~~one question left open (no-evidence abort)~~ **decided 2026-09-18, (b) — see below Task 6** |
-| 7 | the 2e exit-criteria suite | all | **DONE 2026-09-18** — 17 met / 1 reduced (14: the row is 2f's) / 0 failed; four readings taken as stated where the tasks had tested weaker |
+| 7 | the 2e exit-criteria suite | all | **DONE 2026-09-18** — 18 met / 1 reduced (14: the row is 2f's) / 0 failed over nineteen; four readings taken as stated where the tasks had tested weaker; the nineteenth added by decision |
 
 **Task 1 before Task 2 is D4 and is not negotiable by convenience** — the ordering exists so the
 catch-all has a live producer to be verified against, and Task 2 destroys it.
@@ -871,6 +871,7 @@ criterion stays **FAILED** and is not quietly re-scoped.
 | 16 | `COMPLETED_WITH_FAILURES` and `INTERNAL_ERROR` are produced by different events | both exit codes, in one test |
 | 17 | Exit 1 is reachable, **and only from the threshold path** | the inversion of Task 1's unreachability test, **both directions** |
 | 18 | A one-pass run's abort behaviour is the decided one, and §14.1 states it | the run's behaviour, **and the design doc's own sentence** — with Task 0's open note **replaced**, not merely accompanied |
+| 19 | **Added 2026-09-18, by decision, after the suite was first written without it.** A coarse sample with no eligible point continues loudly as its own verdict, `no_evidence`, and exits 0 | the pass-2 store, the final line and the exit code — **0 for a different reason than a clean pass**, which is the load-bearing reading: a claim about the exit vocabulary, not the mechanism. Nineteenth rather than folded, because the eighteen were approved as a set before the question existed and an implementer's addition during the close is scope drift unless it is a decision; the record says so |
 
 **Two criteria are inherited rather than new, and 2e does not close them.**
 
