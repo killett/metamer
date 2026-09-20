@@ -42,9 +42,21 @@ and a `no_evidence` verdict.
 are `audit_report.py`'s and already built — see amendment A2), and open question 23, which 2f gives
 an instrument to without taking.
 
-**Closed before this plan, not a task in it: open question 24.** Taken 2026-09-19 in two commits,
-gate then flip, with the artifact check as its evidence. Recorded under "the decisions this
-sub-phase was planned on", D1 and D2.
+**Open question 24 is taken alongside this plan, not as a task in it — and it is IN PROGRESS, not
+closed.** Three commits, not two, each provable before the next:
+
+| # | commit | state |
+|---|---|---|
+| 1 | the gate reads whether anything was FITTED (D1) | **`49f3db1`, pushed, CI green** |
+| 2 | `INSUFFICIENT_DATA` becomes eligible (D2) | **not written** — blocked on the audit-denominator question raised 2026-09-19 |
+| 3 | 2e's criterion-9 reading, corrected where it sits | **not written** |
+
+**THIS PARAGRAPH IS THE ONE PLACE THIS PLAN STATES A FACT ABOUT THE TREE, AND IT IS DATED AND
+CHECKABLE FOR THAT REASON.** An earlier draft of it said OQ24 was *"closed before this plan… taken
+in two commits"* while nothing was committed and the count was three. **A plan that states an
+estimate in the past tense is the failure its own precedence rule forbids** — a measured, dated fact
+supersedes an unmeasured one, and "already done" is the strongest unmeasured claim available. The
+SHAs above are recorded as each lands; a session resuming here reads the table, not the prose.
 
 ---
 
@@ -66,14 +78,27 @@ membership test over §8.6's nine fit verdicts — the opposite direction from `
 since Phase 1 has been a non-fit code, so defaulting a new member *into* the fit set is the
 dangerous direction: a sample the run never fitted would read as judged.
 
-**THE PATTERN, RECORDED AS A PATTERN AND NOT AS A THIRD ANECDOTE.** Three gates in this project
-have keyed on a proxy that was merely *available*: the quiet gate reads the host's `/proc/loadavg`
-(open question 22) when its subject is this container's CPU use; the stall gate read time-waiting
-when its subject was memory pressure; this one read `is_eligible` when its subject was whether
-anything was fitted. **All three coincide with their subject in the common case and diverge exactly
-where the gate matters.** The tell is *a gate whose predicate names a different quantity from its
-own reason string* — §14.1's said "eligible" while meaning "fitted". The table lives at
-`Outcome.is_fit_verdict` and is not restated at each site.
+**THE PATTERN, RECORDED AS A PATTERN AND NOT AS A THIRD ANECDOTE.** Four instances now:
+
+| # | the gate | it read | its subject |
+|---|---|---|---|
+| 1 | the quiet gate (open question 22) | the host's `/proc/loadavg` | this container's CPU use |
+| 2 | the stall gate | time spent waiting | memory pressure |
+| 3 | §14.1's no-evidence gate | `is_eligible` | whether anything was fitted |
+| 4 | the plan-review fetch, 2026-09-19 | a **cached** 404 and a **summarised** directory listing | the repository's bytes — `curl` returned HTTP 200 and 52,010 bytes on the identical URL |
+
+**All four coincide with their subject in the common case and diverge exactly where it matters**,
+and **the tell held in every one**: a predicate naming a different quantity from its own reason
+string. §14.1's said "eligible" while meaning "fitted"; the fourth said "not on main" while meaning
+"not in my cache".
+
+**The fourth is why the pre-flight category is promoted**, from *never pipe a checker through a
+truncating filter* to **any intermediary that can cache, summarise or truncate is not evidence;
+read the bytes.** Truncation was the known form; caching is a second, and summarising a third — the
+review's miss used all three at once and each agreed with the others. The category lives in the
+handoff §2; the table lives at `Outcome.is_fit_verdict` and is not restated at each site. **Row 4
+reaches `outcomes.py` with the next `src/` commit** — it is a docstring line and does not justify a
+1:38 sweep of its own.
 
 ### D2 — `INSUFFICIENT_DATA` is eligible: §12.5 over §8.6, with the artifact check as evidence
 
@@ -191,6 +216,19 @@ kind: a candidate's indicator says *this candidate failed here* (a selectability
 aggregate's says *no candidate produced a usable fit here* (a coverage fact — a hole in the output).
 The aggregate is **not** a member of the family and is not summarised by it.
 
+**AND THE DEFAULT REPORT IS A FAMILY OF TESTS, WHICH D8 GUARDS ON THE FLAG AND THIS DECISION MUST
+GUARD ON THE PATH EVERYONE READS.** D8 gives the per-branch capability a multiple-comparison caveat
+because *"a family of tests reported without a correction invites reading the largest z as the
+finding"*. **M per-candidate statistics summarised by their maximum is that same family**, in the
+default report, with the correction riding on a flag only the person asking open question 23 will
+set. **2d's rule does not transfer**: max-over-strata was chosen for a **descriptive** summary,
+where a mean can understate and a maximum cannot, and a maximum over M **inferential** statistics
+has inflated type I error — a different argument, which this plan does not make and will not make.
+
+**So the report prints all M z-scores.** M is small and they are computed per candidate anyway, so
+there is nothing to save by hiding them; and any single headline is labelled **"max over M
+candidates, uncorrected"** *at the number*, not in a note beside it.
+
 ### D8 — per-branch statistics are a named capability with a trigger, not a deferral
 
 *"Is `DEGENERATE_HESSIAN` clustered?"* is open question 23's own question, and the maps already carry
@@ -229,11 +267,24 @@ aggregate. Bounded by what occurred rather than by the 14-member alphabet — re
 applied inside one report.
 
 **Colours.** Fractions do not cross zero → `viridis`; `n_valid` and iteration maps likewise
-sequential; anything crossing zero → `RdBu_r` with symmetric limits. **Fixed code-to-colour across
-runs**, or two reports are not comparable. No `cmocean` map applies and `cmcrameri` is not added for
-`batlow`: these are **diagnostics about fitting, not geophysical variables**, and a matplotlib
-built-in that is perceptually uniform and colourblind-safe does the job without a dependency inside
-an optional extra.
+sequential; anything crossing zero → `RdBu_r` with symmetric limits. No `cmocean` map applies and
+`cmcrameri` is not added for `batlow`: these are **diagnostics about fitting, not geophysical
+variables**, and a matplotlib built-in that is perceptually uniform and colourblind-safe does the
+job without a dependency inside an optional extra.
+
+**FIXED COLOUR LIMITS, `vmin=0` AND `vmax=1`, ON EVERY FRACTION MAP — AND THIS IS THE SAME DEFECT
+CLASS ONE LEVEL DOWN.** matplotlib autoscales `vmin`/`vmax` to the data, so a branch present at 0.01
+to 0.03 everywhere renders as a full-range dramatic map, and two stores with different fraction
+ranges are not comparable. **An autoscaled fraction map is the mean-of-codes defect with a
+colourbar**: it does not produce a wrong picture, it produces a *plausible* one, which is this
+decision's own argument in continuous form.
+
+**~~Fixed code-to-colour across runs, and a legend from the store's own `flag_meanings`.~~** Struck,
+not deleted, because it is what an earlier draft of this decision carried and the mistake is
+instructive: **those are properties of the categorical design this decision refuses.** On a binary
+fraction map in `viridis` a branch has no colour — it has a map — and `flag_meanings` supplies the
+**title**, not a legend. Rejecting a design and keeping two of its requirements is how a refused
+design survives in its own replacement.
 
 ### D10 — matplotlib behind a `[report]` extra, lazily imported, enforced by an import-graph test
 
@@ -308,13 +359,20 @@ Three constraints hold it:
   the report says so; **nothing is back-filled**, because a back-fill makes an old store claim a
   resolution nobody recorded — the same refusal as `field_construction_version` on a version-1
   report, and the `calibration` / `decimation` precedent.
-- **Additive, and it moves no hash — confirmed, not assumed.** The three hashes hash `normalize(config)`
-  subset to allowlisted fields. The block records what was **resolved**, which is an output of
-  resolution and never a config field, so it cannot enter any payload. `hashing.py` supplies the
-  membership test — *"a field is fit-relevant if changing it can move `theta_hat` or `log_lik` for any
-  input"* — and the precedent by name: *"the audit's settings MEASURE a run; they are not inputs to
-  it, so they are outside this set."* The resolved table is that shape exactly. Provenance, not
-  identity, like `max_iter`, `floor`, `read_amplification` and `thread_limits` already in root attrs.
+- **Additive, and it moves no hash — confirmed structurally, not assumed.** The three hashes hash
+  `normalize(config)` subset to allowlisted fields. The block records what was **resolved**, which is
+  an output of resolution and never a config field, **so it cannot enter any payload**. That is the
+  whole argument and it carries the conclusion alone. The precedent by name is `hashing.py`'s own:
+  *"the audit's settings MEASURE a run; they are not inputs to it, so they are outside this set"* —
+  the same shape exactly. Provenance, not identity, like `max_iter`, `floor`, `read_amplification`
+  and `thread_limits` already in root attrs.
+  **AND `hashing.py`'s FIT-RELEVANCE TEST IS NOT CITED HERE, DELIBERATELY.** *"A field is
+  fit-relevant if changing it can move `theta_hat` or `log_lik` for any input"* ranges over **inputs**
+  and is **ill-posed on an output**: an output cannot be changed independently of what produced it,
+  and the resolved table correlates perfectly with fields that do move `theta_hat`. Applying it here
+  would reach the right conclusion by an argument that does not hold. **The test governs config
+  fields; outputs are excluded structurally, one step earlier.** Recorded because this decision is
+  building precedent, and a precedent that propagates a bad citation propagates the bad citation.
 - **The write-path touch is a stated deviation.** 2f's property is that **the report** reads and does
   not mutate — and this is **the run** writing, which preserves it exactly. Said at the change,
   because "2f touched the write path" will otherwise read as the property being broken.
@@ -380,10 +438,41 @@ And two clarifications that are not defects:
 - **Commit after every task; check CI after every push, by the until-loop on the run's own `status`
   matched to HEAD's `headSha`** — never by position in `gh run list`, never by a wrapper's exit code.
   **One push per run.** Red CI is the next task.
-- **No exit-criterion verdict from 2a–2e moves.** 2f adds a reader; it reopens no residency model
-  and closes no inherited failure. The inherited verdicts stay visible: **2b's 6 and 7 FAILED, 2c's
-  11 reduced, 2d's 6, 11 and 14 failed with 12 reduced, 2e's 14 reduced** — and 2e's 14 is the drop
-  row, which is 2f's Task 3.
+- **No exit-criterion verdict from 2a–2e moves — AND THAT RULE NEEDS A DISTINCTION IT HAS NEVER
+  CARRIED, because 2f is about to act correctly against its surface reading.**
+
+  > **A verdict's RECORD may be corrected when the correction is a finding about what was actually
+  > read. A verdict's VALUE is not re-argued by a later phase.** The first is provenance and is
+  > always allowed; the second is what this rule forbids.
+
+  Without it, a later session reading "no verdict moves" either fails to notice a stale reading or
+  refuses a correct repair. **This goes into the handoff's §2 as well as here**, because the rule is
+  quoted from there.
+
+  The inherited verdicts stay visible: **2b's 6 and 7 FAILED, 2c's 11 reduced, 2d's 6, 11 and 14
+  failed with 12 reduced, 2e's 14 reduced, and 2e's 9 CORRECTED — reading narrowed, verdict
+  unchanged** (see below). 2e's 14 is the drop row, which is 2f's Task 3.
+
+  **WHY 2e's 9 IS RECORDED AS CORRECTED RATHER THAN REDUCED, ARGUED RATHER THAN ASSUMED.** Review
+  proposed MET → MET WITH REDUCED SCOPE, on the ground that the criterion was met on a narrower
+  reading than the one recorded. The reach is not in dispute: the helper globs `notes/*.json` for the
+  key `outcome_counts` and reaches **8 of 16**, missing six in `notes/*.json` spelled `counts` and
+  two in `notes/*.jsonl` — all inside its own declared `outside`, *"the committed reports under
+  `docs/superpowers/notes/`"*. What is in dispute is which field moves.
+
+  **In this project's vocabulary a reduced scope means the criterion was achieved over a narrower
+  SUBJECT than stated** — 2e's own 14 is the model: the drop row was not delivered at all and became
+  2f's. Criterion 9's subject is the claim *"no committed audit number moves under the
+  reclassification"*, and that claim **is true over the full population**, established by 2f's
+  independent scan of all sixteen on 2026-09-19. Marking it reduced would record the project as
+  holding **less** evidence than it holds, at the moment the evidence got wider.
+
+  So: **verdict MET; the reading corrected to what the helper walked; a dated note recording that at
+  2e's close the instrument reached 8 of 16, so the criterion as closed rested on narrower evidence
+  than its reading claimed, and the full population was checked on 2026-09-19 with the conclusion
+  unchanged.** The over-claim stays visible — which is the half of review's finding that must not be
+  lost — without recording a reduction that no longer exists. **If you read the field differently,
+  say so and it becomes REDUCED**; this is the one finding of the ten I did not take as written.
 - **No task moves** `PUBLISHED_TILE_SIDE`, `resident_bytes_per_series`, `output_slot_bytes`,
   `SVD_CHUNK_SERIES`, `HEADROOM_FRACTION`, `ALGORITHM_VERSION`, `FIELD_SEED`, `HESSIAN_COND_LIMIT`,
   or any `Outcome` code. **2f adds no `Outcome` member.**
@@ -435,8 +524,16 @@ verdict is `phase2f-clustering-verdict.md`.
 - **P3 — positive control.** A planted contiguous patch of the **same total count** rejects at the
   p-floor in ≥ 95% of replicates. **P2 and P3 together are the instrument's calibration**, and
   numeric bands on both are what make a null result readable.
-- **P4 — the seam.** A genuine cluster straddling the antimeridian, wrapped against not: the bias
-  **quantified**, not asserted.
+- **P4 — the seam, with a predicted magnitude and a named consumer.** A genuine cluster straddling
+  the antimeridian, on a global grid of `W` columns, wrapped against not. **Prediction: the
+  non-wrapped join count is lower by at most `2·H` joins out of `≈2·W·H` — one column of vertical
+  joins — so the relative loss is bounded by `1/W`, and the z-score difference is under 0.25 at
+  `W ≥ 360`. Refutation, both directions:** above 0.25 the no-wrap choice of D4 is not free and the
+  seam must be detected or the limitation restated as material; **below 0.01 the measurement is too
+  weak to be worth printing** and the caveat becomes a static sentence rather than a number.
+  **Its consumer is Task 6's invariant** — the report prints the seam caveat carrying this measured
+  magnitude — because P4 is the sole evidence behind D4's no-wrap choice, and **a measurement with
+  no consumer gets made and forgotten.**
 - **P5 — the floor.** The smallest eligible-point count at which P2's calibration breaks. **The floor
   is measured, not picked** — which is where 2d's 30-member floor was weaker, that number coming from
   a binomial SE argument and this one from where the calibration actually fails.
@@ -650,6 +747,15 @@ raw count, null median and quantiles, z, and p — never a bare coefficient.
   adjacency is undefined on this mask.
 - Below Task 0's measured floor the statistic is unavailable and names the floor.
 - The seed and the permutation count are in the record.
+- **The report prints the seam caveat carrying P4's measured magnitude** (F7's consumer), so D4's
+  no-wrap choice travels with its evidence instead of as an assertion.
+- **All M per-candidate z-scores are printed**, and any single headline is labelled "max over M
+  candidates, uncorrected" at the number (D7).
+
+**Task 6's exit includes adding `CLUSTERING_SEED` to the handoff's do-not-move list.** D5 says the
+seed "joins" that list; the list is enumerated in the standing requirements and **cannot contain a
+constant that does not exist yet**, so until this task lands, "joins" is a promise with no owner.
+The task is not done until the constant is on the list.
 
 **Tests, each with the bug it must catch.**
 
@@ -694,8 +800,12 @@ behind `[report]`, imported inside the function (D10).
   extra — catches a hard dependency smuggled in, which is D10's receipt.
 - The set of maps equals the set of (branch present × candidate) pairs the statistic covers —
   catches map and statistic drifting onto different populations.
-- The same branch has the same colour across two stores with different branch sets — catches a
-  palette assigned from what is present, which makes two reports incomparable.
+- **Every fraction map's colourbar limits are exactly 0 and 1, whatever the observed range** —
+  catches matplotlib's autoscale, under which a branch present at 0.01–0.03 everywhere renders
+  full-range and 3% looks like 100%, and two stores with different ranges are not comparable. The
+  test asserts the limits, not the image.
+- The map's title names the branch from the store's own `flag_meanings` — catches a title written
+  from a hard-coded name table, which drifts from the store's alphabet.
 
 ---
 
@@ -714,8 +824,18 @@ is structural rather than promised.
 
 **Tests, each with the bug it must catch.**
 
-- Running the report leaves the store **byte-for-byte identical** — catches any write, including an
-  attrs write reintroduced by convenience, which is A1's whole subject.
+- **The full report runs against a store directory with write permission removed, and exits 0** —
+  this is the read-only guarantee's *mechanism* rather than a sample of its consequences. The byte
+  comparison catches a write that changes bytes **on the one path the test exercised**; it does not
+  catch an attrs write of identical content, a rewrite with reordered JSON keys, a write to a
+  sibling path, a write on a path the test did not run (matplotlib-absent, incomplete-store), or a
+  write rolled back on error. A store that **raises** on any write catches all of them, on every
+  path, for free — and Task 1 already carries "opened read-only" as an invariant, so this turns the
+  invariant into a mechanism. **A fixture precondition that refuses to run beats an assertion that
+  passes**, which is this project's own rule and was not applied here until review.
+- Running the report leaves the store **byte-for-byte identical** — kept as the cheap **positive
+  control** for the permission test: it proves the report ran and wrote its output somewhere, so a
+  green permission test cannot be a report that silently did nothing.
 - An unwritable output directory fails **before** the statistic runs — catches a report that computes
   for minutes and then cannot save, which is the one failure that wastes the user's time entirely.
 - A usage error exits 3 and an unreadable store exits 4 — catches the two collapsing into 5, which
@@ -753,6 +873,13 @@ outside exists. The binding test takes readings from somewhere the implementing 
 (`outcome_counts`) and one extension (`.json`) and reaches 8 of the 16 committed histograms. OQ24's
 check was written independently for that reason.
 
+**WHICH LEAVES TWO NEAR-IDENTICAL READERS, SO THIS TASK STATES WHICH IS AUTHORITATIVE RATHER THAN
+LEAVING THE NEXT PHASE A COIN FLIP.** **2f's scanner is authoritative for every future phase**: it
+enumerates by a rule, is spelling-independent and extension-independent, and covers the whole
+artifact population. **2e's helper is frozen as the reader of 2e's frozen artifacts** — it is the
+instrument that produced a closed criterion's evidence and rewriting it would rewrite that
+evidence. It gains a one-line docstring saying exactly that, and pointing here.
+
 ---
 
 ## Exit criteria
@@ -763,7 +890,7 @@ check was written independently for that reason.
 | 2 | The report never writes to the store | the store's bytes, before and after |
 | 3 | `metamer.report`'s import graph excludes matplotlib and the fit path | the subprocess's `sys.modules`, by name |
 | 4 | The failure-rate denominator includes `INSUFFICIENT_DATA` and excludes `NOT_APPLICABLE` | the denominator on a store constructed to contain both |
-| 5 | No committed artifact's rate moved under D2 | the sixteen committed histograms and the one eligibility-derived denominator, recomputed |
+| 5 | No committed artifact's rate moved under D2, over an enumeration that re-derives itself | **the enumeration first** — a spelling-independent glob over the artifact directories yielding exactly sixteen histograms across the five named families — **then** those sixteen and the one eligibility-derived denominator, recomputed |
 | 6 | `no_evidence` reads whether anything was fitted | the verdict on an all-`SCREENED_OUT` coarse store, against the same store all-`INSUFFICIENT_DATA` |
 | 7 | Every rate carries its own denominator | the record's fields, per row |
 | 8 | The drop row is outside the failure rate and names the coarse population | the row and its denominator, on a real two-pass drop |
@@ -779,7 +906,7 @@ check was written independently for that reason.
 | 18 | The report runs without matplotlib and says so | the exit code, the JSON, and the report's own sentence |
 | 19 | An unfinished store is described, not refused | `(N, M)` in the record, the exit code, and a denominator beside a rate |
 | 20 | Completeness comes from the bitmap | a store whose bitmap and outcomes disagree, reported as a defect |
-| 21 | The run records the resolved candidate table and it moves no hash | the block, and the three hashes with and without it |
+| 21 | The run records the resolved candidate table and it moves no hash | the block, the three hashes with and without it, **and `tests/test_hashing.py::test_compat_relevance_is_an_allowlist_golden_set`, cited by name** — the standing guard against the defect this criterion cannot reach on its own: a later change promoting a resolved field INTO the config namespace, where it enters the payload legitimately, moves `compat_hash`, and invalidates every stored run's resume by an edit nobody thought was semantic. That test already pins `FIT_RELEVANT_FIELDS` against a hand-written set, so growing it requires a deliberate edit and a reviewer reading why. **Checked 2026-09-19: it exists; no new test is owed.** |
 | 22 | A report's exit code describes the report | the codes produced across usage, unreadable-store and internal-error cases, and 1 and 2 absent |
 | 23 | The markdown is rendered from the record | every numeric token in the markdown, found in the JSON |
 

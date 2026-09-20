@@ -3290,6 +3290,43 @@ tests could not see.** `pixi run test-fast` would have shipped both.
   > REASON:** in the first, **staging changes what is CHECKED**; in the second, **staging changes
   > what SURVIVES.** Either alone reads as a quirk of one tool. Together they say the index is
   > where work becomes real, and everything before it is provisional in both senses.
+- **A VERDICT'S RECORD MAY BE CORRECTED WHEN THE CORRECTION IS A FINDING ABOUT WHAT WAS ACTUALLY
+  READ. A VERDICT'S VALUE IS NOT RE-ARGUED BY A LATER PHASE.** Added 2026-09-19, because the rule
+  every plan quotes — *"no exit-criterion verdict from an earlier sub-phase moves"* — has no such
+  distinction on its surface, and 2f was about to act correctly against it.
+
+  **The first is provenance and is always allowed**: the reading a closed criterion records is a
+  claim about what its instrument walked, and a later phase finding that the instrument walked less
+  than the reading says has found a defect in the record, not in the verdict. **The second is what
+  the rule forbids**: a later sub-phase deciding an earlier one's criterion should have been
+  FAILED, or MET, on the same evidence.
+
+  **The instance:** 2e's criterion 9 records the reading *"every committed report's outcome
+  histogram, recomputed"*; its helper globs `notes/*.json` for the key `outcome_counts` and reaches
+  **8 of 16** — missing six spelled `counts` and two in `.jsonl`, all inside its own declared
+  population. The reading is corrected where it sits; the verdict is untouched. **Without this
+  distinction a later session either does not notice the stale reading or refuses a correct
+  repair**, and both cost more than the note.
+
+- **ANY INTERMEDIARY THAT CAN CACHE, SUMMARISE OR TRUNCATE IS NOT EVIDENCE. READ THE BYTES.**
+  **Promoted 2026-09-19 from the narrower form below**, which named truncation only. Truncation
+  was the first form found; **caching is a second and summarising a third**, and on 2026-09-19 a
+  plan review hit all three at once and each agreed with the others: a fetch tool served a **404
+  cached from before the push**, re-served it on every retry, and the miss was then "confirmed"
+  against a **summarised directory listing that had dropped rows**. `curl` on the identical URL
+  returned **HTTP 200 and 52,010 bytes**. The conclusion — *"the plan is not on main"* — was
+  asserted three times and was false throughout.
+
+  **This is the same shape as the gate pattern at `Outcome.is_fit_verdict`, and it is that table's
+  fourth instance**: a predicate reading an available proxy rather than its subject, agreeing with
+  it in the common case, diverging precisely where it mattered. **The tell held** — the predicate
+  named a different quantity from its own reason string: *"not on main"* meant *"not in my cache"*.
+
+  **The repair is not "retry" and not "check more carefully"**, because a cache re-serves and a
+  summariser re-summarises: go to a different reader of the same bytes, and prefer the one with no
+  layer of its own. For a repository, that is `git fetch` and `git log origin/<branch>`, or `curl`
+  on the raw URL with its byte count read.
+
 - **WHERE A TOOL REPORTS ON SOMETHING ELSE, ITS EXIT CODE DESCRIBES THE TOOL. READ THE SUBJECT'S
   OWN STATUS.** Promoted 2026-09-11 on the **third** instance; the causes differ and the shape
   does not, which is why it is one rule and not three notes:
