@@ -51,12 +51,18 @@ closed.** Three commits, not two, each provable before the next:
 | 2 | `INSUFFICIENT_DATA` becomes eligible (D2) | **not written** — held on the audit-denominator decision, whose subject is recorded at [the pre-flight](../notes/phase2f-preflight.md) under *"FILED, NOT TAKEN"*. **The hold is not about D2's check, which is complete and stands**: no committed number moves, under any of the three candidate predicates. It is about whether a live instrument's denominator is repaired alongside the flip — a decision, not a measurement. |
 | 3 | 2e's criterion-9 reading, corrected where it sits | **not written** |
 
-**THIS PARAGRAPH IS THE ONE PLACE THIS PLAN STATES A FACT ABOUT THE TREE, AND IT IS DATED AND
-CHECKABLE FOR THAT REASON.** An earlier draft of it said OQ24 was *"closed before this plan… taken
-in two commits"* while nothing was committed and the count was three. **A plan that states an
-estimate in the past tense is the failure its own precedence rule forbids** — a measured, dated fact
-supersedes an unmeasured one, and "already done" is the strongest unmeasured claim available. The
-SHAs above are recorded as each lands; a session resuming here reads the table, not the prose.
+**STATUS: TAKEN IN PART. Closer: §13.6's declared domain mask.** Not closed, and the distinction is
+not bookkeeping — see D2. The flip is right about what `INSUFFICIENT_DATA` **means** and cannot fix
+what it **contains**, because land is written under that member until a declared domain mask exists.
+What 2f takes is the classification and the two denominators that follow from it; what remains is
+un-unioning the population, which is a sub-phase (a domain mask, a config surface, a producer change
+and re-validation) and not a task.
+
+**THIS TABLE IS THE ONE PLACE THIS PLAN STATES A FACT ABOUT THE TREE, AND IT IS A STATUS LINE
+RATHER THAN PROSE FOR THAT REASON.** Prose here has been wrong in the past tense **twice** — first
+*"closed before this plan, taken in two commits"* while nothing was committed and the count was
+three, then *"closed"* while the closer had not been built. **A status line gets edited; prose gets
+re-argued**, and this paragraph is where a resuming session looks first.
 
 ---
 
@@ -105,14 +111,26 @@ handoff §2; the table lives at `Outcome.is_fit_verdict` and is not restated at 
 reaches `outcomes.py` with the next `src/` commit** — it is a docstring line and does not justify a
 1:38 sweep of its own.
 
-### D2 — `INSUFFICIENT_DATA` is eligible: §12.5 over §8.6, with the artifact check as evidence
+### D2 — `INSUFFICIENT_DATA` is eligible, and §8.6 and §12.5 were never in disagreement
 
-§8.6 called it *"excluded from every failure-rate denominator"* and described it as *"land,
-permanent ice"* — the exact conflation §12.5 was written to undo. §12.5 separates land and
-permanent ice (`NOT_APPLICABLE`, not eligible) from a genuinely thin record (`INSUFFICIENT_DATA`,
-**eligible**, *"its rate is a real statement about record coverage"*), and its heading declares it
-the classification §14.2's denominator reads. Precedence: the design doc is authoritative on intent
-and §12.5 is the later, more refined statement.
+**§8.6 AND §12.5 ARE INDEXED TO DIFFERENT ERAS, NOT IN CONFLICT — and reading them as competing
+statements is what made a correct-looking change dangerous.** An earlier draft of this decision
+resolved them by precedence: *"the design doc is authoritative on intent and §12.5 is the later,
+more refined statement."* **Precedence is the wrong instrument when two statements do not
+disagree.**
+
+- **§12.5 describes what `INSUFFICIENT_DATA` MEANS**, and what it will *contain* once
+  `NOT_APPLICABLE` has a producer: a series whose record is too thin to fit, eligible, because
+  *"its rate is a real statement about record coverage"*.
+- **§8.6 describes what it CONTAINS today**, and §8.6 is accurate: land is written
+  `INSUFFICIENT_DATA`, so a rule excluding the member excludes land, which is exactly what §8.6
+  says the exclusion is for.
+
+**Both are true. So the flip is CORRECT ABOUT WHAT THE MEMBER MEANS AND WRONG ABOUT WHAT IT
+CONTAINS.** Today the symbol is a **union of two populations** — genuinely thin ocean records and
+land — because §12.5 itself says `NOT_APPLICABLE` is **underivable** without §13.6's declared
+domain mask: nothing distinguishes land from *"every value happens to be NaN"*. **A definition
+change cannot un-union them**, and that sentence is why this decision needed a second repair.
 
 **The artifact check, run 2026-09-19 before any edit, and the set is empty.** Sixteen outcome
 histograms across five committed artifacts; **zero carry `INSUFFICIENT_DATA` and zero carry
@@ -129,6 +147,38 @@ array or `.npy` is committed.
 which computes `live == 9` with `is_eligible` as its denominator. Recomputed, and said so at the
 test. "No committed artifact moves, one test's expected value does" is the honest form of "the set
 is empty".
+
+### D2b — the verdict's rate denominator is `fitted`, and that is correct in both eras
+
+**MEASURED ON EXIT CRITERION 12's OWN FIXTURE, 2026-09-20**, after the flip's full sweep came back
+red on it: twelve ocean points, eight land, a candidate failing **all twelve fits**.
+
+| store | failed | eligible | **fitted** | rate over eligible | verdict |
+|---|---|---|---|---|---|
+| full | 12 | 20 | **12** | **0.60** | **continue** |
+| cropped to ocean | 12 | 12 | **12** | **1.00** | **drop** |
+
+Same data, two verdicts — **verbatim the defect criterion 12's docstring exists to catch**, because
+the land rows are `INSUFFICIENT_DATA` and the flip put them in the denominator.
+
+**THE REPAIR IS NOT THAT IT PRESERVES THE OLD NUMBERS.** It does — on any coarse store today
+`eligible == fitted`, because `SCREENED_OUT`, `CANDIDATE_DROPPED` and `NOT_ATTEMPTED` have no
+producer there — but **preserved numbers are a check on the reasoning, never its basis**, which is
+the same rule that refused to let P5's estimate ride into a shipped invariant.
+
+**The argument is that `failed / fitted` is correct in BOTH eras.** This gate asks whether a
+candidate is failing the fits it **attempts**. That question has nothing to do with how much of the
+box is out of domain, and it will still have nothing to do with it after §13.6 makes land
+`NOT_APPLICABLE`. **A gate whose denominator is land-sensitive is broken whether or not the flip
+happens; the flip only exposed it.**
+
+**Seventh instance of one root cause: `is_eligible` was doing two jobs.** D1 moved judgeability off
+it; this moves the rate off it. Said at both sites, not only here.
+
+**And it separates a per-candidate collapse nobody had noticed:** a candidate screened out
+everywhere read rate `0.0` — identical to one fitted at every point and passing. *"Nothing was
+tried"* and *"everything succeeded"*, one number. Over `fitted` the first is `None`. The
+no-evidence decision's collapse, at candidate granularity.
 
 **Gate before flip, in separate commits, and the order is the argument.** The gate repair is correct
 independent of OQ24 and provable independent of it: criterion 19's fixture keeps its producer under
@@ -716,9 +766,26 @@ and the versions it knows.
 ## Task 2 — rates per branch and per candidate, with denominators
 
 **Behaviour.** Counts and rates per taxonomy branch and per candidate, each rate carrying **its own
-denominator at the row**. The eligible-point denominator is `Outcome.is_eligible` — which after D2
-includes `INSUFFICIENT_DATA` and excludes `NOT_APPLICABLE` only. `NOT_ATTEMPTED` is out of every
-denominator: it is the absence of information.
+denominator at the row**.
+
+**BOTH DENOMINATORS ARE PRINTED, PER CANDIDATE, AND THE GAP BETWEEN THEM IS THE DIAGNOSTIC.**
+`failed / fitted` **and** `failed / eligible`, each named at its row. This is D4's
+wrapped-and-unwrapped two-arm print applied to denominators: **where a denominator is contested,
+print both and let the difference speak** rather than choosing one and carrying a caveat.
+
+**The reason is D2b's measurement, one layer up.** Repairing the *gate* and leaving the *report* on
+`eligible` alone would ship a failure rate whose denominator contains land — *"60%"* where a third
+of the denominator is out of domain, which is a statement about record coverage **plus land
+fraction**, exactly the uninterpretable quantity §12.5's separation exists to prevent. **On this
+project's one ocean box the two numbers are identical, which is precisely why it would have
+shipped**: the thing with a test got fixed and the thing without one did not.
+
+A reader on an ocean box sees two identical numbers and learns the exposure is nil. A reader on a
+global run sees **1.00 against 0.60** and learns everything.
+
+The eligible-point denominator is `Outcome.is_eligible` — which after D2 includes
+`INSUFFICIENT_DATA` and excludes `NOT_APPLICABLE` only. The fitted denominator is
+`Outcome.is_fit_verdict`. `NOT_ATTEMPTED` is out of both: it is the absence of information.
 
 **Invariants.**
 
@@ -743,6 +810,13 @@ denominator: it is the absence of information.
   report silently describe a smaller grid.
 - Two candidates with different eligible populations produce two different denominators — catches a
   shared denominator, which invites a comparison that is not available.
+- **A store with land reports `failed/fitted` and `failed/eligible` differing, and an all-ocean
+  store reports them equal** — catches a report that prints one denominator, which on a global run
+  is a rate contaminated by land fraction and on this project's fixtures is indistinguishable from
+  a correct one. The constructed store is criterion 12's: 12 ocean, 8 land, **1.00 against 0.60**.
+- **The caveat beside the eligible rate is present when the store records no domain mask and absent
+  when it records one** — catches a hard-coded caveat, which is wrong the day after §13.6 lands,
+  and a missing one, which is wrong today.
 
 ---
 
@@ -784,7 +858,16 @@ from its arrays and asserted to agree**; when it is absent the number is **label
 
 **Behaviour.** Two halves, and the first is a **write-path change made by the run, not the report**
 (D12). `store.py` gains an additive root-attrs block recording, per candidate: label, spec hash,
-resolved engine, cost class, gradient mode, objective. The report prints it, and prints
+resolved engine, cost class, gradient mode, objective — **and, beside it, a `domain_mask`
+provenance field recording whether a declared domain mask was applied.**
+
+**THE `domain_mask` FIELD IS WHAT MAKES THE ERA READABLE FROM THE STORE**, which the foreign-store
+property requires: a reader of someone else's store has no other way to know which rule produced
+it. **Absent or false**, `INSUFFICIENT_DATA` unions thin records and land, and Task 2's report says
+so beside the eligible-denominator rate. **True**, the caveat drops. **A report that always prints
+the caveat is wrong the day after §13.6 lands; one that never prints it is wrong today** — so it is
+derived from the store rather than hard-coded. Absence is the answer for older stores, same rule as
+the resolved-candidate block, and **nothing is back-filled**. The report prints it, and prints
 *"not recorded by the run that wrote this store"* when the block is absent. The second half is
 single-store computable and cheap: the `n_valid` distribution (§10.2), the iteration histogram from
 `iterations[y,x,m]`, and the resolved config, all three hashes, profile name and calibration

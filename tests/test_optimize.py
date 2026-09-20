@@ -711,7 +711,10 @@ def test_a_wholly_masked_series_stays_insufficient_data():
     got = optimize_series(obj, np.zeros((1, t.size)), mask, t, design)
     assert got.outcome is Outcome.INSUFFICIENT_DATA
     assert not got.outcome.is_failure
-    assert not got.outcome.is_eligible
+    # ELIGIBLE SINCE 2026-09-20 (open question 24): section 12.5 keeps only
+    # NOT_APPLICABLE out of the denominator. The property that matters here is
+    # unchanged -- this is not a FAILURE, so it never enters a numerator.
+    assert got.outcome.is_eligible
     # Also with no design at all, where there is no precheck to short-circuit.
     plain = ProcessSpec((_term("matern12"),))
     bare = _objective(plain, StateSpace.from_spec(plain))

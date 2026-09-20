@@ -353,9 +353,11 @@ class ObjectiveResult:
         outcome: PER-SERIES outcome codes, shape (B,) uint8. This is the MERGE
             of the engine's verdict with this module's own -- see
             `merge_outcomes`. It is never a replacement: an INSUFFICIENT_DATA
-            series relabelled NONFINITE_OBJECTIVE would turn land and permanent
-            ice into failures and inflate the very denominator that
-            `Outcome.is_eligible` exists to protect.
+            series relabelled NONFINITE_OBJECTIVE would turn a thin record into
+            a FAILURE, moving it into the numerator of every rate computed over
+            it. (Corrected 2026-09-20: the member is eligible since open
+            question 24, so what the relabelling corrupts is the numerator, not
+            the denominator.)
         n_used: Unmasked observation count per series, shape (B,). Valid even
             for a failed series, including on the design-precheck path, and
             carries no sentinel -- the same contract as `ScoredResult.n_used`.
@@ -424,12 +426,14 @@ disagree about what a series failed of.
 Reading the ladder top to bottom:
 
   * INSUFFICIENT_DATA and NOT_ATTEMPTED are DATA-LEVEL facts and outrank
-    everything. An all-masked series is land or permanent ice: `is_failure` is
-    False and `is_eligible` is False, so design doc section 8.6 excludes it from
-    the failure-rate denominator. The engine poisons such a series' accumulator
-    to NaN, so this module's independent view of it is "non-finite" -- and
-    taking that view would relabel every land pixel a failure, moving it into
-    the numerator AND inflating the denominator the exclusion protects, which
+    everything. An all-masked series has no usable record: `is_failure` is
+    False, so it is in no failure NUMERATOR. (`is_eligible` is True since
+    2026-09-20, open question 24 -- section 12.5 keeps only NOT_APPLICABLE out
+    of the denominator, because a thin record's rate is a real statement about
+    record coverage.) The engine poisons such a series' accumulator to NaN, so
+    this module's independent view of it is "non-finite" -- and taking that
+    view would relabel every such pixel a failure, moving it into the
+    numerator, which
     would make every reported failure rate meaningless. **A land pixel yielding
     NaN is not a numerical failure, and this ordering is what encodes that.**
   * RANK_DEFICIENT_X then ILL_CONDITIONED_X are DESIGN-LEVEL causes, the second
@@ -844,9 +848,11 @@ class ConcentratedObjective:
                 # `data_level` above was folded in first. Returning
                 # `check_design`'s verdict alone here skipped the engine, and
                 # with it the engine's INSUFFICIENT_DATA, so a WHOLLY masked
-                # tile came back RANK_DEFICIENT_X: `is_failure` True AND
-                # `is_eligible` True, putting every pixel of an all-land tile
-                # into both halves of the failure rate. The saving is worth
+                # tile came back RANK_DEFICIENT_X -- `is_failure` True, putting
+                # every pixel of an unfittable tile into the NUMERATOR of the
+                # failure rate. (Both members are eligible since 2026-09-20, so
+                # the denominator is the same either way and the corruption is
+                # entirely in the numerator.) The saving is worth
                 # keeping -- a tile with no usable data anywhere is exactly
                 # where a B x N filter sweep buys nothing -- and nothing is lost
                 # by keeping it, because "no unmasked epoch" is derivable from

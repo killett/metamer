@@ -563,7 +563,10 @@ def _failed(outcome: NDArray[np.uint8]) -> NDArray[np.bool_]:
 
     **NOT `!= OK`.** `NOT_ATTEMPTED` and `INSUFFICIENT_DATA` are neither OK nor
     failures, and folding them into the rescue rate's denominator would divide
-    by a population that was never at risk.
+    by a population that was never at risk. **That is a statement about
+    `is_failure` and is unaffected by open question 24**, which moved
+    `INSUFFICIENT_DATA` into the ELIGIBLE set only; the rescue and loss
+    denominators are `cold_failed` and `cold_ok` and did not move.
     """
     return _taxonomy_lookup("is_failure")[np.asarray(outcome, dtype=np.uint8)]
 
@@ -766,7 +769,45 @@ class CandidateOutcomes:
         lint_flagged: Whether the lint flagged it.
         lint_findings: The rules that fired, so a flagged report NAMES the
             flagged pair rather than merely marking it.
-        attempted: Eligible cells, by `Outcome.is_eligible`.
+        attempted: Eligible cells, by `Outcome.is_eligible`. **OPEN QUESTION
+            25: THIS FIELD NAMES A DIFFERENT QUANTITY FROM THE PREDICATE IT
+            READS.** "Attempted" says a fit was *tried*; `is_eligible` says a
+            fit was *possible*. They differ on every decided skip and on every
+            never-tried cell, so this count includes points the optimizer never
+            touched -- which was true before open question 24 and became
+            louder with it, since a thin record is now eligible too. Section
+            11.2's subject is what the optimizer did from two starts, so a
+            point never fitted in either arm was never attempted from either,
+            and including it dilutes `both_ok_fraction` with points that could
+            not have been OK. **Three candidate denominators, and the third is
+            not obviously wrong:** `is_eligible` (this), `is_fit_verdict`, or
+            the INTERSECTION of cells fitted in BOTH arms -- which for a
+            two-arm statistic is plausibly the right population and cannot be
+            settled from outside this module. On the fixture at
+            `test_a_not_attempted_cell_is_in_no_flip_denominator` those give
+            40, 20, and a number this module would have to define. **No
+            committed number moves under any of them**, which makes this the
+            ideal condition for deciding on MEANING rather than on which number
+            the choice protects. Design doc section 14.2's amendment A2 puts
+            the two-arm audit numbers outside sub-phase 2f, and a scope
+            boundary that only holds when convenient is not a boundary --
+            **owned by whoever next opens this module.**
+
+            **AND THE STRUCTURAL HALF, ADDED 2026-09-20: `is_eligible` IS NOW A
+            ONE-MEMBER DENYLIST.** After open question 24 it excludes only
+            `NOT_APPLICABLE` -- a member with no producer -- while its real
+            consumers each hand-exclude two or three more: section 14.1's
+            verdict moved its rate to `is_fit_verdict` entirely, section 14.2's
+            per-branch rates must hand-exclude `NOT_ATTEMPTED`, and the drop
+            row hand-excludes `CANDIDATE_DROPPED`. **A predicate that excludes
+            exactly one unreachable member while every caller excludes more is
+            not carrying an abstraction; it is carrying a place for land to
+            hide**, since land is written `INSUFFICIENT_DATA` until section
+            13.6 lands. The positively-defined `is_fit_verdict` is doing the
+            actual work at both repair sites. **Whether `is_eligible` survives
+            section 13.6 at all is part of this question and should be answered
+            once, with both call sites in view, by whoever implements the
+            domain mask.**
         cold_ok: Cells the cold arm fitted.
         cold_failed: Cells the cold arm failed, by `Outcome.is_failure`.
         cold_degenerate: Cells the cold arm refused with `DEGENERATE_HESSIAN`.

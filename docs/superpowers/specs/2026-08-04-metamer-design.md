@@ -678,14 +678,26 @@ global grid reports ~70% "failure" and the number becomes noise everyone learns 
 > above still names land and permanent ice, which is the exact conflation §12.5 was written to
 > undo**, and it still calls the code excluded from every denominator, which §12.5 contradicts.
 >
-> **`Outcome.is_eligible` currently follows THIS row, not §12.5.** The disagreement is filed as
-> open question 24 and is **2f's**, because 2f owns §14.2's denominators and the correction should
-> land with a consumer rather than ahead of one.
+> **~~`Outcome.is_eligible` currently follows THIS row, not §12.5.~~ CLOSED 2026-09-20: the code
+> follows §12.5.** `INSUFFICIENT_DATA` is **eligible**; only `NOT_APPLICABLE` leaves the
+> denominator. Open question 24 is closed, and it closed in three commits — the gate repair it
+> found first, the flip, and the record correction — because **the check found a defect that was
+> independent of its own answer**: §14.1's no-evidence gate was reading `is_eligible` when its
+> subject was whether anything had been *fitted*, and those two coincide only under THIS row's
+> reading.
 >
-> **It is a re-baselining, not a classification edit:** `INSUFFICIENT_DATA` has producers and
-> occurs in real data, so moving it into the denominator changes every failure rate the project
-> computes, and any artifact carrying a rate computed under the current rule becomes incomparable
-> to one computed after.
+> **The direction is worth stating, because §8.6's fear above is the opposite one.** This member is
+> not a failure, so it enters the denominator and never the numerator: **every rate it touches can
+> only fall.** The ~70%-failure scenario this section warns about needs land counted as FAILED,
+> which is `RANK_DEFICIENT_X` and is what `OUTCOME_PRECEDENCE` exists to prevent.
+>
+> **It was a re-baselining, not a classification edit** — `INSUFFICIENT_DATA` has producers and
+> occurs in real data — **so it was checked before it was taken, and the affected set was empty.**
+> Sixteen outcome histograms across five committed artifacts carry neither this member nor
+> `NOT_APPLICABLE`; the one committed family whose denominator reaches the property has
+> `attempted == audited_points` on every candidate. **No committed number moved. One expected value
+> inside a test did**, and it was recomputed and said so. The check is now an executable invariant,
+> not a dated claim: `tests/test_outcomes.py::test_no_committed_artifact_carries_insufficient_data`.
 >
 > **The note sits HERE and not only at §12.5 because a reader looking for denominators reaches
 > §8.6 first** — (a6): a description whose subject has moved is struck where it sits, not only

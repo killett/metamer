@@ -767,6 +767,17 @@ def test_compat_relevance_is_an_allowlist_golden_set():
     regression -- putting the package version back where design doc section
     13.3's wording ("metamer version") most naturally reads. It is VCS-derived
     and moves on every commit, so a gate keyed on it stops resuming.
+
+    **THE NAME READS NARROWER THAN THE SUBJECT: this test pins BOTH
+    allowlists** (checked 2026-09-19, recorded because the gap between a name
+    and a subject is what this project keeps finding). `fit_payload` subsets
+    `FIT_RELEVANT_FIELDS`, pinned above; `compat_payload` subsets
+    `COMPAT_RELEVANT_FIELDS`, pinned through its definition in terms of fit.
+    `run_payload` has **no allowlist by design** -- it is `normalize(config)`
+    entire, provenance only and never a gate, and its `_subset` call is a
+    validation whose result is discarded -- so there is no third set to pin and
+    none is missing. **And because it hashes everything, a field promoted into
+    the config namespace moves `run_hash` BEFORE it reaches either allowlist.**
     """
     assert FIT_RELEVANT_FIELDS == frozenset(
         {

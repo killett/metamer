@@ -412,7 +412,13 @@ PHASE_2E_EXIT_CRITERIA: tuple[ExitCriterion, ...] = (
             "test_criterion_19_no_evidence_and_a_clean_pass_exit_zero_for_different_reasons",
             "test_an_empty_coarse_sample_continues_loudly_when_the_fine_grid_has_data",
             "test_a_no_evidence_run_exits_ok_with_the_headline_on_the_final_line",
-            "test_an_empty_eligible_population_is_no_evidence_not_clean_and_not_abort",
+            # RENAMED 2026-09-20, AND THE OLD NAME BECAME FALSE RATHER THAN
+            # MERELY DATED. Open question 24 made `INSUFFICIENT_DATA` eligible,
+            # so the fixture's population is no longer an "empty eligible
+            # population" -- it is a fully eligible one that holds no fit. The
+            # verdict is untouched; the test's SUBJECT is unchanged and its
+            # name now describes it.
+            "test_an_unfitted_coarse_sample_is_no_evidence_not_clean_and_not_abort",
             "test_an_empty_sample_and_an_all_failing_sample_are_different_verdicts",
         ),
         outside=(

@@ -35,10 +35,40 @@ class Outcome(StrEnum):
     def is_eligible(self) -> bool:
         """Whether this point counts toward a failure-rate denominator.
 
-        INSUFFICIENT_DATA is a legitimate expected outcome -- land, permanent
-        ice, or too few valid samples -- and is excluded.
+        **SECTION 12.5's NON-FIT GROUPING TABLE IS THE CLASSIFICATION**, by its
+        own declaration -- *"the grouping is what section 14.2's denominator
+        reads"*. Only `NOT_APPLICABLE` leaves the denominator: **this location**
+        is out of domain, land or permanent ice, and is not a point the rate is
+        over.
+
+        **`INSUFFICIENT_DATA` IS ELIGIBLE, CORRECTED 2026-09-20 (open question
+        24).** ~~Section 8.6 called it "a legitimate expected outcome -- land,
+        permanent ice" and excluded it from every denominator.~~ That row
+        conflated two different facts and section 12.5 was written to undo the
+        conflation: land and permanent ice are `NOT_APPLICABLE`, while **this
+        series** having too thin a record is `INSUFFICIENT_DATA`, which section
+        12.5 calls **eligible** because *"its rate is a real statement about
+        record coverage"*. Collapsing them makes the failure rate
+        uninterpretable, which is the failure section 14.2 exists to prevent.
+
+        **THE DIRECTION OF THE CHANGE, BECAUSE SECTION 8.6's FEAR WAS THE
+        OPPOSITE ONE.** That section worried an ocean-only run on a global grid
+        would report ~70% "failure". **This cannot cause that**:
+        `INSUFFICIENT_DATA` is not a failure, so it enters the denominator and
+        never the numerator, and every failure rate it touches can only fall.
+        The ~70% scenario needs land counted as FAILED, which is
+        `RANK_DEFICIENT_X` -- the defect `OUTCOME_PRECEDENCE` exists to prevent
+        and which `tests/test_objective.py` pins.
+
+        **IT WAS CHECKED BEFORE IT WAS TAKEN, NOT AFTER.** Sixteen outcome
+        histograms across five committed artifacts carry neither this member nor
+        `NOT_APPLICABLE`, and the one committed family whose denominator reaches
+        this property has `attempted == audited_points` on every candidate. No
+        committed number moves. See
+        `tests/test_outcomes.py::test_no_committed_artifact_carries_insufficient_data`,
+        which is that check as an executable invariant rather than a dated claim.
         """
-        return self not in {Outcome.INSUFFICIENT_DATA, Outcome.NOT_APPLICABLE}
+        return self is not Outcome.NOT_APPLICABLE
 
     @property
     def is_failure(self) -> bool:
@@ -77,10 +107,10 @@ class Outcome(StrEnum):
         decision rather than the candidate, and would read louder than the
         evidence that triggered it. See the handoff's (j7b).
 
-        **`INSUFFICIENT_DATA`'s exclusion follows section 8.6, which section 12.5
-        contradicts** -- open question 24, filed to 2f. It is left alone here
-        because it has producers: changing it re-baselines every failure rate,
-        which is a different act from a correction that cannot move a number.
+        ~~**`INSUFFICIENT_DATA`'s exclusion follows section 8.6, which section
+        12.5 contradicts** -- open question 24, filed to 2f.~~ **CLOSED
+        2026-09-20:** it is eligible, and its exclusion from `is_failure` is
+        unchanged and was never in question. See `is_eligible`.
         """
         return self not in {
             Outcome.OK,
@@ -125,19 +155,23 @@ class Outcome(StrEnum):
         24 lands.
 
         **THE PATTERN, RECORDED HERE RATHER THAN AS A THIRD ANECDOTE.** This is
-        the third gate in this project caught keying on a proxy that was merely
-        *available*:
+        one of five instruments in this project caught keying on a proxy that
+        was merely *available*:
 
         | gate | it read | its subject |
         |---|---|---|
         | the quiet gate (open question 22) | the host's `/proc/loadavg` | this container's CPU use |
         | the stall gate | time spent waiting | memory pressure |
         | this one | `is_eligible` | whether anything was fitted |
+        | the plan-review fetch (2026-09-19) | a **cached** 404 and a **summarised** directory listing | the repository's bytes -- `curl` returned HTTP 200 and 52,010 bytes on the identical URL |
+        | 2e's criterion-9 instrument | what one glob and one key spelling happened to walk -- 8 of 16 | the committed audit numbers its claim named |
 
-        All three coincide with their subject in the common case and diverge
+        All five coincide with their subject in the common case and diverge
         exactly where the gate matters. **The tell is a gate whose predicate
         names a different quantity from its own reason string** -- section
-        14.1's said "eligible" while meaning "fitted".
+        14.1's said "eligible" while meaning "fitted". The handoff carries the
+        general form at (a10): **before reading an instrument, demonstrate it
+        can produce both answers.**
         """
         return self in {
             Outcome.OK,

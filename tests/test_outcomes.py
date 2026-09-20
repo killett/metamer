@@ -4,14 +4,28 @@ from metamer.core.outcomes import Outcome
 
 
 def test_insufficient_data_is_not_a_failure():
-    """Land and permanent-ice pixels must not inflate the failure rate.
+    """A thin record is not a failure -- and since 2026-09-20 it IS in the denominator.
 
     Bug this catches: counting INSUFFICIENT_DATA as failure, which on a global
     ocean-only run reports ~70% 'failure' and turns the number into noise
     everyone learns to ignore.
+
+    **~~`is_eligible is False`~~ INVERTED 2026-09-20, open question 24.** The
+    exclusion followed design doc section 8.6, which described this member as
+    "land, permanent ice" -- the conflation section 12.5 was written to undo.
+    Land is `NOT_APPLICABLE`; **this series** having too thin a record is this
+    member, and section 12.5 calls it eligible because *"its rate is a real
+    statement about record coverage"*.
+
+    **The ~70% fear in the paragraph above is NOT what this change causes**,
+    and the direction is worth stating because it looks like the same subject:
+    this member is not a failure, so it enters the denominator and never the
+    numerator, and every rate it touches can only FALL. Land counted as failed
+    is `RANK_DEFICIENT_X`, which `tests/test_objective.py` pins.
     """
     assert Outcome.INSUFFICIENT_DATA.is_failure is False
-    assert Outcome.INSUFFICIENT_DATA.is_eligible is False
+    assert Outcome.INSUFFICIENT_DATA.is_eligible is True
+    assert Outcome.NOT_APPLICABLE.is_eligible is False
 
 
 def test_not_attempted_is_distinct_from_failure():
@@ -184,11 +198,17 @@ def test_is_eligible_is_not_trivially_constant():
     Bug this catches: an `is_eligible` implementation that always returns the
     same value regardless of member (e.g. always True, or always False),
     which would make the eligible-count denominator either meaningless or
-    always zero. Pairing a known-False case (INSUFFICIENT_DATA) with a
-    known-True case (OK) is what catches a constant stub that either always
-    passes or always fails would otherwise slip past a single-value check.
+    always zero. Pairing a known-False case with a known-True case is what
+    catches a constant stub that a single-value check would let through.
+
+    **THE KNOWN-FALSE CASE MOVED ON 2026-09-20 AND THE TEST WOULD OTHERWISE
+    HAVE GONE VACUOUS.** It was `INSUFFICIENT_DATA`, which open question 24
+    made eligible; the only remaining ineligible member is `NOT_APPLICABLE`.
+    A triviality guard whose False case becomes True stops guarding anything
+    while still passing -- which is why this file's one-table test asserts the
+    whole enum and this one asserts the pair.
     """
-    assert Outcome.INSUFFICIENT_DATA.is_eligible is False
+    assert Outcome.NOT_APPLICABLE.is_eligible is False
     assert Outcome.OK.is_eligible is True
 
 
@@ -248,13 +268,59 @@ def test_every_member_is_classified_by_all_three_properties_in_one_table():
         Outcome.NOT_ATTEMPTED: (False, True, False),
         Outcome.SCREENED_OUT: (False, True, False),
         Outcome.CANDIDATE_DROPPED: (False, True, False),
-        Outcome.INSUFFICIENT_DATA: (False, False, False),
+        Outcome.INSUFFICIENT_DATA: (False, True, False),
         Outcome.NOT_APPLICABLE: (False, False, False),
     }
 
     assert {
         m: (m.is_failure, m.is_eligible, m.is_fit_verdict) for m in Outcome
     } == expected
+
+
+def test_no_committed_artifact_carries_insufficient_data():
+    """Open question 24's artifact check, as an invariant rather than a date.
+
+    Moving `INSUFFICIENT_DATA` into the failure-rate denominator changes every
+    rate computed over a population containing it. **The claim that no
+    committed number moved rests on that population being empty**, which is a
+    statement about the artifacts and not about the enum.
+
+    Expected value determined independently: every committed JSON and JSONL
+    artifact under `docs/superpowers/notes/` and `bench/` was scanned on
+    2026-09-19 and none carries this member, across sixteen outcome histograms
+    in five families.
+
+    Bug this catches: a future committed artifact containing the member, which
+    would silently make the re-baselining retroactive and two committed rates
+    incomparable. **The right response to this failing is not to loosen it**;
+    it is to recompute the artifact and say so.
+
+    **IT SCANS BOTH EXTENSIONS AND DOES NOT KEY ON A HISTOGRAM SPELLING**, and
+    that is the point rather than an implementation detail. 2e's criterion-9
+    helper globbed `*.json` for the key `outcome_counts` and reached 8 of the
+    16 committed histograms -- six are spelled `counts` and two live in
+    `.jsonl`. Searching the raw text for the member's own value is immune to
+    both. **(a10):** the positive control below is what demonstrates the scan
+    can see an outcome name at all, so a pass is not merely a scan that found
+    nothing because it was looking in the wrong place.
+    """
+    root = Path(__file__).resolve().parents[1]
+    scanned = 0
+    saw_an_outcome_name = False
+    for directory in (root / "docs" / "superpowers" / "notes", root / "bench"):
+        for pattern in ("*.json", "*.jsonl"):
+            for path in sorted(directory.glob(pattern)):
+                text = path.read_text(encoding="utf-8")
+                scanned += 1
+                assert Outcome.INSUFFICIENT_DATA.name not in text, path.name
+                assert Outcome.INSUFFICIENT_DATA.value not in text, path.name
+                saw_an_outcome_name |= Outcome.DEGENERATE_HESSIAN.name in text
+
+    assert scanned > 0, "no committed artifact was scanned; the check is vacuous"
+    assert saw_an_outcome_name, (
+        "no committed artifact carried ANY outcome member name, so this scan "
+        "has not been shown able to find one -- a pass would mean nothing"
+    )
 
 
 def test_no_committed_report_carries_a_decided_skip():

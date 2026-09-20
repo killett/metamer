@@ -561,23 +561,44 @@ def test_criterion_12_a_store_and_its_ocean_crop_reach_one_verdict(tmp_path):
     (3/12 = 0.25, below) -- so under `drop` the verdict is `drop` naming
     candidate 0, with `failed`, `eligible` and `rate` equal in both stores.
 
-    Bug this catches: a rate over ALL points rather than eligible ones -- the
+    Bug this catches: a rate over ALL points rather than FITTED ones -- the
     full store would read 12/20 = 0.6 for candidate 0 and continue where the
     crop drops. On a global run that is every verdict dominated by land.
 
     **PROVED TO BITE 2026-09-18:** the eligibility filter in `_rate_for` was
     replaced by `if True` and this test failed on the rates -- the full store
     read 3/20 = 0.15 for candidate 1 against the crop's 3/12 = 0.25.
+
+    **AND PROVED TO BITE AGAIN 2026-09-20, FROM THE OTHER SIDE.** Open question
+    24 made `INSUFFICIENT_DATA` eligible, and the land rows here are
+    `INSUFFICIENT_DATA` **because that is what the producer writes** -- section
+    12.5's `NOT_APPLICABLE` is underivable without section 13.6's declared
+    domain mask. So `eligible` became 20 against the crop's 12, the full store
+    read 0.60 and **continued where the crop dropped**, and this test failed on
+    exactly the sentence above. The repair is that the verdict's denominator is
+    `fitted`, which is 12 in both stores and is correct in both eras: this gate
+    asks whether a candidate fails the fits it ATTEMPTS, which has nothing to
+    do with how much of the box is out of domain.
+
+    **THE CRITERION'S VERDICT DOES NOT MOVE.** Its statement -- a store and its
+    ocean crop reach one verdict -- is still MET, by both arms dropping on
+    candidate 0. What changed is that `eligible` now legitimately DIFFERS
+    between the two stores (20 against 12), and that difference is the store's
+    land exposure, which section 14.2's report prints rather than hides.
     """
     full, crop = _ocean_and_land(tmp_path)
     rows, columns, models = _shape(full)
     assert (rows, columns, models) == (5, 4, 2)
     assert _shape(crop) == (3, 4, 2)
 
-    # The land rows were written by the run, not planted, and are ineligible.
+    # The land rows were written by the run, not planted, and carry no fit
+    # verdict. **NOT "are ineligible"**: since 2026-09-20 they ARE eligible,
+    # because the producer writes INSUFFICIENT_DATA for land and open question
+    # 24 put that member in section 14.2's population. What makes them leave
+    # THIS verdict's denominator is that no fit ran there.
     written = _outcome(full)
     for code in np.unique(written[3:, :, :]):
-        assert not Outcome.from_code(int(code)).is_eligible, int(code)
+        assert not Outcome.from_code(int(code)).is_fit_verdict, int(code)
 
     pattern = [
         _plane((3, 4), 1.0, fill=Outcome.OK),
@@ -592,11 +613,22 @@ def test_criterion_12_a_store_and_its_ocean_crop_reach_one_verdict(tmp_path):
     whole = abort_verdict(full, policy=CandidateFailurePolicy.DROP)
     ocean = abort_verdict(crop, policy=CandidateFailurePolicy.DROP)
 
-    assert whole.rates == ocean.rates
-    assert whole.rates[0].eligible == 12 and whole.rates[0].failed == 12
-    assert whole.rates[1].eligible == 12 and whole.rates[1].failed == 3
+    # The VERDICT-bearing quantities agree; `eligible` does not, and that gap
+    # is the point rather than a tolerance.
+    assert [(r.failed, r.fitted, r.rate) for r in whole.rates] == [
+        (r.failed, r.fitted, r.rate) for r in ocean.rates
+    ]
+    assert whole.rates[0].fitted == 12 and whole.rates[0].failed == 12
+    assert whole.rates[1].fitted == 12 and whole.rates[1].failed == 3
+    assert whole.rates[0].rate == 1.0 and whole.rates[1].rate == 0.25
     assert whole.action == ocean.action == "drop"
     assert whole.candidates == ocean.candidates == (whole.rates[0].candidate,)
+
+    # THE LAND EXPOSURE, ASSERTED RATHER THAN IMPLIED: the eligible populations
+    # differ by exactly the eight land points, which is what section 14.2's
+    # report surfaces by printing both denominators side by side.
+    assert whole.rates[0].eligible == 20 and ocean.rates[0].eligible == 12
+    assert whole.rates[0].eligible - ocean.rates[0].eligible == 8
 
 
 # ---------------------------------------------------------------------------
@@ -867,5 +899,9 @@ def test_criterion_19_no_evidence_and_a_clean_pass_exit_zero_for_different_reaso
     }
     assert recorded["no_evidence"]["action"] == "no_evidence"
     assert recorded["clean"]["action"] == "continue"
-    assert all(rate["eligible"] == 0 for rate in recorded["no_evidence"]["rates"])
+    # `fitted`, NOT `eligible`: since 2026-09-20 an all-INSUFFICIENT_DATA
+    # sample is fully ELIGIBLE and still holds no fit, which is the whole
+    # reason the two counts exist separately.
+    assert all(rate["fitted"] == 0 for rate in recorded["no_evidence"]["rates"])
+    assert all(rate["eligible"] > 0 for rate in recorded["no_evidence"]["rates"])
     assert bool(completed_tiles(tmp_path / "no_evidence.zarr").all())

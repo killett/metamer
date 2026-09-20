@@ -79,28 +79,44 @@ class CandidateRate:
     property and not a contract -- it holds until a joint signal x noise search
     lands -- which is why this is a field rather than a comment.
 
-    **`fitted` AND `eligible` ARE TWO COUNTS AND THE VERDICT READS THE FIRST
-    (2026-09-19).** `eligible` is the rate's denominator -- who is in the
-    failure-rate population. `fitted` is whether the store is making a fit
-    claim at all, by section 12.5's non-fit grouping table through
-    `Outcome.is_fit_verdict`. They differ on every decided skip:
-    `SCREENED_OUT` and `CANDIDATE_DROPPED` are eligible and are not fits, so a
-    sample can have a full denominator, a rate of exactly 0.0, and **no
-    evidence whatever**. Section 14.1's judgeability question is the second
-    one; it was asking the first until this field existed. `fitted <= eligible`
-    always, because every fit verdict is eligible under either reading of
-    `INSUFFICIENT_DATA`.
+    **`fitted` AND `eligible` ARE TWO COUNTS AND THIS VERDICT READS THE FIRST
+    FOR BOTH ITS QUESTIONS (2026-09-19, extended 2026-09-20).** `eligible` is
+    section 14.2's failure-rate population. `fitted` is whether the store is
+    making a fit claim at all, by section 12.5's non-fit grouping table through
+    `Outcome.is_fit_verdict`. `fitted <= eligible` always.
+
+    **THE RATE'S DENOMINATOR IS `fitted`, AND THAT IS CORRECT IN BOTH ERAS
+    RATHER THAN CONVENIENT IN THIS ONE.** This gate asks whether a candidate is
+    failing the fits it ATTEMPTS. That question has nothing to do with how much
+    of the box is out of domain, and it will still have nothing to do with it
+    after section 13.6's declared domain mask makes land `NOT_APPLICABLE`. **A
+    gate whose denominator is land-sensitive is broken whether or not
+    `INSUFFICIENT_DATA` is eligible**; open question 24 only exposed it.
+
+    **MEASURED, on exit criterion 12's own fixture (2026-09-20).** Twelve ocean
+    points and eight land points, a candidate failing all twelve: over
+    `eligible` the full store reads **12/20 = 0.60 and continues** while its
+    ocean crop reads **12/12 = 1.00 and drops** -- the same data, two verdicts,
+    which is the defect that criterion's docstring exists to catch. Over
+    `fitted` both read **12/12** and both drop. `fitted` is 12 in both stores.
+
+    **`eligible` IS STILL COUNTED AND RECORDED**, because section 14.2's report
+    is over that population and the gap between the two counts is the store's
+    land-and-thin-record exposure -- a quantity worth printing, not discarding.
+
+    **SEVENTH INSTANCE OF ONE ROOT CAUSE:** `is_eligible` was doing two jobs.
+    The first repair moved judgeability off it; this moves the rate off it.
 
     Attributes:
         candidate: The label, as the store records it.
         failed: Eligible points this candidate failed, by `Outcome.is_failure`.
-        eligible: Points where this candidate was a real candidate for fitting,
-            by `Outcome.is_eligible`. **The rate's denominator, and not what
-            decides whether there is a rate to compare.**
+        eligible: Points where this candidate was in section 14.2's
+            failure-rate population, by `Outcome.is_eligible`. **Recorded, and
+            NOT this verdict's denominator** -- see `rate`.
         fitted: Points where the store records a fit verdict for this
-            candidate, by `Outcome.is_fit_verdict`. **This is what
-            `no_evidence` reads.**
-        rate: `failed / eligible`, or **None when `eligible` is zero** -- see
+            candidate, by `Outcome.is_fit_verdict`. **This verdict's
+            denominator, and what `no_evidence` reads.**
+        rate: `failed / fitted`, or **None when `fitted` is zero** -- see
             `abort_verdict` on why that is not the same as zero.
     """
 
@@ -225,8 +241,9 @@ def _rate_for(label: str, codes: NDArray[np.uint8]) -> CandidateRate:
         codes: Its `(y, x)` outcome codes.
 
     Returns:
-        The rate, with `rate=None` when nothing was eligible, and `fitted`
-        counted separately because that is what judgeability reads.
+        The rate over FITTED points, with `rate=None` when nothing was fitted,
+        and `eligible` counted separately because section 14.2's report is over
+        that population.
     """
     eligible = 0
     failed = 0
@@ -245,7 +262,7 @@ def _rate_for(label: str, codes: NDArray[np.uint8]) -> CandidateRate:
         failed=failed,
         eligible=eligible,
         fitted=fitted,
-        rate=None if eligible == 0 else failed / eligible,
+        rate=None if fitted == 0 else failed / fitted,
     )
 
 

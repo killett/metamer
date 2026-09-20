@@ -1739,6 +1739,21 @@ near the boundary* — and fired it (KS 0.717 at n = 50) before reporting any fl
 did not, and was written into the same predictions file on the same day**, which is how cheap the
 omission is: the rule was applied in one half of a file and forgotten in the other.
 
+> **(a10c) A BOUND ON THE DIRECTION OF A CHANGE IS NOT A BOUND ON ITS CONSEQUENCE. ASK WHAT
+> CONSUMES THE NUMBER, AND WHICH WAY IT IS THRESHOLDED.**
+
+**Added 2026-09-20.** Open question 24's flip was argued safe on a direction: *"`INSUFFICIENT_DATA`
+is not a failure, so it enters the denominator and never the numerator, and every rate it touches
+can only FALL."* **Every word of that was true, and falling was the harm.** The rate feeds a gate
+thresholded at 90%, so a diluted rate is a gate that **stops firing**: measured on a real fixture,
+a candidate failing **100% of the fits it attempted** read 0.60 over a box that was 40% land, and
+the run continued where the same data cropped to its ocean aborted.
+
+**Same family as (a10a)** — bounding one property and inferring safety about a different one — and
+it earns its own letter because the gap is different in kind: (a10a) is a bound on the wrong
+*quantity*, (a10c) is a bound on the right quantity that says nothing about its *consumer*. The
+check is one question: **who reads this number, and in which direction does their threshold sit?**
+
 > **(a10.1) A POST-HOC INVALIDATION OF AN INSTRUMENT IS LEGITIMATE EXACTLY WHEN IT WOULD HAVE
 > FIRED THE SAME WAY UNDER THE OPPOSITE OUTCOME.**
 

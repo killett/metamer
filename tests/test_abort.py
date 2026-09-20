@@ -242,10 +242,19 @@ def test_ineligible_points_change_neither_numerator_nor_denominator(
 ):
     """A mostly-land grid gives the same verdict as its ocean.
 
-    Expected values determined independently: `INSUFFICIENT_DATA` and
-    `NOT_APPLICABLE` are both `is_eligible = False` per design doc section
-    12.5, so a plane of nine ineligible points plus one failure has the same
-    rate as a plane of one failure alone -- 1/1, not 1/10.
+    Expected values determined independently: `NOT_APPLICABLE` is
+    `is_eligible = False` per design doc section 12.5 -- **this location** is
+    out of domain -- so a plane of nineteen land points plus one failure has
+    the same rate as a plane of one failure alone: 1/1, not 1/20.
+
+    **THE FILLER WAS `INSUFFICIENT_DATA` UNTIL 2026-09-20 AND THIS TEST WAS
+    CARRYING THE CONFLATION IT EXISTS TO PREVENT.** Its subject is *a mostly-
+    LAND grid*, and land is `NOT_APPLICABLE`; `INSUFFICIENT_DATA` is **this
+    series** having too thin a record, which section 12.5 calls eligible
+    because its rate is a real statement about record coverage. Using the
+    second to mean the first is exactly section 8.6's conflation, and open
+    question 24 removed the coincidence that let it pass. **The test now tests
+    what its docstring claims.**
 
     Bug this catches: a rate over ALL points rather than eligible ones. On a
     global ocean-only run that reports ~70% "failure" and the number becomes
@@ -261,7 +270,7 @@ def test_ineligible_points_change_neither_numerator_nor_denominator(
     """
     store = _copy(coarse_store, tmp_path)
     rows, columns, _ = _shape(store)
-    plane = np.full((rows, columns), Outcome.INSUFFICIENT_DATA.code, np.uint8)
+    plane = np.full((rows, columns), Outcome.NOT_APPLICABLE.code, np.uint8)
     plane.flat[0] = Outcome.DEGENERATE_HESSIAN.code
     clean = np.full((rows, columns), Outcome.OK.code, np.uint8)
     _set_outcomes(store, [clean, plane])
@@ -280,13 +289,23 @@ def test_a_decided_skip_is_in_the_denominator_and_not_in_the_numerator(
     """`SCREENED_OUT` counts as a point, not as a failure.
 
     Expected values determined independently: design doc section 12.5 groups it
-    as a legitimate non-fit -- eligible, not a failure -- so a plane that is
-    entirely `SCREENED_OUT` has a full denominator and a zero numerator.
+    as a legitimate non-fit -- **eligible, not a failure, and not a fit** -- so
+    a plane that is entirely `SCREENED_OUT` is in section 14.2's population,
+    contributes nothing to a numerator, and **has no rate at all**.
 
     Bug this catches: the decided-skip group applied to one member and not
     another, which is the asymmetry 2e's Task 3 closed for `CANDIDATE_DROPPED`.
     Counting a screened candidate as failing would abort a run for being
     **cheaper** than it could have been.
+
+    **AND SINCE 2026-09-20 THE RATE IS `None`, WHICH IS A DISTINCTION THE OLD
+    DENOMINATOR COLLAPSED.** With the verdict's rate over `fitted`, a candidate
+    screened everywhere has `0/0` and no rate. Over `eligible` it read **0.0**
+    -- identical to a candidate that was fitted at every point and passed. Two
+    opposite facts, one number: *"nothing was tried"* and *"everything
+    succeeded"*. That is the same collapse the no-evidence decision fixed at
+    SAMPLE granularity, appearing here at CANDIDATE granularity, and the gate's
+    move to `fitted` separates them for free.
     """
     store = _copy(coarse_store, tmp_path)
     rows, columns, _ = _shape(store)
@@ -297,12 +316,17 @@ def test_a_decided_skip_is_in_the_denominator_and_not_in_the_numerator(
     verdict = abort_verdict(store)
 
     assert verdict.rates[1].eligible == rows * columns
+    assert verdict.rates[1].fitted == 0
     assert verdict.rates[1].failed == 0
-    assert verdict.rates[1].rate == 0.0
+    assert verdict.rates[1].rate is None
+    # The CONTRAST that makes the None meaningful: candidate 0 was fitted
+    # everywhere and passed, and reads 0.0. Same numerator, different fact.
+    assert verdict.rates[0].fitted == rows * columns
+    assert verdict.rates[0].rate == 0.0
     assert verdict.action == "continue"
 
 
-def test_an_empty_eligible_population_is_no_evidence_not_clean_and_not_abort(
+def test_an_unfitted_coarse_sample_is_no_evidence_not_clean_and_not_abort(
     coarse_store, tmp_path
 ):
     """0/0 is a finding about the instrument -- and the finding is `no_evidence`.
@@ -361,8 +385,24 @@ def test_an_empty_eligible_population_is_no_evidence_not_clean_and_not_abort(
     assert "--no-early-abort" not in verdict.reason, (
         "nothing is blocked under (b); a message naming a lift is a wrong instruction"
     )
-    assert all(rate.rate is None for rate in verdict.rates)
-    assert all(rate.eligible == 0 for rate in verdict.rates)
+    assert all(rate.rate is None for rate in verdict.rates), (
+        "`rate is None` HOLDS, AND ITS REASON MOVED TWICE ON 2026-09-20. It was "
+        "None because nothing was ELIGIBLE; open question 24 made this sample "
+        "fully eligible, at which point the rate briefly existed and was "
+        "EXACTLY 0.0 -- a perfect score over a sample in which nothing was "
+        "fitted. Moving the verdict's denominator to `fitted` makes it None "
+        "again, now for the right reason: 0/0 is not a score. The intermediate "
+        "state is recorded because it is the argument for the change -- a gate "
+        "reading a rate over eligibility would have called this a clean pass"
+    )
+    assert all(rate.fitted == 0 for rate in verdict.rates)
+    assert all(rate.eligible == rows * columns for rate in verdict.rates), (
+        "SINCE 2026-09-20 THIS SAMPLE IS FULLY ELIGIBLE AND STILL NOT EVIDENCE, "
+        "which is the whole point of the two predicates being different: open "
+        "question 24 made INSUFFICIENT_DATA eligible, so `eligible == 0` is no "
+        "longer reachable from it and a gate reading eligibility would now call "
+        "this a clean pass"
+    )
 
 
 def test_a_coarse_sample_of_decided_skips_is_no_evidence_and_not_a_clean_pass(

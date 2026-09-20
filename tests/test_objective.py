@@ -5,6 +5,8 @@ inverse, published Harville form) or from a hand-stated identity, never from
 re-running the code under test.
 """
 
+import ast
+import pathlib
 from dataclasses import replace
 
 import numpy as np
@@ -1059,17 +1061,99 @@ def test_the_no_design_return_merges_rather_than_trusting_the_engine(empty_desig
     np.testing.assert_array_equal(result.rank_x, [0, -1, 0])
 
 
+def test_land_is_written_insufficient_data_because_not_applicable_has_no_producer():
+    """THE ERA FACT, pinned -- and this test is EXPECTED TO FAIL at section 13.6.
+
+    Design doc section 12.5 separates land and permanent ice
+    (`NOT_APPLICABLE`, out of the denominator) from a series with too thin a
+    record (`INSUFFICIENT_DATA`, in it). **In this codebase those are one
+    population**, because section 12.5 also says `NOT_APPLICABLE` is
+    **UNDERIVABLE**: the mask comes from the data, so a land pixel is all-NaN,
+    hence all-masked, hence `INSUFFICIENT_DATA`, and nothing can distinguish
+    "land" from "every value happens to be NaN" without a **declared
+    domain-mask variable in the input contract (section 13.6)**.
+
+    Expected values determined independently: by reading section 12.5's own
+    unreachability table, which lists `NOT_APPLICABLE` with "a declared domain
+    mask variable in section 13.6's input contract" as what would make it
+    reachable.
+
+    Bug this catches: a reader -- human or code -- taking section 12.5's
+    SEPARATION for a description of what the store contains TODAY. It does not
+    describe that. A rule that excludes `INSUFFICIENT_DATA` excludes land here,
+    and a rule that includes it includes land; **that is why open question 24's
+    flip could not be reasoned about from the classification alone**, and why
+    section 14.1's gate had to move to `is_fit_verdict` rather than to the
+    other eligibility rule.
+
+    **THIS TEST IS THE ONLY PLACE THE ERA FACT IS WRITTEN AS AN ASSERTION.** It
+    replaces one that stated the fact by accident: `test_abort.py`'s
+    `test_ineligible_points_change_neither_numerator_nor_denominator` said "a
+    mostly-land grid" and filled its plane with `INSUFFICIENT_DATA`, and its
+    docstring and fixture agreed **because in this codebase land IS
+    `INSUFFICIENT_DATA`**. Correcting that fixture to `NOT_APPLICABLE` made the
+    test test its claim and deleted the tree's only witness to the era.
+
+    **WHEN SECTION 13.6 LANDS, THIS TEST FAILS, AND THAT IS HOW IT ANNOUNCES
+    ITSELF.** A test that fails loudly at the moment the world changes is worth
+    more than a comment that quietly stops being true. The response is not to
+    loosen it: it is to delete it, and to revisit open question 25 -- whether
+    `is_eligible` survives a world where land has its own code -- with both
+    call sites in view.
+    """
+    spec, ss, theta, t, _, _, _ = _setup()
+    y = np.zeros((1, t.size))
+    mask = np.zeros((1, t.size), dtype=bool)
+
+    obj = ConcentratedObjective(spec, ss, KalmanEngine(), Objective.ML)
+    result = obj.evaluate(theta, y, mask, t, None)
+
+    assert Outcome.from_code(int(result.outcome[0])) is Outcome.INSUFFICIENT_DATA
+
+    # AND `NOT_APPLICABLE` IS REFERENCED BY NO CODE IN `src/` OUTSIDE THE
+    # TAXONOMY ITSELF, which is the half that flips. **Parsed, not grepped**:
+    # four modules MENTION the member in prose while none reads or writes it,
+    # and a text scan cannot tell those apart -- it would report this test
+    # green only by accident of wording. `ast` sees attribute references and
+    # not docstrings, so it answers the question actually being asked.
+    root = pathlib.Path(__file__).resolve().parents[1] / "src"
+    producers: list[str] = []
+    for path in sorted(root.rglob("*.py")):
+        if path.name == "outcomes.py":
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Attribute) and node.attr == "NOT_APPLICABLE":
+                producers.append(f"{path.relative_to(root).as_posix()}:{node.lineno}")
+
+    assert producers == [], (
+        f"{producers} reads or writes NOT_APPLICABLE outside the taxonomy "
+        "module. If a declared domain mask has landed, delete this test and "
+        "revisit open question 25 with both is_eligible call sites in view; if "
+        "not, this is a member being produced with no way to derive it"
+    )
+
+
 @pytest.mark.parametrize("with_design", [False, True])
 def test_a_WHOLLY_masked_tile_is_insufficient_data_not_a_failure(with_design):
     """A tile where EVERY series is all-masked is expected, not failed.
 
     Antarctic interior, or open ocean under permanent ice: an entire tile with
-    no usable observation anywhere in it is ordinary, not an edge case. Design
-    doc section 8.6 excludes such a point from the failure-rate denominator
-    entirely -- `Outcome.INSUFFICIENT_DATA` has `is_failure` False AND
-    `is_eligible` False -- and those two properties, not the code, are what
-    this test asserts, so it is pinned to the taxonomy's documented meaning
-    rather than to an integer.
+    no usable observation anywhere in it is ordinary, not an edge case.
+    `Outcome.INSUFFICIENT_DATA` has `is_failure` False, and that property --
+    not the code -- is what this test asserts, so it is pinned to the
+    taxonomy's documented meaning rather than to an integer.
+
+    **~~AND `is_eligible` False.~~ CORRECTED 2026-09-20, open question 24.**
+    The tile IS in the denominator now: section 12.5 separates land and
+    permanent ice (`NOT_APPLICABLE`, out of the denominator) from **this
+    series** having too thin a record (this member, eligible, because its rate
+    is a real statement about record coverage). A wholly-masked tile is
+    `INSUFFICIENT_DATA` today precisely because `NOT_APPLICABLE` is
+    **underivable** -- nothing can distinguish land from "every value happens
+    to be NaN" without a declared domain mask (section 13.6) -- so this
+    fixture reaches the eligible member, and that is the honest classification
+    rather than a defect.
 
     Bug this catches: `evaluate` short-circuiting on the design precheck and
     returning BEFORE the engine runs, so the data-level verdict never reaches
@@ -1105,8 +1189,12 @@ def test_a_WHOLLY_masked_tile_is_insufficient_data_not_a_failure(with_design):
         result.outcome, np.full(batch, Outcome.INSUFFICIENT_DATA.code)
     )
     outcomes = [Outcome.from_code(code) for code in result.outcome]
-    assert not any(o.is_failure for o in outcomes), "land is not a failure"
-    assert not any(o.is_eligible for o in outcomes), "land is not in the denominator"
+    assert not any(o.is_failure for o in outcomes), "a thin record is not a failure"
+    assert all(o.is_eligible for o in outcomes), (
+        "a thin record IS in the denominator (section 12.5); only NOT_APPLICABLE "
+        "leaves it, and nothing can derive NOT_APPLICABLE without a declared "
+        "domain mask"
+    )
 
     assert np.all(np.isnan(result.loglik))
     # n_used carries no sentinel: 0 is a true count of unmasked epochs.

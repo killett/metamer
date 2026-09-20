@@ -642,10 +642,12 @@ def optimize_series(
     # precheck through the module's own declared precedence, never decided by
     # which check happens to run first. A wholly-masked series has an all-zero
     # restricted design, so `check_design` calls it RANK_DEFICIENT_X and is not
-    # wrong on its own terms -- but land and permanent ice are EXPECTED, and
-    # `Outcome.INSUFFICIENT_DATA` keeps them out of both the numerator and the
-    # denominator of the section 8.6 failure rate. Short-circuiting on the
-    # precheck alone put every land pixel into both.
+    # wrong on its own terms -- but a series with no usable record is EXPECTED,
+    # and `Outcome.INSUFFICIENT_DATA` keeps it out of the failure NUMERATOR.
+    # Short-circuiting on the precheck alone put every such pixel into it.
+    # (Since 2026-09-20 the member is eligible -- section 12.5 keeps only
+    # NOT_APPLICABLE out of the denominator -- so the numerator is the whole of
+    # what this ordering protects.)
     data_level = outcome_array(1, Outcome.OK)
     if int(np.count_nonzero(mask)) == 0:
         data_level[0] = Outcome.INSUFFICIENT_DATA.code

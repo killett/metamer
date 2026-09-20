@@ -656,14 +656,29 @@ def test_a_not_attempted_cell_is_in_no_flip_denominator():
 
     Expected values determined independently: of 40 points, candidate 0 has 10
     `NOT_ATTEMPTED` and 10 `INSUFFICIENT_DATA` cold, 10 failures and 10 OK. The
-    rescue denominator is therefore 10, not 30; the attempted count is 30, not
-    40.
+    rescue denominator is therefore 10, not 30.
 
     Bug this catches: `cold_failed = outcome != OK.code`, which is the obvious
-    spelling. `INSUFFICIENT_DATA` is land, permanent ice or too few samples --
-    a legitimate expected outcome the taxonomy excludes by name -- and folding
-    it in divides by a population that was never at risk, making every rescue
-    rate smaller in proportion to how much land is in the tile.
+    spelling. Neither a never-tried point nor a too-thin record is a failure,
+    and folding them in divides by a population that was never at risk, making
+    every rescue rate smaller in proportion to how much of the tile could not
+    be fitted.
+
+    **`attempted` MOVED FROM 30 TO 40 ON 2026-09-20, RECOMPUTED AND SAID SO.**
+    Open question 24 made `INSUFFICIENT_DATA` eligible, and `attempted` reads
+    `Outcome.is_eligible`, so the ten thin-record points joined the count. **The
+    rescue and loss denominators did not move** -- they are `cold_failed` and
+    `cold_ok`, which this change does not touch -- so the numbers this test
+    exists to pin are unchanged and only the eligibility-derived one moved.
+
+    **AND THAT MOVE IS OPEN QUESTION 25, FILED NOT TAKEN.** `attempted` NAMES a
+    different quantity from the predicate it READS: "attempted" says a fit was
+    tried, `is_eligible` says a fit was possible. Ten never-tried points are
+    counted as attempted here, which was true before this change too. Design
+    doc section 14.2's amendment A2 puts the two-arm audit numbers outside 2f,
+    and a scope boundary that only holds when it is convenient is not a
+    boundary -- so the finding is recorded and the repair is owned by whoever
+    next opens this module.
     """
     batch = 40
     cold_outcome = np.full((batch, 2), Outcome.OK.code, dtype=np.uint8)
@@ -677,7 +692,7 @@ def test_a_not_attempted_cell_is_in_no_flip_denominator():
     first = report.candidates[0]
     assert first.cold_failed == 10
     assert first.cold_ok == 10
-    assert first.attempted == 30
+    assert first.attempted == 40
 
 
 def test_a_point_ranked_by_only_one_arm_is_counted_and_dilutes_no_rate():

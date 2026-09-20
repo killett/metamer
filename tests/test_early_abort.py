@@ -363,7 +363,11 @@ def test_an_empty_coarse_sample_continues_loudly_when_the_fine_grid_has_data(
     assert report.interrupted is False
     assert report.verdict is not None
     assert report.verdict.action == "no_evidence"
-    assert all(rate.eligible == 0 for rate in report.verdict.rates)
+    # `fitted`, NOT `eligible`: open question 24 made INSUFFICIENT_DATA
+    # eligible, so this sample now has a FULL denominator and still holds no
+    # fit. A gate reading eligibility would call it a clean pass.
+    assert all(rate.fitted == 0 for rate in report.verdict.rates)
+    assert all(rate.eligible > 0 for rate in report.verdict.rates)
     assert "no evidence" in report.verdict.reason
     assert "--no-early-abort" not in report.verdict.reason
     # CONTINUES, POSITIVELY: pass 2 fitted the fine grid and seeded nothing.
