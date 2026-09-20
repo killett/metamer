@@ -1,0 +1,87 @@
+{
+  "record": "phase2f_clustering_prime_predictions",
+  "task": "Phase 2f Task 0 -- the two spike extensions owed by the first verdict",
+  "written": "2026-09-19",
+  "written_before_the_harness_extension": true,
+  "why_these_two_exist": "The first spike refuted P4 and P5. P4 was refuted on a case where nothing was at stake -- both arms rejected overwhelmingly -- so the hazard it exposed is still unmeasured. P5 was refuted because its detector was structurally blind to the failure mode, so the floor is still unmeasured and Task 6's invariant consumes it. Neither number is carried forward from an estimate.",
+
+  "P4_prime": {
+    "subject": "A SMALL cluster existing only at the seam, sized near the detection boundary: does not wrapping actually miss it?",
+    "why": "The first P4 planted an enormous seam-straddling cluster; wrapped z was 239.8 and unwrapped 228.8, so both arms rejected and no decision flipped. That measured the magnitude of the bias and not its CONSEQUENCE. This measures the consequence -- and it is the false negative that D4's detector trades for, so it also prices the detector's own failure mode.",
+    "setup": {
+      "grid": "360 x 90, every cell eligible, degree-like x with dx = 1.0 so the detector calls it global",
+      "cluster": "a square patch of side s straddling the antimeridian -- half its columns at the right edge, half at column 0 -- placed at a random row per replicate",
+      "sizes": [4, 6, 8, 10, 12, 14],
+      "replicates": 120,
+      "alpha": 0.05,
+      "arms": "wrapped and unwrapped, computed on the SAME fixture per replicate so the contrast is paired"
+    },
+    "predictions": [
+      {
+        "id": "P4p-1",
+        "claim": "There is at least one size in the ladder where the wrapped arm rejects in >= 0.80 of replicates while the unwrapped arm rejects in <= 0.20 -- a gap of at least 0.60.",
+        "reasoning": "Wrapped, the two halves are one patch of s^2 cells with about 2*s*(s-1) internal joins. Unwrapped, they are two patches of s^2/2 with the seam column's s joins removed AND the two halves no longer reinforcing one another. Near the detection boundary that difference should be the difference between rejecting and not.",
+        "refutation": "If the maximum gap across every size is below 0.30, the seam's PRACTICAL cost is small even where its magnitude is large, and D4's rejected option (b) -- never wrap, state the limitation -- becomes defensible after all. That would reopen D4, which is the point of measuring it."
+      },
+      {
+        "id": "P4p-2",
+        "claim": "The gap is non-monotone in size: near zero at the smallest sizes (neither arm detects), peaking in the middle, and near zero at the largest (both detect).",
+        "reasoning": "A gap that only grows would mean the wrapped arm's advantage never saturates, which contradicts the first spike's finding that both arms reject overwhelmingly on a large cluster.",
+        "refutation": "A monotone-increasing gap across the whole ladder contradicts the first spike's own measurement, and one of the two is then wrong -- a disagreement between two of this instrument's readings, which is a defect to report either way."
+      }
+    ],
+    "host_dependent": false
+  },
+
+  "P5_prime": {
+    "subject": "The usable floor, measured with a detector chosen for the failure mode rather than for convenience",
+    "why": "P5's detector was the rejection rate at fixed alpha, which never left its band even at 25 eligible points while the p-value median marched to 1.000. A test that never rejects has a low rejection rate, and a low rejection rate is what calibration looks like from below.",
+    "detector": {
+      "primary": "KS distance of the replicate p-values from Uniform(0, 1)",
+      "secondary": "the fraction of replicates at p = 1.0",
+      "threshold": "KS <= 0.15 is called uniform. With 120 replicates the 5% KS critical value is about 1.36/sqrt(120) = 0.124, so 0.15 sits just above it and is not tuned to the data."
+    },
+    "precondition": {
+      "claim": "THE NEW DETECTOR MUST FIRE ON THE KNOWN-DEGENERATE CASE BEFORE IT IS TRUSTED ANYWHERE NEAR THE BOUNDARY.",
+      "test": "At target 50 eligible points -- where the first spike measured a p-median of exactly 1.000 -- the KS distance must be >= 0.5 and the fraction at p = 1.0 must be >= 0.5.",
+      "if_it_fails": "The extension STOPS. A detector that cannot see the failure already in hand is not calibrated to look for it, and no floor it reports would be evidence.",
+      "shape": "The same rule as a fixture asserted able to express the condition its test names, applied to an instrument."
+    },
+    "setup": {
+      "targets": [2000, 1000, 500, 200, 100, 50, 25],
+      "replicates": 120,
+      "eligible_fraction": 0.7,
+      "failure_rate": 0.1,
+      "same_sizes_as_the_first_pass": true,
+      "why_the_same_sizes": "So the two detectors are compared on identical fixtures and the difference is the detector rather than the data."
+    },
+    "predictions": [
+      {
+        "id": "P5p-1",
+        "claim": "KS <= 0.15 at target 2000, and KS >= 0.5 at target 50.",
+        "reasoning": "The first pass measured p-median 0.476 at 2000 -- ideal uniformity -- and exactly 1.000 at 50, which is maximal departure.",
+        "refutation_high_end": "KS > 0.15 at 2000 would mean the null is not uniform even at a comfortable population, which impugns P2's negative control and the whole instrument -- a cross-check of one decision's measurement against another's.",
+        "refutation_low_end": "KS < 0.5 at 50 fails the precondition and stops the extension."
+      },
+      {
+        "id": "P5p-2",
+        "claim": "The floor -- the smallest target at which KS <= 0.15 still holds -- lands at 500 or 1000.",
+        "reasoning": "The first pass's p-median drifts 0.476 -> 0.559 -> 0.569 at 2000/1000/500 and then jumps to 0.699 at 200, so the departure becomes visible between 500 and 200.",
+        "refutation_low": "A floor at 200 or below means the statistic is usable on far smaller stores than expected, and Task 6's unavailability rule keeps a case it would otherwise have needed.",
+        "refutation_high": "A floor at 2000 means the statistic is unusable on any realistic subset box -- the real-data spike's own box is 900 cells -- and the design changes rather than the constant."
+      },
+      {
+        "id": "P5p-3",
+        "claim": "The fraction at p = 1.0 is 0.000 at every target of 500 or more, and above 0.5 at target 50.",
+        "reasoning": "It is the coarsest possible signature of the degenerate regime and should agree with the KS reading; two detectors agreeing is what makes the floor a measurement rather than one instrument's opinion.",
+        "refutation": "The two detectors disagreeing about where the floor is -- one calling a size uniform while the other calls it degenerate -- means neither is trusted and the floor is not yet measured."
+      }
+    ],
+    "host_dependent": false
+  },
+
+  "what_consumes_these": {
+    "P4_prime": "D4's not-global branch. A large gap makes the limitation statement honest and concrete; a small gap reopens D4.",
+    "P5_prime": "Task 6's floor invariant, which cannot consume a number from a refuted instrument."
+  }
+}

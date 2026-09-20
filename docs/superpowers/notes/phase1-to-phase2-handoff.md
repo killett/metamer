@@ -1712,45 +1712,51 @@ took **18m29s**, the deadline expired first and the assertion surfaced as
 failure.** **(i9) across CI runners**, and the next reader is sent at zarr rather than at the
 deadline. **A timing fixture calibrated on one machine is a fixture calibrated on none.**
 
-### (a10) A QUANTITY THAT COINCIDES WITH ITS SUBJECT IN THE COMMON CASE AND DIVERGES WHERE THE QUESTION IS LIVE — TWO INSTANCES FROM ONE SPIKE
+### (a10) BEFORE READING AN INSTRUMENT, DEMONSTRATE IT CAN PRODUCE BOTH ANSWERS
 
-**Added 2026-09-19 from Phase 2f's Task 0**, which refuted two of its six predictions and both
-refutations were this shape. They are one category with two instances rather than two notes,
-because the repair is the same: **check the relationship between the proxy and the subject at the
-point where the question is live, not at the point where they agree.**
+> **That is the whole rule.** An instrument that cannot return the other answer has not
+> measured anything — it has reported its own operating point. **Demonstrate the discrimination
+> first, then read the result.**
 
-> **(a10a) A BOUND COMPUTED ON A DENOMINATOR DOES NOT BOUND AN EFFECT IN THE NUMERATOR UNLESS THE
-> REMOVAL IS INDEPENDENT OF THE EFFECT.**
+**Added 2026-09-19, consolidated 2026-09-20 when the fifth instance arrived and the category was
+growing a bullet per instance.** One sentence at the head, instances as lines: a new one costs a
+line rather than a category.
 
-**The instance.** A join-count statistic's longitude seam was argued negligible because not
-wrapping removes one column of joins — `H` out of `≈ 2·W·H`, so **0.14%** of the edges at W = 360,
-which is true and was measured true. **The z-score moved 11.02 standard deviations.** The z is
-`(observed − null_mean) / null_sd`, and the removed joins are not a random sample of edges: **they
-are exactly the joins internal to a seam-straddling cluster**, which is the thing the hypothesis is
-about. The removal is maximally dependent on the effect by construction, so a 0.14% loss in the
-denominator's population landed as an 11-SD loss in the numerator's signal. **Predicted on the
-denominator, measured in the numerator.**
+| # | the instrument | what it could not return | how it presented |
+|---|---|---|---|
+| 1 | a bound on the longitude seam computed from the edge count | a large effect — the bound ranged over the **denominator** while the effect lived in the **numerator** | "negligible, one column of joins", measured false by forty-fold |
+| 2 | a floor detector reading the rejection rate at fixed α | "conservative" — a test that never rejects has a **low** rejection rate | 0.025 at 25 eligible points, which reads as perfect calibration |
+| 3 | a seam fixture with background rate 0.0005 | a difference between arms — the null expects **0.01** adjacent pairs, so any clump is 200 SD out and both arms saturate | gap = 0.000 at every rung, which reads as "the seam is harmless" |
+| 4 | a plan-review fetch served from cache | anything but the cached 404 | "not on main", while `curl` returned HTTP 200 and 52,010 bytes |
+| 5 | a criterion keyed on one glob and one key spelling | the eight histograms it could not see | "every committed report's outcome histogram", reaching 8 of 16 |
 
-> **(a10b) A DETECTOR THAT REPORTS A RATE AT FIXED α IS STRUCTURALLY BLIND TO CONSERVATISM,
-> BECAUSE A TEST THAT NEVER REJECTS HAS A LOW REJECTION RATE AND A LOW REJECTION RATE IS WHAT
-> CALIBRATION LOOKS LIKE FROM BELOW.**
+**The repair is the same in all five: state what the instrument is standing in for, then check the
+two at the point where they can disagree — not at the point where they agree.**
 
-**The instance.** A permutation null's usable floor was to be found by watching the rejection rate
-at α = 0.05 leave a band as the population shrank. **It never left the band** — 0.025 at 25
-eligible points, which reads as perfect calibration. What actually degraded was the whole p-value
-distribution: the median marched **0.476 → 0.559 → 0.569 → 0.699 → 0.700 → 1.000 → 1.000**, the
-last two meaning the observed statistic sat at or below every one of 999 null draws. The test
-became conservative and then degenerate, and **the chosen detector is the quantile least sensitive
-to that failure**. Calibration is a claim about a distribution; a rejection rate is one point of it.
+**THE PRECONDITION IS CHEAP AND IS WRITTEN INTO THE MEASUREMENT, NOT REMEMBERED.** Instance 2's
+replacement detector carried one — *it must fire on the known-degenerate case before it is trusted
+near the boundary* — and fired it (KS 0.717 at n = 50) before reporting any floor. **Instance 3's
+did not, and was written into the same predictions file on the same day**, which is how cheap the
+omission is: the rule was applied in one half of a file and forgotten in the other.
 
-**THE REPAIR, WHICH IS THE SAME FOR BOTH:** state what the proxy is standing in for, then choose
-the reading at the place they can disagree. For (a10a) that is the joins the hypothesis is about,
-not the edge total; for (a10b) it is the distribution, not one quantile of it.
+> **(a10.1) A POST-HOC INVALIDATION OF AN INSTRUMENT IS LEGITIMATE EXACTLY WHEN IT WOULD HAVE
+> FIRED THE SAME WAY UNDER THE OPPOSITE OUTCOME.**
 
-**AND A PRECONDITION FOR ANY REPLACEMENT DETECTOR:** it must **fire on the known-degenerate case
-you already found** before it is trusted anywhere near the boundary. A detector that cannot see the
-failure already in hand is not calibrated to look for it — the same rule as a fixture asserted able
-to express the condition its test names.
+**This is the rule that lets a pre-registered project revise an instrument without the revision
+becoming a loophole**, and it is needed the moment a refuted prediction is not accepted at face
+value — which is the move pre-registration exists to prevent.
+
+**Apply it by construction, not by intention:** state the invalidating property, then ask whether
+it is computable **without** the result. Instance 3 qualifies — a background rate of 0.0005 gives a
+null expectation of 0.01 joins, which is arithmetic on the fixture and is known before the gap is
+looked at, and **the same saturation would have invalidated a LARGE gap just as completely.** The
+invalidation does not know which way the result went.
+
+**The illegitimate form, written beside it because the two look alike from inside:** *a reason
+constructed after the outcome that could only have been constructed for that outcome.* If the
+property you are invalidating on would have been left unmentioned had the result come out the other
+way, it is not an invalidation, it is an excuse. **The test is symmetry, and it is applied before
+the reason is written down, not after.**
 
 ### (c7) A READING PRODUCED BY A DISCOVERY MECHANISM MUST ASSERT THE SIZE OF WHAT IT DISCOVERED, NOT ONLY THE VALUES IT FOUND
 

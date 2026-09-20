@@ -188,21 +188,65 @@ rule stated, tested in both directions, and printed.
   whole run on one number among many. **A declaration is available as an override on top of the
   detector, never as the mechanism.**
 
-**AND THE DETECTOR'S OWN WEAKNESS IS QUANTIFIED RATHER THAN LEFT INVISIBLE.** A detector can be
-wrong in both directions and nothing downstream would show it — so **when the question is live,
-both arms are computed and Δz is printed**, with the detected arm reported as the statistic. **Δz
-is exactly the bound on what the judgement cost:** near zero and a wrong detection cost nothing;
-large and the number hinges on the detector, which the reader checks against the printed span.
-Every number says where it came from, applied to a judgement rather than to a measurement.
+**AND THE DETECTOR'S OWN WEAKNESS IS MADE SELF-AUDITING RATHER THAN LEFT INVISIBLE.** A detector
+can be wrong in both directions and nothing downstream would show it — so **when the question is
+live, both arms are computed and BOTH ARE PRINTED IN FULL**: `z` and `p` for each, labelled
+`wrapped` and `unwrapped`, with the detected arm marked as the reported one.
 
-**Gated on the question being live** — degree-like units and a span above **90%** of 360° — so a
-22.5° subtropical box computes one arm and prints its span. Where it fires the cost is **2×**,
-against a floor of 224 s, on a report describing a run that took days. Not a consideration.
+**~~Δz is exactly the bound on what the judgement cost.~~ STRUCK 2026-09-20, AND THE REASON IS A1's
+DEFECT REAPPEARING INSIDE ITS OWN SUB-PHASE.** Δz is the wrong scalar, and Task 0's own table shows
+why: wrapped 239.9 against unwrapped 199.9 is **Δz = 40 with both arms reaching the identical
+conclusion**, while two arms at z = 2.1 and z = −8.9 are **Δz = 11 with opposite conclusions**. Δz
+cannot distinguish those, and distinguishing them is the only job it has — **the reader is not
+asking how much the seam moved the statistic, they are asking whether the arm choice changed the
+answer.** A derived scalar that discards the comparison it was derived to support is exactly what
+A1 struck from §14.2's closing line, one decision away and one day later. Δz may be printed
+*beside* the two arms as a convenience; it never stands in for them.
+
+**THE TWO-ARM ZONE IS WIDER THAN THE WRAP GATE, DELIBERATELY** — both arms are computed whenever
+the `x` coordinate is degree-like and its span is **within a couple of cells of 360°**, not only
+when the gate says global. **This removes the hazard rather than pricing it.** The false negative
+bites only on the not-global branch, where one arm is computed and no comparison exists; widening
+means the realistic false negatives — a global grid with masked columns, a global grid whose
+spacing fails the regularity check — **all land near the boundary in span, which is precisely where
+the widening reaches**, and each then prints both arms for the reader to compare. What widening
+does **not** catch is a global grid in unrecognised units, which no measurement in this plan
+reaches either.
+
+**Mechanism over assertion**, the same preference as D9's structural refusal of categorical
+downsampling and F5's permission-removed store over a byte comparison. **A hazard removed does not
+need a number.**
+
+Where both arms fire the cost is **2×**, against a floor of 224 s, on a report describing a run
+that took days — and this project currently has **no** near-global store, so the cost is
+hypothetical. A 22.5° subtropical box computes one arm and prints its span.
 
 **THE WRAP BRANCH IS FIXTURE-TESTED ONLY, AND WILL BE UNTIL A GLOBAL STORE EXISTS.** Stated here,
 at the code path, and not only in the limitations section: this is the standing geographic
 limitation — every real-data number in this project is one box of subtropical open ocean — reaching
 a branch of the implementation.
+
+### The not-global branch's limitation: priced where it is priced, named where it is not
+
+**Priced.** The seam's effect on the statistic is measured: **Δz = 11.02** at W = 360 — *at a
+saturated operating point*, on a deterministic fixture, one reading per width.
+
+**Not priced, and named rather than estimated.** The *consequence* — whether not wrapping ever
+changes the verdict on a real seam-straddling cluster — **was attempted on two ladders and reached
+by neither.** The first saturated because the cluster was enormous (both arms z ≈ 230); the second
+saturated because the grid had no background failures, so the null expected **0.01** adjacent pairs
+and any clump sat 200 SD out on both arms. **Two fixtures, both unable to express the condition
+the question names.** See (a10) instances 1 and 3.
+
+**`second-order risk` is not written here**, because that is an estimate and this project does not
+carry estimates as conclusions.
+
+**P4″ IS OWED AT A TRIGGER, NOT DROPPED: the first time a global store exists.** At that point the
+branch stops being hypothetical and the measurement acquires a real subject and real geometry
+instead of a synthetic ladder — and **it will carry the precondition both earlier attempts lacked**:
+demonstrate an operating point where the wrapped arm's rejection rate sits strictly inside
+(0.2, 0.8), *asserted before the arms are compared*, or the comparison is INDETERMINATE rather than
+negative. (a10)'s one sentence, applied in advance.
 
 ### D5 — the null permutes labels among eligible points with the mask held fixed
 
@@ -789,10 +833,17 @@ raw count, null median and quantiles, z, and p — never a bare coefficient.
 - The three degenerate cases are **unavailable with their reason**, never a z of 0: no failures to
   arrange; every eligible point failing, so one arrangement exists; and no adjacent eligible pair, so
   adjacency is undefined on this mask.
-- Below Task 0's measured floor the statistic is unavailable and names the floor.
+- **Below 500 eligible points the statistic is unavailable and names the floor** — measured by
+  P5-prime with a detector that fired on the known-degenerate case first. **500 is a LADDER RUNG,
+  not a boundary**: 200 failed and 500 passed, so the true threshold lies in **(200, 500]** and 500
+  is *the smallest tested size demonstrated uniform*. The invariant says it that way, or a later
+  reader takes it for a measured threshold with a precision it does not have.
 - The seed and the permutation count are in the record.
-- **The report prints the seam caveat carrying P4's measured magnitude** (F7's consumer), so D4's
-  no-wrap choice travels with its evidence instead of as an assertion.
+- **Where the two-arm zone fires, BOTH arms are printed in full** — `z` and `p` each, labelled,
+  detected arm marked as reported — so the global case is self-auditing per store and needs no
+  external calibration to interpret. **Δz never stands in for the pair** (D4).
+- **Where it does not fire, the report prints the span it found** — *"22.5° of 360°, not global,
+  not wrapped"* — so the not-global branch is a measurement rather than a policy.
 - **All M per-candidate z-scores are printed**, and any single headline is labelled "max over M
   candidates, uncorrected" at the number (D7).
 
