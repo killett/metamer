@@ -149,3 +149,83 @@ outlives the session**; the plan's commit table points at this entry.
   was absent from its own record, and "no candidate had a fit verdict anywhere" is not recoverable
   from `eligible` and `rate`.
 - 2e's criterion 9 gained a correction, and the handoff gained the rule that permits it.
+
+
+---
+
+## Plan Task 1 — the reader, audited before any code (2026-09-20)
+
+**THE BRIEF** is the plan's Task 1: open a finished store read-only, refuse an unknown
+`schema_version` with `DATA_INVALID`, expose labels/attrs/completion with the bitmap authoritative,
+and hold an import boundary excluding matplotlib and the fit path. **Two findings, and the second
+one says the plan contains a false mechanism.**
+
+### (g) THE PLAN'S D10 NAMES AN IMPORT THAT DOES NOT WORK THAT WAY
+
+D10 says, in the plan, on main: *"Note `import metamer.core` drags `core.fit` and every family, so
+the report imports `metamer.core.outcomes` as a leaf."*
+
+**There is no such thing as importing a submodule as a leaf.** Python executes a package's
+`__init__.py` on any submodule import, and `metamer/core/__init__.py` imports `families` (a
+deliberate registration side effect, documented there and load-bearing — without it
+`TermSpec.engine_costs()` raises on an empty registry) and `core.fit`. **Measured, not reasoned:**
+
+| import | seconds | modules | heavy members present |
+|---|---|---|---|
+| `metamer` | 0.001 | 64 | — |
+| `metamer.core.outcomes` | **0.500** | **708** | `metamer.core.fit`, `scipy` |
+| `metamer.batch.store` | 0.688 | 928 | + `zarr` |
+| `metamer.batch.run` | 1.425 | 1002 | + **`pydantic`** |
+
+**So Task 1's import-graph test would have failed on its first run**, against an invariant the plan
+states and a mechanism that cannot hold. Found before code, which is the whole point of running the
+pre-flight against the brief rather than after.
+
+### WHAT THE INVARIANT SHOULD HAVE SAID, AND IT IS SHARPER THAN WHAT IT DID SAY
+
+**`numba` and `matplotlib` are absent from every one of those graphs.** What `metamer.batch.run`
+adds over `metamer.batch.store` is **`pydantic`** — the config machinery — and 0.74 s.
+
+**That is the property worth holding, and it is the foreign-store claim in mechanism form:** *the
+report must not import the config and run machinery.* A user with a store and no config cannot be
+made to load the validator for a config they do not have. So the invariant becomes:
+
+> **`metamer.report`'s import graph contains no `matplotlib`, no `numba`, no `pydantic`, and no
+> `metamer.batch.run`.**
+
+**`metamer.core` and `metamer.core.fit` ride along and that is stated rather than excluded**, with
+its measured cost: +0.5 s and 644 modules, no JIT, no plotting stack. The taxonomy lives in
+`metamer.core` and the package initialises itself; **restructuring `core/__init__.py` to avoid it
+is refused** — the registration side effect is deliberate, documented, and load-bearing, and moving
+`Outcome` out of `metamer.core` would be a refactor of the spine for a reader's convenience.
+
+**The struck claim is "excludes the fit path". The kept claim is "excludes the config path".** The
+second is testable, true, and is the one the foreign-store property actually needs.
+
+### (a10) TASK 1's OWN TESTS NEED THE RULE THE SPIKE JUST PAID FOR
+
+**The import-graph test must be demonstrated able to FAIL.** A subprocess probe that passes because
+it imported nothing is (a10) instance 4 wearing a different hat — an instrument reporting its
+operating point. So the test carries a **positive control**: a second subprocess that imports
+something known to drag a forbidden member, asserting the probe catches it. `test_core_isolation`'s
+own docstring supplies the reason the probe must be a subprocess at all — *"inside the pytest
+session every one of these is already imported by some other test module"* — and that is a
+statement about visibility, not about discrimination. Both are needed.
+
+**And the completeness-disagreement fixture must be asserted able to express disagreement.** A
+complete tile holding `NOT_ATTEMPTED` is **constructible but not producible by any run**, so the
+fixture states its own reachability rather than implying the condition occurs in the wild.
+
+### TRANSCRIPTION OWED WITH THIS COMMIT
+
+Task 1 touches `src/` and `tests/`, so the two parked one-liners above are transcribed with it:
+`Outcome.is_fit_verdict`'s pattern table gains rows 4 and 5 with *"Three gates"* → *"Five gates"*,
+and `test_compat_relevance_is_an_allowlist_golden_set` gains its name/subject line. **Verbatim text
+is parked above; this is a transcription, not a recollection.**
+
+### WHAT THIS ENTRY CHANGED
+
+- **D10's invariant is rewritten** from "excludes the fit path" to "excludes the config path", with
+  the false leaf-import mechanism struck and the measured graph recorded in its place.
+- **Task 1 gains a positive control** on the import-graph probe, and a reachability statement on the
+  completeness fixture.

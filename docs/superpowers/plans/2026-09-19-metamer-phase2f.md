@@ -388,11 +388,37 @@ dependency set CI installs, so this file passed locally and failed in CI on its 
 
 **Enforcement is a subprocess import-graph test**, on `test_core_isolation.py`'s precedent — which
 exists because *"inside the pytest session every one of these is already imported by some other test
-module"*. Importing `metamer.report` pulls in neither matplotlib nor the fit path (`numba`,
-`metamer.core.fit`, `metamer.batch.run`). That measures the import graph rather than what happens to
-be installed, which is both stronger and cheaper than a second CI environment. **Note `import
-metamer.core` drags `core.fit` and every family**, so the report imports `metamer.core.outcomes` as
-a leaf.
+module"*. That measures the import graph rather than what happens to be installed, which is both
+stronger and cheaper than a second CI environment.
+
+**~~The report imports `metamer.core.outcomes` as a leaf, because `import metamer.core` drags
+`core.fit` and every family.~~ STRUCK 2026-09-20 AT TASK 1's PRE-FLIGHT: THERE IS NO SUCH THING AS
+A LEAF SUBMODULE IMPORT.** Python executes a package's `__init__.py` on any submodule import, and
+`metamer/core/__init__.py` imports `families` — a deliberate, documented, load-bearing registration
+side effect — and `core.fit`. **This plan stated a mechanism that cannot hold, and Task 1's own test
+would have failed on its first run.**
+
+**MEASURED AT THE PRE-FLIGHT, AND THE REPLACEMENT INVARIANT IS SHARPER THAN THE STRUCK ONE:**
+
+| import | seconds | modules | heavy members |
+|---|---|---|---|
+| `metamer` | 0.001 | 64 | — |
+| `metamer.core.outcomes` | 0.500 | 708 | `metamer.core.fit`, `scipy` |
+| `metamer.batch.store` | 0.688 | 928 | + `zarr` |
+| `metamer.batch.run` | 1.425 | 1002 | + **`pydantic`** |
+
+`numba` and `matplotlib` appear in **none** of them. What `batch.run` adds over `batch.store` is
+**the config machinery**. So:
+
+> **`metamer.report`'s import graph contains no `matplotlib`, no `numba`, no `pydantic`, and no
+> `metamer.batch.run`.**
+
+**That is the foreign-store property in mechanism form** — a user with a store and no config cannot
+be made to load the validator for a config they do not have — and it is testable, true, and the one
+the property actually needs. **`metamer.core` and `core.fit` ride along**, stated with their
+measured cost (+0.5 s, no JIT, no plotting stack) rather than excluded by a claim that cannot hold.
+Restructuring `core/__init__.py` is refused: the registration side effect is load-bearing, and
+moving `Outcome` out of the spine for a reader's convenience is not a trade this sub-phase makes.
 
 ### D11 — the drop row: carried record primary, recomputed and asserted when pass 1 is present
 
@@ -670,13 +696,20 @@ and the versions it knows.
   `DATA_INVALID` — catches a bare `KeyError` escaping as `INTERNAL_ERROR`, which tells a script the
   report is broken when the input is.
 - **The import-graph test, in a subprocess**: importing `metamer.report` leaves `matplotlib`,
-  `numba`, `metamer.core.fit` and `metamer.batch.run` absent from `sys.modules` — catches the
-  convenience import that makes the report unusable where a store is readable, which is the failure
-  `test_readme_figure.py` records CI already having had once.
+  `numba`, `pydantic` and `metamer.batch.run` absent from `sys.modules` — catches the convenience
+  import that makes the report unusable where a store is readable, which is the failure
+  `test_readme_figure.py` records CI already having had once, and the config import that would
+  break the foreign-store property.
+- **Its positive control, in a second subprocess**: a probe that imports a module known to drag a
+  forbidden member must report it. **(a10)** — a probe that passes because it imported nothing is an
+  instrument reporting its operating point, and the subprocess isolation that makes the first test
+  meaningful is about *visibility*, not about *discrimination*. Both are needed.
 - A store with an incomplete bitmap reports `(N, M)` with `N < M` and does not raise — catches a
   reader that treats incompleteness as an error, which is D6 inverted.
 - A complete tile holding `NOT_ATTEMPTED` is reported as a disagreement — catches the silent
-  resolution, which would let a partially-written tile read as a screened candidate.
+  resolution, which would let a partially-written tile read as a screened candidate. **The fixture
+  states its own reachability**: this state is constructible and **not producible by any run**, so
+  the test does not imply the condition occurs in the wild.
 
 ---
 
