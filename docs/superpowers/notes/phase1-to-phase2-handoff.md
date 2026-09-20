@@ -1712,6 +1712,46 @@ took **18m29s**, the deadline expired first and the assertion surfaced as
 failure.** **(i9) across CI runners**, and the next reader is sent at zarr rather than at the
 deadline. **A timing fixture calibrated on one machine is a fixture calibrated on none.**
 
+### (a10) A QUANTITY THAT COINCIDES WITH ITS SUBJECT IN THE COMMON CASE AND DIVERGES WHERE THE QUESTION IS LIVE — TWO INSTANCES FROM ONE SPIKE
+
+**Added 2026-09-19 from Phase 2f's Task 0**, which refuted two of its six predictions and both
+refutations were this shape. They are one category with two instances rather than two notes,
+because the repair is the same: **check the relationship between the proxy and the subject at the
+point where the question is live, not at the point where they agree.**
+
+> **(a10a) A BOUND COMPUTED ON A DENOMINATOR DOES NOT BOUND AN EFFECT IN THE NUMERATOR UNLESS THE
+> REMOVAL IS INDEPENDENT OF THE EFFECT.**
+
+**The instance.** A join-count statistic's longitude seam was argued negligible because not
+wrapping removes one column of joins — `H` out of `≈ 2·W·H`, so **0.14%** of the edges at W = 360,
+which is true and was measured true. **The z-score moved 11.02 standard deviations.** The z is
+`(observed − null_mean) / null_sd`, and the removed joins are not a random sample of edges: **they
+are exactly the joins internal to a seam-straddling cluster**, which is the thing the hypothesis is
+about. The removal is maximally dependent on the effect by construction, so a 0.14% loss in the
+denominator's population landed as an 11-SD loss in the numerator's signal. **Predicted on the
+denominator, measured in the numerator.**
+
+> **(a10b) A DETECTOR THAT REPORTS A RATE AT FIXED α IS STRUCTURALLY BLIND TO CONSERVATISM,
+> BECAUSE A TEST THAT NEVER REJECTS HAS A LOW REJECTION RATE AND A LOW REJECTION RATE IS WHAT
+> CALIBRATION LOOKS LIKE FROM BELOW.**
+
+**The instance.** A permutation null's usable floor was to be found by watching the rejection rate
+at α = 0.05 leave a band as the population shrank. **It never left the band** — 0.025 at 25
+eligible points, which reads as perfect calibration. What actually degraded was the whole p-value
+distribution: the median marched **0.476 → 0.559 → 0.569 → 0.699 → 0.700 → 1.000 → 1.000**, the
+last two meaning the observed statistic sat at or below every one of 999 null draws. The test
+became conservative and then degenerate, and **the chosen detector is the quantile least sensitive
+to that failure**. Calibration is a claim about a distribution; a rejection rate is one point of it.
+
+**THE REPAIR, WHICH IS THE SAME FOR BOTH:** state what the proxy is standing in for, then choose
+the reading at the place they can disagree. For (a10a) that is the joins the hypothesis is about,
+not the edge total; for (a10b) it is the distribution, not one quantile of it.
+
+**AND A PRECONDITION FOR ANY REPLACEMENT DETECTOR:** it must **fire on the known-degenerate case
+you already found** before it is trusted anywhere near the boundary. A detector that cannot see the
+failure already in hand is not calibrated to look for it — the same rule as a fixture asserted able
+to express the condition its test names.
+
 ### (c7) A READING PRODUCED BY A DISCOVERY MECHANISM MUST ASSERT THE SIZE OF WHAT IT DISCOVERED, NOT ONLY THE VALUES IT FOUND
 
 > **An unasserted enumeration is a silent denominator.** Where a criterion's reading is produced by

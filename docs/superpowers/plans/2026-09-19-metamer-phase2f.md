@@ -160,10 +160,49 @@ choosing it would be choosing the form §14.2 says nobody can interpret.
 
 **Rook (4-neighbour), index-space, documented as such** — §14.2 fixes index-space; rook rather than
 queen because the statistic is about contiguous patches and queen's diagonal joins make the count
-more sensitive to grid anisotropy. **No wrap at the longitude seam**, stated with its bias
-quantified by Task 0 rather than asserted: every store this project has produced is a subset box,
-and detecting global coverage means interpreting the `x` coordinate, which is a data-dependent
-guess. A limitation with a measured magnitude; not an unexamined choice.
+more sensitive to grid anisotropy.
+
+### ~~No wrap at the longitude seam~~ — RE-DECIDED 2026-09-19 ON TASK 0's NUMBERS
+
+**The original decision was "never wrap, bias bounded by one column of joins", and P4 measured that
+bound false by forty-fold**: Δz = **11.02** at W = 360 against a predicted < 0.25, with the edge
+loss at 0.14% exactly as predicted. **The bound was computed on the denominator and the effect is
+in the numerator** — not wrapping removes 16 of the *observed cluster's own* joins, because the
+seam joins are precisely what make a seam-straddling cluster one cluster rather than two.
+
+**DETECT GLOBAL COVERAGE FROM THE `x` COORDINATE AND WRAP WHEN IT IS GLOBAL**, with the detection
+rule stated, tested in both directions, and printed.
+
+- **The rule is arithmetic on stored coordinates, not a guess:** `n_x · dx` within half a cell of
+  360°, on degree-like units, with regular spacing. **Every ambiguous case fails toward
+  not-wrapping** — unknown or non-degree units, irregular spacing, or a span short of 360° because
+  columns are missing. Auditable rather than inferred.
+- **The report prints the span it found** — *"22.5° of 360°, not global, not wrapped"* — so the
+  not-global branch stops being a policy and becomes a **measurement**. This is what the old
+  decision's limitation statement becomes, and it is strictly better than asserting one.
+- **Always-wrap is refused** and the reason is stronger than "wrong on a subset box": **every real
+  store this project has produced is a subset box**, so always-wrap would manufacture adjacency on
+  100% of the actual data to date, and **0% of it would be caught by a real-data check**.
+- **A flag with no default is refused** as D6's flag reintroduced: it is a report refusing to run on
+  a store whose owner may not have made it — the foreign-store property broken — and it gates a
+  whole run on one number among many. **A declaration is available as an override on top of the
+  detector, never as the mechanism.**
+
+**AND THE DETECTOR'S OWN WEAKNESS IS QUANTIFIED RATHER THAN LEFT INVISIBLE.** A detector can be
+wrong in both directions and nothing downstream would show it — so **when the question is live,
+both arms are computed and Δz is printed**, with the detected arm reported as the statistic. **Δz
+is exactly the bound on what the judgement cost:** near zero and a wrong detection cost nothing;
+large and the number hinges on the detector, which the reader checks against the printed span.
+Every number says where it came from, applied to a judgement rather than to a measurement.
+
+**Gated on the question being live** — degree-like units and a span above **90%** of 360° — so a
+22.5° subtropical box computes one arm and prints its span. Where it fires the cost is **2×**,
+against a floor of 224 s, on a report describing a run that took days. Not a consideration.
+
+**THE WRAP BRANCH IS FIXTURE-TESTED ONLY, AND WILL BE UNTIL A GLOBAL STORE EXISTS.** Stated here,
+at the code path, and not only in the limitations section: this is the standing geographic
+limitation — every real-data number in this project is one box of subtropical open ocean — reaching
+a branch of the implementation.
 
 ### D5 — the null permutes labels among eligible points with the mask held fixed
 

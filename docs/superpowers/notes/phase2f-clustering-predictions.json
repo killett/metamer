@@ -1,0 +1,127 @@
+{
+  "record": "phase2f_clustering_predictions",
+  "task": "Phase 2f Task 0 -- the clustering spike",
+  "written": "2026-09-19",
+  "written_before_the_harness": true,
+  "why_this_file_exists_before_the_harness": "A prediction written after a measurement is a description. This file is committed first so every reading below can be refuted by the run rather than accommodated by it.",
+  "subject": "The join-count (BB) statistic on a binary failure indicator, rook adjacency in index space, over the fit-verdict population, against a permutation null that holds the eligible mask fixed.",
+  "a_note_on_vocabulary_in_this_file": "Outcome member names are deliberately absent from this JSON. tests/test_outcomes.py::test_no_committed_report_carries_a_decided_skip scans notes/*.json and asserts the decided-skip member names appear in none of them, so naming them here would turn a green suite red for a reason unrelated to this spike. The population is referred to as `is_fit_verdict` throughout; member names live in the harness and in the verdict markdown.",
+  "instrument": {
+    "adjacency": "rook, 4-neighbour, index space, no wrap at the longitude seam",
+    "statistic": "BB join count -- adjacent pairs where both cells carry the failure indicator",
+    "population": "cells where `Outcome.is_fit_verdict` is true; every non-fit code leaves the graph entirely",
+    "null": "permute the failure labels among eligible points with the eligible mask HELD FIXED, which preserves both the missing-data geometry and the failure count, so the null asks whether this ARRANGEMENT is unusual rather than whether this RATE is unusual",
+    "permutations": 999,
+    "p_value_form": "(1 + count(null >= observed)) / (1 + permutations), so the floor is 0.001",
+    "seed": "a stated constant, recorded in every report and overridable by flag"
+  },
+
+  "predictions": [
+    {
+      "id": "P1",
+      "subject": "cost",
+      "gates": "Tasks 5 and 6",
+      "setup": "999 permutations, rook graph, eligible fraction 0.7, failure rate 0.1, at 64x64, 256x256 and 1024x1024",
+      "prediction": {
+        "seconds_64": "< 1",
+        "seconds_256": "< 10",
+        "seconds_1024": "< 120"
+      },
+      "reasoning": "The statistic reads a stored uint8 array and never refits. A rook graph on a WxH grid has about 2*W*H edges, so one permuted count is an O(edges) gather over a shuffled label vector. At 1024^2 that is ~2.1e6 edges x 999 permutations = ~2.1e9 edge reads, which is seconds of vectorised numpy, not minutes.",
+      "refutation_high": "If 1024^2 exceeds 600 s, the default permutation count or the implementation is re-planned. The SUB-PHASE is not re-planned: the statistic is still the right measurement, it is the instrument that is wrong.",
+      "refutation_low": "If 1024^2 comes in under 1 s, the implementation is suspected of not doing the work -- check that the null actually permutes and that the edge list is not empty, because an empty graph is fast and wrong.",
+      "what_it_decides": "Whether Phase 2f needs open question 22's quiet-gate repair. The prediction on the record is that it does NOT, because every measurement that has cost this project days was a FITTING measurement and 2f fits nothing.",
+      "host_dependent": true
+    },
+    {
+      "id": "P2",
+      "subject": "negative control -- the null's calibration",
+      "setup": "Failure labels placed by independent Bernoulli draws at the observed rate on a 128x128 grid, eligible fraction 0.7; 200 replicates; alpha = 0.05",
+      "prediction": {
+        "rejection_rate_band": [0.02, 0.09]
+      },
+      "reasoning": "Under independent placement the observed arrangement IS a draw from the null, so the p-value is uniform and the rejection rate is alpha up to binomial error. With 200 replicates the standard error at 0.05 is about 0.015, so a band of [0.02, 0.09] is roughly alpha +/- 2-3 SE and is wide enough not to fire on noise.",
+      "refutation_high": "Above 0.09 the statistic over-rejects: the null is not the right null, and any clustering this report prints would be partly manufactured by the instrument.",
+      "refutation_low": "Below 0.02 the test is conservative and the null is mis-specified in the other direction -- it would hide real clustering. BOTH DIRECTIONS FAIL THE TASK. A conservative test is not a safe test here, because the report's whole claim is that a scalar rate cannot distinguish scattered from concentrated.",
+      "host_dependent": false
+    },
+    {
+      "id": "P3",
+      "subject": "positive control -- power",
+      "setup": "The SAME total failure count as P2, placed as one contiguous square patch instead of scattered; 200 replicates over patch positions; same grid and eligible fraction",
+      "prediction": {
+        "rejection_rate_at_p_floor": ">= 0.95"
+      },
+      "reasoning": "Holding the count fixed and moving only the arrangement is exactly the contrast the statistic is built to see; a single contiguous patch maximises internal adjacency. If this does not reject at the floor, the statistic cannot see the thing section 14.2 wants it for.",
+      "refutation": "Below 0.95 the statistic lacks power at a clustering magnitude far larger than anything real data will show, and the design needs a different statistic rather than more permutations.",
+      "note": "P2 and P3 TOGETHER are the instrument's calibration. Numeric bands on both are what make a NULL RESULT readable: without P3 a non-rejection means nothing, and without P2 a rejection means nothing.",
+      "host_dependent": false
+    },
+    {
+      "id": "P4",
+      "subject": "the longitude seam -- the bias of not wrapping",
+      "form": "A PREDICTION WITH A BAND, not an unrefutable 'quantify it'",
+      "setup": "A global grid of W columns by H rows carrying a genuine cluster straddling the antimeridian; the statistic computed wrapped and unwrapped",
+      "prediction": {
+        "joins_lost_at_most": "2 * H, being the one column of horizontal joins the seam does not close",
+        "relative_loss_bound": "1 / W",
+        "z_difference_at_W_360": "< 0.25"
+      },
+      "reasoning": "Not wrapping removes exactly the joins between column W-1 and column 0. A rook graph has W*H horizontal joins when wrapped and (W-1)*H when not, so the loss is H joins out of ~2*W*H total, bounded in relative terms by 1/W. At W = 360 that is under 0.3%, and a z-score is a standardised count, so the shift should be far smaller than the null's own spread.",
+      "refutation_high": "A z difference above 0.25 means the no-wrap choice is NOT free and D4 must either detect global coverage or restate its limitation as material rather than negligible.",
+      "refutation_low": "A z difference below 0.01 means the measurement is too weak to be worth printing as a number, and the caveat becomes a static sentence instead.",
+      "consumer": "Task 6's invariant -- the report prints the seam caveat CARRYING this measured magnitude. Named because a measurement with no consumer gets made and forgotten, and this is the sole evidence behind D4's no-wrap choice.",
+      "host_dependent": false
+    },
+    {
+      "id": "P5",
+      "subject": "the floor -- measured, not picked",
+      "setup": "P2's calibration repeated at decreasing eligible-point counts: 2000, 1000, 500, 200, 100, 50, 25",
+      "prediction": {
+        "calibration_holds_at_or_above": 200,
+        "breaks_at_or_below": 50
+      },
+      "reasoning": "The permutation null is exact for any population size, so the failure mode is not bias but GRANULARITY: with few eligible points the join count takes few distinct values, the null becomes lumpy, and the discrete p-value cannot land near alpha. The prediction is that lumpiness becomes visible somewhere between 50 and 200.",
+      "refutation": "If the calibration holds all the way down to 25, there is no floor to state and Task 6's unavailability rule loses one of its three cases -- which is a finding, not a failure. If it breaks at 2000, the statistic is unusable on any realistic subset box and the design changes.",
+      "why_measured_rather_than_chosen": "This is where 2d's 30-member stratum floor was weaker: that number came from a binomial standard-error argument, and this one comes from where the calibration actually fails.",
+      "host_dependent": false
+    },
+    {
+      "id": "P6",
+      "subject": "the zero-edge mask -- a fixture precondition, not a value",
+      "setup": "A checkerboard eligible mask, under which no two eligible cells are rook-adjacent",
+      "prediction": {
+        "result": "unavailable, naming zero edges as the reason",
+        "must_not": "return a number, raise a bare ZeroDivisionError, or report z = 0"
+      },
+      "reasoning": "(a2b): where a value is invalid under a detectable condition, make it unavailable with its reason rather than emitting it with a caveat. A z of 0 reads as 'no clustering found', which is a finding this fixture cannot support. And (i12): the fixture must be asserted ABLE to express clustering before any assertion about clustering.",
+      "refutation": "Any numeric return refutes it.",
+      "host_dependent": false
+    }
+  ],
+
+  "reproducibility": {
+    "claim": "Same seed gives an identical z on three consecutive iterations; a different seed gives a z within the null's own standard error.",
+    "iterations": 3,
+    "refutation": "A z that moves under a fixed seed means the null is drawing from an unseeded source, which makes every p-value this project ever prints irreproducible."
+  },
+
+  "the_control_that_reproduces_a_committed_number_exactly": {
+    "why": "The instrument must reproduce a number already in the tree before it produces any new ones.",
+    "source": "docs/superpowers/notes/realdata-spike-report.json, the real_ct arm's outcome histogram",
+    "expected_counts": {"ok": 809, "degenerate": 91},
+    "expected_total_cells": 900,
+    "claim": "A constructed store carrying that histogram makes the report's own counter produce 809 and 91 and 900, exactly, with no tolerance.",
+    "refutation": "Any difference at all. This is a counting claim, not a measurement."
+  },
+
+  "host_discipline": {
+    "quiet_gate_applies_to": ["P1"],
+    "quiet_gate_does_not_apply_to": ["P2", "P3", "P4", "P5", "P6", "reproducibility", "the committed-number control"],
+    "why": "P1 is a cost reading and is contaminated by anything else running. The rest are correctness readings computed from arrays and are host-independent -- the same split the real-data spike recorded as `seconds_are_the_contaminated_half`.",
+    "known_limitation": "The quiet gate reads /proc/loadavg, which is the HOST, on a container using a few percent of four cores -- open question 22, whose repair is named and untaken. If P1's prediction holds, 2f never needs that repair; the gate's reading is recorded beside P1 either way and is a diagnostic, not an assertion."
+  },
+
+  "arms_interleaved": true,
+  "arms_interleaving_note": "P2's and P3's replicates are generated and evaluated in an interleaved order rather than as two blocks, so a drift in machine state cannot align with the contrast being measured."
+}
