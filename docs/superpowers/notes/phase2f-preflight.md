@@ -101,6 +101,45 @@ them.
 flip: a correction that cannot move a number and a correction that moves the audit's meaning are
 different acts, and bundling them lets the second ride in on the first's evidence.
 
+### PARKED FOR THE NEXT `src/` OR `tests/` COMMIT — TRANSCRIPTION, NOT RECOLLECTION
+
+**Two one-line edits are owed to files whose commits cost a 1:38 sweep.** Parking the TEXT here
+rather than the intention, because *"it reaches the tree with the next commit"* is a promise with
+no owner and dies with the session — the same shape as a constant that "joins the do-not-move
+list" that does not exist yet. Whoever makes the next `src/` or `tests/` commit transcribes these.
+
+**1. `Outcome.is_fit_verdict`'s pattern table gains rows 4 and 5.** It currently holds three. Add,
+verbatim:
+
+| gate | it read | its subject |
+|---|---|---|
+| the plan-review fetch (2026-09-19) | a **cached** 404 and a **summarised** directory listing | the repository's bytes — `curl` returned HTTP 200 and 52,010 bytes on the identical URL |
+| 2e's criterion-9 instrument | what one glob and one key spelling happened to walk — 8 of 16 | the committed audit numbers its claim named |
+
+and change *"Three gates in this project"* to *"Five gates in this project"*, keeping the sentence
+that all of them coincide with their subject in the common case and diverge exactly where the gate
+matters.
+
+**2. `tests/test_hashing.py::test_compat_relevance_is_an_allowlist_golden_set` gains a line saying
+its reach is wider than its name.** Verbatim: *"THE NAME READS NARROWER THAN THE SUBJECT: this test
+pins BOTH allowlists. `fit_payload` subsets `FIT_RELEVANT_FIELDS`, pinned above; `compat_payload`
+subsets `COMPAT_RELEVANT_FIELDS`, pinned through its definition in terms of fit. `run_payload` has
+no allowlist by design — it is `normalize(config)` entire, provenance only and never a gate — so
+there is no third set to pin and none is missing."* Checked 2026-09-19 against `hashing.py`.
+
+### THE HOLD ON COMMIT 2, NAMED — AND D2 IS NOT OVERSTATED
+
+**D2's artifact check is complete and its claim stands**: sixteen histograms, zero carrying either
+code, one eligibility-derived denominator at 52 of 52, and **no committed number moves under any of
+the three candidate predicates** — today's `is_eligible`, the flipped `is_eligible`, or
+`is_fit_verdict`. Checked, not inferred.
+
+**The hold's subject is a different question, and it is a decision rather than a measurement:**
+should `audit_report`'s survival denominator be *repaired* to read `is_fit_verdict` at the same
+time, given that the flip widens a defect that is already there? Nothing in the artifact record
+answers that, because no artifact distinguishes the three predicates. **Recorded here so the hold
+outlives the session**; the plan's commit table points at this entry.
+
 ### WHAT THIS ENTRY CHANGED
 
 - Open question 24 became **three commits, gate → flip → record**, from the two the brief assumed.

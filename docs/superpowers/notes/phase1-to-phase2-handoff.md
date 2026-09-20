@@ -1712,6 +1712,36 @@ took **18m29s**, the deadline expired first and the assertion surfaced as
 failure.** **(i9) across CI runners**, and the next reader is sent at zarr rather than at the
 deadline. **A timing fixture calibrated on one machine is a fixture calibrated on none.**
 
+### (c7) A READING PRODUCED BY A DISCOVERY MECHANISM MUST ASSERT THE SIZE OF WHAT IT DISCOVERED, NOT ONLY THE VALUES IT FOUND
+
+> **An unasserted enumeration is a silent denominator.** Where a criterion's reading is produced by
+> a glob, a grep, or a helper that walks files, the count of what was walked is part of the
+> reading — and a check that asserts only the values keeps passing while the population it was
+> supposed to cover grows past it.
+
+**ADDED 2026-09-19, ON 2e's CRITERION 9.** Its claim was *"no committed audit number moves under
+the reclassification"* and its recorded reading was *"every committed report's outcome histogram,
+recomputed"*. The helper globs `notes/*.json` for the key `outcome_counts` and reaches **8 of the
+16 committed histograms** — six are spelled `counts`, two live in `.jsonl`, and **all of them are
+inside the criterion's own declared population**. The conclusion was true; the instrument covered
+half of it, and the criterion asserted `seen > 0` rather than `seen == 16`.
+
+**THIS IS THE GATE PATTERN AT `Outcome.is_fit_verdict`, FIFTH INSTANCE** — a reading keyed on an
+available proxy (what the helper happened to walk) rather than on its subject (the full
+population), agreeing in the common case and diverging where it mattered. **The tell held**: the
+predicate named a different quantity from its own claim string.
+
+**The repair is not a bigger glob.** It is to enumerate by a rule, assert the enumeration's SIZE
+against a hand-derived count, and fail when the two differ — which converts a dated measurement
+into a maintained invariant and forces whoever commits artifact seventeen to classify it. **Note
+the interaction with (c5)**: (c5) says write the gate against the set rather than an enumeration of
+members; (c7) says when you must enumerate, assert how many you got. They are the same instinct at
+two altitudes.
+
+**OWED, NOT BLOCKING:** sweep 2a–2e's criteria for other readings of this shape and record the
+count found, **including zero** — a sweep that reports nothing and a sweep that was not run print
+the same way, which is (a2b) at a count.
+
 ### (c6) A PRACTICE ENFORCED BY A MECHANISM MUST BE CHECKED TO REACH EVERY INSTANCE IT COVERS
 
 > **Where a discipline is enforced by a mechanism, enumerate every instance the discipline should

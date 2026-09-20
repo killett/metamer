@@ -48,7 +48,7 @@ closed.** Three commits, not two, each provable before the next:
 | # | commit | state |
 |---|---|---|
 | 1 | the gate reads whether anything was FITTED (D1) | **`49f3db1`, pushed, CI green** |
-| 2 | `INSUFFICIENT_DATA` becomes eligible (D2) | **not written** — blocked on the audit-denominator question raised 2026-09-19 |
+| 2 | `INSUFFICIENT_DATA` becomes eligible (D2) | **not written** — held on the audit-denominator decision, whose subject is recorded at [the pre-flight](../notes/phase2f-preflight.md) under *"FILED, NOT TAKEN"*. **The hold is not about D2's check, which is complete and stands**: no committed number moves, under any of the three candidate predicates. It is about whether a live instrument's denominator is repaired alongside the flip — a decision, not a measurement. |
 | 3 | 2e's criterion-9 reading, corrected where it sits | **not written** |
 
 **THIS PARAGRAPH IS THE ONE PLACE THIS PLAN STATES A FACT ABOUT THE TREE, AND IT IS DATED AND
@@ -86,11 +86,16 @@ dangerous direction: a sample the run never fitted would read as judged.
 | 2 | the stall gate | time spent waiting | memory pressure |
 | 3 | §14.1's no-evidence gate | `is_eligible` | whether anything was fitted |
 | 4 | the plan-review fetch, 2026-09-19 | a **cached** 404 and a **summarised** directory listing | the repository's bytes — `curl` returned HTTP 200 and 52,010 bytes on the identical URL |
+| 5 | 2e's criterion-9 instrument | what one glob and one key spelling happened to walk — 8 of 16 | the committed audit numbers its claim named |
 
-**All four coincide with their subject in the common case and diverge exactly where it matters**,
+**All five coincide with their subject in the common case and diverge exactly where it matters**,
 and **the tell held in every one**: a predicate naming a different quantity from its own reason
 string. §14.1's said "eligible" while meaning "fitted"; the fourth said "not on main" while meaning
-"not in my cache".
+"not in my cache"; the fifth said *"every committed report's outcome histogram"* while meaning
+*"every `outcome_counts` key in `notes/*.json`"*.
+
+**Row 5 is why F3 is a category and not a patch to one criterion** — it is at the handoff as (c7),
+with the sweep of 2a–2e's criteria that it owes.
 
 **The fourth is why the pre-flight category is promoted**, from *never pipe a checker through a
 truncating filter* to **any intermediary that can cache, summarise or truncate is not evidence;
@@ -906,7 +911,7 @@ evidence. It gains a one-line docstring saying exactly that, and pointing here.
 | 18 | The report runs without matplotlib and says so | the exit code, the JSON, and the report's own sentence |
 | 19 | An unfinished store is described, not refused | `(N, M)` in the record, the exit code, and a denominator beside a rate |
 | 20 | Completeness comes from the bitmap | a store whose bitmap and outcomes disagree, reported as a defect |
-| 21 | The run records the resolved candidate table and it moves no hash | the block, the three hashes with and without it, **and `tests/test_hashing.py::test_compat_relevance_is_an_allowlist_golden_set`, cited by name** — the standing guard against the defect this criterion cannot reach on its own: a later change promoting a resolved field INTO the config namespace, where it enters the payload legitimately, moves `compat_hash`, and invalidates every stored run's resume by an edit nobody thought was semantic. That test already pins `FIT_RELEVANT_FIELDS` against a hand-written set, so growing it requires a deliberate edit and a reviewer reading why. **Checked 2026-09-19: it exists; no new test is owed.** |
+| 21 | The run records the resolved candidate table and it moves no hash | the block, and the three hashes with and without it, **plus `tests/test_hashing.py::test_compat_relevance_is_an_allowlist_golden_set`, cited by name.** That test is the standing guard against the defect this criterion cannot reach on its own: a later change promoting a resolved field INTO the config namespace, where it enters a payload legitimately, moves `compat_hash`, and invalidates every stored run's resume by an edit nobody thought was semantic. **Its reach covers all three payloads, checked 2026-09-19 and stated here because its NAME reads narrower than its subject — there are only TWO allowlists.** `fit_payload` subsets `FIT_RELEVANT_FIELDS`; `compat_payload` subsets `COMPAT_RELEVANT_FIELDS`, which the same test pins through `COMPAT == FIT | {"criteria"}` and `FIT < COMPAT`; `run_payload` is `normalize(config)` entire, with **no allowlist by design** — provenance only, never a gate — so there is no third set to pin, and its `_subset` call is a validation whose result is discarded. **And because it hashes everything, a resolved field promoted into the config namespace would move `run_hash` BEFORE it reached either allowlist**, which strengthens the guard rather than evading it. No new test is owed. |
 | 22 | A report's exit code describes the report | the codes produced across usage, unreadable-store and internal-error cases, and 1 and 2 absent |
 | 23 | The markdown is rendered from the record | every numeric token in the markdown, found in the JSON |
 
