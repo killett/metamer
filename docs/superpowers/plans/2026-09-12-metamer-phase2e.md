@@ -861,7 +861,7 @@ criterion stays **FAILED** and is not quietly re-scoped.
 | 6 | The six exit codes are the six the taxonomy names | the enumerated member list, by name and value |
 | 7 | `INTERNAL_ERROR`'s guard names the live producer it was verified against | the dated provenance **at the test** |
 | 8 | `CANDIDATE_DROPPED` is outside the failure rate and inside the eligible denominator | both properties, enumerated |
-| 9 | No committed audit number moves under the reclassification | every committed report's outcome histogram, recomputed |
+| 9 | No committed audit number moves under the reclassification | the `outcome_counts` histograms under `notes/*.json` — 8 of the 16 committed, the rest checked independently at 2f — **corrected 2026-09-20**, verdict unchanged; see the record for why this is reach and not scope |
 | 10 | The counters are display-only and no decision path reaches them | the construction, **both directions** |
 | 11 | The abort verdict is a pure function of a finished store | the verdict on a constructed pass-1 store, **with no run** |
 | 12 | The verdict is invariant to the eligible-excluded population | the same store, cropped to its ocean |

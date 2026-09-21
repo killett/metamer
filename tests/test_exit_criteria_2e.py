@@ -415,7 +415,17 @@ def test_criterion_7_the_internal_error_guard_carries_its_dated_live_producer():
 
 
 def _histograms(document: Any) -> list[dict[str, int]]:
-    """Every `outcome_counts` mapping anywhere in a decoded JSON document."""
+    """Every `outcome_counts` mapping anywhere in a decoded JSON document.
+
+    **FROZEN AS 2e's READER OF 2e's FROZEN ARTIFACTS, 2026-09-20.** It is
+    keyed on one spelling and reaches 8 of the 16 committed histograms; the
+    tree also spells the key `counts` and carries histograms in `.jsonl`.
+    **Do not widen it** -- it is the instrument that produced a closed
+    criterion's evidence, and rewriting it would rewrite that evidence.
+    **2f's scanner is authoritative for every future phase**: it enumerates by
+    a rule, is spelling- and extension-independent, and asserts the size of
+    what it found. See `tests/test_outcomes.py` and handoff (c7).
+    """
     found: list[dict[str, int]] = []
     if isinstance(document, dict):
         for key, value in document.items():

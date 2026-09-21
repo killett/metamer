@@ -62,7 +62,7 @@ READINGS = (
     "the enumerated member list, by name and value",
     "the dated provenance at the test",
     "both properties, enumerated",
-    "every committed report's outcome histogram, recomputed",
+    "the `outcome_counts` histograms under `notes/*.json` — 8 of the 16 committed, the rest checked independently at 2f",
     "the construction, both directions",
     "the verdict on a constructed pass-1 store, with no run",
     "the same store, cropped to its ocean",
@@ -222,7 +222,25 @@ PHASE_2E_EXIT_CRITERIA: tuple[ExitCriterion, ...] = (
         number=9,
         statement="No committed audit number moves under the reclassification",
         verdict=Verdict.MET,
-        reading="every committed report's outcome histogram, recomputed",
+        # READING CORRECTED 2026-09-20, VERDICT UNCHANGED. The helper globs
+        # `notes/*.json` for the key `outcome_counts` and reaches 8 of the 16
+        # committed histograms: six are spelled `counts` and two live in
+        # `.jsonl`, ALL INSIDE THIS CRITERION'S OWN DECLARED `outside`. The
+        # reach was found by open question 24's artifact check, which was
+        # written independently BECAUSE this helper's spelling-dependence was
+        # already suspected -- not by re-running this test.
+        #
+        # THE VERDICT STAYS MET AND IS NOT REDUCED. A reduced scope in this
+        # project means a criterion achieved over a narrower SUBJECT -- 2e's
+        # own 14, where the drop row was not delivered at all. This claim, "no
+        # committed audit number moves", is TRUE over the full population: 2f
+        # checked all sixteen on 2026-09-19 and found the member in none. The
+        # defect was EVIDENTIAL REACH, not scope, and marking it reduced would
+        # record the project as holding less evidence at the moment it got
+        # more. The durable repair is not this note: it is 2f's criterion 5,
+        # which asserts the ENUMERATION's size and so cannot silently go stale
+        # as the artifact set grows -- handoff (c7).
+        reading="the `outcome_counts` histograms under `notes/*.json` — 8 of the 16 committed, the rest checked independently at 2f",
         scope="",
         established_by=(
             "test_criterion_9_every_committed_histogram_recomputes_unchanged",
