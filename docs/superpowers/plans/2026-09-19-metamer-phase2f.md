@@ -791,6 +791,14 @@ The eligible-point denominator is `Outcome.is_eligible` — which after D2 inclu
 
 - **`branch` means taxonomy branch** — an `Outcome` member — as `progress.py`'s `by_branch` and §14.1
   already fix it. Not a candidate.
+- **WHEN `fitted == 0`, BOTH RATES ARE UNAVAILABLE, EACH NAMING "nothing fitted", AND THE ELIGIBLE
+  COUNT APPEARS AS A COUNT RATHER THAN AS A DENOMINATOR.** D1 carried through the two-column print:
+  the verdict's move to `fitted` separated *"nothing was tried"* from *"everything succeeded"* in
+  the **fitted** column, and the **eligible** column still reads `0/N = 0.0` — *"0% of the eligible
+  domain failed"*, literally true and **a perfect score for a candidate that tried nothing**. That
+  is the same false inference D1 was repaired to prevent, arriving in the report's own table. **The
+  general form: a failure rate over the eligible domain is a coverage statement only when there are
+  fits to judge.**
 - Counts over all branches present sum to the cell count; **rates do not sum to 1** and the table
   says why.
 - Every rate's denominator is a number in the record, beside it.
@@ -814,6 +822,11 @@ The eligible-point denominator is `Outcome.is_eligible` — which after D2 inclu
   store reports them equal** — catches a report that prints one denominator, which on a global run
   is a rate contaminated by land fraction and on this project's fixtures is indistinguishable from
   a correct one. The constructed store is criterion 12's: 12 ocean, 8 land, **1.00 against 0.60**.
+- **A candidate screened out at every point reports BOTH columns unavailable, both naming "nothing
+  fitted", with its eligible count printed as a count** — catches the eligible column reporting
+  **0.0** for a candidate that was never tried, which reads as a clean pass and is the D1 collapse
+  surviving into the report. The fixture is the one that surfaced it: an all-`SCREENED_OUT` plane,
+  whose sibling candidate was fitted everywhere and passed, so the two must not print alike.
 - **The caveat beside the eligible rate is present when the store records no domain mask and absent
   when it records one** — catches a hard-coded caveat, which is wrong the day after §13.6 lands,
   and a missing one, which is wrong today.

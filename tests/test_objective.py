@@ -5,12 +5,11 @@ inverse, published Harville form) or from a hand-stated identity, never from
 re-running the code under test.
 """
 
-import ast
-import pathlib
 from dataclasses import replace
 
 import numpy as np
 import pytest
+import xarray as xr
 
 from metamer.core.capability import EngineId, Objective
 from metamer.core.engines.kalman import KalmanEngine
@@ -1061,76 +1060,89 @@ def test_the_no_design_return_merges_rather_than_trusting_the_engine(empty_desig
     np.testing.assert_array_equal(result.rank_x, [0, -1, 0])
 
 
-def test_land_is_written_insufficient_data_because_not_applicable_has_no_producer():
-    """THE ERA FACT, pinned -- and this test is EXPECTED TO FAIL at section 13.6.
+def test_a_run_writes_insufficient_data_for_land_and_never_writes_not_applicable(
+    tmp_path,
+):
+    """THE ERA FACT, from a REAL RUN -- and expected to FAIL when section 13.6 lands.
 
-    Design doc section 12.5 separates land and permanent ice
-    (`NOT_APPLICABLE`, out of the denominator) from a series with too thin a
-    record (`INSUFFICIENT_DATA`, in it). **In this codebase those are one
+    Design doc section 12.5 separates land and permanent ice (`NOT_APPLICABLE`,
+    out of the denominator) from a series with too thin a record
+    (`INSUFFICIENT_DATA`, in it). **In this codebase those are one
     population**, because section 12.5 also says `NOT_APPLICABLE` is
     **UNDERIVABLE**: the mask comes from the data, so a land pixel is all-NaN,
-    hence all-masked, hence `INSUFFICIENT_DATA`, and nothing can distinguish
+    hence all-masked, hence `INSUFFICIENT_DATA`, and nothing distinguishes
     "land" from "every value happens to be NaN" without a **declared
     domain-mask variable in the input contract (section 13.6)**.
 
     Expected values determined independently: by reading section 12.5's own
-    unreachability table, which lists `NOT_APPLICABLE` with "a declared domain
-    mask variable in section 13.6's input contract" as what would make it
-    reachable.
+    unreachability table, which lists `NOT_APPLICABLE` against "a declared
+    domain mask variable in section 13.6's input contract".
 
     Bug this catches: a reader -- human or code -- taking section 12.5's
-    SEPARATION for a description of what the store contains TODAY. It does not
-    describe that. A rule that excludes `INSUFFICIENT_DATA` excludes land here,
-    and a rule that includes it includes land; **that is why open question 24's
-    flip could not be reasoned about from the classification alone**, and why
-    section 14.1's gate had to move to `is_fit_verdict` rather than to the
+    SEPARATION for a description of what the store contains TODAY. It does
+    not. A rule excluding `INSUFFICIENT_DATA` excludes land here, and a rule
+    including it includes land; **that is why open question 24's flip could not
+    be reasoned about from the classification alone**, and why section 14.1's
+    verdict had to move its denominator to `is_fit_verdict` rather than to the
     other eligibility rule.
 
-    **THIS TEST IS THE ONLY PLACE THE ERA FACT IS WRITTEN AS AN ASSERTION.** It
-    replaces one that stated the fact by accident: `test_abort.py`'s
-    `test_ineligible_points_change_neither_numerator_nor_denominator` said "a
-    mostly-land grid" and filled its plane with `INSUFFICIENT_DATA`, and its
-    docstring and fixture agreed **because in this codebase land IS
-    `INSUFFICIENT_DATA`**. Correcting that fixture to `NOT_APPLICABLE` made the
-    test test its claim and deleted the tree's only witness to the era.
+    **IT READS WHAT A RUN WRITES, WHICH IS A DIFFERENT SUBJECT FROM WHAT THE
+    SOURCE SAYS.** The first version of this test walked `src/` with `ast` for
+    references to `NOT_APPLICABLE` -- a proxy, and one that fails in the
+    direction that matters: section 13.6 will most plausibly write the member
+    **vectorised from a mask**, with the code taken from a module constant, a
+    lookup table, `flag_values` or `Outcome(n)`, and an attribute-reference
+    scan sees none of those. **So on the one day the test exists to go red, it
+    would have stayed green.** A test that reads its subject directly needs no
+    positive control against proxy divergence, because there is no proxy.
 
-    **WHEN SECTION 13.6 LANDS, THIS TEST FAILS, AND THAT IS HOW IT ANNOUNCES
-    ITSELF.** A test that fails loudly at the moment the world changes is worth
-    more than a comment that quietly stops being true. The response is not to
-    loosen it: it is to delete it, and to revisit open question 25 -- whether
-    `is_eligible` survives a world where land has its own code -- with both
-    call sites in view.
+    **WHEN SECTION 13.6 LANDS, THIS FAILS, AND THAT IS HOW IT ANNOUNCES
+    ITSELF.** The response is not to loosen it: delete it, and revisit open
+    question 25 -- whether `is_eligible` survives a world where land has its
+    own code -- with both call sites in view.
     """
-    spec, ss, theta, t, _, _, _ = _setup()
-    y = np.zeros((1, t.size))
-    mask = np.zeros((1, t.size), dtype=bool)
+    from metamer.batch.run import run
+    from metamer.report.reader import read_store
 
-    obj = ConcentratedObjective(spec, ss, KalmanEngine(), Objective.ML)
-    result = obj.evaluate(theta, y, mask, t, None)
+    # THE FIXTURE PRECONDITION, ASSERTED BEFORE THE ASSERTION IT SERVES: the
+    # input must really contain all-NaN series, or this measures nothing.
+    # (i12), and it fired twice in 2e before an assertion could lie.
+    values = np.zeros((24, 2, 2), dtype="float32")
+    values[:, 0, :] = np.nan
+    assert bool(np.isnan(values[:, 0, :]).all()), "row 0 must be wholly masked"
+    assert not bool(np.isnan(values[:, 1, :]).any()), "row 1 must be fittable"
 
-    assert Outcome.from_code(int(result.outcome[0])) is Outcome.INSUFFICIENT_DATA
+    origin = np.datetime64("2000-01-01")
+    time = np.array([origin + np.timedelta64(31 * i, "D") for i in range(24)])
+    dataset = xr.Dataset(
+        {"sla": (("time", "y", "x"), values)},
+        coords={"time": time, "y": np.arange(2), "x": np.arange(2)},
+    )
+    uri = tmp_path / "land.zarr"
+    dataset.to_zarr(uri)
+    config = tmp_path / "c.toml"
+    config.write_text(
+        f'data_uri = "{uri}"\n'
+        'variable = "sla"\n'
+        'signal_terms = ["constant", "trend"]\n'
+        'candidates = ["white"]\n'
+        'criteria = ["aic"]\n'
+    )
+    store = tmp_path / "out.zarr"
+    run(config, store)
 
-    # AND `NOT_APPLICABLE` IS REFERENCED BY NO CODE IN `src/` OUTSIDE THE
-    # TAXONOMY ITSELF, which is the half that flips. **Parsed, not grepped**:
-    # four modules MENTION the member in prose while none reads or writes it,
-    # and a text scan cannot tell those apart -- it would report this test
-    # green only by accident of wording. `ast` sees attribute references and
-    # not docstrings, so it answers the question actually being asked.
-    root = pathlib.Path(__file__).resolve().parents[1] / "src"
-    producers: list[str] = []
-    for path in sorted(root.rglob("*.py")):
-        if path.name == "outcomes.py":
-            continue
-        tree = ast.parse(path.read_text(encoding="utf-8"))
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Attribute) and node.attr == "NOT_APPLICABLE":
-                producers.append(f"{path.relative_to(root).as_posix()}:{node.lineno}")
+    written = read_store(store).outcome
+    present = {Outcome.from_code(int(code)) for code in np.unique(written)}
 
-    assert producers == [], (
-        f"{producers} reads or writes NOT_APPLICABLE outside the taxonomy "
-        "module. If a declared domain mask has landed, delete this test and "
-        "revisit open question 25 with both is_eligible call sites in view; if "
-        "not, this is a member being produced with no way to derive it"
+    assert Outcome.INSUFFICIENT_DATA in present, (
+        "an all-NaN series did not come back INSUFFICIENT_DATA; either the "
+        "producer changed or the fixture no longer masks anything"
+    )
+    assert Outcome.NOT_APPLICABLE not in present, (
+        "a run wrote NOT_APPLICABLE. If section 13.6's declared domain mask "
+        "has landed, DELETE this test and revisit open question 25 with both "
+        "is_eligible call sites in view; if not, a member with no derivation "
+        "is being written"
     )
 
 

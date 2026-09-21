@@ -3399,6 +3399,31 @@ tests could not see.** `pixi run test-fast` would have shipped both.
   distinction a later session either does not notice the stale reading or refuses a correct
   repair**, and both cost more than the note.
 
+- **NOTHING THAT CAN WRITE MAY RUN AFTER THE SWEEP. ASSERT THE COVERAGE, DO NOT CLAIM IT.**
+  Added 2026-09-21, after a commit went out whose 78-minute sweep described bytes that were then
+  rewritten by a lint autofix.
+
+  **The order, because each writer costs seconds and the sweep costs over an hour:**
+
+  1. every tool that can write — `ruff check --fix`, `ruff format`, `pre-commit run --all-files`;
+  2. `git add -A` and record `git write-tree`;
+  3. the full sweep, to a file, read on its own status;
+  4. read-only checks only — `ruff check` with **no** `--fix`, `ruff format --check`, `mypy`;
+  5. at commit time, `git add -A && git write-tree` again and **assert it equals the recorded
+     hash**. If it differs, the sweep does not cover this commit: re-sweep, or say so in the
+     message.
+
+  **THE ASSERTION IS THE POINT.** "The sweep covered these bytes" is a claim; the two hashes are a
+  check, and the check is free. **It also detects rewrites nobody predicted** — a formatter, a hook,
+  an editor, a tool restoring from the index.
+
+  > **AND "A REORDER CANNOT CHANGE BEHAVIOUR" IS FALSE IN THIS PACKAGE, WHICH IS WHY THE RULE IS
+  > MECHANICAL RATHER THAN A JUDGEMENT CALL.** `metamer/core/__init__.py` carries a **load-bearing
+  > registration side effect**, so import order *is* behaviour here — and pytest imports every test
+  > module into one process, so reordering imports in one module can change registry state visible
+  > to another. **Re-running the one file you touched cannot detect that.** The only evidence for a
+  > post-sweep rewrite being harmless is CI's run on the committed bytes.
+
 - **ANY INTERMEDIARY THAT CAN CACHE, SUMMARISE OR TRUNCATE IS NOT EVIDENCE. READ THE BYTES.**
   **Promoted 2026-09-19 from the narrower form below**, which named truncation only. Truncation
   was the first form found; **caching is a second and summarising a third**, and on 2026-09-19 a

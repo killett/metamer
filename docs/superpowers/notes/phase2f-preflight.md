@@ -223,9 +223,41 @@ Task 1 touches `src/` and `tests/`, so the two parked one-liners above are trans
 and `test_compat_relevance_is_an_allowlist_golden_set` gains its name/subject line. **Verbatim text
 is parked above; this is a transcription, not a recollection.**
 
+### ADDENDUM, 2026-09-21 — THREE RULES LANDED AFTER THIS ENTRY AND TIGHTEN IT
+
+**This entry was written on 2026-09-20 and is not amended to look prescient.** Three things
+reached the handoff and the plan after it, and each raises Task 1's standard:
+
+1. **(a10) — before reading an instrument, demonstrate it can produce both answers.** The entry
+   already asked for a positive control on the import probe, which is that rule; **what it did not
+   say is that the control must use the IDENTICAL probe function with a different target**, not a
+   parallel implementation of the same idea. A positive control written twice tests two things and
+   proves neither.
+2. **(a10.1) — a post-hoc invalidation is legitimate exactly when it would have fired the same way
+   under the opposite outcome.** This governs what I may do if a Task 1 test comes back green for a
+   reason I dislike: state the invalidating property, then ask whether it is computable **without**
+   the result.
+3. **The sweep-ordering rule.** Every tool that can write runs FIRST; the sweep runs LAST, on final
+   bytes; `git write-tree` before and at commit time, asserted equal. **Task 1's commit is the first
+   to follow it by construction rather than by luck.**
+
+**AND ONE FINDING AGAINST THIS ENTRY'S OWN WORK, 2026-09-21.** The era test this pre-flight's
+sibling commit produced scans `src/` with `ast` for references to `NOT_APPLICABLE`. **That is the
+wrong subject** — it reads the source as a proxy for what a run writes — and it fails in the
+direction that matters: §13.6 will most plausibly write the member **vectorised from a mask**, with
+the code taken from a module constant, a lookup table, `flag_values` or `Outcome(n)`, and an
+attribute-reference scan sees none of those. **So on the one day the test exists to go red, it stays
+green.** It also cannot separate a read from a write. Replaced in Task 1's first commit by a
+behavioural witness: run the fit path on all-NaN series, read back the **written** codes, assert
+`INSUFFICIENT_DATA` present and `NOT_APPLICABLE` absent, with a fixture precondition asserting the
+input really contains all-NaN series. **A test that reads its subject directly needs no positive
+control against proxy divergence, because there is no proxy.**
+
 ### WHAT THIS ENTRY CHANGED
 
 - **D10's invariant is rewritten** from "excludes the fit path" to "excludes the config path", with
   the false leaf-import mechanism struck and the measured graph recorded in its place.
 - **Task 1 gains a positive control** on the import-graph probe, and a reachability statement on the
   completeness fixture.
+- **Task 1 also carries three inherited repairs** (see the addendum): the behavioural era test, the
+  PROGRESS.md pointer consolidation, and the sweep-ordering rule in handoff §2.

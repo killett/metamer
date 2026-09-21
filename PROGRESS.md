@@ -133,7 +133,7 @@ Full sweep **before the commit**: the figures are head item 5's and are not rest
 >
 > Everything below supports that sentence.
 
-**THE RECORD IS `tests/exit_criteria_2e.py` AND IT IS EXECUTABLE.** Every criterion names its
+**THE RECORD IS `tests/exit_criteria_2e.py` AND IT IS EXECUTABLE — AND IT IS AUTHORITATIVE FOR EVERY CRITERION'S READING (2026-09-20).** Where a reading is corrected, it is corrected THERE; this table carries the verdict and points at it rather than restating the reading text. **A fact stored in four places drifts, because the next correction fixes three of them** — criterion 9's reading lived in four homes until it was consolidated here, and D1's own rule already says a table lives at one site and is not restated at each. Every criterion names its
 reading — the plan's own third column — names the tests that establish it, and names what it is
 driven from or why no outside exists; `tests/test_exit_criteria_2e.py` binds all of that to the
 collected suite and takes eight readings from somewhere the implementing task's test did not: a
@@ -151,7 +151,7 @@ below is the reasoning; the record is the part a test can hold**, and neither re
 | 6 | The six exit codes are the six the taxonomy names | **MET** | the enumerated member list, by name and value |
 | 7 | `INTERNAL_ERROR`'s guard names the live producer it was verified against | **MET** | the dated provenance at the test |
 | 8 | `CANDIDATE_DROPPED` is outside the failure rate and inside the eligible denominator | **MET** | both properties, enumerated |
-| 9 | No committed audit number moves under the reclassification | **MET** | the `outcome_counts` histograms under `notes/*.json` — 8 of the 16 committed, the rest checked independently at 2f — **reading corrected 2026-09-20; verdict unchanged.** The reach was found by open question 24's independently-written check; the claim is true over the full sixteen, which 2f verified. The defect was evidential reach, not scope. |
+| 9 | No committed audit number moves under the reclassification | **MET** | **see the record** — `tests/exit_criteria_2e.py` is authoritative for every criterion's reading; this one's was corrected 2026-09-20 with the verdict unchanged |
 | 10 | The counters are display-only and no decision path reaches them | **MET** | the construction, both directions |
 | 11 | The abort verdict is a pure function of a finished store | **MET** | the verdict on a constructed pass-1 store, with no run |
 | 12 | The verdict is invariant to the eligible-excluded population | **MET** | the same store, cropped to its ocean |
