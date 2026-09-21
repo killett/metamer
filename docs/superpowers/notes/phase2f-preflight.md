@@ -261,3 +261,198 @@ control against proxy divergence, because there is no proxy.**
   completeness fixture.
 - **Task 1 also carries three inherited repairs** (see the addendum): the behavioural era test, the
   PROGRESS.md pointer consolidation, and the sweep-ordering rule in handoff §2.
+
+
+---
+
+## Plan Task 2 — rates per branch and per candidate, audited before any code (2026-09-21)
+
+**THE BRIEF** is the plan's Task 2 as amended: counts and rates per taxonomy branch and per
+candidate, **both denominators printed** (`failed/fitted` and `failed/eligible`), each named at its
+row, with the `fitted == 0` unavailability rule and the `domain_mask` caveat. **Three findings, and
+the first is a live defect in shipped code that this task was written to prevent in a different
+module.**
+
+### (a5) THE DEFECT TASK 2 EXISTS TO PREVENT IS ALREADY SHIPPED IN 2e's LIVE COUNTERS
+
+`progress.py`'s `LiveCounters.lines` computes, at line 149-152:
+
+    total  = sum(self._by_branch.values())
+    failed = sum(count for name, count in ... if Outcome(name).is_failure)
+
+**`total` is every point the run touched**, including every non-fit code. **Measured, on a
+constructed tally** — one tile, sixteen land points and four real failures:
+
+    progress: tiles=1  fits=20  failed=4 (20.0%)
+
+**Four failures out of four fits is 100%. It prints 20.0%, and it calls the denominator `fits`.**
+The label says *fits*; the quantity is *points touched*. That is D1's tell — a name and a predicate
+describing different quantities — in a **third** place, and it is on the path a user watches for ten
+hours.
+
+**It is the same arithmetic the verdict was repaired for on 2026-09-20** (D2b: 12/20 = 0.60 against
+12/12 = 1.00), and the repair did not reach here because the two were never connected: 2e's Task 4
+shipped the counters and 2e's Task 5 shipped the verdict, and nothing crossed them. **2c's lesson,
+exactly: a term of art repeated across decisions acquires a reading nobody chose.**
+
+**AND IT DEGRADES WITH THE THING THE REPORT IS FOR.** On this project's one ocean box the number is
+right — no land, no gaps — so every test and every real run to date shows it correct. It is wrong in
+proportion to how much of the grid is out of domain, which is to say **wrong exactly on the global
+run §14.1's ten-hour scenario describes**.
+
+**WHOSE IS IT?** §14.1's counters are 2e's and this is 2f's pre-flight. But the plan's own standing
+requirement says no 2a–2e verdict moves, **and this moves none**: 2e's criterion 10 is *"the counters
+are display-only and no decision path reaches them"*, which is about the seam and is untouched by
+the arithmetic inside `lines`. **This is a correction to a shipped number, not a re-argued verdict**
+— the handoff's own distinction, added 2026-09-20 — so it lands with Task 2, in its own commit,
+ahead of the report so the two cannot print different rates for one run.
+
+**THE FIX IS THE ONE TASK 2 ALREADY OWES**: the denominator is `is_fit_verdict`, the label says what
+it counts, and where nothing was fitted the rate is unavailable rather than `0.0`.
+
+### (c5) THE COUNTERS AND THE REPORT MUST NOT GROW TWO DEFINITIONS OF ONE RATE
+
+Two modules will now compute *"the failure rate"* — `progress.py` live, `metamer.report` from the
+store — and **the second is defined to be recomputable and the first is not**. If they disagree, a
+user sees one number during the run and a different one after it, over the same data.
+
+**They cannot share code**: `progress.py` is deliberately outside `metamer.batch` (2e's Task 4, an
+import boundary asserted in a subprocess) and `metamer.report` must not import the run path
+(Task 1). **So they share a TEST rather than a module** — one constructed tally and one constructed
+store carrying the same outcome census, asserted to produce the same rate. That is the only shape
+that binds two definitions without binding two import graphs.
+
+### (a10) THE `fitted == 0` RULE NEEDS A FIXTURE THAT CAN EXPRESS BOTH OUTCOMES
+
+The rule is that a candidate with no fits prints **unavailable**, not `0.0`. A fixture where *every*
+candidate has no fits cannot show that the rule discriminates — both columns would be unavailable
+for every row, which is also what a report that had simply broken would print. **The fixture carries
+two candidates: one screened out everywhere, one fitted everywhere and passing.** Both print, and
+they must not print alike.
+
+### THE FLIP DID NOT CAUSE IT — MEASURED, NOT INFERRED
+
+`progress.py` is **byte-identical at `ac3e577` (before the flip) and at HEAD**, and `is_eligible`
+appears **zero times in it at either revision**. It reads a raw point count and always has. **So the
+defect is 2e's from birth and commit 2's record is clean** — read with `git show`, never a checkout.
+
+Had it read `is_eligible`, the flip would have regressed the live display yesterday and commit 2
+would owe a dated note. It did not. **The wording "the quantity is points touched" suggested this;
+suggesting is not measuring, and the check cost one command.**
+
+### (a6) THE REPAIR LEFT A DESCRIPTION BEHIND, IN THE FUNCTION IT REPAIRED
+
+`abort_verdict`'s own docstring still reads *"The rate is `failed / eligible`"* — at
+`abort.py:167`, inside the function whose rate moved to `fitted` on 2026-09-20. **My repair changed
+the code, the field docs and the dataclass docstring, and missed the description at the top of the
+function.** (a6): when code is replaced, sweep for the descriptions that survive it. Fixed in this
+commit.
+
+### THE RULE THIS FINDING IS REALLY ABOUT, AND WHY F3 KEPT NEEDING RE-APPLYING
+
+The flip's consumer enumeration searched for **callers of `is_eligible`** and found eight tests and
+two modules. `LiveCounters` computes a failure rate **with its own arithmetic** and calls neither
+predicate's rate path, so **no search for the predicate could ever have found it.**
+
+> **A QUANTITY COMPUTED IN MORE THAN ONE PLACE CANNOT BE REPAIRED BY ENUMERATION, BECAUSE A SEARCH
+> FINDS CALL SITES OF FUNCTIONS, NOT COMPUTATIONS OF QUANTITIES. GIVE EACH QUANTITY ONE DEFINITION,
+> AND ITS NEXT REPAIR IS A SEARCH AGAIN.**
+
+That is why F3's enumeration rule kept needing to be re-applied: **the thing being enumerated was
+not the thing being repaired.** And it settles the shape of this commit — **one definition, not two
+implementations policed by a census test.** A census test is the four-homes problem in code: it is
+only as good as its census, and two implementations sharing a blind spot (a new `Outcome` member
+each classifies differently) pass it while both are wrong.
+
+**THE BOUNDARIES DO NOT PREVENT SHARING — CHECKED.** `progress.py` cannot tally failures without
+`Outcome`, and `metamer.report` imports `metamer.core.outcomes` already (with `metamer.core` riding
+along at its measured 0.5 s, recorded at Task 1). So a **pure function beside `is_fit_verdict`**,
+taking a histogram and returning failed / fitted / eligible / points and a rate-or-reason, is
+importable by both with no new edge in either graph. **It inherits `is_fit_verdict`'s
+positive-membership default**, so a future `Outcome` member lands on the safe side in every consumer
+at once.
+
+### THE ENUMERATION, WITH ITS COUNT — FIVE SITES
+
+| # | site | kind | disposition |
+|---|---|---|---|
+| 1 | `progress.py` `LiveCounters.lines` | **display** | **WRONG — fixed in this commit**, becomes the shared function's first consumer |
+| 2 | `abort.py` `_rate_for` / `_decide` | **decision** | correct since 2026-09-20; moves onto the shared function, and its stale docstring is fixed |
+| 3 | `audit_report.py` rescue / loss / `both_ok_fraction` | measurement | **filed as open question 25**, not touched — its denominators are `cold_failed` / `cold_ok` / `attempted`, a different question |
+| 4 | committed harnesses under `notes/` — **15 rate-shaped divisions** | measurement of committed artifacts | **FILED, NOT TOUCHED.** They use denominators like `outcome != 8` and `iterations != ITERATIONS_UNSET` that describe the artifacts they produced; rewriting them rewrites closed evidence — the same reason 2e's `_histograms` is frozen |
+| 5 | `metamer.report` | display | **does not exist yet**; Task 2 makes it the shared function's second consumer |
+
+**Two are display or decision sites and both are addressed here. Three are measurement sites and all
+three are filed.** The count is five and is asserted in a test, per (c7).
+
+### WHAT THIS ENTRY CHANGED
+
+- **Task 2 gains a commit ahead of it**: one shared definition of the failure tally, with
+  `progress.py` as its first consumer and the verdict moved onto it. **Found before any code, on the
+  second pre-flight in a row to change a task's size.**
+- **~~A cross-module agreement test~~ is refused** in favour of one definition — a test holding two
+  implementations equal is two homes for one fact, policed rather than prevented.
+- **The `fitted == 0` fixture is specified as two candidates**, so the rule is shown to
+  discriminate — (a10)'s head rule applied to a fixture.
+
+
+---
+
+## Task 2's repair — what the sweep caught that targeted runs did not (2026-09-21)
+
+**THE FULL SWEEP CAME BACK RED ON A TEST I HAD NOT RUN**: `test_runner.py`'s
+`test_a_recompute_run_counts_its_tiles_and_does_not_report_an_empty_run` parses `fits=` out of the
+live display, and the repair renamed that field. `max()` on an empty sequence, a `ValueError`, and a
+red sweep.
+
+**I CHANGED A LABEL AND DID NOT GREP FOR ITS READERS.** `grep -rn "fits=" tests/` finds it in one
+second. I had run `test_progress.py` — the module that owns the display — and stopped there, which
+is a search bounded by the module I was editing rather than by the string I was changing. **Third
+instance in one day of the same shape:** the flip's enumeration searched a predicate and missed a
+second computation of the quantity; the regression check inspected a file and missed the transitive
+step; this searched a module and missed a consumer.
+
+> **WHEN YOU CHANGE THE TEXT OF AN OUTPUT, THE OUTPUT IS AN INTERFACE. GREP FOR THE STRING, NOT FOR
+> THE MODULE.** A display is parsed by tests, by scripts and by operators, and none of them live in
+> the module that emits it.
+
+**The repair is stronger than a rename.** The test now reads **both** `points` and `fitted`: `points`
+preserves its subject exactly (the seam fed the same number of codes on both branches of the tile
+loop), and `fitted` is added because a recompute feeding the seam a block of NON-FIT codes would
+keep `points` equal while silently dropping `fitted` to zero — an under-count this test exists to
+catch and could not have seen through a single field.
+
+### THE RUN-TIME IMPORT MEASUREMENT, AND TASK 1's CEILING WAS WRONG TWICE
+
+Measured 2026-09-21, fixture store built in the PARENT and only read by the probe subprocess — so
+the probe measures the report and not the fixture builder:
+
+| stage | modules | forbidden present |
+|---|---|---|
+| `import metamer.report` | **63** | none |
+| `+ from metamer.report.reader import read_store` | **930** | none |
+| **after `read_store` runs** | **933** | **none** |
+
+**No leak: the boundary holds at run time.** But Task 1's test does not establish that, and its
+ceiling is wrong in both directions:
+
+1. **`metamer/report/__init__.py` is docstring-only**, so `import metamer.report` reaches **63**
+   modules — not the reader, not zarr. **The assertion "no forbidden module" is trivially true
+   because nothing was imported.**
+2. **The ceiling says "measured 708"**, which is the pre-flight's figure for
+   `metamer.core.outcomes` — a different subject, carried across as if it described this one. **The
+   real subject is 933, which is ABOVE the 900 asserted.** Had the probe targeted the right thing,
+   the ceiling would have failed.
+
+**AND THE PROBE CANNOT SEE THE FAILURE THE LAZY DESIGN CREATES.** D10 requires `matplotlib` imported
+*inside* the maps function, which is invisible to a `sys.modules` check taken right after an import
+— that is what lazy means. So the numbers path reaching a lazily-imported module by a shared helper
+would be green at import time and red at run time. **By (a10)'s head rule the probe cannot give both
+answers for the failure the boundary exists to prevent**, and the positive control does not fix it:
+it shows the probe sees an *import-time* import.
+
+**Repair, in the follow-up commit**: the subject becomes the module that exists and the path that
+runs — import, then `read_store` on a parent-built fixture, then read `sys.modules`; ceiling
+re-measured against that subject with the figure and its date in the docstring; the import-time
+probe kept as the cheap first check. Criterion 3's reading changes with it, since it currently
+names evidence that is vacuous.

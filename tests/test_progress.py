@@ -139,16 +139,26 @@ def test_the_tallies_count_points_and_not_tiles():
 def test_the_failure_count_uses_the_taxonomy_and_not_a_name_test():
     """A decided skip is not a failure, here as everywhere.
 
-    Expected values determined independently: `CANDIDATE_DROPPED` is a decided
-    skip per design doc section 12.5's grouping table, so of these six fits two
-    failed -- the `DEGENERATE_HESSIAN` pair -- and the three dropped ones are
-    not failures.
+    Expected values determined independently from design doc section 12.5's
+    grouping table: `CANDIDATE_DROPPED` is a decided skip -- eligible, not a
+    failure, **and not a fit** -- so of these six points three carry a fit
+    verdict, two of those failed (the `DEGENERATE_HESSIAN` pair), and the rate
+    is 2/3.
 
     Bug this catches: a display computing "failed" as "not OK", which is the
     obvious shortcut and is wrong for every member of the decided-skip group.
-    **The display is where that error is most expensive**: a run that dropped a
-    candidate on purpose would report a failure rate of 83% while the store says
-    33%, and the operator reads the display.
+    It would report `failed=5` here. **The display is where that error is most
+    expensive**, because the operator reads the display and decides whether to
+    kill a ten-hour run.
+
+    **THE AGREED NUMBER MOVED ON 2026-09-21 AND THE CLAIM DID NOT.** This test
+    exists to keep the display and the store saying the same thing, and it
+    pinned that agreement at ~~`fits=6`, 33.3%~~ -- a rate over every point
+    TOUCHED. Both sides now compute `core.outcomes.failure_tally`, whose
+    denominator is fitted points, so both say **2 of 3, 66.7%**. The three
+    dropped points are still not failures; they are also not fits, and a
+    candidate the run decided not to fit cannot dilute the rate of the one it
+    did. `fits=6` was the label that made the old number look right.
     """
     counters = LiveCounters()
     counters.record(
@@ -163,9 +173,11 @@ def test_the_failure_count_uses_the_taxonomy_and_not_a_name_test():
 
     head = counters.lines()[0]
 
-    assert "fits=6" in head
-    assert "failed=2" in head
-    assert "33.3%" in head
+    # THE LITERAL LINE, not four independent substring checks. The layout is
+    # the subject here as much as the numbers are: the denominator must sit
+    # ADJACENT to the rate, because the defect this line was repaired for is a
+    # person reading the neighbouring count as the denominator.
+    assert head == "progress: tiles=1  points=6  failed=2 of 3 fitted (66.7%)"
 
 
 def test_the_approximation_lives_in_the_counters_and_nowhere_else():
@@ -236,7 +248,7 @@ def test_nothing_is_rendered_before_anything_is_recorded():
     Expected value determined independently: there is no run to describe yet, so
     the honest output is none. A caller need not special-case the start.
 
-    Bug this catches: a display emitting `fits=0 failed=0 (n/a)` before the
+    Bug this catches: a display emitting `points=0 failed=0 (n/a)` before the
     first tile, which at the head of a ten-hour log reads as a completed run
     that fitted nothing.
     """

@@ -1,6 +1,8 @@
 from pathlib import Path
 
-from metamer.core.outcomes import Outcome
+import pytest
+
+from metamer.core.outcomes import Outcome, failure_tally
 
 
 def test_insufficient_data_is_not_a_failure():
@@ -361,3 +363,174 @@ def test_no_committed_report_carries_a_decided_skip():
         for name in skips:
             assert name not in text, f"{path.name} carries {name!r}"
     assert scanned > 0, "no committed reports were scanned; the check is vacuous"
+
+
+# ---------------------------------------------------------------------------
+# The failure tally -- ONE definition of a quantity computed in several places
+# ---------------------------------------------------------------------------
+
+
+def test_the_failure_rate_is_over_fitted_points_and_not_over_points_touched():
+    """The denominator is fits, and land does not dilute it.
+
+    Expected values determined independently by hand from the census below:
+    twenty points, sixteen of them `INSUFFICIENT_DATA` (which is what a run
+    writes for land until design doc section 13.6 lands) and four
+    `DEGENERATE_HESSIAN`. Four of the four points that were FITTED failed, so
+    the rate is 4/4 = 1.0. The eligible population is all twenty, because open
+    question 24 put `INSUFFICIENT_DATA` in it; the points touched are twenty.
+
+    Bug this catches: `failed / points`, which reports **0.20** on this census
+    -- the exact number `LiveCounters.lines` printed from 2e until 2026-09-21,
+    under the label `fits=20`. A candidate failing every fit it attempted reads
+    as failing one in five, and it degrades in proportion to how much of the
+    grid is out of domain, so it is right on this project's one ocean box and
+    wrong on the global run section 14.1's ten-hour scenario is about.
+
+    **THE THREE COUNTS ARE THREE FACTS.** `points` is what the run touched,
+    `eligible` is section 14.2's coverage population, `fitted` is where a fit
+    verdict exists -- and only the third is a denominator for a failure rate.
+    """
+    census = {
+        Outcome.INSUFFICIENT_DATA.value: 16,
+        Outcome.DEGENERATE_HESSIAN.value: 4,
+    }
+
+    tally = failure_tally(census)
+
+    assert tally.points == 20
+    assert tally.eligible == 20
+    assert tally.fitted == 4
+    assert tally.failed == 4
+    assert tally.rate == 1.0
+    assert tally.unavailable is None
+
+
+def test_a_candidate_that_was_never_fitted_has_no_rate_and_says_why():
+    """0/0 is not a score, and "nothing fitted" is not 0.0.
+
+    Expected value determined independently: design doc section 12.5 calls
+    `SCREENED_OUT` a decided skip -- eligible, not a failure, and not a fit --
+    so a candidate screened everywhere has a full eligible population and no
+    fit to judge.
+
+    Bug this catches: the rate reported as **0.0**, which is what a candidate
+    fitted at every point and passing reports. "Nothing was tried" and
+    "everything succeeded" are opposite facts and would print alike -- the
+    collapse design doc section 14.1's no-evidence decision fixed at SAMPLE
+    granularity, appearing at CANDIDATE granularity.
+    """
+    tally = failure_tally({Outcome.SCREENED_OUT.value: 20})
+
+    assert tally.points == 20
+    assert tally.eligible == 20
+    assert tally.fitted == 0
+    assert tally.failed == 0
+    assert tally.rate is None
+    assert tally.unavailable is not None
+    assert "fitted" in tally.unavailable
+
+
+def test_nothing_fitted_and_everything_passed_do_not_print_alike():
+    """The discrimination the rule exists for, as one assertion over two censuses.
+
+    Expected values determined independently: a candidate fitted at twenty
+    points with no failures is 0/20 = 0.0; a candidate screened out at twenty
+    points has no rate at all.
+
+    Bug this catches: a fixture that cannot show the rule DISCRIMINATES. If
+    every candidate in a test has no fits, "unavailable everywhere" is also
+    what a tally that had simply broken would produce -- (a10), before reading
+    an instrument demonstrate it can produce both answers. Pairing the two
+    censuses in one test is what makes the `None` mean something.
+    """
+    screened = failure_tally({Outcome.SCREENED_OUT.value: 20})
+    passing = failure_tally({Outcome.OK.value: 20})
+
+    assert (screened.rate, passing.rate) == (None, 0.0)
+    assert screened.fitted == 0 and passing.fitted == 20
+    assert screened.unavailable is not None and passing.unavailable is None
+
+
+def test_an_empty_census_is_unavailable_rather_than_an_error():
+    """A tile with nothing recorded yet has no rate and does not raise.
+
+    Bug this catches: a `ZeroDivisionError` on the first tile of a run, before
+    anything has been tallied -- which `LiveCounters` must survive because it
+    prints per tile from the start.
+    """
+    tally = failure_tally({})
+
+    assert (tally.points, tally.eligible, tally.fitted, tally.failed) == (0, 0, 0, 0)
+    assert tally.rate is None
+    assert tally.unavailable is not None
+
+
+def test_the_tally_accepts_outcome_members_as_keys_as_well_as_their_values():
+    """Both spellings, because two callers hold two shapes.
+
+    `LiveCounters` keys its `Counter` by the enum's string VALUE; a caller
+    reading a store holds `Outcome` members. Accepting both is what lets one
+    definition serve both without either converting at the boundary and
+    getting it subtly wrong.
+
+    Bug this catches: a tally that silently counts nothing because its keys
+    were members where it expected strings -- which reports `fitted=0` and
+    therefore "unavailable", a plausible-looking answer rather than a crash.
+    """
+    by_value = failure_tally({Outcome.OK.value: 3, Outcome.DEGENERATE_HESSIAN.value: 1})
+    by_member = failure_tally({Outcome.OK: 3, Outcome.DEGENERATE_HESSIAN: 1})
+
+    assert by_value == by_member
+    assert by_member.rate == 0.25
+
+
+def test_an_unknown_outcome_name_is_refused_rather_than_ignored():
+    """A key the taxonomy does not know stops the tally.
+
+    Bug this catches: a misspelled or renamed member silently contributing to
+    `points` and to nothing else, which lowers every rate computed from the
+    census without changing anything a reader can see. Refusing is the (a2b)
+    treatment: unavailable with a reason beats a plausible number.
+    """
+    with pytest.raises(ValueError, match="not_a_real_outcome"):
+        failure_tally({"not_a_real_outcome": 1})
+
+
+def test_every_failure_rate_in_src_comes_from_the_one_definition():
+    """The quantity has ONE definition, and this asserts the COUNT of its sites.
+
+    Expected values determined independently by enumerating the tree at
+    sub-phase 2f Task 2's pre-flight, 2026-09-21: five places compute a
+    failure-like rate. Two are display or decision sites and both call
+    `failure_tally` -- `progress.LiveCounters.lines` and `abort._rate_for`.
+    Three are measurement sites and all three are filed rather than changed:
+    `audit_report`'s rescue/loss denominators (open question 25, a different
+    question), the committed harnesses under `notes/` (they describe artifacts
+    they produced, and rewriting them rewrites closed evidence), and the
+    report, which does not exist yet.
+
+    Bug this catches: **a third computation of the failure rate.** That is not
+    hypothetical -- it is what happened. Section 14.1's verdict and the live
+    counters each had their own arithmetic, the verdict's denominator was
+    repaired on 2026-09-20, and the display's was not, because **a search finds
+    call sites of a FUNCTION and cannot find computations of a QUANTITY.** They
+    disagreed for four days over the same data.
+
+    **IT ASSERTS THE ENUMERATION'S SIZE AND NOT ONLY ITS MEMBERS** -- handoff
+    (c7). A check that merely confirmed these two callers exist would keep
+    passing while a third site was added beside them.
+    """
+    root = Path(__file__).resolve().parents[1] / "src"
+    callers = sorted(
+        path.relative_to(root).as_posix()
+        for path in root.rglob("*.py")
+        if path.name != "outcomes.py"
+        and "failure_tally(" in path.read_text(encoding="utf-8")
+    )
+
+    assert callers == ["metamer/batch/abort.py", "metamer/progress.py"], (
+        "the set of failure_tally consumers moved. If a site was ADDED, check "
+        "it is not a third arithmetic for the same quantity; if one was "
+        "REMOVED, it has grown its own"
+    )

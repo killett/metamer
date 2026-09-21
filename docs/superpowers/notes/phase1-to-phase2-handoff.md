@@ -3381,6 +3381,32 @@ tests could not see.** `pixi run test-fast` would have shipped both.
   > REASON:** in the first, **staging changes what is CHECKED**; in the second, **staging changes
   > what SURVIVES.** Either alone reads as a quirk of one tool. Together they say the index is
   > where work becomes real, and everything before it is provisional in both senses.
+- **SCOPE BOUNDARIES PROTECT OPEN QUESTIONS, NOT KNOWN DEFECTS.** Added 2026-09-21, because two
+  rulings a day apart look contradictory without it.
+
+  On 2026-09-20 a scope boundary **held**: `audit_report.py`'s survival denominator was found to
+  name a different quantity from its predicate, and the repair was **filed as open question 25**
+  rather than taken, because design doc §14.2's amendment A2 puts the two-arm audit numbers outside
+  sub-phase 2f. On 2026-09-21 the same-shaped finding in `progress.py` was **taken immediately**,
+  in another sub-phase's module, by the sub-phase that found it.
+
+  **The difference is what the boundary was protecting:**
+
+  | | open question 25 | the live counters |
+  |---|---|---|
+  | is a committed number wrong? | **no** — 52 of 52 under all three candidate denominators | **yes** — 20.0% where the truth is 100%, measured |
+  | is the right denominator decided? | **no** — three candidates, possibly the intersection, not settleable without the module in view | **yes** — `failed / fitted`, argued on its merits the day before |
+
+  **Filing a known defect is not scope discipline, it is leaving a wrong number in a shipped
+  artifact.** Applying a settled answer to a site the repair missed is not reopening a question in
+  another phase's module.
+
+  > **AND "DISPLAY-ONLY" IS A CLAIM ABOUT CODE AND IS SILENT ABOUT PEOPLE.** 2e's criterion 10 says
+  > no decision path reaches the live counters, and it is true. **A human watching that line decides
+  > whether to kill a ten-hour run** — and a diluted 20% where the truth is 100% is a human letting a
+  > doomed candidate reach hour nine, which is §14.1's motivating scenario verbatim. **The display
+  > exists to prevent exactly the outcome the defect produces.**
+
 - **A VERDICT'S RECORD MAY BE CORRECTED WHEN THE CORRECTION IS A FINDING ABOUT WHAT WAS ACTUALLY
   READ. A VERDICT'S VALUE IS NOT RE-ARGUED BY A LATER PHASE.** Added 2026-09-19, because the rule
   every plan quotes — *"no exit-criterion verdict from an earlier sub-phase moves"* — has no such
@@ -3398,6 +3424,36 @@ tests could not see.** `pixi run test-fast` would have shipped both.
   population. The reading is corrected where it sits; the verdict is untouched. **Without this
   distinction a later session either does not notice the stale reading or refuses a correct
   repair**, and both cost more than the note.
+
+- **SEARCH EVERYTHING THE CHANGE CAN AFFECT, NOT JUST WHERE THE CHANGE WAS MADE.** Added
+  2026-09-21, consolidating **three misses in one day**, each a search bounded by the wrong thing:
+
+  | the search | what it was bounded by | what it missed |
+  |---|---|---|
+  | the flip's consumer enumeration | the **predicate** `is_eligible` | a second computation of the same quantity, in `progress.py`, which calls no predicate a search could reach |
+  | the regression check on that display | the **file** (`git show`, byte-identical) | the transitive step — an identical body is not identical behaviour if what it calls changed |
+  | the display's rename | the **module** that owns the display | a reader of the *string* `fits=` in `test_runner.py`, found by the full sweep |
+
+  **Before claiming consumers are enumerated, write down every KIND of thing that can observe the
+  change, then search each kind:** callers; other computations of the same quantity; transitive
+  dependents; readers of its text (tests, scripts, operators); persisted artifacts; docstrings.
+
+  > **AN OUTPUT IS AN INTERFACE. GREP FOR THE STRING, NOT FOR THE MODULE.** A display is parsed by
+  > tests, by scripts and by operators, and none of them live in the module that emits it.
+
+- **A POSITIVE CONTROL PROVES THE DETECTOR, NOT WHAT IT IS POINTED AT.** Added 2026-09-21.
+
+  **The instance:** sub-phase 2f Task 1's import-boundary probe carried a positive control, and the
+  control was sound — it demonstrated the probe could see a forbidden module. **It could not show
+  the probe was looking at the report**, because the probe imported `metamer.report`, whose
+  `__init__.py` is docstring-only: **63 modules, reaching neither the reader nor zarr.** The
+  assertion "no forbidden module" was trivially true because nothing had been imported, and the
+  ceiling beside it cited a figure measured for a different subject.
+
+  **(a10) asks whether the instrument can produce both answers; this asks whether it is aimed at
+  the subject.** They are different questions and a control answers only the first. **What an
+  instrument is pointed at is established by exercising the subject itself** — call `read_store` on
+  a real store, do not import a package that hopefully leads to it.
 
 - **NOTHING THAT CAN WRITE MAY RUN AFTER THE SWEEP. ASSERT THE COVERAGE, DO NOT CLAIM IT.**
   Added 2026-09-21, after a commit went out whose 78-minute sweep described bytes that were then

@@ -37,7 +37,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from metamer.core.outcomes import Outcome
+from metamer.core.outcomes import Outcome, failure_tally
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from numpy.typing import NDArray
@@ -140,19 +140,55 @@ class LiveCounters:
     def lines(self) -> list[str]:
         """Render the current tallies as plain lines.
 
+        **THE RATE NAMES ITS DENOMINATOR ADJACENT TO IT**, as
+        `failed=4 of 4 fitted (100.0%)`. `points` is a count and sits before
+        it, deliberately: an earlier layout printed `fitted=4  points=20
+        failed=4 (100.0%)`, which put the NON-denominator next to the rate and
+        left the real one two fields away. **Anyone who learned the older
+        `fits=20  failed=4 (20.0%)` reads the adjacent count as the
+        denominator**, and misreading a denominator on this line is the defect
+        this line was repaired for. On one line, "every rate names its
+        denominator at the row" means *adjacent*.
+
+        **THIS TEXT IS AN INTERFACE.** It is parsed by
+        `tests/test_runner.py::test_a_recompute_run_counts_its_tiles_and_does_not_report_an_empty_run`
+        and, being the only progress output a ten-hour run emits, plausibly by
+        operators' own scripts. **Changing the field names or their order is a
+        deliberate decision, not a formatting tidy-up** -- the 2026-09-21
+        rename broke that test, which is how this note came to exist.
+
         Returns:
             One summary line plus one line per candidate. Empty when nothing
             has been recorded, so a caller need not special-case the start.
         """
         if not self._tiles:
             return []
-        total = sum(self._by_branch.values())
-        failed = sum(
-            count for name, count in self._by_branch.items() if Outcome(name).is_failure
-        )
-        head = (
-            f"{PREFIX} tiles={self._tiles}  fits={total}  "
-            f"failed={failed} ({_percent(failed, total)})"
+        # **THE DENOMINATOR IS FITTED POINTS, AND THE LABEL SAYS SO (2026-09-21).**
+        # ~~`fits=total` over `sum(self._by_branch.values())`~~ counted every
+        # point the run TOUCHED -- land, decided skips, unwritten cells -- while
+        # calling it `fits`. Measured on a constructed tally of sixteen
+        # INSUFFICIENT_DATA and four DEGENERATE_HESSIAN, it printed
+        # `fits=20 failed=4 (20.0%)` where four of the four points that were
+        # FITTED had failed: the truth is 100%.
+        #
+        # It was right on every fixture and every real run this project has
+        # made, because all of them are one box of subtropical open ocean with
+        # no land and no gaps -- and wrong in proportion to the out-of-domain
+        # fraction, which is to say wrong exactly on the global run section
+        # 14.1's ten-hour scenario is about. **A human reading this line decides
+        # whether to kill that run**, so "display-only" is a claim about code
+        # and is silent about people.
+        #
+        # The arithmetic is `core.outcomes.failure_tally` and is NOT restated
+        # here: the same quantity computed twice is how this defect survived
+        # the verdict's repair on 2026-09-20, since a search finds call sites of
+        # a function and not computations of a quantity.
+        tally = failure_tally(self._by_branch)
+        head = f"{PREFIX} tiles={self._tiles}  points={tally.points}  " + (
+            "failed=0 of 0 fitted (nothing fitted yet)"
+            if tally.rate is None
+            else f"failed={tally.failed} of {tally.fitted} fitted "
+            f"({_percent(tally.failed, tally.fitted)})"
         )
         rows = [
             f"{PREFIX}   {label}: " + _render(counter)

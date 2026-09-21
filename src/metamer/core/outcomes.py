@@ -7,6 +7,8 @@ This is an enum written to the output, never a boolean `converged` flag.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+from dataclasses import dataclass
 from enum import StrEnum
 
 import numpy as np
@@ -194,6 +196,123 @@ class Outcome(StrEnum):
     def from_code(cls, value: int) -> Outcome:
         """Invert `code`."""
         return _BY_CODE[int(value)]
+
+
+@dataclass(frozen=True)
+class FailureTally:
+    """One census of outcome codes, reduced to the counts a rate needs.
+
+    **THIS IS THE PROJECT'S ONE DEFINITION OF "THE FAILURE RATE", AND IT IS
+    SINGLE ON PURPOSE.** The quantity was computed in two places with two
+    arithmetics -- section 14.1's verdict and the live counters -- and they
+    disagreed for four days without anything noticing, because **a search
+    finds call sites of a FUNCTION and not computations of a QUANTITY.** The
+    verdict's denominator was repaired on 2026-09-20 and the counters' was not,
+    since the counters call no predicate a search for the repair could reach.
+
+    **THE THREE COUNTS ARE THREE FACTS AND ONLY ONE IS A DENOMINATOR FOR A
+    FAILURE RATE.**
+
+    | count | what it is | what it answers |
+    |---|---|---|
+    | `points` | every code in the census | how big is the grid |
+    | `eligible` | `Outcome.is_eligible` | section 14.2's coverage population |
+    | `fitted` | `Outcome.is_fit_verdict` | where a fit verdict exists |
+
+    **`failed / fitted` is correct in both eras** -- before and after section
+    13.6's declared domain mask -- because "is this candidate failing the fits
+    it attempts" has nothing to do with how much of the grid is out of domain.
+    A denominator that includes unfittable points is diluted in proportion to
+    the land fraction, which is right on an ocean box and wrong on a global
+    run.
+
+    Attributes:
+        points: Every code counted, fit verdict or not.
+        eligible: Points in section 14.2's failure-rate population.
+        fitted: Points carrying a fit verdict. **The rate's denominator.**
+        failed: Fitted points that failed, by `Outcome.is_failure`.
+        rate: `failed / fitted`, or **None when nothing was fitted**.
+        unavailable: Why there is no rate, or None when there is one. **Never
+            a rate of 0.0 for a candidate that was never tried** -- that reads
+            identically to one fitted everywhere and passing, which is the
+            collapse section 14.1's `no_evidence` verdict exists to prevent,
+            one granularity down.
+    """
+
+    points: int
+    eligible: int
+    fitted: int
+    failed: int
+    rate: float | None
+    unavailable: str | None
+
+
+def failure_tally(census: Mapping[Outcome | str, int]) -> FailureTally:
+    """Reduce a census of outcome counts to `FailureTally`.
+
+    **PURE, AND IN THIS MODULE BECAUSE BOTH CONSUMERS ALREADY IMPORT IT.**
+    `metamer.progress` cannot tally failures without `Outcome`, and
+    `metamer.report` imports this module with `metamer.core` riding along, so
+    one definition here adds no edge to either import graph -- checked at
+    sub-phase 2f Task 2's pre-flight rather than assumed.
+
+    **A NEW MEMBER LANDS ON THE SAFE SIDE IN EVERY CONSUMER AT ONCE**, because
+    the counts are taken from `is_fit_verdict`, which is a POSITIVE membership
+    test: an unclassified member is not a fit, so it cannot silently become a
+    denominator.
+
+    Args:
+        census: Counts keyed by `Outcome` members or by their string values.
+            Both spellings are accepted because the live counters key a
+            `Counter` by value and a store reader holds members.
+
+    Returns:
+        The tally, with `rate=None` and a reason where nothing was fitted.
+
+    Raises:
+        ValueError: If a key is not an outcome. **Refused rather than ignored**
+            -- an unknown key that contributed only to `points` would lower
+            every rate computed from the census with nothing visible to a
+            reader.
+    """
+    points = eligible = fitted = failed = 0
+    for key, count in census.items():
+        try:
+            member = key if isinstance(key, Outcome) else Outcome(key)
+        except ValueError as error:
+            raise ValueError(
+                f"{key!r} is not an outcome; a census with an unknown key "
+                "would lower every rate computed from it and show nothing"
+            ) from error
+        points += int(count)
+        if member.is_eligible:
+            eligible += int(count)
+        if member.is_fit_verdict:
+            fitted += int(count)
+            if member.is_failure:
+                failed += int(count)
+
+    if fitted == 0:
+        return FailureTally(
+            points=points,
+            eligible=eligible,
+            fitted=0,
+            failed=0,
+            rate=None,
+            unavailable=(
+                "no point was fitted, so there is no rate: 0/0 is not a score, "
+                "and 0.0 would read identically to a candidate fitted "
+                "everywhere that passed"
+            ),
+        )
+    return FailureTally(
+        points=points,
+        eligible=eligible,
+        fitted=fitted,
+        failed=failed,
+        rate=failed / fitted,
+        unavailable=None,
+    )
 
 
 # Stable on-disk codes. NEVER renumber: they are written to the zarr store as

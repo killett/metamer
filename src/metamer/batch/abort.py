@@ -41,7 +41,7 @@ from numpy.typing import NDArray
 
 from metamer.batch.completion import completed_tiles
 from metamer.batch.resume import _refuse
-from metamer.core.outcomes import Outcome
+from metamer.core.outcomes import Outcome, failure_tally
 
 #: Section 14.1's default. **Strictly greater**: a candidate at exactly this
 #: rate continues. The sentence is *"> 90% failure"*, the side is invisible on
@@ -163,13 +163,18 @@ def abort_verdict(
 ) -> AbortVerdict:
     """Decide section 14.1's early abort from a finished pass-1 store.
 
-    **AN EMPTY ELIGIBLE POPULATION IS A FINDING, NOT A CLEAN BILL -- AND NOT
-    AN ABORT EITHER.** The rate is `failed / eligible`, and with no eligible
-    points that is `0/0`: a naive implementation either raises -- a crash, on a
+    **A SAMPLE WITH NOTHING FITTED IS A FINDING, NOT A CLEAN BILL -- AND NOT
+    AN ABORT EITHER.** The rate is `failed / fitted`, and with nothing fitted
+    that is `0/0`: a naive implementation either raises -- a crash, on a
     well-formed store -- or yields `nan` or `0.0`, **both of which compare
     False against the threshold and read as "continue"**. So the empty sample
     is its own verdict, `no_evidence`, and it is never allowed to read as
     healthy.
+
+    **~~`failed / eligible`~~ CORRECTED 2026-09-21, (a6).** The denominator
+    moved to `fitted` on 2026-09-20 and this description survived the change,
+    inside the very function that was repaired -- when code is replaced, sweep
+    for the descriptions that outlive it.
 
     **DECIDED 2026-09-18, (b): NO EVIDENCE CONTINUES LOUDLY.** ~~It aborts and
     says so~~ was Task 5's reading (2026-09-14), on the argument that a config
@@ -245,24 +250,26 @@ def _rate_for(label: str, codes: NDArray[np.uint8]) -> CandidateRate:
         and `eligible` counted separately because section 14.2's report is over
         that population.
     """
-    eligible = 0
-    failed = 0
-    fitted = 0
+    # **THE ARITHMETIC IS `core.outcomes.failure_tally` AND IS NOT RESTATED
+    # HERE (2026-09-21).** This function and `progress.LiveCounters` both
+    # computed "the failure rate" with their own arithmetic, and they disagreed
+    # for four days: this one was repaired to `failed / fitted` on 2026-09-20
+    # and the display was not, because a search for the repair finds call sites
+    # of a predicate and cannot find a second computation of the same quantity.
+    # One definition, two consumers, and the next repair is a search again.
     values, counts = np.unique(codes, return_counts=True)
-    for value, count in zip(values, counts, strict=True):
-        member = Outcome.from_code(int(value))
-        if member.is_fit_verdict:
-            fitted += int(count)
-        if member.is_eligible:
-            eligible += int(count)
-            if member.is_failure:
-                failed += int(count)
+    tally = failure_tally(
+        {
+            Outcome.from_code(int(value)): int(count)
+            for value, count in zip(values, counts, strict=True)
+        }
+    )
     return CandidateRate(
         candidate=label,
-        failed=failed,
-        eligible=eligible,
-        fitted=fitted,
-        rate=None if fitted == 0 else failed / fitted,
+        failed=tally.failed,
+        eligible=tally.eligible,
+        fitted=tally.fitted,
+        rate=tally.rate,
     )
 
 

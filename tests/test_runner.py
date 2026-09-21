@@ -16,6 +16,7 @@ invisible to an in-process call.
 
 from __future__ import annotations
 
+import re
 import subprocess
 import sys
 import textwrap
@@ -1615,7 +1616,7 @@ def test_a_recompute_run_counts_its_tiles_and_does_not_report_an_empty_run(tmp_p
 
     Bug this catches: silent under-counting on the recompute path. **A display
     is exactly where an absence looks like a zero**: an operator watching a
-    `--reuse-fits-from` run would see `fits=0` beside a store filling up, and
+    `--reuse-fits-from` run would see `points=0` beside a store filling up, and
     the natural reading is that nothing is being written.
 
     **PROVED TO BITE 2026-09-14:** the recompute branch was made to feed an
@@ -1640,15 +1641,40 @@ def test_a_recompute_run_counts_its_tiles_and_does_not_report_an_empty_run(tmp_p
     )
     assert again.returncode == ExitCode.OK, again.stderr
 
-    def _fits(stderr: str) -> int:
-        lines = [line for line in stderr.splitlines() if "progress:" in line]
-        assert lines, stderr
-        return max(
-            int(part.split("=")[1])
-            for line in lines
-            for part in line.split()
-            if part.startswith("fits=")
-        )
+    # **MATCHED AGAINST THE LITERAL FORMAT WITH A REGEX WRITTEN HERE**, never
+    # by calling the code that formatted it: a test that parses output with the
+    # formatter's own helper is circular and would follow the format silently
+    # wherever it went. The pattern below is the display's contract, spelled
+    # out, so a format change fails HERE and is a decision rather than a drift.
+    line = re.compile(
+        r"progress: tiles=(?P<tiles>\d+)\s+points=(?P<points>\d+)\s+"
+        r"failed=(?P<failed>\d+) of (?P<fitted>\d+) fitted \("
+    )
 
-    assert _fits(again.stderr) == _fits(first.stderr)
-    assert _fits(again.stderr) > 0
+    def _counted(stderr: str, field: str) -> int:
+        """The largest value of `field` across the run's progress lines.
+
+        **PARAMETERISED BY FIELD SINCE 2026-09-21**, when the display's
+        ~~`fits=`~~ became `points=` and `failed=N of M fitted`. The old name
+        counted every point the run TOUCHED while calling them fits -- see
+        `metamer.core.outcomes.failure_tally`.
+        """
+        matches = [line.search(text) for text in stderr.splitlines()]
+        values = [int(m.group(field)) for m in matches if m is not None]
+        assert values, (
+            f"no progress line matched the expected format for {field!r}. "
+            f"The display's format is a published interface; if it changed on "
+            f"purpose, change this pattern too.\n{stderr}"
+        )
+        return max(values)
+
+    # BOTH COUNTS, WHICH IS STRICTLY STRONGER THAN THE ONE THIS REPLACED.
+    # `points` is what the old `fits=` computed, so it preserves this test's
+    # subject exactly: the seam fed the same number of codes on both branches.
+    # `fitted` is added because a recompute that fed the seam a block of
+    # NON-FIT codes would keep `points` equal and silently drop `fitted` to
+    # zero -- an under-count this test existed to catch and could not have
+    # seen through a single field.
+    for field in ("points", "fitted"):
+        assert _counted(again.stderr, field) == _counted(first.stderr, field), field
+        assert _counted(again.stderr, field) > 0, field
