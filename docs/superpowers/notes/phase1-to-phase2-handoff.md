@@ -3425,6 +3425,65 @@ tests could not see.** `pixi run test-fast` would have shipped both.
   distinction a later session either does not notice the stale reading or refuses a correct
   repair**, and both cost more than the note.
 
+- **A QUANTITY COMPUTED IN MORE THAN ONE PLACE CANNOT BE REPAIRED BY ENUMERATION, BECAUSE A SEARCH
+  FINDS CALL SITES OF FUNCTIONS, NOT COMPUTATIONS OF QUANTITIES. GIVE EACH QUANTITY ONE DEFINITION,
+  AND ITS NEXT REPAIR IS A SEARCH AGAIN.** Added 2026-09-21.
+
+  **The instance:** "the failure rate" was computed twice with two arithmetics — §14.1's verdict and
+  the live counters. The verdict's denominator was repaired on 2026-09-20; the display's was not,
+  and they disagreed for four days over the same data. **The repair's consumer enumeration searched
+  for callers of `is_eligible`, and the display calls no predicate that search could reach.**
+
+  **This is why (c7)'s enumeration rule kept needing re-application: the thing being enumerated was
+  not the thing being repaired.** The fix is `core.outcomes.failure_tally` — one definition, both
+  consumers, and a positive-membership default so a new member lands on the safe side everywhere at
+  once.
+
+- **A SHARED DEFINITION NEEDS AN EXTERNAL ORACLE. ITS TESTS ASSERT AGAINST VALUES COMPUTED BY HAND
+  FROM THE FIXTURE'S LITERAL COUNTS, NEVER AGAINST ANOTHER CALL TO THE FUNCTION.** Added 2026-09-21,
+  and it is the **price** of the rule above rather than an independent idea.
+
+  Two implementations give a weak cross-check for free; collapsing them to one removes it. **And the
+  cross-check was already worthless here, which is the instance:** a 2e test pinned the display and
+  the store agreeing at 33.3% — **both were wrong, and they agreed while wrong.** A census test
+  between two implementations passes whenever both share a blind spot, such as a new `Outcome`
+  member each classifies the same wrong way.
+
+  Once both sides call one function, "display agrees with store" reduces to the function agreeing
+  with itself. **Write the arithmetic in the test** — *"2 failed of 3 fitted"* — from the fixture's
+  literal counts. Same discipline as the exit-criteria suites: the binding test takes its reading
+  from somewhere the implementing test did not.
+
+- **IDENTICAL SOURCE IS NOT IDENTICAL BEHAVIOUR WHEN THE SOURCE CALLS ANYTHING THAT CHANGED. FOR A
+  PREDICATE OVER A FINITE ENUM, COMPARE TRUTH TABLES, NOT BODIES.** Added 2026-09-21.
+
+  **The instance:** asking whether `INSUFFICIENT_DATA`'s eligibility flip had regressed the live
+  display, the check was *"`progress.py` is byte-identical between the two revisions"* — which
+  misses transitive dependence — and then *"`is_failure`'s body is identical"*, **which is the same
+  argument one level down.** Had `is_failure` been written as *"eligible and not OK"*, its body
+  would be unchanged and its behaviour would have moved.
+
+  **The truth table is the subject; the body is a stand-in for it.** Fourteen members, both
+  revisions, read from a separate `git worktree` — **never a checkout of the working tree**, per the
+  standing rule.
+
+  > **AND THIS IS WHY A BEHAVIOURAL RUN BEATS AN INFERENCE CHAIN: a run closes every transitive step
+  > at once, while an inference has to find and close each step by hand — and the step you have not
+  > noticed is the one that is open.**
+
+- **THERE IS NO SUCH THING AS A "LEAF" SUBMODULE IMPORT IN PYTHON UNLESS THE PARENT PACKAGE'S
+  `__init__` IS EMPTY.** Added 2026-09-21, after it cost a reviewed and approved invariant.
+
+  Sub-phase 2f's plan stated, on main, that the report could *"import `metamer.core.outcomes` as a
+  leaf"* to avoid `core.fit`'s weight. **Python executes a package's `__init__.py` on any submodule
+  import**, and `metamer/core/__init__.py` deliberately imports `families` — a load-bearing
+  registration side effect — and `core.fit`. The task's own import test would have failed on its
+  first run.
+
+  **It is a language fact, not a repository fact**, so it is checkable from a plan's text without
+  reading the repository: **any sentence claiming an import is a leaf, or naming a submodule to
+  avoid a parent's weight, is false by default, and the parent's `__init__` settles it.**
+
 - **SEARCH EVERYTHING THE CHANGE CAN AFFECT, NOT JUST WHERE THE CHANGE WAS MADE.** Added
   2026-09-21, consolidating **three misses in one day**, each a search bounded by the wrong thing:
 

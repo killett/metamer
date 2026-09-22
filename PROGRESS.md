@@ -4,14 +4,110 @@
 
 1. **Branch `main`, every commit pushed by a hook** — https://github.com/killett/metamer. **No SHA is named anywhere in this head**; `git log --oneline -8` is the authority.
 2. **DONE:** Phase 1, P0–P4, 2a, 2b, 2c, 2d, the real-data spike, wiring one, the selection-map report — and **Phase 2e (COMPLETE 2026-09-18 — 18 met / 1 reduced scope / 0 failed over nineteen criteria, the nineteenth added by decision; Tasks 0–6 by 2026-09-16, the no-evidence decision and Task 7 on 2026-09-18)**. Per-phase closes are in their sections — [2e's is here](#phase-2e-is-closed-2026-09-18--18-met--1-met-with-reduced-scope--0-failed-plus-2bs-two-inherited-failures-2cs-one-reduction-and-2ds-three-failures-and-one-reduction); **none is restated here**.
-3. **NEXT ACTION: 2f — §14.2's report, computed from the store, with `python -m metamer.report <store>` as its entry point.** Brainstorm and plan first, in 2e's shape. Start from [what 2f inherits](#what-2f-inherits) at the foot of 2e's close — three subjects to count, criterion 14's row, and **open question 24, whose first act is an artifact check**. The 2e plan is [`2026-09-12-metamer-phase2e.md`](docs/superpowers/plans/2026-09-12-metamer-phase2e.md) and its record is `tests/exit_criteria_2e.py`.
+3. **NEXT ACTION: 2f Task 2's FOLLOW-UP COMMIT, then Task 2's code.** The plan is [`2026-09-19-metamer-phase2f.md`](docs/superpowers/plans/2026-09-19-metamer-phase2f.md), **APPROVED with ten review amendments**; the pre-flight is [`phase2f-preflight.md`](docs/superpowers/notes/phase2f-preflight.md) and every task's entry is written **before** its code. **Task 0 (the clustering spike) and Task 1 (the reader) are DONE.** The five queued follow-up items are [here](#the-queued-follow-up--2fs-next-commit) and land **before** any Task 2 code.
 4. **2f is not blocked**: stores, `/selection/delta_ic` and `audit_report.py` exist, and the subjects it waits on to count are now produced. Open question 24 is filed to it.
-5. **Tests: 1483 passed, 0 failed, 0 INDETERMINATE — 2026-09-18, 5745.87 s (1:35:45), exit code pytest's own** (1482 earlier the same day with eighteen criteria, 1465 after the no-evidence decision, 1463 on 2026-09-16; the one added last is criterion 19's test). `pixi run test` is the full sweep and the only end-of-task evidence. **The run an hour earlier on the IDENTICAL TREE took 1:40:14, had 5 above the diagnostic, and printed a floor ladder 32% low and non-monotonic — see the gotcha. Same code, same fixture, same box.** **AND THE EXIT CODE READ IS PYTEST's OWN.** A `pixi run test 2>&1 | tail -25` on the run before this one reported **exit 0 with a test failing** — the code was `tail`'s. Handoff §2's rule, third instance: *where a tool reports on something else, its exit code describes the tool.* **Run the sweep to a file and read its status; never pipe it.** **`pixi run test` is the full sweep and every end-of-task verification must run it; `test-fast` and `test-ci` are NOT evidence** — the full sweep has caught **eight** things a fast run could not, the most recent being a test whose own expected value was computed from a 1-based reading of `np.arange`. **Every run prints `RSS measurement validity`, including at zero**; a nonzero count is INDETERMINATE, neither pass nor fail.
+5. **Tests: 1506 passed, 0 failed, 0 INDETERMINATE — 2026-09-21, 7231.56 s (2:00:31), exit code pytest's own** (1499 at 2f Task 1, 1486 at the OQ24 flip, 1483 at 2e's close). **WRITERS RUN BEFORE THE SWEEP AND THE SWEEP RUNS LAST**, with `git write-tree` recorded at sweep start and asserted equal at commit time — a lint autofix once rewrote bytes a 78-minute sweep had already described. Older figures: ~~1483 passed, 2026-09-18, 5745.87 s (1:35:45)~~ (1482 earlier the same day with eighteen criteria, 1465 after the no-evidence decision, 1463 on 2026-09-16; the one added last is criterion 19's test). `pixi run test` is the full sweep and the only end-of-task evidence. **The run an hour earlier on the IDENTICAL TREE took 1:40:14, had 5 above the diagnostic, and printed a floor ladder 32% low and non-monotonic — see the gotcha. Same code, same fixture, same box.** **AND THE EXIT CODE READ IS PYTEST's OWN.** A `pixi run test 2>&1 | tail -25` on the run before this one reported **exit 0 with a test failing** — the code was `tail`'s. Handoff §2's rule, third instance: *where a tool reports on something else, its exit code describes the tool.* **Run the sweep to a file and read its status; never pipe it.** **`pixi run test` is the full sweep and every end-of-task verification must run it; `test-fast` and `test-ci` are NOT evidence** — the full sweep has caught **eight** things a fast run could not, the most recent being a test whose own expected value was computed from a 1-based reading of `np.arange`. **Every run prints `RSS measurement validity`, including at zero**; a nonzero count is INDETERMINATE, neither pass nor fail.
 6. **Verify a checkout with `pixi run test && pixi run typecheck && pixi run lint` and `pixi run pre-commit run --all-files`**; `git add` new files first. **Never pipe a checker through `tail`** — see the handoff.
 7. **The method is the pre-flight**, and it lives only in [the handoff doc](docs/superpowers/notes/phase1-to-phase2-handoff.md) §1; 2e added **(j7b)** and **(a2)'s second register**.
 8. **CI is verified per commit, by an until-loop on the run's own `status`** — never by position in `gh run list`, never by `gh run watch --exit-status`; one push per run.
 9. **Open and unowned:** open question 20 (coordinate direction; duplicate dims now closed), the 120 s poll in `test_completion.py`, and open question 23 (`DEGENERATE_HESSIAN` is start-dependent). Detail in [the retired head items](#head-items-retired-from-the-cold-start-summary-2026-09-16).
 10. **Precedence: the design doc is authoritative on INTENT; a measured, dated number supersedes an unmeasured one wherever it lives. Any measurement stated twice has one copy DELETED, never reconciled.**
+
+---
+
+## Phase 2f — IN PROGRESS (2026-09-19 to 2026-09-21)
+
+**The plan is [`2026-09-19-metamer-phase2f.md`](docs/superpowers/plans/2026-09-19-metamer-phase2f.md)**,
+approved with ten review amendments; the pre-flight is
+[`phase2f-preflight.md`](docs/superpowers/notes/phase2f-preflight.md), **appended before each task,
+never after**. Nothing in the plan is restated here.
+
+### Where it is
+
+| task | state |
+|---|---|
+| 0 — the clustering spike | **DONE.** 4 predictions met, 2 refuted; D4 re-decided on its numbers |
+| 1 — the reader, import boundary, completeness | **DONE** (`3f04f68`) |
+| — | **`failure_tally`, one definition of the failure rate** (`7790100`) |
+| 2 — rates, both denominators | **NEXT, behind the follow-up below** |
+| 3–10 | planned |
+
+**Open question 24 is TAKEN IN PART, not closed** — closer is §13.6's declared domain mask. It cost
+four commits: the judgeability gate, the flip, the verdict's rate denominator, and the record
+correction. **The flip itself is one line; the other three are defects the artifact check found in
+consumers of the classification, none of which the change caused.**
+
+### What Task 0 measured
+
+**The permutation null is affordable**: 23.5 s at 1024², so 10⁷ points is **≥ 224 s — a FLOOR, not
+an estimate**, because the ladder is 1.6× superlinear (the working set leaves cache). **So 2f does
+not need open question 22's repair**, which removes 2f as a reason to take it and does not close it.
+
+**Two refutations, both instructive.** P4 predicted the longitude seam's bias bounded by one column
+of joins: the edge count held exactly and **the z-score moved 11.02 where < 0.25 was predicted** —
+a bound computed on the denominator while the effect lived in the numerator, because the removed
+joins are precisely the ones internal to a seam-straddling cluster. P5's floor detector **never left
+its band** while the p-value median marched to 1.000 — a rejection rate at fixed α is structurally
+blind to conservatism. **P5-prime re-measured with a distributional detector: the floor is 500**, a
+ladder rung and not a boundary (200 failed, 500 passed, so the threshold is in (200, 500]).
+
+**P4-prime is INDETERMINATE and D4 does not reopen on it.** Its fixture had a background rate of
+0.0005, so the null expected 0.01 adjacent pairs and both arms saturated — it measured its own
+operating point. The invalidation is legitimate by symmetry: saturation is computable from the
+background rate **before** the gap is looked at, and would have invalidated a large gap identically.
+
+### The queued follow-up — 2f's next commit
+
+**These land BEFORE any Task 2 code.**
+
+1. **Re-aim the tautological agreement test** and `failure_tally`'s own tests at values computed
+   **by hand from literal fixture counts**. A 2e test pinned the display and the store agreeing at
+   33.3% — **both were wrong and agreed while wrong**; now both call one function, so it asserts the
+   function against itself.
+2. **Count the rate-computation enumeration per file or per computation.** It says "five sites"
+   while counting **fifteen** rate-shaped divisions in the committed harnesses as one — and
+   harnesses are written every sub-phase. Drop "the report itself": it does not exist, and will be a
+   *caller*.
+3. **Docstrings name `failure_tally`** and state only what is specific to their site.
+4. **The run-time import probe and the ceiling.** Task 1's probe imports `metamer.report`, whose
+   `__init__.py` is docstring-only — **63 modules, reaching neither the reader nor zarr**, so the
+   assertion is trivially true. **Measured 2026-09-21: 933 modules after `read_store` runs, no
+   forbidden module at any stage** — the boundary holds, the test does not establish it, and the
+   stated ceiling of 900 would have **failed** against the real subject. Repair: subprocess imports
+   *and calls* `read_store` on a **parent-built** fixture (build it in the probe and it measures the
+   fixture builder), ceiling re-measured with its figure and date, import-time probe kept as the
+   cheap first check. **Criterion 3's record notes its evidence was vacuous from `3f04f68` until the
+   fix.** Note also that a `sys.modules` check **cannot see a lazy import by construction**, which
+   is what D10's maps design requires.
+5. **The `is_failure` truth table** across all fourteen members at `ac3e577` and `f4eb42f`, from a
+   separate `git worktree`, recorded in the flip's provenance **as measured**. The current claim is
+   an inference — *"byte-identical, and `is_failure`'s body is unchanged"* — and an identical body
+   is not identical behaviour if what it calls changed.
+
+### Task 2's accumulated amendments
+
+- **Both denominators per candidate**, `failed/fitted` and `failed/eligible`, each named at its row,
+  both from `failure_tally`. **The gap between them is the store's land exposure.** On an ocean box
+  they are identical, **which is exactly why a single-denominator report would have shipped.**
+- **When `fitted == 0`, BOTH columns are unavailable**, each naming *"nothing fitted"*, and the
+  eligible count prints **as a count, not as a denominator** — otherwise it reads `0/N = 0.0`, a
+  perfect score for a candidate that tried nothing.
+- **The fixture is two candidates** — one screened out everywhere, one fitted and passing — so the
+  rule is shown to discriminate rather than to have broken.
+- **An absent `domain_mask` means the caveat applies.** Task 4 adds the field; **every store in
+  existence lacks it until then.**
+
+### Open items, with owners
+
+| item | state |
+|---|---|
+| **OQ20** — coordinate monotonic direction | open, unowned |
+| **OQ22** — the quiet gate reads the host, not the cgroup | open, unowned. **2f does not need it** |
+| **OQ23** — `DEGENERATE_HESSIAN` is start-dependent | open. 2f gives it an instrument and **no story**; why `cond(H)` moves is not established |
+| **OQ24** — `INSUFFICIENT_DATA`'s eligibility | **taken in part**, closed by §13.6 |
+| **OQ25** — `audit_report.attempted` names a different quantity from its predicate | filed, not taken. Three candidate denominators (30/40/20); for a two-arm statistic the population is plausibly the **intersection**. **Structural half:** `is_eligible` is now a one-member denylist over a member with no producer |
+| **P4″** — a small cluster existing only at the seam | owed **at a trigger**: the first global store |
+| **the 2a–2e sweep for discovery-mechanism criteria** ((c7)) | **NOT DONE.** Owed, not blocking. Record the count found, **including zero** |
 
 ---
 
