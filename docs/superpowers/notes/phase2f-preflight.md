@@ -340,6 +340,30 @@ Had it read `is_eligible`, the flip would have regressed the live display yester
 would owe a dated note. It did not. **The wording "the quantity is points touched" suggested this;
 suggesting is not measuring, and the check cost one command.**
 
+> ## AND THE INFERENCE IS REPLACED BY A MEASUREMENT, 2026-09-21 — THE FLIP'S PROVENANCE, AS MEASURED
+>
+> **The two sentences above are an inference chain and they are no longer what the record rests
+> on.** *"Byte-identical"* misses transitive dependence and *"`is_failure`'s body is unchanged"* is
+> the same argument one level down: had `is_failure` been written as *"eligible and not OK"*, its
+> body would be unchanged and its behaviour would have moved. **For a predicate over a finite enum,
+> compare truth tables, not bodies** — handoff §2.
+>
+> **MEASURED: `is_failure`, `is_eligible` and `is_fit_verdict` over all fourteen `Outcome` members
+> at `ac3e577` and at `f4eb42f`, read from two side `git worktree`s and removed afterwards, never a
+> checkout of the working tree. Forty-two cells. ONE moved:
+> `INSUFFICIENT_DATA.is_eligible`, False → True — and that one is the flip itself.**
+>
+> | predicate | cells | moved |
+> |---|---|---|
+> | `is_failure` | 14 | **0** |
+> | `is_fit_verdict` | 14 | **0** |
+> | `is_eligible` | 14 | **1** — `insufficient_data` |
+>
+> Both revisions carry `is_fit_verdict`, because the gate (`49f3db1`) preceded both, so all three
+> predicates are comparable at both. **A behavioural run closes every transitive step at once; an
+> inference has to find and close each one, and the step you have not noticed is the one that is
+> open.**
+
 ### (a6) THE REPAIR LEFT A DESCRIPTION BEHIND, IN THE FUNCTION IT REPAIRED
 
 `abort_verdict`'s own docstring still reads *"The rate is `failed / eligible`"* — at
@@ -456,3 +480,271 @@ runs — import, then `read_store` on a parent-built fixture, then read `sys.mod
 re-measured against that subject with the figure and its date in the docstring; the import-time
 probe kept as the cheap first check. Criterion 3's reading changes with it, since it currently
 names evidence that is vacuous.
+
+---
+
+## The queued follow-up — audited before any code (2026-09-21)
+
+**THE BRIEF** is PROGRESS.md's five queued follow-up items, which land before any Task 2 code:
+re-aim the tautological agreement test and `failure_tally`'s own tests at hand-computed values;
+count the rate-computation enumeration per file or per computation; make the docstrings name
+`failure_tally`; repair the run-time import probe and its ceiling; and measure the `is_failure`
+truth table across the flip. **Four findings, and the first one changes the size of the follow-up.**
+
+### (a4) TWO OF THE FIVE WERE ALREADY DONE BY THE COMMIT THAT QUEUED THEM, AND THE LIST DID NOT SAY SO
+
+**Items 1 and 3 are landed in `7790100` and owe no code.** Read rather than recalled, and checked
+mechanically rather than by reading the docstrings that claim it:
+
+- **Item 1, the agreement test.** `test_progress.py` **neither imports nor calls** `failure_tally`
+  — asserted by an `ast` walk, 0 calls, not in any `ImportFrom` — and
+  `test_the_failure_count_uses_the_taxonomy_and_not_a_name_test` asserts the **literal line**
+  `"progress: tiles=1  points=6  failed=2 of 3 fitted (66.7%)"` against a hand-derivation from the
+  fixture's own six codes (one `OK`, two `DEGENERATE_HESSIAN`, three `CANDIDATE_DROPPED` → three
+  fitted, two failed, 2/3). **It is not tautological and was never allowed to become so.**
+- **Item 1, `failure_tally`'s own tests.** Six of them call it, each on a literal census with its
+  expected counts derived by hand: `{INSUFFICIENT_DATA: 16, DEGENERATE_HESSIAN: 4}` → 20/20/4/4 at
+  rate 1.0; `{SCREENED_OUT: 20}` → no rate with a reason; the (a10) pair that shows the rule
+  **discriminates** (`None` against `0.0`); the empty census; both key spellings; and the refused
+  unknown key. Every one is an external oracle in the §2 sense.
+- **Item 3, the docstrings.** Both consumer sites already say the arithmetic is `failure_tally`'s
+  and is **not restated** — `abort.py:253` and `progress.py:182` — and `abort_verdict`'s surviving
+  *"the rate is `failed / eligible`"* was corrected in the same commit under (a6).
+
+**THE FINDING IS ABOUT THE LIST, NOT ABOUT THE WORK.** A handoff that queues five items without
+marking which ones its own commit discharged spends the next session's first hour re-deriving that
+— and the cheaper failure is the other direction: **a session that trusted the list would have
+"re-aimed" two tests that are already aimed**, editing a correct oracle to look like the repair the
+list promised. **(a4) at a handoff's own follow-up list**: *"checked" in one's own document is a
+claim*, and so is *"owed"*.
+
+### (c7) ITEM 2's COUNT IS NOT RE-DERIVABLE, AND A PER-COMPUTATION COUNT IS THE WRONG INSTRUMENT
+
+**"Five sites" mixes three units, which is the defect the item names. Measured today, by `ast`
+rather than by grep, so the count is per COMPUTATION and reproducible:**
+
+| population | measured |
+|---|---|
+| `src/` divisions producing a failure rate | **one** — `core/outcomes.py:313`, `failed / fitted` |
+| `abort.py` division nodes, **any kind** | **zero** |
+| `progress.py` division nodes | **one**, and it is the percentage formatter `100.0 * part / whole` at line 213 |
+| `audit_report.py` rate divisions | **one** — `_rate`'s `numerator / denominator` at line 250 — serving **seven** callers: `selection_disagreement`, `selection_move`, `selection_dropout`, `ranked_fraction`, `rescue`, `loss`, `both_ok_fraction` |
+| `audit_report.py` other divisions | one, `gap / scale` at 608, a normalisation and not a rate |
+| division nodes under `docs/superpowers/notes/` | **184** |
+| committed `.py` instruments under `notes/` | **30** |
+
+**THE 184 IS THE FINDING.** A per-computation count over the harnesses is **dominated by
+`pathlib`** — `work / f'store_{tag}.zarr'`, `fixtures / 'control2' / 'easy.toml'` — so the `/`
+operator is not the subject at all there. **So "fifteen rate-shaped divisions in the committed
+harnesses" has no rule that reproduces it**, and it must not be carried as a number: it is a
+hand-count of a population whose enumeration rule was never written down, which is the shape (c7)
+exists for one level up from where it was applied.
+
+**AND THE `audit_report` ROW CORRECTS THE SITE LIST'S OWN ARITHMETIC IN THE OTHER DIRECTION.** The
+test's docstring names *"`audit_report`'s rescue/loss denominators"* — two quantities. The division
+is **one** and the quantities are **seven**. So the same list over-counts the harnesses and
+under-counts the audit, which is what a mixed unit does.
+
+**THE POPULATIONS ARE TWO AND THE LIST TREATS THEM AS ONE.** Live code that must agree about a
+quantity, and **frozen instruments that must not be touched** — (j8)'s third register, the same
+rule that froze 2e's `_histograms`. A harness is out of scope **by a stated rule**, which is a
+different statement from *"counted as one site"*: the first survives a thirty-first harness landing
+next sub-phase, the second silently absorbs it. **(a5b): two constraints that look like a
+trade-off often share a term that belongs to neither.**
+
+**AND THE ASSERTION THE CURRENT TEST CANNOT MAKE.** `test_every_failure_rate_in_src_comes_from_the_one_definition`
+pins the **member list** of `failure_tally`'s consumers, so it sees a site added *that calls
+`failure_tally`* and is blind to a third site that computes the rate **with its own arithmetic** —
+which is the only failure it exists to catch, and is exactly what happened between 2e's Task 4 and
+Task 5. **The division-node counts above are the mechanical form of that claim**: `abort.py` at
+zero and `progress.py` at one-and-it-is-the-formatter fail the moment either grows an arithmetic
+beside the shared call.
+
+### ITEM 4 CONFIRMED, AND ONE OF ITS OWN FIGURES CORRECTED
+
+**Re-measured 2026-09-21**, fixture store built in the **parent** and only read by the probe
+subprocess, so the reading describes the report and not the fixture builder:
+
+| stage | modules | forbidden present |
+|---|---|---|
+| `import metamer.report` | **65** | none |
+| `+ from metamer.report.reader import read_store` | **930** | none |
+| **after `read_store` runs** | **933** | **none** |
+
+**THE BOUNDARY HOLDS AT RUN TIME. THE TESTS DO NOT ESTABLISH IT.** `metamer/report/__init__.py` is
+docstring-only, so both of Task 1's assertions are taken at the 65-module stage: *"no forbidden
+module"* is trivially true because nothing was imported, and *"under a ceiling of 900"* passes on
+65. **Against the real subject the ceiling FAILS — 933 > 900** — so the one assertion that could
+have caught a heavy arrival was both vacuous and wrong.
+
+**THE HANDOFF SAID 63 AND I MEASURE 65, AND THE DIFFERENCE RECONCILES EXACTLY RATHER THAN BEING
+LEFT AS SCATTER.** Task 1's own docstring records `metamer` alone at **64**; a docstring-only
+`metamer/report/__init__.py` adds exactly itself, giving **65**. The 63 was taken under a probe that
+had not yet imported `json` and `sys`. **Recorded because a two-module gap nobody explains is how a
+figure becomes unquotable** — and because the ceiling's whole defect was a figure carried from
+another subject.
+
+**AND THE CEILING'S ORIGINAL ARGUMENT IS NO LONGER AVAILABLE, WHICH IS A CONSEQUENCE RATHER THAN A
+CHOICE.** It was *"comfortably above the measurement, well below `metamer.batch.run`'s 1002"*. The
+real subject is **933** and the discriminating bound is still **1002**, so the whole window is
+**69 modules — 7%**. A ceiling inside it discriminates a heavy arrival and trips on ordinary
+growth; one above it discriminates nothing. **That is the decision below, and it is a decision
+because no measurement chooses between a tripwire and a wall.**
+
+**THE PROBE'S STRUCTURAL LIMIT IS RESTATED AT THE REPAIR, NOT ONLY IN THE PLAN.** A `sys.modules`
+check **cannot see a lazy import by construction** — that is what lazy means — and D10 requires
+`matplotlib` imported *inside* the maps function. So even the repaired probe is silent about the
+one design D10 chose, and the numbers path reaching a lazily-imported module through a shared
+helper would be green at import time and red at run time. **(a10) at the repaired instrument:** it
+gives both answers for an import-time violation and only one for a run-time one, and the positive
+control does not fix that, because the control demonstrates the probe sees an *import-time* import.
+**Calling `read_store` is what narrows the gap** — the numbers path is then exercised rather than
+hoped about — and the residue is stated rather than priced.
+
+### ITEM 5 MEASURED: `is_failure`'s TRUTH TABLE DID NOT MOVE, AND ONE CELL OF THE WHOLE TABLE DID
+
+**Fourteen members, three predicates, two revisions, read from two side `git worktree`s and
+removed afterwards — never a checkout of the working tree.** `ac3e577` is the last commit before
+the flip; `f4eb42f` is the flip. Both carry `is_fit_verdict`, since the gate (`49f3db1`) preceded
+both, so all three predicates are comparable at both revisions.
+
+| predicate | cells | moved |
+|---|---|---|
+| `is_failure` | 14 | **0** |
+| `is_fit_verdict` | 14 | **0** |
+| `is_eligible` | 14 | **1** — `insufficient_data`, False → True |
+
+**So the inference is replaced by a measurement, and it holds.** The record said *"byte-identical,
+and `is_failure`'s body is unchanged"*; an identical body is not identical behaviour if what it
+calls changed, and now it does not have to be. **Exactly one cell of forty-two moved and it is the
+flip's own**, so the live display — which reads `is_failure` and a raw point count and never
+`is_eligible` — could not have regressed through it. **A behavioural run closes every transitive
+step at once; an inference has to find each one, and the step you have not noticed is the one that
+is open.**
+
+### ~~TWO DECISIONS THIS ENTRY RAISES AND DOES NOT TAKE~~ — BOTH RULED 2026-09-21
+
+~~1. **ITEM 2's UNIT.** The queued item offers *"per file or per computation"* and the measurement
+says neither alone works: per computation is the right unit for `src/` (one division) and the
+wrong one for the harnesses (184, mostly `pathlib`). **The proposal is two enumerations with two
+units** — live sites per computation, frozen instruments per file and out of scope by the
+frozen-instrument rule — rather than one count of five. That is a reframe of the item rather
+than a choice between its two options, so it is raised.
+2. **THE CEILING'S VALUE, given a 69-module window.** 933 measured against 1002 discriminating.~~
+
+**Struck rather than deleted: the proposal was NEITHER of the offered units AND NOT the one ruled.**
+Both of my framings kept a count of a population I could not classify — (a) per computation over
+`src/` plus per file over `notes/`, with the *classification* of a division left to the counter. The
+ruling removes the classification instead of choosing its unit, which neither option offered.
+
+**BOTH RULINGS ARE RECORDED VERBATIM BELOW.** They are Dr. Twinklebrane's words and are not
+paraphrased, because a ruling restated is a ruling re-argued.
+
+> **RULING, ITEM 2: NEITHER UNIT. DON'T COUNT WHAT YOU CAN'T CLASSIFY; PIN WHAT YOU CAN
+> OBSERVE.**
+>
+> Delete "five sites" and "fifteen" — (d)'s instinct is right: an unverifiable claim is
+> removed, not maintained. Replace them with a golden table.
+>
+> - Scope: every src/ module that references Outcome. Which modules those are is a
+>   mechanical fact from the ast.
+> - The test asserts two things: the set of those modules, and each module's count of
+>   division nodes.
+> - Classify nothing. Pathlib joins count too; a reviewer judges any change.
+> - A third arithmetic anywhere in scope changes a pinned count.
+> - A new Outcome-referencing module, which Task 2's report code will be, has to be added
+>   to the table deliberately, with its count.
+>
+> This is (a)'s pin extended from two hand-picked modules to a scope defined mechanically.
+> That is the difference between enumerating the modules you named and catching new ones.
+>
+> Frozen instruments under notes/ are excluded by the frozen-instrument rule, and the test
+> states that exclusion and its reason. Forward rule for handoff §2: new harness code that
+> reports a failure rate calls failure_tally, checked at its pre-flight. Name the gap: the
+> suite does not enforce this.
+>
+> audit_report's docstring says two quantities and the measurement shows seven. Correct
+> it. That is a known defect, not OQ25's open question. Note the correction in OQ25.
+>
+> Residual gap, named: a rate computed by comparing raw integer codes without referencing
+> Outcome. D1 already forbids that, and nothing in the suite catches it.
+
+> **RULING, THE CEILING (the second ruling you were going to bring): IT IS A BACKSTOP FOR
+> UNNAMED DEPENDENCIES, NOT A SECOND COPY OF THE DENYLIST.**
+>
+> batch.run and pydantic are already caught by name, so batch.run's 1002 is not the number
+> the ceiling has to discriminate against. The principle that reconciles this with item 2:
+> PIN EXACTLY WHERE CHANGE IS RARE AND MEANINGFUL; BOUND WITH A MARGIN WHERE HARMLESS DRIFT
+> IS COMMON. Module counts shift with lockfile updates and with platform, so a ceiling tight
+> enough to fire on routine updates becomes a number people bump without reading it. That is
+> D6's flag argument again.
+>
+> - Set the ceiling 5% above the measured figure: about 980. That also happens to sit below
+>   batch.run's 1002.
+> - The assertion message prints the measured count.
+> - After the first CI run, record CI's count next to the local 933. If they differ
+>   materially, set the margin from the larger of the two.
+
+### WHAT THE RULINGS CHANGE, AND THE FIGURES THE NEXT SESSION WRITES CODE AGAINST
+
+**ITEM 2 — a golden table, not a count.** Scope is *every `src/` module that references `Outcome`*,
+which the `ast` decides; the test asserts **the set of those modules** and **each module's division-node
+count**; nothing is classified, so `pathlib` joins are in the counts and a reviewer judges any
+movement. The measured seeds for that table are in this entry's (c7) section — `abort.py` **0**,
+`progress.py` **1**, `core/outcomes.py` **1** — and the rest of the scope is enumerated when the
+table is written. **`metamer.report`'s numbers module will be a new row and must be added
+deliberately, with its count**, which is the property that catches a module the previous list would
+not have named.
+
+**ITEM 4 — the probe's subject and the ceiling's margin.** The figures, re-measured 2026-09-21 with
+the fixture built in the parent: **65** modules after `import metamer.report`, **930** after
+`from metamer.report.reader import read_store`, **933** after `read_store` has run, with **no
+forbidden module at any stage**. The ceiling is **980** — 5% above 933 — its assertion message
+prints the measured count, and **CI's own count is recorded beside the local 933 after the first
+run**, with the margin taken from the larger of the two if they differ materially.
+
+**ITEM 5 — recorded where the flip's provenance lives**, at *"THE FLIP DID NOT CAUSE IT"* in Task
+2's entry above, as **measured**: forty-two cells, one moved, and that one is the flip itself. **The
+inference is struck there rather than here**, because a correction recorded away from the claim it
+corrects is a second version of the claim.
+
+**AND THE TWO LESSONS THIS SESSION EARNED GO TO THE HANDOFF, NOT HERE** — queue reconciliation and
+the cold-start read list, with pin-versus-bound and the forward harness rule beside them. They are
+rules about how any handoff is written, so they belong in §2 where the method lives, and PROGRESS.md
+points at them rather than restating them.
+
+
+### PARKED FOR ITEM 2's COMMIT — TRANSCRIPTION, NOT RECOLLECTION
+
+**This session is docs-only, so the two `tests/` corrections the rulings call for are parked as
+TEXT rather than as intentions** — the same idiom as the pre-plan entry's two parked one-liners, and
+for the same reason: *"it reaches the tree with the next commit"* is a promise with no owner and
+dies with the session. Whoever writes item 2 transcribes these; neither is a recollection.
+
+**1. `test_every_failure_rate_in_src_comes_from_the_one_definition` loses its count and gains the
+golden table.** Its docstring currently says *"five places compute a failure-like rate"* and names
+*"`audit_report`'s rescue/loss denominators"*. **Both figures go.** The replacement claim, to be
+written in the task's own words against the table it asserts:
+
+- the scope is **every `src/` module that references `Outcome`**, decided by the `ast`;
+- the test asserts **the set of those modules** and **each module's division-node count**;
+- **nothing is classified** — `pathlib` joins are in the counts, and a reviewer judges any movement;
+- **frozen instruments under `docs/superpowers/notes/` are excluded**, and the test states the
+  exclusion **and its reason**: a harness is the apparatus of a number somebody is still quoting, so
+  rewriting it rewrites closed evidence — (j8)'s third register;
+- the two gaps are named **in the test**: the suite does not enforce that a new harness calls
+  `failure_tally`, and a rate computed by comparing **raw integer codes** without referencing
+  `Outcome` is outside the scope entirely — D1 forbids it and nothing catches it.
+
+**2. The `audit_report` count, verbatim.** Wherever that module's rate helper is described, the
+figure is *"**one** division — `_rate` — serving **seven** quantities: `selection_disagreement`,
+`selection_move`, `selection_dropout`, `ranked_fraction`, `rescue`, `loss`, `both_ok_fraction`"*,
+**not** *"rescue/loss"*. Measured by `ast` on 2026-09-21. **The denominator itself stays filed as
+open question 25**; only the count is corrected, because a miscount of a known set is a defect and
+not an open question.
+
+**AND THE MEASURED SEEDS FOR THE TABLE, SO THE NEXT SESSION WRITES CODE AND NOT A MEASUREMENT
+HARNESS:** `src/metamer/batch/abort.py` **0**, `src/metamer/progress.py` **1**,
+`src/metamer/core/outcomes.py` **1**. **The rest of the scope is enumerated when the table is
+written** — the `ast` decides which modules reference `Outcome`, and that enumeration is the
+deliverable rather than a figure to transcribe from here.

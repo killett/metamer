@@ -3782,6 +3782,82 @@ tests could not see.** `pixi run test-fast` would have shipped both.
   finite-looking sentinel that survives some consumers' checks; it is the optimizer's
   internal barrier value only.
 
+- **PIN EXACTLY WHERE CHANGE IS RARE AND MEANINGFUL; BOUND WITH A MARGIN WHERE HARMLESS DRIFT IS
+  COMMON.** Added 2026-09-21, as the principle that reconciles two rulings taken the same hour and
+  pointing opposite ways.
+
+  **A pinned value and a bounded value are different instruments and the choice is decided by the
+  quantity's own drift rate, never by taste.** 2f's rate-site table is **pinned** — the set of
+  `src/` modules referencing `Outcome`, and each one's division-node count — because that set
+  changes rarely and every change is a decision somebody should read. 2f's import ceiling is
+  **bounded at 5% above the measured 933** because module counts shift with a lockfile update and
+  with the platform, and **a bound tight enough to fire on routine drift becomes a number people
+  bump without reading it** — which is D6's flag argument in a second register: a guard whose only
+  effect is to be waved through trains the reader to wave it through.
+
+  > **AND THE TWO FAILURE MODES ARE NOT SYMMETRIC, WHICH IS WHY THE RULE NAMES A DIRECTION.** A pin
+  > on a drifting quantity is edited until nobody reads the edit; a bound on a stable one is a
+  > guard that never fires and says nothing. **The first decays into a ritual and the second into
+  > an absence**, and only the first looks like maintenance while it happens.
+
+  **The ceiling's own corollary**: a backstop for **unnamed** dependencies is not a second copy of
+  the denylist. `pydantic` and `metamer.batch.run` are caught **by name**, so `batch.run`'s 1002 is
+  not the figure the ceiling has to discriminate against — the ceiling exists for the fifth arrival
+  nobody listed. **The assertion message prints the measured count**, so the next reader meets the
+  measurement rather than the threshold.
+
+- **A HANDOFF QUEUE IS RECONCILED AGAINST THE COMMIT BEFORE IT; EACH ITEM IS MARKED DONE OR OPEN,
+  WITH ITS EVIDENCE.** Added 2026-09-21, after a five-item queue was carried into a fresh session
+  with **two items already discharged by the commit that queued them**.
+
+  **THE MECHANISM IS THE TENSE.** A queue drafted from a plan written *before* the commit it follows
+  is **a future-tense claim about finished work**, and copying it forward word for word preserves
+  the tense along with the words. **F2's shape inverted**: there, a formula described an
+  architecture that had been deleted; here, a list described work that had been done.
+
+  **AND THE EXPENSIVE FAILURE IS THE OBEDIENT ONE.** A session that trusts such a queue does not
+  merely waste the re-derivation — it *edits correct work to match the repair the list promised*.
+  2f's items 1 and 3 were landed in `7790100`; a session taking them at face value would have
+  re-aimed two tests already asserting hand-derived values against literal fixture counts, and the
+  edit would have read as discharging the queue.
+
+  **The check is mechanical and is what the cold-start protocol is for**: for each queued item,
+  name the artifact that would show it done and read that artifact — an `ast` walk, a `git show`, a
+  grep — never the docstring that claims it. **"Owed" in one's own handoff is a claim, exactly as
+  "checked" is** — (a4)'s register, pointed at a work item instead of at a number.
+
+- **PROGRESS.md's HEAD CARRIES A COLD-START READ LIST FOR THE NEXT ACTION.** Added 2026-09-21,
+  because a resume prompt asking for five documents in full **spent a session's context on the
+  read and left none for the work.**
+
+  **It lists the sections, with anchors, that the NEXT ACTION needs, plus the standing rules that
+  govern any commit. Everything else is consulted by name when needed.** That keeps the cost of a
+  handoff proportional to the next task rather than to the project's history — which grows
+  monotonically, so a "read everything" handoff gets more expensive every sub-phase while the task
+  in front of it does not.
+
+  **AND MEASUREMENT OUTPUT GOES TO FILES, NEVER INTO CONTEXT.** A harness writes its readings to
+  the scratchpad and the session reads the derived answer; a sweep is redirected and its status
+  read. That is the same rule as *never pipe a measurement* arriving from the other side — there,
+  the pipe hid the status; here, the unredirected output consumes the budget the analysis needs.
+
+- **NEW HARNESS CODE THAT REPORTS A FAILURE RATE CALLS `core.outcomes.failure_tally`, CHECKED AT ITS
+  PRE-FLIGHT — AND THE SUITE DOES NOT ENFORCE THIS.** Added 2026-09-21, and **the gap is named
+  rather than papered over.**
+
+  The rate-site table is scoped to `src/`. **Committed instruments under
+  `docs/superpowers/notes/` are excluded by the frozen-instrument rule** — (j8)'s third register: a
+  harness is the experimental apparatus of a number somebody is still quoting, and rewriting it
+  rewrites closed evidence. **So a harness written next sub-phase can grow a fourth arithmetic and
+  nothing will fail**, which is why the obligation is a pre-flight item with an owner instead of a
+  test.
+
+  > **AND THE RESIDUAL GAP IS NAMED TOO, BECAUSE AN UNNAMED ONE IS INDISTINGUISHABLE FROM AN
+  > ABSENT ONE.** A rate computed by **comparing raw integer codes** without referencing `Outcome`
+  > falls outside the table's scope entirely — the scope is *modules that reference `Outcome`*, and
+  > such a module would not. **2f's D1 already forbids it** (a predicate must read its subject, not
+  > an available proxy) and **nothing in the suite catches it.**
+
 ---
 
 ## 3. The number every Phase 2 tile calculation inherits
