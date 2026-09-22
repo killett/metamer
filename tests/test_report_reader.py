@@ -344,9 +344,29 @@ def test_the_report_module_graph_stays_under_its_ceiling(runtime_reading):
 
     **Handoff (c7) reaching a new place**: assert the SIZE of what a discovery
     mechanism found, not only the values it found. An unasserted enumeration
-    is a silent denominator. **And CI's own count is recorded beside the local
-    933 after this test's first CI run**; if the two differ materially the
-    margin is taken from the larger.
+    is a silent denominator.
+
+    **FOUR ENVIRONMENTS, FOUR COUNTS — measured 2026-09-22 from CI run
+    35698698743, all four green:**
+
+    | environment | modules |
+    |---|---|
+    | local, 3.13 | **933** |
+    | CI, 3.12 | 912 |
+    | CI, 3.13 | 913 |
+    | CI, 3.14 | 920 |
+
+    **The margin is taken from the LARGER, which is local, so the ceiling
+    stays at 980.** The spread is the finding: 8 modules across interpreter
+    versions, and **20 between local 3.13 and CI 3.13 -- the same interpreter,
+    so that gap is the ENVIRONMENT** (a dev env against the declared
+    dependency set). **A pin would have fired on three of these four passing
+    runs**, which is pin-versus-bound measured rather than asserted: bound
+    with a margin where harmless drift is common.
+
+    **These numbers exist only because the count also goes to
+    `DIAGNOSTIC_LINES`.** An assertion message prints when it FIRES; every one
+    of the four runs above passed, so the message said nothing in all four.
     """
     count = runtime_reading["modules"]
     assert isinstance(count, int)

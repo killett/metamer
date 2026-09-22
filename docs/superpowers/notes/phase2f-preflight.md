@@ -819,3 +819,119 @@ the commit that wrote the table rather than deferred to the one that will grow i
 costs a subprocess, while pinning "the table fails when a division arrives" would mean committing a
 mutation of `src/`. **The demonstration is recorded here instead of asserted there**, and that is
 the weaker form — it establishes the instrument bit on 2026-09-21 and not on every run.
+
+**AND THE FIRST FINDING PAID FOR ITSELF WITHIN ONE RUN, 2026-09-22.** CI run `35698698743` was green
+on all four environments, so **the assertion message said nothing in all four** — and the
+`DIAGNOSTIC_LINES` copy produced **four different counts**, which are recorded at the ceiling test's
+own docstring and **are not repeated here**. Two things follow, and only the second was foreseen:
+
+1. **The ceiling stays at 980.** The ruling says take the margin from the larger, and the larger is
+   the local reading the bound was already set from.
+2. **The quantity drifts across environments that all pass** — several modules across interpreter
+   versions, and a larger gap between local and CI **on the same interpreter**, which is the
+   environment rather than the language. **A pin would have fired on three of the four green runs.**
+   Pin-versus-bound was ruled on the expectation of drift; this measures it, and the two figures a
+   reader needs to see that are the local one and CI's, side by side, which is why the obligation to
+   record CI's was worth a mechanism at all.
+
+---
+
+## Task 2's pre-flight, REFRESHED before its code (2026-09-22)
+
+**Task 2's entry above was written on 2026-09-21 and its findings stand** — the live-counter defect
+it found was fixed at `7790100`, and the cross-module agreement test it refused stayed refused.
+**What follows is the re-audit owed because the entry predates both that commit and the follow-up's
+golden table.** Four findings, and the first is a contradiction inside the plan's own Task 2.
+
+### (f) THE PLAN'S TASK 2 DESCRIBES `is_eligible` WRONGLY, AND THREE OTHER PLACES SETTLE THE BEHAVIOUR
+
+The plan says, in consecutive sentences:
+
+> The eligible-point denominator is `Outcome.is_eligible` — which after D2 includes
+> `INSUFFICIENT_DATA` and excludes `NOT_APPLICABLE` only. […] `NOT_ATTEMPTED` is out of both: it is
+> the absence of information.
+
+**Both cannot hold, and the tree says which is which.** Measured over all fourteen members today:
+**`NOT_ATTEMPTED.is_eligible` is `True`.** The predicate excludes `NOT_APPLICABLE` only, exactly as
+the first sentence says, **so the second sentence is not a description of it.**
+
+**THE SECOND SENTENCE IS THE REQUIREMENT AND THE FIRST IS THE DEFECT.** Three places carry the
+behaviour and only one carries the parenthetical:
+
+| source | what it says about `NOT_ATTEMPTED` |
+|---|---|
+| the plan's own test list | *"excludes it from every denominator while still **counting** it in the branch table"* |
+| design doc §12.5's grouping table | **"n/a, and a finished store should hold none"** — the store is saying *nothing wrote here* |
+| `Outcome.is_eligible` in the tree | **eligible**, because the predicate's rule is *"`NOT_APPLICABLE` leaves the denominator"* and nothing else does |
+
+**So no decision is owed: the denominator excludes it, and what is wrong is one clause describing
+how.** Recorded rather than silently worked around, because the next reader meets the clause before
+they meet the test list.
+
+### AND THE PREMISE THAT MADE IT "n/a" IS THE PREMISE 2f WAS WRITTEN TO BREAK
+
+§12.5 can call `NOT_ATTEMPTED`'s eligibility *n/a* because **a finished store should hold none**.
+**D6 and exit criterion 19 make 2f describe UNFINISHED stores deliberately** — *"an unfinished store
+is described, not refused"* — and an unfinished store holds `NOT_ATTEMPTED` **in proportion to how
+far the run did not get.**
+
+**So counting it eligible dilutes `failed / eligible` in proportion to PROGRESS.** That is the same
+shape as the land dilution the two-column print exists to expose, arriving through a different
+member, and **it is invisible on every fixture that finishes** — which is every fixture in the tree.
+**(a5): a constraint checked against the brief's finished-store case is not checked at all**, since
+the sub-phase's own D6 says the unfinished case is in scope.
+
+### (i) "AN ALL-OCEAN STORE REPORTS THEM EQUAL" IS NOT A PROPERTY OF OCEAN
+
+The plan's fixture rule reads *"a store with land reports `failed/fitted` and `failed/eligible`
+differing, and an all-ocean store reports them equal"*. **Equality needs `eligible == fitted`, and
+FOUR members are eligible without being fitted** — measured, not recalled: `NOT_ATTEMPTED`,
+`CANDIDATE_DROPPED`, `INSUFFICIENT_DATA`, `SCREENED_OUT`.
+
+**So the all-ocean fixture reports them equal only if it also holds none of those four**, and a
+fixture that happens to carry one `SCREENED_OUT` fails a test whose stated subject is land. **The
+fixture rule is a statement about the census, not about the geography**, and the test says so or it
+will be debugged as a land bug the first time it fires. Criterion 12's 12-ocean/8-land store gives
+`1.00` against `0.60` **because its twenty points are otherwise all fit verdicts**, which is a
+property of that store worth writing down beside the numbers.
+
+### (g) THE ONE DEFINITION CARRIES ONE RATE, AND TASK 2 PRINTS TWO
+
+`FailureTally` is `points / eligible / fitted / failed / rate / unavailable`, where `rate` is
+`failed / fitted` and `unavailable` is its single reason. **Task 2's amendment needs `failed /
+eligible` beside it, at every row.** Computing that division in the report would be **a second
+arithmetic for a rate, in a module the follow-up's golden table now scopes** — D1's prohibition and
+the table's tripwire pointing the same way. **So the second denominator is a field of the one
+definition**, and `core/outcomes.py`'s pinned division count moves deliberately, with the table
+updated in the same commit.
+
+**TWO CONTAINMENTS MEASURED RATHER THAN ASSUMED, AND EACH BUYS SOMETHING:**
+
+| measured over all 14 members | consequence |
+|---|---|
+| `is_fit_verdict` ⊆ `is_eligible` — **no member is fitted without being eligible** | `fitted > 0` implies `eligible ≥ fitted > 0`, so **the eligible column cannot divide by zero while the fitted column can compute.** The two share exactly ONE unavailability condition, `fitted == 0` — which is what the amendment already states, now as a fact rather than a hope |
+| `is_failure` ⊆ `is_fit_verdict` — **no failure lies outside a fit verdict** | **the numerator is common to both rates**, so they differ in the denominator alone. That is what makes *"the gap between them is the store's land exposure"* a true statement rather than a slogan: any other difference would put two quantities in one subtraction |
+
+### AND THE NAME `eligible` IS ALREADY SPOKEN FOR, SO THE NEW COUNT IS AN ADDITION
+
+`FailureTally.eligible` is read in three places and **divided by in none**: `abort.py:270` and
+`twopass.py:440` record it in an artifact, `__main__.py:474` prints it as *"eligible coarse
+points"*. **Redefining it to drop `NOT_ATTEMPTED` would move a number in a committed verdict
+record** — and `audit_report`'s `attempted`, the same predicate's other reader, is **open question
+25's filed subject**, which 2f does not reopen.
+
+**So Task 2 ADDS a named count and does not redefine one.** (a2)'s register: the fix for a name
+doing two jobs is a second name, not a quieter definition of the first.
+
+### WHAT THIS ENTRY CHANGES, BEFORE ANY CODE
+
+- **Task 2's denominator comes from `core.outcomes`, not from a division in the report.** One
+  definition, two rates, two reasons.
+- **One test the plan does not list is owed**: the eligible denominator excludes `NOT_ATTEMPTED`
+  **on an UNFINISHED store**, where the dilution is proportional to progress. The plan's
+  `NOT_ATTEMPTED` test is written on a store that merely contains the member; this one is written
+  where it is a large fraction, which is the case D6 put in scope.
+- **The all-ocean fixture's equality is stated as a census property**, with the four
+  eligible-but-unfitted members named at the fixture.
+- **Two golden-table rows move deliberately in Task 2's commit** — `core/outcomes.py` for the
+  second rate, and `metamer/report`'s numbers module as a new row with its measured count.
