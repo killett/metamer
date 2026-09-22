@@ -25,6 +25,7 @@ from metamer.batch.run import run
 from metamer.batch.validation import ExitCode, exit_code_for
 from metamer.core.outcomes import Outcome
 from metamer.report.reader import read_store
+from tests import conftest
 
 pytestmark = pytest.mark.filterwarnings("ignore::UserWarning")
 
@@ -106,6 +107,57 @@ _PROBE = textwrap.dedent(
 )
 
 
+#: **THE RUN-TIME PROBE: ONE SOURCE, TWO PREAMBLES.** It imports `read_store`
+#: and CALLS it on a store built by the PARENT -- build the fixture inside the
+#: probe and the reading describes the fixture builder, which is a `run()` and
+#: drags in everything the boundary excludes. The subject and its positive
+#: control differ by the injected `preamble` alone.
+_RUNTIME_PROBE = textwrap.dedent(
+    """
+    import json, sys
+    {preamble}
+    from metamer.report.reader import read_store
+    at_import = sorted(m for m in sys.modules if m in {forbidden!r})
+    read_store({store!r})
+    print(json.dumps({{
+        "at_import": at_import,
+        "after_call": sorted(m for m in sys.modules if m in {forbidden!r}),
+        "modules": len(sys.modules),
+    }}))
+    """
+)
+
+
+def _reads(store: Path, preamble: str = "") -> dict[str, object]:
+    """Forbidden modules and graph size after `read_store` has actually RUN.
+
+    Two readings from one subprocess: at the moment `read_store` is imported,
+    and after it has been called. **The second is the one the boundary is
+    about** -- a convenience import inside the function body is invisible to
+    the first, and `metamer/report/__init__.py` being docstring-only means the
+    package-level probe is invisible to both.
+    """
+    source = _RUNTIME_PROBE.format(
+        preamble=preamble, forbidden=set(FORBIDDEN), store=str(store)
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", source],
+        capture_output=True,
+        text=True,
+        env={"PYTHONPATH": "src", "PATH": "/usr/bin:/bin"},
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    reading: dict[str, object] = json.loads(result.stdout)
+    return reading
+
+
+@pytest.fixture(scope="module")
+def runtime_reading(finished_store: Path) -> dict[str, object]:
+    """The clean run-time reading, taken once and asserted by two tests."""
+    return _reads(finished_store)
+
+
 def _imports(target: str) -> list[str]:
     """Which forbidden modules are in `sys.modules` after importing `target`.
 
@@ -131,6 +183,16 @@ def _imports(target: str) -> list[str]:
 
 def test_the_report_package_imports_no_config_or_plotting_machinery():
     """`metamer.report` drags in neither the config path nor a plotting stack.
+
+    **THIS IS THE CHEAP FIRST CHECK AND IT IS NOT THE BOUNDARY CLAIM.**
+    `metamer/report/__init__.py` is docstring-only, so this probe stops at
+    **65** modules (measured 2026-09-21) having reached neither the reader nor
+    zarr, and "no forbidden module" is true here because nothing was imported.
+    A positive control proves the DETECTOR; it cannot show what the detector is
+    aimed at. The boundary is established by
+    `test_reading_a_store_imports_no_forbidden_module` below, which imports
+    `read_store` and calls it. This one is kept because it is a hundredth of
+    the cost and fails first on a module-scope arrival in the package itself.
 
     Expected values determined independently by measuring each candidate import
     at Task 1's pre-flight, 2026-09-20: `metamer` alone is 64 modules,
@@ -199,40 +261,107 @@ def test_every_forbidden_module_declares_whether_it_is_portability_or_boundary()
     assert FORBIDDEN["pydantic"] == "boundary"
 
 
-def test_the_report_module_graph_stays_under_its_ceiling():
+def test_reading_a_store_imports_no_forbidden_module(runtime_reading):
+    """The boundary, measured on the SUBJECT: `read_store` imported and CALLED.
+
+    Expected values determined independently by re-measuring on 2026-09-21
+    with the fixture store built in the parent: **930** modules once
+    `read_store` is imported, **933** once it has run, and **no forbidden
+    module at either stage**. The 65-module package probe above reconciles
+    exactly with Task 1's measured 64 for `metamer` alone plus a
+    docstring-only `metamer/report/__init__.py`, which adds itself.
+
+    Bug this catches: a convenience import the package probe structurally
+    cannot see -- `from metamer.batch.run import run` for one constant inside
+    `read_store`, or a module-scope `import matplotlib` in a helper the reader
+    reaches only at call time. That is the failure CI already had once, in
+    `tests/test_readme_figure.py`.
+
+    **THE PROBE'S STRUCTURAL LIMIT, STATED RATHER THAN PRICED.** A
+    `sys.modules` check cannot see a lazy import by construction -- that is
+    what lazy means -- and D10 requires `matplotlib` imported INSIDE the maps
+    function. So this test is silent about the one design D10 chose: it gives
+    both answers for an import-time violation and only one for a run-time one
+    in a branch nothing here calls. **Calling `read_store` is what narrows the
+    gap** rather than closing it; the numbers path is exercised instead of
+    hoped about.
+    """
+    assert runtime_reading["at_import"] == []
+    assert runtime_reading["after_call"] == []
+
+
+def test_the_runtime_probe_can_see_a_violation(finished_store):
+    """THE POSITIVE CONTROL for the run-time probe, on both of its readings.
+
+    Expected value determined independently: `pydantic` is in `FORBIDDEN` and
+    importing it puts it in `sys.modules` -- true by construction -- and it
+    arrives with dependencies, so the graph is strictly larger than the clean
+    reading.
+
+    Bug this catches: a probe that reports nothing because the forbidden set
+    is misspelled, because `sys.modules` is read wrong, or because the count
+    is a constant. **All three pass the two tests above and all three make
+    them worthless.** (a10): before reading an instrument, demonstrate it can
+    produce both answers -- and the SIZE reading needs that demonstration as
+    much as the name reading does, which is why this control asserts both.
+
+    **It injects one import into the identical probe source**, rather than
+    reimplementing it; a control written twice tests two things and proves
+    neither.
+    """
+    clean = _reads(finished_store)
+    tripped = _reads(finished_store, preamble="import pydantic")
+
+    assert tripped["at_import"] == ["pydantic"]
+    assert tripped["after_call"] == ["pydantic"]
+    assert isinstance(tripped["modules"], int)
+    assert isinstance(clean["modules"], int)
+    assert tripped["modules"] > clean["modules"]
+
+
+def test_the_report_module_graph_stays_under_its_ceiling(runtime_reading):
     """A SIZE assertion, because a denylist cannot see a fifth arrival.
 
-    Expected value determined independently: measured at 708 modules for
-    `metamer.core.outcomes` on 2026-09-20, and `metamer.report` sits just above
-    it. The ceiling is set at 900 -- comfortably above the measurement, well
-    below `metamer.batch.run`'s 1002 -- so ordinary growth does not trip it and
-    a heavy dependency does.
+    Expected value determined independently: **933** modules after
+    `read_store` has run on a real store, measured 2026-09-21. The ceiling is
+    **980**, 5% above it.
+
+    **~~"comfortably above the measurement, well below `metamer.batch.run`'s
+    1002"~~ -- THAT ARGUMENT IS GONE, AND THE CEILING IS A BACKSTOP FOR
+    UNNAMED DEPENDENCIES RATHER THAN A SECOND COPY OF THE DENYLIST.**
+    `pydantic` and `metamer.batch.run` are caught BY NAME, so `batch.run`'s
+    1002 is not the figure this bound has to discriminate against; it exists
+    for the fifth arrival nobody listed. The margin is 5% because module
+    counts drift with a lockfile update and with the platform, and **a bound
+    tight enough to fire on routine drift becomes a number people bump without
+    reading it** -- the old 900 was such a number in the other direction: it
+    passed on 65 while the real subject stood at 933.
 
     Bug this catches: the failure the four named modules structurally cannot.
     `metamer/core/__init__.py`'s registration side effect is load-bearing and
     is staying, which makes this graph hostage to the spine: anyone adding a
-    heavy dependency to `core/__init__.py` or to `families/` lands it in the
-    report silently, and a list of four names will not notice a fifth arriving.
+    heavy dependency there or to `families/` lands it in the report silently.
 
     **Handoff (c7) reaching a new place**: assert the SIZE of what a discovery
-    mechanism found, not only the values it found. An unasserted enumeration is
-    a silent denominator.
+    mechanism found, not only the values it found. An unasserted enumeration
+    is a silent denominator. **And CI's own count is recorded beside the local
+    933 after this test's first CI run**; if the two differ materially the
+    margin is taken from the larger.
     """
-    source = (
-        "import json, sys; import metamer.report; print(json.dumps(len(sys.modules)))"
+    count = runtime_reading["modules"]
+    assert isinstance(count, int)
+    # **THE MEASUREMENT REACHES A CI LOG FROM A PASSING TEST, AND THE
+    # ASSERTION MESSAGE DOES NOT.** The ruling owes "CI's own count, recorded
+    # beside the local 933 after the first run", and a message that prints
+    # only when the bound fires has no source for it on a green run. This is
+    # the channel `conftest.DIAGNOSTIC_LINES` exists for.
+    conftest.DIAGNOSTIC_LINES.append(
+        f"report module graph: {count} modules after read_store "
+        "(ceiling 980; local reference 933, 2026-09-21)"
     )
-    result = subprocess.run(
-        [sys.executable, "-c", source],
-        capture_output=True,
-        text=True,
-        env={"PYTHONPATH": "src", "PATH": "/usr/bin:/bin"},
-        check=False,
-    )
-    assert result.returncode == 0, result.stderr
-    count = int(json.loads(result.stdout))
-    assert count < 900, (
-        f"metamer.report now loads {count} modules against a ceiling of 900, "
-        "measured at 708 on 2026-09-20. Something heavy has entered the graph, "
+    assert count < 980, (
+        f"reading a store now loads {count} modules against a ceiling of 980, "
+        "measured at 933 on 2026-09-21. Something heavy has entered the graph, "
         "most likely through metamer/core/__init__.py or a family module"
     )
 

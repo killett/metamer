@@ -4,7 +4,7 @@
 
 1. **Branch `main`, every commit pushed by a hook** — https://github.com/killett/metamer. **No SHA is named anywhere in this head**; `git log --oneline -8` is the authority.
 2. **DONE:** Phase 1, P0–P4, 2a, 2b, 2c, 2d, the real-data spike, wiring one, the selection-map report — and **Phase 2e (COMPLETE 2026-09-18 — 18 met / 1 reduced scope / 0 failed over nineteen criteria, the nineteenth added by decision; Tasks 0–6 by 2026-09-16, the no-evidence decision and Task 7 on 2026-09-18)**. Per-phase closes are in their sections — [2e's is here](#phase-2e-is-closed-2026-09-18--18-met--1-met-with-reduced-scope--0-failed-plus-2bs-two-inherited-failures-2cs-one-reduction-and-2ds-three-failures-and-one-reduction); **none is restated here**.
-3. **NEXT ACTION: 2f Task 2's FOLLOW-UP COMMIT (items 2 and 4 only), then Task 2's code.** The plan is [`2026-09-19-metamer-phase2f.md`](docs/superpowers/plans/2026-09-19-metamer-phase2f.md), **APPROVED with ten review amendments**; the pre-flight is [`phase2f-preflight.md`](docs/superpowers/notes/phase2f-preflight.md) and every task's entry is written **before** its code. **Task 0 (the clustering spike) and Task 1 (the reader) are DONE.** The queued follow-up is [here](#the-queued-follow-up--2fs-next-commit), **RECONCILED against the tree 2026-09-21: items 1, 3 and 5 are CLOSED and items 2 and 4 are OPEN, each carrying its ruling.** Both rulings are verbatim at the pre-flight.
+3. **NEXT ACTION: 2f Task 2's CODE.** The follow-up commit is landed — **the queue is spent, all five items closed** — and Task 2's own pre-flight entry is appended before any of its code. The plan is [`2026-09-19-metamer-phase2f.md`](docs/superpowers/plans/2026-09-19-metamer-phase2f.md), **APPROVED with ten review amendments**; the pre-flight is [`phase2f-preflight.md`](docs/superpowers/notes/phase2f-preflight.md) and every task's entry is written **before** its code. **Task 0 (the clustering spike) and Task 1 (the reader) are DONE.** The queued follow-up is [here](#the-queued-follow-up--2fs-next-commit) and is **SPENT — all five items closed, items 2 and 4 by the follow-up commit.** Both rulings are verbatim at the pre-flight, with an addendum recording the three things the code found that they did not cover.
 
    > ### THE COLD-START READ LIST FOR THIS NEXT ACTION — READ THESE, CONSULT EVERYTHING ELSE BY NAME
    >
@@ -13,8 +13,8 @@
    > | # | read | for |
    > |---|---|---|
    > | 1 | this head, items 1–10 | state, and the rules that bind any commit |
-   > | 2 | [the queued follow-up](#the-queued-follow-up--2fs-next-commit), **items 2 and 4** | the two open items and their rulings |
-   > | 3 | [the pre-flight](docs/superpowers/notes/phase2f-preflight.md)'s **follow-up entry** (the last one) | the measured figures, both rulings verbatim, and the two named gaps |
+   > | 2 | [Task 2's accumulated amendments](#task-2s-accumulated-amendments) | the four amendments the plan's Task 2 is read with |
+   > | 3 | [the pre-flight](docs/superpowers/notes/phase2f-preflight.md)'s **Task 2 entry** and its **final addendum** | the defect Task 2 exists to prevent, and the two instruments the follow-up left behind |
    > | 4 | [the plan](docs/superpowers/plans/2026-09-19-metamer-phase2f.md)'s **Task 2** and **D10** | the brief the code is written against |
    > | 5 | [the handoff](docs/superpowers/notes/phase1-to-phase2-handoff.md) **§2** | the standing rules — sweep ordering, pin-versus-bound, one push per run |
    >
@@ -22,7 +22,7 @@
    >
    > **NOT read up front, consulted by name if a question needs it:** handoff §1's (a)–(k) — indexed at head item 7; 2a–2e's execution sections; the closed sub-phases' criteria tables; the open questions, except **OQ24** (taken in part, this sub-phase's) and **OQ25** (filed).
 4. **2f is not blocked**: stores, `/selection/delta_ic` and `audit_report.py` exist, and the subjects it waits on to count are now produced. Open question 24 is filed to it.
-5. **Tests: 1506 passed, 0 failed, 0 INDETERMINATE — 2026-09-21, 7231.56 s (2:00:31), exit code pytest's own** (1499 at 2f Task 1, 1486 at the OQ24 flip, 1483 at 2e's close). **WRITERS RUN BEFORE THE SWEEP AND THE SWEEP RUNS LAST**, with `git write-tree` recorded at sweep start and asserted equal at commit time — a lint autofix once rewrote bytes a 78-minute sweep had already described. Older figures: ~~1483 passed, 2026-09-18, 5745.87 s (1:35:45)~~ (1482 earlier the same day with eighteen criteria, 1465 after the no-evidence decision, 1463 on 2026-09-16; the one added last is criterion 19's test). `pixi run test` is the full sweep and the only end-of-task evidence. **The run an hour earlier on the IDENTICAL TREE took 1:40:14, had 5 above the diagnostic, and printed a floor ladder 32% low and non-monotonic — see the gotcha. Same code, same fixture, same box.** **AND THE EXIT CODE READ IS PYTEST's OWN.** A `pixi run test 2>&1 | tail -25` on the run before this one reported **exit 0 with a test failing** — the code was `tail`'s. Handoff §2's rule, third instance: *where a tool reports on something else, its exit code describes the tool.* **Run the sweep to a file and read its status; never pipe it.** **`pixi run test` is the full sweep and every end-of-task verification must run it; `test-fast` and `test-ci` are NOT evidence** — the full sweep has caught **eight** things a fast run could not, the most recent being a test whose own expected value was computed from a 1-based reading of `np.arange`. **Every run prints `RSS measurement validity`, including at zero**; a nonzero count is INDETERMINATE, neither pass nor fail.
+5. **Tests: 1509 passed, 0 failed, 0 INDETERMINATE — 2026-09-21, 4534.79 s (1:15:34), exit code pytest's own** (1506 at the reconciliation, 1499 at 2f Task 1, 1486 at the OQ24 flip, 1483 at 2e's close). **The +3 are the follow-up's: the golden table, the run-time boundary reading, and its control.** **1:15:34 against the previous run's 2:00:31 on a LARGER tree** — a 37% swing on more tests, which is the same machine variance the gotcha below records and is not a speed-up anyone bought. **WRITERS RUN BEFORE THE SWEEP AND THE SWEEP RUNS LAST**, with `git write-tree` recorded at sweep start and asserted equal at commit time — a lint autofix once rewrote bytes a 78-minute sweep had already described. Older figures: ~~1483 passed, 2026-09-18, 5745.87 s (1:35:45)~~ (1482 earlier the same day with eighteen criteria, 1465 after the no-evidence decision, 1463 on 2026-09-16; the one added last is criterion 19's test). `pixi run test` is the full sweep and the only end-of-task evidence. **The run an hour earlier on the IDENTICAL TREE took 1:40:14, had 5 above the diagnostic, and printed a floor ladder 32% low and non-monotonic — see the gotcha. Same code, same fixture, same box.** **AND THE EXIT CODE READ IS PYTEST's OWN.** A `pixi run test 2>&1 | tail -25` on the run before this one reported **exit 0 with a test failing** — the code was `tail`'s. Handoff §2's rule, third instance: *where a tool reports on something else, its exit code describes the tool.* **Run the sweep to a file and read its status; never pipe it.** **`pixi run test` is the full sweep and every end-of-task verification must run it; `test-fast` and `test-ci` are NOT evidence** — the full sweep has caught **eight** things a fast run could not, the most recent being a test whose own expected value was computed from a 1-based reading of `np.arange`. **Every run prints `RSS measurement validity`, including at zero**; a nonzero count is INDETERMINATE, neither pass nor fail.
 6. **Verify a checkout with `pixi run test && pixi run typecheck && pixi run lint` and `pixi run pre-commit run --all-files`**; `git add` new files first. **Never pipe a checker through `tail`** — see the handoff.
 7. **The method is the pre-flight**, and it lives only in [the handoff doc](docs/superpowers/notes/phase1-to-phase2-handoff.md) §1; 2e added **(j7b)** and **(a2)'s second register**. **§2 gained four rules on 2026-09-21, named here and stated only there:** **pin versus bound** (pin where change is rare and meaningful, bound with a margin where harmless drift is common — and a backstop for unnamed dependencies is not a second copy of the denylist); **queue reconciliation** (a handoff queue is reconciled against the commit before it, each item marked done or open with its evidence); **the cold-start read list** (PROGRESS.md's head carries one for the next action, and measurement output goes to files rather than into context); and **the forward harness rule** (new harness code reporting a failure rate calls `failure_tally`, checked at its pre-flight — **and the suite does not enforce it**).
 8. **CI is verified per commit, by an until-loop on the run's own `status`** — never by position in `gh run list`, never by `gh run watch --exit-status`; one push per run.
@@ -45,7 +45,8 @@ never after**. Nothing in the plan is restated here.
 | 0 — the clustering spike | **DONE.** 4 predictions met, 2 refuted; D4 re-decided on its numbers |
 | 1 — the reader, import boundary, completeness | **DONE** (`3f04f68`) |
 | — | **`failure_tally`, one definition of the failure rate** (`7790100`) |
-| 2 — rates, both denominators | **NEXT, behind the follow-up below** |
+| — | **the queued follow-up: item 2's golden table and item 4's run-time probe** — **DONE**, SHA filled at the next commit |
+| 2 — rates, both denominators | **NEXT, and the follow-up no longer blocks it** |
 | 3–10 | planned |
 
 **Open question 24 is TAKEN IN PART, not closed** — closer is §13.6's declared domain mask. It cost
@@ -82,7 +83,7 @@ DONE or OPEN with the evidence that settles it; the rule this earned is in
 **The audit is [the pre-flight's](docs/superpowers/notes/phase2f-preflight.md) follow-up entry and
 is not restated here.**
 
-**ITEMS 2 AND 4 LAND BEFORE ANY TASK 2 CODE. ITEMS 1, 3 AND 5 ARE CLOSED.**
+**ALL FIVE ARE NOW CLOSED.** Items 1, 3 and 5 were closed by the reconciliation; **items 2 and 4 landed as code at the follow-up commit** and are struck below, each naming where its deliverable now lives. **The queue is spent and Task 2 is not blocked by it.**
 
 1. ~~**Re-aim the tautological agreement test** and `failure_tally`'s own tests at values computed
    by hand from literal fixture counts.~~ **DONE AT `7790100`, and the test was never tautological.**
@@ -94,48 +95,39 @@ is not restated here.**
    the (a10) pair that shows the rule **discriminates** (`None` against `0.0`). **The cross-module
    agreement test was refused at Task 2's pre-flight rather than re-aimed**, so the tautology was
    never built.
-2. **OPEN — and the unit is NEITHER of the two the item offered. RULED 2026-09-21: don't count what
-   you can't classify; pin what you can observe.** *"Five sites"* and *"fifteen"* are **deleted**,
-   not maintained: the first mixes three units and the second has no rule that reproduces it — a
-   per-computation count over `notes/` is **184** division nodes, dominated by `pathlib` joins.
-   **Replaced by a golden table**: scope is every `src/` module that references `Outcome`, which the
-   `ast` decides; the test asserts **the set of those modules** and **each module's division-node
-   count**; **nothing is classified**, so `pathlib` joins are in the counts and a reviewer judges
-   any movement. Measured seeds — `abort.py` **0**, `progress.py` **1** (the percentage formatter),
-   `core/outcomes.py` **1** (`failed / fitted`). **`metamer.report`'s numbers module is a new row
-   and must be added deliberately, with its count.** `audit_report.py`'s docstring says two
-   quantities where the measurement shows **seven** (one `_rate` division, seven callers) — a known
-   defect, corrected, **not** OQ25's open question, and the correction is noted at OQ25. Frozen
-   instruments under `notes/` are excluded by the frozen-instrument rule, **with the exclusion and
-   its reason stated in the test**. **Two gaps named rather than papered over**: the suite does not
-   enforce that a new harness calls `failure_tally` (a pre-flight obligation), and a rate computed
-   by comparing **raw integer codes** without referencing `Outcome` falls outside the scope
-   entirely — D1 forbids it and nothing catches it. The ruling is verbatim at the pre-flight.
+2. ~~**Count the rate-computation enumeration per file or per computation.**~~ **DONE AT THE
+   FOLLOW-UP COMMIT, AND THE UNIT WAS NEITHER OF THE TWO THE ITEM OFFERED.** *"Five sites"* and
+   *"fifteen"* are **deleted, not maintained** — the ruling was *don't count what you can't
+   classify; pin what you can observe.* The deliverable is a golden table in
+   `tests/test_outcomes.py`: scope is every `src/` module that references `Outcome`, the `ast`
+   decides which, and the test asserts **the set of those modules and each module's division-node
+   count**, classifying nothing. **The table is there and is not copied here.** Frozen instruments
+   under `notes/` are excluded by the frozen-instrument rule, with the exclusion and its reason
+   stated in the test, and **the two gaps are named in the test** — the suite does not enforce that
+   a new harness calls `failure_tally`, and a rate over raw integer codes never referencing
+   `Outcome` is outside the scope entirely. `audit_report`'s *"two quantities"* is corrected to
+   **one `_rate` division serving seven callers** in the same commit; the denominator itself stays
+   filed as **OQ25**. The ruling is verbatim at the pre-flight, and what the code turned up beyond
+   it is the pre-flight's closing addendum.
+
 3. ~~**Docstrings name `failure_tally`** and state only what is specific to their site.~~ **DONE AT
    `7790100`.** `abort.py:253` and `progress.py:182` both say the arithmetic is `failure_tally`'s
    and is **not restated**, and `abort_verdict`'s surviving *"the rate is `failed / eligible`"* was
    corrected in the same commit under (a6).
-4. **OPEN. The run-time import probe and the ceiling.** Task 1's probe imports `metamer.report`,
-   whose `__init__.py` is docstring-only — **65 modules** (re-measured; the 63 in the first draft
-   reconciles exactly, since `metamer` alone is 64 and a docstring-only `__init__` adds itself) —
-   reaching neither the reader nor zarr, **so the assertion is trivially true**. Re-measured
-   2026-09-21 with the fixture built in the **parent**: **65 / 930 / 933** modules across
-   `import metamer.report` → `+ read_store` imported → **after `read_store` runs**, with **no
-   forbidden module at any stage**. The boundary holds, the test does not establish it, and the
-   stated ceiling of **900 would have FAILED** against the real subject of 933. Repair: subprocess
-   imports *and calls* `read_store` on a parent-built fixture (build it in the probe and it measures
-   the fixture builder), import-time probe kept as the cheap first check. **RULED 2026-09-21: the
-   ceiling is a backstop for UNNAMED dependencies, not a second copy of the denylist** — `pydantic`
-   and `metamer.batch.run` are caught by name, so `batch.run`'s 1002 is not the figure it must
-   discriminate against. **Set at 980, 5% above 933**, because module counts drift with a lockfile
-   update and with the platform and a bound tight enough to fire on routine drift becomes a number
-   people bump without reading it; **the assertion message prints the measured count**; and **CI's
-   own count is recorded beside the local 933 after the first run**, with the margin taken from the
-   larger if they differ materially. **Criterion 3's record notes its evidence was vacuous from
-   `3f04f68` until the fix.** And a `sys.modules` check **cannot see a lazy import by
-   construction**, which is what D10's maps design requires — so even the repaired probe gives both
-   answers for an import-time violation and only one for a run-time one, which is stated rather
-   than priced.
+4. ~~**The run-time import probe and the ceiling.**~~ **DONE AT THE FOLLOW-UP COMMIT.** The probe
+   now **imports and CALLS `read_store`** on a fixture built in the parent, with the import-time
+   probe kept as the cheap first check and relabelled as such — it stops at 65 modules and
+   establishes nothing on its own. The ceiling is **980**, 5% above the measured 933, **as a
+   backstop for UNNAMED dependencies rather than a second copy of the denylist**: `pydantic` and
+   `metamer.batch.run` are caught by name, so `batch.run`'s 1002 is not the figure it discriminates
+   against. A permanent positive control injects one import into the identical probe source and
+   asserts both readings move. **CI's own count reaches the log through
+   `conftest.DIAGNOSTIC_LINES`, not through the assertion message** — a message prints only when it
+   fires, so a green run recorded nothing; that gap is the pre-flight addendum's first finding.
+   **Criterion 3's record in the plan now states its evidence was vacuous from `3f04f68` until this
+   commit**, along with the residual limit: a `sys.modules` check cannot see a lazy import by
+   construction, which is what D10's maps design requires.
+
 5. ~~**The `is_failure` truth table** across all fourteen members at `ac3e577` and `f4eb42f`.~~
    **DONE AND MEASURED 2026-09-21**, from two side `git worktree`s, removed afterwards, never a
    checkout of the working tree. **Forty-two cells — fourteen members × three predicates × two

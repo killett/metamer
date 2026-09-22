@@ -396,18 +396,32 @@ importable by both with no new edge in either graph. **It inherits `is_fit_verdi
 positive-membership default**, so a future `Outcome` member lands on the safe side in every consumer
 at once.
 
-### THE ENUMERATION, WITH ITS COUNT — FIVE SITES
+### ~~THE ENUMERATION, WITH ITS COUNT — FIVE SITES~~ — THE DISPOSITIONS STAND, THE COUNT IS DELETED
+
+> **CORRECTED IN PLACE 2026-09-21, AT THE FOLLOW-UP COMMIT, BECAUSE A CORRECTION RECORDED
+> AWAY FROM THE CLAIM IT CORRECTS IS A SECOND VERSION OF THE CLAIM.** The table's five
+> *dispositions* are still what this task does — two addressed, three filed. **Its COUNT is
+> not an instrument**: *"five"* mixes three units and *"fifteen rate-shaped divisions"* has
+> no rule that reproduces it, which the follow-up entry's (c7) measures. Both figures are
+> **deleted rather than maintained**, and the size claim is now a golden table in
+> `tests/test_outcomes.py` — the set of `src/` modules referencing `Outcome`, decided by the
+> `ast`, with each module's division-node count.
 
 | # | site | kind | disposition |
 |---|---|---|---|
 | 1 | `progress.py` `LiveCounters.lines` | **display** | **WRONG — fixed in this commit**, becomes the shared function's first consumer |
 | 2 | `abort.py` `_rate_for` / `_decide` | **decision** | correct since 2026-09-20; moves onto the shared function, and its stale docstring is fixed |
 | 3 | `audit_report.py` rescue / loss / `both_ok_fraction` | measurement | **filed as open question 25**, not touched — its denominators are `cold_failed` / `cold_ok` / `attempted`, a different question |
-| 4 | committed harnesses under `notes/` — **15 rate-shaped divisions** | measurement of committed artifacts | **FILED, NOT TOUCHED.** They use denominators like `outcome != 8` and `iterations != ITERATIONS_UNSET` that describe the artifacts they produced; rewriting them rewrites closed evidence — the same reason 2e's `_histograms` is frozen |
+| 4 | committed harnesses under `notes/` — ~~**15 rate-shaped divisions**~~ **not counted; out of scope by the frozen-instrument rule** | measurement of committed artifacts | **FILED, NOT TOUCHED.** They use denominators like `outcome != 8` and `iterations != ITERATIONS_UNSET` that describe the artifacts they produced; rewriting them rewrites closed evidence — the same reason 2e's `_histograms` is frozen |
 | 5 | `metamer.report` | display | **does not exist yet**; Task 2 makes it the shared function's second consumer |
 
 **Two are display or decision sites and both are addressed here. Three are measurement sites and all
-three are filed.** The count is five and is asserted in a test, per (c7).
+three are filed.** ~~The count is five and is asserted in a test, per (c7).~~ **It is not.** What
+the test asserts is the golden table in `tests/test_outcomes.py` — a scope the `ast` decides and a
+count per module,
+classifying nothing — because (c7) asks for the size of what a discovery mechanism found and a
+hand-drawn list of five is not a discovery mechanism. **A new site arriving in a module already
+in scope moves that module's pinned count; a new module in scope has to be added deliberately.**
 
 ### WHAT THIS ENTRY CHANGED
 
@@ -714,7 +728,16 @@ rules about how any handoff is written, so they belong in §2 where the method l
 points at them rather than restating them.
 
 
-### PARKED FOR ITEM 2's COMMIT — TRANSCRIPTION, NOT RECOLLECTION
+### ~~PARKED FOR ITEM 2's COMMIT — TRANSCRIPTION, NOT RECOLLECTION~~ — TRANSCRIBED AND DISCHARGED
+
+> **BOTH LANDED AT THE FOLLOW-UP COMMIT, 2026-09-21, AND THIS SECTION IS SPENT.** Kept rather
+> than deleted because it is the record of what was owed and by whom; **marked here so the
+> next session does not transcribe it a second time**, which is the queue-reconciliation rule
+> applied to this document's own parked text. Item 1 is the rewritten docstring of
+> `test_every_failure_rate_in_src_comes_from_the_one_definition` plus the new
+> `test_the_rate_site_table_is_pinned_over_every_outcome_referencing_module`; item 2 is the
+> `audit_report` count, now stated as **one `_rate` division serving seven quantities** in the
+> golden table test's docstring.
 
 **This session is docs-only, so the two `tests/` corrections the rulings call for are parked as
 TEXT rather than as intentions** — the same idiom as the pre-plan entry's two parked one-liners, and
@@ -748,3 +771,51 @@ HARNESS:** `src/metamer/batch/abort.py` **0**, `src/metamer/progress.py` **1**,
 `src/metamer/core/outcomes.py` **1**. **The rest of the scope is enumerated when the table is
 written** — the `ast` decides which modules reference `Outcome`, and that enumeration is the
 deliverable rather than a figure to transcribe from here.
+
+### ADDENDUM, 2026-09-21 — WHAT WRITING ITEMS 2 AND 4 TURNED UP THAT THE RULINGS DID NOT COVER
+
+**The rulings were followed, not re-argued. Three things the code found are recorded because they
+are not in them.**
+
+**1. THE RULING'S OWN RECORDING MECHANISM HAD NO SOURCE ON A GREEN RUN, WHICH IS THE ONE STATE IT
+WAS WRITTEN FOR.** The ceiling ruling asks for *"the assertion message prints the measured count"*
+and *"after the first CI run, record CI's count next to the local 933"* — and those two sentences
+do not compose: **an assertion message is emitted only when the assertion FIRES**, so a passing CI
+run prints nothing and the figure the second sentence asks for has nowhere to come from. The fix is
+the channel the suite already has for exactly this: `conftest.DIAGNOSTIC_LINES`, whose own docstring
+says it is *"the only channel that reaches a CI log from a passing test"* because pytest hides a
+passing test's stdout. The count is appended there **and** kept in the assertion message, so the
+number is readable in both states rather than in neither.
+
+> **THE SHAPE IS (a2c)'s, ONE REGISTER OUT: A VALUE THE MECHANISM COMPUTES AND DOES NOT PERSIST.**
+> The count was measured, used for a comparison, and dropped — and the artifact built to answer
+> *"what does CI load?"* would not have carried its own subject. It reads as complete: the ceiling
+> passes, the message exists, and nothing looks partial until somebody goes looking for CI's
+> number and finds a green log.
+
+**2. THE SCOPE IS NINETEEN MODULES, AND THE THREE SEEDS ARE ITS SMALLEST COUNTS.** *"Classify
+nothing"* was ruled with `pathlib` in view; what the enumeration actually shows is that the table is
+**dominated by modules with no rate in them** — `bench/fields.py` at 14, `bench/spike.py` at 8,
+`core/counting.py` at 6 — against the seeds' 0, 1 and 1. **That is the ruling working rather than
+failing**: those counts are the noise a classifier would have had to judge, and judging them is
+precisely what could not be reproduced. The table is in
+`tests/test_outcomes.py::FAILURE_RATE_SITE_TABLE` and **is not copied here**.
+
+**AND `metamer/report/reader.py` IS ALREADY A ROW, AT 1.** The ruling anticipated *"`metamer.report`'s
+numbers module is a new row and must be added deliberately"* as a future event; Task 1's reader
+references `Outcome` and is in scope **today**, so the deliberate-addition property was exercised by
+the commit that wrote the table rather than deferred to the one that will grow it.
+
+**3. BOTH REPAIRED INSTRUMENTS WERE SHOWN TO PRODUCE BOTH ANSWERS, AND THE THIRD IS PERMANENT.**
+(a10) applied to instruments whose whole defect was that they could not:
+
+| instrument | the demonstration | reading |
+|---|---|---|
+| the golden table | a division node appended to `abort.py`, reverted from a scratchpad copy — **never a `git checkout`** | `{'metamer/batch/abort.py': 1} != {'metamer/batch/abort.py': 0}` |
+| the ceiling | the bound temporarily lowered, to read the count the passing form hides | *"reading a store now loads **933** modules"* — the pre-flight's figure, from the shipped instrument |
+| the run-time probe | `test_the_runtime_probe_can_see_a_violation`, **kept in the suite**: one injected import into the identical probe source | `pydantic` at both readings, and a strictly larger module count |
+
+**The third is a test and the first two are not**, which is a real asymmetry: the probe's control
+costs a subprocess, while pinning "the table fails when a division arrives" would mean committing a
+mutation of `src/`. **The demonstration is recorded here instead of asserted there**, and that is
+the weaker form — it establishes the instrument bit on 2026-09-21 and not on every run.

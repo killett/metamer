@@ -1,8 +1,76 @@
+import ast
 from pathlib import Path
 
 import pytest
 
 from metamer.core.outcomes import Outcome, failure_tally
+
+#: Every `src/` module whose AST mentions `Outcome`, with its count of division
+#: nodes. **Measured by `ast` on 2026-09-21, not hand-counted**, and pinned
+#: rather than bounded because this set changes rarely and every change is a
+#: decision somebody should read.
+#:
+#: **NOTHING HERE IS CLASSIFIED.** `pathlib` joins are division nodes and are
+#: in these counts; so are normalisations like `audit_report`'s `gap / scale`.
+#: A count that moves is not by itself a defect -- it is a diff a reviewer
+#: judges. The alternative was a count of "rate-shaped" divisions, and that is
+#: the instrument this table replaces: it has no rule that reproduces it, so it
+#: could not be re-derived by the next reader and was being maintained rather
+#: than measured.
+FAILURE_RATE_SITE_TABLE: dict[str, int] = {
+    "metamer/batch/abort.py": 0,
+    "metamer/batch/audit_report.py": 2,
+    "metamer/batch/store.py": 2,
+    "metamer/batch/warmstart.py": 2,
+    "metamer/batch/write.py": 0,
+    "metamer/bench/arms.py": 1,
+    "metamer/bench/fields.py": 14,
+    "metamer/bench/spike.py": 8,
+    "metamer/core/__init__.py": 0,
+    "metamer/core/counting.py": 6,
+    "metamer/core/criteria.py": 2,
+    "metamer/core/engines/compiled.py": 3,
+    "metamer/core/engines/kalman.py": 2,
+    "metamer/core/fit.py": 0,
+    "metamer/core/objective.py": 0,
+    "metamer/core/optimize.py": 3,
+    "metamer/core/outcomes.py": 1,
+    "metamer/progress.py": 1,
+    "metamer/report/reader.py": 1,
+}
+
+
+def _outcome_referencing_modules() -> dict[str, int]:
+    """The scope, decided mechanically: `src/` modules whose AST names `Outcome`.
+
+    An identifier anywhere in the tree counts -- a `Name`, an `Attribute`, an
+    import alias or a definition -- because the question is whether the module
+    is in the taxonomy's world at all, not how it spells its reference.
+    """
+    root = Path(__file__).resolve().parents[1] / "src"
+    table: dict[str, int] = {}
+    for path in sorted(root.rglob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        names: set[str] = set()
+        divisions = 0
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Name):
+                names.add(node.id)
+            elif isinstance(node, ast.Attribute):
+                names.add(node.attr)
+            elif isinstance(node, ast.alias):
+                names.add(node.name.rpartition(".")[2])
+                if node.asname is not None:
+                    names.add(node.asname)
+            elif isinstance(
+                node, ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef
+            ):
+                names.add(node.name)
+            if isinstance(node, ast.Div | ast.FloorDiv):
+                divisions += 1
+        if "Outcome" in names:
+            table[path.relative_to(root).as_posix()] = divisions
+    return table
 
 
 def test_insufficient_data_is_not_a_failure():
@@ -498,28 +566,25 @@ def test_an_unknown_outcome_name_is_refused_rather_than_ignored():
 
 
 def test_every_failure_rate_in_src_comes_from_the_one_definition():
-    """The quantity has ONE definition, and this asserts the COUNT of its sites.
+    """The quantity has ONE definition, and these are exactly its consumers.
 
-    Expected values determined independently by enumerating the tree at
-    sub-phase 2f Task 2's pre-flight, 2026-09-21: five places compute a
-    failure-like rate. Two are display or decision sites and both call
-    `failure_tally` -- `progress.LiveCounters.lines` and `abort._rate_for`.
-    Three are measurement sites and all three are filed rather than changed:
-    `audit_report`'s rescue/loss denominators (open question 25, a different
-    question), the committed harnesses under `notes/` (they describe artifacts
-    they produced, and rewriting them rewrites closed evidence), and the
-    report, which does not exist yet.
+    Expected value determined independently by an `ast` walk of `src/` on
+    2026-09-21: two modules call `failure_tally` -- `progress.LiveCounters.
+    lines` and `abort._rate_for`.
 
-    Bug this catches: **a third computation of the failure rate.** That is not
-    hypothetical -- it is what happened. Section 14.1's verdict and the live
-    counters each had their own arithmetic, the verdict's denominator was
-    repaired on 2026-09-20, and the display's was not, because **a search finds
-    call sites of a FUNCTION and cannot find computations of a QUANTITY.** They
-    disagreed for four days over the same data.
+    Bug this catches: a consumer REMOVED, which means it has grown its own
+    arithmetic. Section 14.1's verdict and the live counters each had one, the
+    verdict's denominator was repaired on 2026-09-20 and the display's was not,
+    because **a search finds call sites of a FUNCTION and cannot find
+    computations of a QUANTITY**; they disagreed for four days over the same
+    data.
 
-    **IT ASSERTS THE ENUMERATION'S SIZE AND NOT ONLY ITS MEMBERS** -- handoff
-    (c7). A check that merely confirmed these two callers exist would keep
-    passing while a third site was added beside them.
+    **WHAT THIS TEST CANNOT SEE IS THE SIZE OF THE POPULATION IT IS DRAWN
+    FROM** -- handoff (c7). A third site computing the rate with its own
+    arithmetic calls nothing this walk can find. That claim is
+    `test_the_rate_site_table_is_pinned_over_every_outcome_referencing_module`
+    below, and the two are read together: this one says the shared definition
+    is used, that one says no arithmetic grew beside it.
     """
     root = Path(__file__).resolve().parents[1] / "src"
     callers = sorted(
@@ -533,4 +598,59 @@ def test_every_failure_rate_in_src_comes_from_the_one_definition():
         "the set of failure_tally consumers moved. If a site was ADDED, check "
         "it is not a third arithmetic for the same quantity; if one was "
         "REMOVED, it has grown its own"
+    )
+
+
+def test_the_rate_site_table_is_pinned_over_every_outcome_referencing_module():
+    """The SIZE claim the caller-set test cannot make, as a golden table.
+
+    Scope is every `src/` module that references `Outcome`, decided by the
+    `ast` rather than named by hand; the assertion is the set of those modules
+    AND each module's count of division nodes. **Nothing is classified** --
+    `pathlib` joins are in the counts -- so a moved count is a diff a reviewer
+    judges rather than a verdict this test reaches.
+
+    Expected values measured by `ast` on 2026-09-21 and recorded in
+    `FAILURE_RATE_SITE_TABLE`. Three of them were cross-derived at the
+    follow-up's pre-flight the same day, by a separate walk: `abort.py` 0,
+    `progress.py` 1 (the percentage formatter), `core/outcomes.py` 1
+    (`failed / fitted`), and `audit_report.py` 2 -- `_rate`'s
+    `numerator / denominator`, which serves **seven** quantities
+    (`selection_disagreement`, `selection_move`, `selection_dropout`,
+    `ranked_fraction`, `rescue`, `loss`, `both_ok_fraction`), plus the
+    `gap / scale` normalisation, which is not a rate.
+
+    Bug this catches: **a third arithmetic for the failure rate, written
+    anywhere in scope.** A module computing `failed / eligible` for itself
+    instead of calling `failure_tally` moves its pinned count, which is the
+    exact failure that shipped between 2e's Task 4 and Task 5 and that a
+    caller enumeration structurally cannot see. It also catches a NEW
+    `Outcome`-referencing module arriving unannounced: 2f's report modules
+    each have to be added here deliberately, with their count.
+
+    **FROZEN INSTRUMENTS UNDER `docs/superpowers/notes/` ARE OUT OF SCOPE, BY
+    A STATED RULE AND NOT BY OMISSION** -- handoff (j8)'s third register. A
+    committed harness is the experimental apparatus of a number somebody is
+    still quoting, so rewriting it rewrites closed evidence. The rule survives
+    a thirty-first harness landing next sub-phase in a way that "counted as one
+    site" would not; a per-computation count over them is 184 nodes and
+    dominated by `pathlib` joins, which is why they are excluded by kind and
+    not by threshold.
+
+    **TWO GAPS, NAMED HERE RATHER THAN PAPERED OVER:**
+
+    1. Nothing in this suite enforces that NEW harness code reporting a
+       failure rate calls `failure_tally`. That is a pre-flight obligation with
+       an owner (handoff section 2), and a harness written next sub-phase can
+       grow a fourth arithmetic with nothing failing.
+    2. A rate computed by comparing **raw integer codes**, without referencing
+       `Outcome` at all, falls outside this scope entirely -- such a module
+       would not be in the table. Sub-phase 2f's D1 forbids it (a predicate
+       must read its subject, not an available proxy) and nothing catches it.
+    """
+    assert _outcome_referencing_modules() == FAILURE_RATE_SITE_TABLE, (
+        "the rate-site table moved. A module ADDED to the scope must be added "
+        "here deliberately, with its count; a COUNT that moved is a new "
+        "division node in a module that knows about Outcome -- check it is not "
+        "a second arithmetic for a quantity failure_tally already defines"
     )
