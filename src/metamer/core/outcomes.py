@@ -16,7 +16,51 @@ from numpy.typing import NDArray
 
 
 class Outcome(StrEnum):
-    """Per (point, candidate) fit outcome."""
+    """Per (point, candidate) fit outcome.
+
+    **THE FOUR PREDICATES, IN ONE TABLE, ORDERED NARROWEST TO WIDEST.** They
+    are four distinct questions, and this project's recurring defect is asking
+    one of them and reading the answer as another -- section 14.1's abort gate
+    asked "eligible" while meaning "fitted", and the live counters divided by
+    points touched while the label said fits. **Reading them side by side is
+    the only way to see that no two are the same set.**
+
+    | member | `is_failure` | `is_fit_verdict` | `is_covered` | `is_eligible` |
+    |---|---|---|---|---|
+    | `OK` | no | yes | yes | yes |
+    | `ITER_CAP_SMALL_GRAD` | yes | yes | yes | yes |
+    | `ITER_CAP_LARGE_GRAD` | yes | yes | yes | yes |
+    | `DIAGNOSTIC_LIMIT` | yes | yes | yes | yes |
+    | `TRUST_RADIUS_COLLAPSED` | yes | yes | yes | yes |
+    | `NONFINITE_OBJECTIVE` | yes | yes | yes | yes |
+    | `RANK_DEFICIENT_X` | yes | yes | yes | yes |
+    | `DEGENERATE_HESSIAN` | yes | yes | yes | yes |
+    | `ILL_CONDITIONED_X` | yes | yes | yes | yes |
+    | `NOT_ATTEMPTED` | no | no | no | yes |
+    | `CANDIDATE_DROPPED` | no | no | yes | yes |
+    | `INSUFFICIENT_DATA` | no | no | yes | yes |
+    | `SCREENED_OUT` | no | no | yes | yes |
+    | `NOT_APPLICABLE` | no | no | no | no |
+
+    **THE COLUMNS NEST, LEFT TO RIGHT**: once a row says `yes` it says `yes`
+    for the rest of that row. That is not a coincidence of the current members
+    -- it is the invariant
+    `is_failure` < `is_fit_verdict` < `is_covered` < `is_eligible`, asserted
+    over the whole enum with each step proved PROPER by a named witness. Three
+    rows carry the three witnesses: `OK` separates the first pair,
+    `SCREENED_OUT` the second, `NOT_ATTEMPTED` the third.
+
+    **THIS TABLE IS LOAD-BEARING, NOT DECORATIVE.** `tests/test_outcomes.py`
+    parses it out of this docstring and asserts it against the four properties,
+    so a member reclassified in code and not here fails the suite. It is the
+    only place all four can be seen at once, which is why it lives in the
+    module rather than in a test.
+
+    **THE QUESTIONS, ONE LINE EACH:** `is_failure` -- did a fit run and come
+    out bad? `is_fit_verdict` -- is the store making a claim about a fit here?
+    `is_covered` -- is this point in the domain AND did the run reach it?
+    `is_eligible` -- is this location one a rate is over at all?
+    """
 
     OK = "ok"
     ITER_CAP_SMALL_GRAD = "iter_cap_small_grad"
@@ -35,7 +79,16 @@ class Outcome(StrEnum):
 
     @property
     def is_eligible(self) -> bool:
-        """Whether this point counts toward a failure-rate denominator.
+        """Whether this LOCATION is one a rate is over at all.
+
+        **NOT THE COVERAGE DENOMINATOR -- THAT IS `is_covered`, AND THE TWO
+        DIFFER BY `NOT_ATTEMPTED`.** This predicate answers a question about
+        the DOMAIN and says nothing about whether the run got there, so a rate
+        over it improves the earlier an interrupted run was killed. Sub-phase
+        2f Task 2 added the second predicate rather than narrowing this one:
+        **these values are recorded in committed artifacts** (`abort`'s verdict
+        record, `twopass`'s summary) and `audit_report.attempted` reads it under
+        open question 25, so redefining it would move numbers already written.
 
         **SECTION 12.5's NON-FIT GROUPING TABLE IS THE CLASSIFICATION**, by its
         own declaration -- *"the grouping is what section 14.2's denominator
@@ -188,6 +241,64 @@ class Outcome(StrEnum):
         }
 
     @property
+    def is_covered(self) -> bool:
+        """Whether the point is IN THE DOMAIN and the run REACHED it.
+
+        **THIS IS SECTION 14.2's COVERAGE DENOMINATOR, AND IT IS NOT
+        `is_eligible`.** The two answer different questions and disagree about
+        exactly one member. `is_eligible` asks *"is this location one the rate
+        is over?"* -- a statement about the DOMAIN -- and its values are
+        already written into committed artifacts, so it is not redefined.
+        This one asks *"did the run produce information here?"*, and the
+        difference is `NOT_ATTEMPTED`.
+
+        **TWO EXCLUSIONS, TWO DIFFERENT REASONS, AND CONFLATING THEM IS THE
+        DEFECT THIS PREDICATE EXISTS TO PREVENT:**
+
+        | excluded | because |
+        |---|---|
+        | `NOT_APPLICABLE` | **the point is not in the domain** -- land, permanent ice. It is not a point any coverage statement is about |
+        | `NOT_ATTEMPTED` | **the run never got there** -- nothing wrote here. The point is in the domain and the store has no information about it |
+
+        **WHY THE SECOND EXCLUSION IS NOT COSMETIC.** Design doc section 12.5
+        gives `NOT_ATTEMPTED` the entry *"n/a, and a finished store should hold
+        none"* -- true of a finished store, and sub-phase 2f describes
+        **unfinished** ones deliberately (D6, exit criterion 19). An unfinished
+        store carries this member in proportion to how far the run did **not**
+        get, so counting it in a coverage denominator dilutes the rate in
+        proportion to the interruption: **a run killed earlier reports a better
+        coverage rate.** That is the land dilution one member over, and no
+        fixture that finishes can show it.
+
+        **POSITIVE MEMBERSHIP, LIKE `is_fit_verdict` AND FOR THE SAME REASON.**
+        An unknown member is not covered until someone says so. The default
+        that matters here is the denominator's: a new member drifting IN
+        dilutes every coverage rate silently, while a new member left OUT makes
+        the rate louder and is caught by the nesting chain the moment it is
+        also a fit verdict.
+
+        **THE CHAIN IS THE INVARIANT, NOT THIS SET.** `is_failure` is inside
+        `is_fit_verdict` is inside this is inside `is_eligible`, asserted over
+        the whole enum by `tests/test_outcomes.py`. The middle step is what
+        makes `failed/fitted` and `failed/covered` share a numerator and one
+        unavailability condition.
+        """
+        return self in {
+            Outcome.OK,
+            Outcome.ITER_CAP_SMALL_GRAD,
+            Outcome.ITER_CAP_LARGE_GRAD,
+            Outcome.DIAGNOSTIC_LIMIT,
+            Outcome.TRUST_RADIUS_COLLAPSED,
+            Outcome.NONFINITE_OBJECTIVE,
+            Outcome.RANK_DEFICIENT_X,
+            Outcome.ILL_CONDITIONED_X,
+            Outcome.DEGENERATE_HESSIAN,
+            Outcome.CANDIDATE_DROPPED,
+            Outcome.INSUFFICIENT_DATA,
+            Outcome.SCREENED_OUT,
+        }
+
+    @property
     def code(self) -> int:
         """Stable integer code, for the batched arrays and the zarr schema."""
         return _CODES[self]
@@ -216,8 +327,31 @@ class FailureTally:
     | count | what it is | what it answers |
     |---|---|---|
     | `points` | every code in the census | how big is the grid |
-    | `eligible` | `Outcome.is_eligible` | section 14.2's coverage population |
+    | `eligible` | `Outcome.is_eligible` | which locations a rate is over at all |
+    | `covered` | `Outcome.is_covered` | **section 14.2's coverage population** -- in the domain AND reached |
     | `fitted` | `Outcome.is_fit_verdict` | where a fit verdict exists |
+
+    **~~`eligible` was described here as "section 14.2's coverage
+    population"~~ -- CORRECTED 2f TASK 2.** It is not: it counts points the
+    run never reached, so a rate over it improves the earlier an interrupted
+    run was killed. `covered` is that population, and the two differ by
+    `NOT_ATTEMPTED` alone. `eligible` is kept, unchanged, because its values
+    are recorded in committed artifacts and it answers a real question --
+    a different one.
+
+    **BOTH RATES ARE FIELDS, AND THAT IS WHY THERE ARE TWO.** Where a
+    denominator is contested, print both and let the difference speak rather
+    than choosing one and carrying a caveat. `rate` is `failed / fitted` --
+    *"is this candidate failing the fits it attempts?"* -- and `coverage_rate`
+    is `failed / covered` -- *"how much of what the run reached came out
+    bad?"*. **They share a numerator**, because `is_failure` is inside
+    `is_fit_verdict`, so the gap between them is the denominator alone: the
+    in-domain points the run reached and did not fit.
+
+    **ONE UNAVAILABILITY CONDITION SERVES BOTH**, because `is_fit_verdict` is
+    inside `is_covered`: `fitted == 0` is the only way either denominator can
+    be zero. Stating it once is not a shortcut, it is the nesting chain being
+    true.
 
     **`failed / fitted` is correct in both eras** -- before and after section
     13.6's declared domain mask -- because "is this candidate failing the fits
@@ -228,10 +362,15 @@ class FailureTally:
 
     Attributes:
         points: Every code counted, fit verdict or not.
-        eligible: Points in section 14.2's failure-rate population.
+        eligible: Locations a rate is over at all -- **not** the coverage
+            population; see the correction above.
+        covered: Points in the domain that the run reached. **The coverage
+            rate's denominator.**
         fitted: Points carrying a fit verdict. **The rate's denominator.**
         failed: Fitted points that failed, by `Outcome.is_failure`.
         rate: `failed / fitted`, or **None when nothing was fitted**.
+        coverage_rate: `failed / covered`, or **None when nothing was
+            fitted** -- the same condition, for the reason above.
         unavailable: Why there is no rate, or None when there is one. **Never
             a rate of 0.0 for a candidate that was never tried** -- that reads
             identically to one fitted everywhere and passing, which is the
@@ -241,13 +380,17 @@ class FailureTally:
 
     points: int
     eligible: int
+    covered: int
     fitted: int
     failed: int
     rate: float | None
+    coverage_rate: float | None
     unavailable: str | None
 
 
-def failure_tally(census: Mapping[Outcome | str, int]) -> FailureTally:
+def failure_tally(
+    census: Mapping[Outcome, int] | Mapping[str, int],
+) -> FailureTally:
     """Reduce a census of outcome counts to `FailureTally`.
 
     **PURE, AND IN THIS MODULE BECAUSE BOTH CONSUMERS ALREADY IMPORT IT.**
@@ -264,7 +407,12 @@ def failure_tally(census: Mapping[Outcome | str, int]) -> FailureTally:
     Args:
         census: Counts keyed by `Outcome` members or by their string values.
             Both spellings are accepted because the live counters key a
-            `Counter` by value and a store reader holds members.
+            `Counter` by value and a store reader holds members. **The type is
+            a UNION of two mappings rather than one mapping of a union key**,
+            because `Mapping` is invariant in its key: a caller holding a
+            declared `dict[Outcome, int]` cannot pass it as a
+            `Mapping[Outcome | str, int]`, and would otherwise have to widen
+            its own annotation to satisfy this one.
 
     Returns:
         The tally, with `rate=None` and a reason where nothing was fitted.
@@ -275,7 +423,7 @@ def failure_tally(census: Mapping[Outcome | str, int]) -> FailureTally:
             every rate computed from the census with nothing visible to a
             reader.
     """
-    points = eligible = fitted = failed = 0
+    points = eligible = covered = fitted = failed = 0
     for key, count in census.items():
         try:
             member = key if isinstance(key, Outcome) else Outcome(key)
@@ -287,6 +435,8 @@ def failure_tally(census: Mapping[Outcome | str, int]) -> FailureTally:
         points += int(count)
         if member.is_eligible:
             eligible += int(count)
+        if member.is_covered:
+            covered += int(count)
         if member.is_fit_verdict:
             fitted += int(count)
             if member.is_failure:
@@ -296,9 +446,11 @@ def failure_tally(census: Mapping[Outcome | str, int]) -> FailureTally:
         return FailureTally(
             points=points,
             eligible=eligible,
+            covered=covered,
             fitted=0,
             failed=0,
             rate=None,
+            coverage_rate=None,
             unavailable=(
                 "no point was fitted, so there is no rate: 0/0 is not a score, "
                 "and 0.0 would read identically to a candidate fitted "
@@ -308,9 +460,15 @@ def failure_tally(census: Mapping[Outcome | str, int]) -> FailureTally:
     return FailureTally(
         points=points,
         eligible=eligible,
+        covered=covered,
         fitted=fitted,
         failed=failed,
         rate=failed / fitted,
+        # **THE SECOND DENOMINATOR IS COMPUTED HERE OR IT IS COMPUTED TWICE.**
+        # `covered >= fitted > 0` is guaranteed by the nesting chain, so this
+        # division is safe under the same guard as the one above -- which is
+        # why there is one `unavailable` and not two.
+        coverage_rate=failed / covered,
         unavailable=None,
     )
 

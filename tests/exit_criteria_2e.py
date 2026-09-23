@@ -202,17 +202,23 @@ PHASE_2E_EXIT_CRITERIA: tuple[ExitCriterion, ...] = (
         verdict=Verdict.MET,
         reading="both properties, enumerated",
         scope="",
-        # THE FIRST NAME MOVED ON 2026-09-19 AND THE VERDICT DID NOT. 2f's
-        # gate repair added a third property, `Outcome.is_fit_verdict`, to the
-        # one-table test, and a count in a name is renamed rather than edited
-        # -- so `..._by_both_properties_...` became
-        # `..._by_all_three_properties_...`. **Criterion 8's reading stays "both
-        # properties, enumerated"**, because that is what 2e read and a later
-        # sub-phase adding a column does not retroactively widen a met
-        # criterion. This edit keeps the name pointing at evidence that exists;
-        # it is not a re-reading.
+        # THE NAME HAS MOVED TWICE AND THE VERDICT HAS NOT. 2f's gate repair
+        # added `is_fit_verdict` (both -> three) on 2026-09-19, and 2f Task 2
+        # added `is_covered` (three -> four) on 2026-09-22. **Criterion 8's
+        # reading stays "both properties, enumerated"**, because that is what
+        # 2e read, and a later sub-phase adding a column does not retroactively
+        # widen a met criterion. These edits keep the name pointing at evidence
+        # that EXISTS; neither is a re-reading.
+        #
+        # **AND THE COUNT IS NOW OUT OF THE NAME, WHICH IS WHY THERE WILL NOT
+        # BE A THIRD EDIT.** A name carrying a count of a growing set is
+        # renamed every time the set grows, and every rename silently breaks
+        # every record that names it -- this one, twice, each time found by the
+        # full sweep and by nothing else. `..._by_every_predicate_...` is true
+        # at any width. **An output is an interface**, and a test name read by
+        # a closed criterion's record is an output.
         established_by=(
-            "test_every_member_is_classified_by_all_three_properties_in_one_table",
+            "test_every_member_is_classified_by_every_predicate_in_one_table",
             "test_the_three_deferred_outcomes_are_skips_and_not_failures",
             "test_a_dropped_candidate_is_outside_the_failure_rate_and_inside_the_denominator",
         ),

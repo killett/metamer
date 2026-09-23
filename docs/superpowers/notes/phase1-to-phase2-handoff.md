@@ -3795,6 +3795,12 @@ tests could not see.** `pixi run test-fast` would have shipped both.
   bump without reading it** — which is D6's flag argument in a second register: a guard whose only
   effect is to be waved through trains the reader to wave it through.
 
+  **CONFIRMED BY MEASUREMENT 2026-09-22, WHICH IS RARER THAN BEING RIGHT.** The first green CI run
+  read the import graph in four environments — 912, 913, 920 and 933 — so **a pin would have failed
+  three of four passing runs**, and the bound's margin is now derived from the observed spread of 21
+  rather than from a round 5%. The rule was ruled on an *expectation* of drift and the thing it
+  predicted then happened.
+
   > **AND THE TWO FAILURE MODES ARE NOT SYMMETRIC, WHICH IS WHY THE RULE NAMES A DIRECTION.** A pin
   > on a drifting quantity is edited until nobody reads the edit; a bound on a stable one is a
   > guard that never fires and says nothing. **The first decays into a ritual and the second into
@@ -3805,6 +3811,32 @@ tests could not see.** `pixi run test-fast` would have shipped both.
   not the figure the ceiling has to discriminate against — the ceiling exists for the fifth arrival
   nobody listed. **The assertion message prints the measured count**, so the next reader meets the
   measurement rather than the threshold.
+
+- **A MEASUREMENT THAT ONLY SURFACES ON FAILURE IS NOT A RECORD. A NUMBER YOU WANT FROM A GREEN RUN
+  NEEDS A CHANNEL THAT RUNS WHEN THE RUN IS GREEN.** Added 2026-09-22, and **the defect was in a
+  ruling rather than in code**, which is why it is stated as a rule rather than filed as a bug.
+
+  The ceiling ruling said two things that do not compose: *"the assertion message prints the
+  measured count"* and *"after the first CI run, record CI's count next to the local 933"*. **An
+  assertion message exists only when the assertion FIRES.** The run it was meant to describe was
+  green, so the message said nothing, and the recording obligation had no source. A specification
+  for a record that can only be produced by a failure is a specification for no record.
+
+  **THE CHANNEL HAS TO BE UNCONDITIONAL, AND THIS SUITE ALREADY HAD ONE**: `conftest.DIAGNOSTIC_LINES`,
+  printed by the terminal-summary hook whatever the verdict, *"the only channel that reaches a CI log
+  from a passing test"* — because pytest hides a passing test's stdout. **Keep the assertion message
+  too**; they are not redundant, they are the failing and passing halves of one reading.
+
+  > **AND IT PAID WITHIN ONE RUN.** The first green CI run produced **four** counts across four
+  > environments, none of which any assertion message would have shown — and the spread they
+  > revealed is what the bound's margin is now derived from. **The number you do not collect on a
+  > green run is the number you cannot reason about**, and a guard justified by one box's reading is
+  > a guard justified by an anecdote.
+
+  **THE GENERAL SHAPE IS (a2c)'s — a value computed, used, and not persisted** — one register out,
+  at the specification of an instrument rather than at a driver. The detection rule is the same:
+  **ask what the artifact looks like when nothing goes wrong**, because that is the case it will
+  almost always be in.
 
 - **A HANDOFF QUEUE IS RECONCILED AGAINST THE COMMIT BEFORE IT; EACH ITEM IS MARKED DONE OR OPEN,
   WITH ITS EVIDENCE.** Added 2026-09-21, after a five-item queue was carried into a fresh session

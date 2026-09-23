@@ -935,3 +935,107 @@ doing two jobs is a second name, not a quieter definition of the first.
   eligible-but-unfitted members named at the fixture.
 - **Two golden-table rows move deliberately in Task 2's commit** — `core/outcomes.py` for the
   second rate, and `metamer/report`'s numbers module as a new row with its measured count.
+
+---
+
+## Task 2, as built (2026-09-22) — what the ruling changed and what the code then found
+
+**THE RULING SETTLED THE MECHANISM, AND I HAD CALLED IT SETTLED WHEN IT WAS NOT.** My refreshed
+entry said the `NOT_ATTEMPTED` finding needed no ruling because the plan's *behaviour* was settled
+three ways. **That reasoning was right about the behaviour and wrong about what it forces at the
+call site**: the only way to get the required denominator without a new predicate is to hand-exclude
+a member where the row is computed, which is a second definition of a denominator **two days after
+the last one was removed**, in a module the golden table now scopes. The behaviour being settled did
+not make the mechanism settled, and the mechanism was the part with a choice in it.
+
+### WHAT LANDED
+
+**`Outcome.is_covered`, positively defined and enumerated member by member**, meaning *in the domain
+**and** the run reached it*. Two exclusions with two different reasons stated at its own table:
+`NOT_APPLICABLE` because the point is not in the domain, `NOT_ATTEMPTED` because nothing wrote
+there. Its docstring says in one line that it is **not** `is_eligible` and why — that predicate
+answers a question about the domain and its values are in committed artifacts.
+
+**`failure_tally` returns BOTH rates.** `rate = failed / fitted`, `coverage_rate = failed / covered`,
+and **one** `unavailable` reason, because the chain makes `fitted == 0` the only condition either
+can fail under. **`report/numbers.py` computes nothing** — the golden table records it at **zero**
+division nodes, which is that claim in mechanical form.
+
+**The chain is asserted with each step proved PROPER by a named witness** — `OK`, `SCREENED_OUT`,
+`NOT_ATTEMPTED`. Containment alone would pass if two predicates were the same set, which is exactly
+the collapse this taxonomy keeps suffering: §14.1 asked `is_eligible` while meaning `is_fit_verdict`
+*because they agreed on every member anyone had looked at*.
+
+### THE TABLE IS IN THE MODULE AND IS PARSED BY THE TEST, WHICH IS MORE THAN WAS ASKED FOR
+
+The ruling asked that the four be readable together, one table, predicates as columns. **A docstring
+table and a test dict would have been the same fact in two places**, and the one that drifts is the
+one nobody runs. So the table lives in `Outcome`'s docstring and
+`test_every_member_is_classified_by_every_predicate_in_one_table` **parses it out of
+`Outcome.__doc__`** and asserts it against the four properties. Documentation that fails the suite
+when it lies. **Demonstrated to bite**: one cell flipped in the docstring, 13 rows identical, 1
+differing, reverted from a scratchpad copy rather than by `git checkout`.
+
+### THREE THINGS THE CODE FOUND THAT THE RULING DID NOT NAME
+
+**1. THE GAP BETWEEN THE TWO RATES IS NOT LAND, AND THE PLAN'S WORDING INVITES THAT READING.**
+*"The gap between them is the store's land exposure"* — but true land is `NOT_APPLICABLE`, which is
+outside **both** denominators and therefore **cannot separate them at all**. What opens the gap is
+an in-domain point the run **reached and did not fit**, which on a global run is dominated by thin
+records. D2b's own `1.00 against 0.60` reconciles only this way: its eight non-ocean points are
+`INSUFFICIENT_DATA`, not land. **The fixture rule follows the census, not the geography** — and
+"an all-ocean store reports them equal" is true only of a store that also holds none of the four
+covered-but-unfitted members, which is stated at the test rather than left to be debugged as a land
+bug the first time a stray `SCREENED_OUT` fires.
+
+**2. THE INTERRUPTION LADDER IS THREE ARMS, NOT TWO.** Two stores show the coverage rate unchanged;
+**three show that it does not move with the thing it must not move with**, and that the wrong
+denominator is *monotone in the wrong direction* — 0.75, 0.15, 0.03 as the run is killed earlier.
+**The failure is then legible rather than merely detectable**, which is what a reader needs from a
+test that fires in five years.
+
+**3. BOTH TRIPWIRES FIRED ON THE FIRST RUN OF THE NEW CODE, AND NEITHER WAS A FALSE ALARM.** The
+golden table caught `core/outcomes.py` moving 1 → 2 (the second division) and `report/numbers.py`
+arriving at 0; the consumer-set test caught the third `failure_tally` caller. **Both were exactly
+the deliberate additions the ruling said must be deliberate**, and both were updated with their
+reason at the row. The table did its job before it was needed and then again the moment it was.
+
+### AND ONE DESCRIPTION THAT SURVIVED THE CHANGE, FOUND BY SWEEPING FOR IT
+
+`FailureTally`'s own docstring table called `eligible` *"section 14.2's coverage population"* — which
+is now precisely what it is **not**. Corrected where it sits, with the struck text kept: `covered` is
+that population. `is_eligible`'s summary line said *"whether this point counts toward a failure-rate
+denominator"*, equally true of both and therefore useless for telling them apart; it now says which
+question it answers and names its sibling. **(a6): when code is replaced, sweep for the descriptions
+that survive it** — and a predicate's docstring is the description most likely to be read *instead*
+of the code.
+
+### WHAT THE SWEEP CAUGHT AND THE TARGETED RUNS DID NOT — A RENAME, FOR THE SECOND TIME
+
+**`tests/test_exit_criteria_2e.py::test_every_criterion_names_evidence_that_exists` failed on the
+first full sweep of Task 2's code**, alone, after 36 green tests in the two files I had been running.
+2e's **criterion 8** names its evidence by test name, and Task 2 renamed that test — three properties
+to four — so a **closed criterion pointed at a test that did not exist.**
+
+**THIS IS THE HANDOFF'S OWN FOURTH INSTANCE OF ONE SHAPE**, and the table there already predicts it:
+*the display's rename missed a reader of the STRING, found by the full sweep.* **An output is an
+interface, and a test name read by a criterion's record is an output.** A search bounded by "what
+does this test assert" cannot reach a record in another file that merely spells it.
+
+**AND IT HAD HAPPENED BEFORE, TO THE SAME NAME, FOR THE SAME REASON.** The comment sitting beside
+the record describes the 2026-09-19 edit: `..._by_both_properties_...` became
+`..._by_all_three_properties_...` when `is_fit_verdict` arrived. **So the repair was not to make that
+edit a second time.**
+
+> **A NAME THAT CARRIES A COUNT OF A GROWING SET IS RENAMED EVERY TIME THE SET GROWS, AND EVERY
+> RENAME SILENTLY BREAKS EVERY RECORD THAT NAMES IT.** The count is now out of the name —
+> `test_every_member_is_classified_by_every_predicate_in_one_table` — which is true at any width.
+> Two breakages, each found by the full sweep and by nothing else, are enough evidence that the
+> third was coming.
+
+**THE VERDICT DID NOT MOVE AND WAS NOT RE-ARGUED.** Criterion 8's reading stays *"both properties,
+enumerated"* — that is what 2e read, and a later sub-phase adding a column does not retroactively
+widen a met criterion. Only the pointer was repaired, which is the handoff's provenance-versus-value
+distinction doing exactly the work it was written for.
+
+**AND IT IS THE NINTH THING THE FULL SWEEP HAS CAUGHT THAT A FAST RUN COULD NOT.**

@@ -324,7 +324,9 @@ def test_the_report_module_graph_stays_under_its_ceiling(runtime_reading):
 
     Expected value determined independently: **933** modules after
     `read_store` has run on a real store, measured 2026-09-21. The ceiling is
-    **980**, 5% above it.
+    **980**, and the margin's basis is the OBSERVED SPREAD rather than a round
+    percentage -- this project does not carry an estimate where it has a
+    measurement.
 
     **~~"comfortably above the measurement, well below `metamer.batch.run`'s
     1002"~~ -- THAT ARGUMENT IS GONE, AND THE CEILING IS A BACKSTOP FOR
@@ -346,27 +348,40 @@ def test_the_report_module_graph_stays_under_its_ceiling(runtime_reading):
     mechanism found, not only the values it found. An unasserted enumeration
     is a silent denominator.
 
-    **FOUR ENVIRONMENTS, FOUR COUNTS — measured 2026-09-22 from CI run
-    35698698743, all four green:**
+    **FOUR ENVIRONMENTS, FOUR COUNTS -- measured 2026-09-22 from CI run
+    35698698743, every one of them GREEN:**
 
     | environment | modules |
     |---|---|
-    | local, 3.13 | **933** |
     | CI, 3.12 | 912 |
     | CI, 3.13 | 913 |
     | CI, 3.14 | 920 |
+    | local, 3.13 | **933** |
 
-    **The margin is taken from the LARGER, which is local, so the ceiling
-    stays at 980.** The spread is the finding: 8 modules across interpreter
-    versions, and **20 between local 3.13 and CI 3.13 -- the same interpreter,
-    so that gap is the ENVIRONMENT** (a dev env against the declared
-    dependency set). **A pin would have fired on three of these four passing
-    runs**, which is pin-versus-bound measured rather than asserted: bound
-    with a margin where harmless drift is common.
+    **THE MARGIN IS DERIVED FROM THE SPREAD, AND HERE IS THE ARITHMETIC.** The
+    observed band is 912 to 933, a spread of **21** modules across four
+    environments that all pass. The ceiling sits **47** above the highest
+    reading -- **more than twice the observed spread** -- which is why it
+    holds: drift of the kind already seen cannot reach it, and an arrival
+    larger than everything drift has ever done can.
 
-    **These numbers exist only because the count also goes to
-    `DIAGNOSTIC_LINES`.** An assertion message prints when it FIRES; every one
-    of the four runs above passed, so the message said nothing in all four.
+    **WHAT THE SPREAD IS MADE OF**: 8 modules across interpreter versions, and
+    **20 between local 3.13 and CI 3.13 -- the same interpreter, so that gap is
+    the ENVIRONMENT** (a dev environment against the declared dependency set),
+    and it is the larger half.
+
+    **A PIN WOULD HAVE FAILED THREE OF THESE FOUR GREEN RUNS.**
+    Pin-versus-bound was ruled on an *expectation* of drift; this measures it.
+
+    **IF A NEW ENVIRONMENT READS OUTSIDE 912-933, RE-DERIVE THE MARGIN FROM
+    THE NEW BAND -- DO NOT BUMP THE NUMBER.** A threshold raised to admit a
+    reading nobody explained is the guard decaying into a ritual, which is the
+    failure mode a bound has and a pin does not.
+
+    **THESE NUMBERS EXIST ONLY BECAUSE THE COUNT ALSO GOES TO
+    `DIAGNOSTIC_LINES`.** An assertion message prints when it FIRES; all four
+    runs above passed, so the message said nothing in any of them. **A
+    measurement that only surfaces on failure is not a record.**
     """
     count = runtime_reading["modules"]
     assert isinstance(count, int)

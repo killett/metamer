@@ -783,9 +783,33 @@ shipped**: the thing with a test got fixed and the thing without one did not.
 A reader on an ocean box sees two identical numbers and learns the exposure is nil. A reader on a
 global run sees **1.00 against 0.60** and learns everything.
 
-The eligible-point denominator is `Outcome.is_eligible` — which after D2 includes
-`INSUFFICIENT_DATA` and excludes `NOT_APPLICABLE` only. The fitted denominator is
-`Outcome.is_fit_verdict`. `NOT_ATTEMPTED` is out of both: it is the absence of information.
+~~The eligible-point denominator is `Outcome.is_eligible` — which after D2 includes
+`INSUFFICIENT_DATA` and excludes `NOT_APPLICABLE` only.~~ **CORRECTED IN PLACE 2026-09-22, AT TASK
+2's PRE-FLIGHT: THIS CLAUSE WAS WRONG, AND IT CONTRADICTED THE SENTENCE AFTER IT.** `is_eligible`
+does exclude `NOT_APPLICABLE` only — measured over all fourteen members — so it **includes**
+`NOT_ATTEMPTED`, and the next sentence requires that member out of both denominators. The behaviour
+the next sentence states is the requirement; the description of which predicate delivers it was the
+defect.
+
+**THE SECOND DENOMINATOR IS `Outcome.is_covered`, A PREDICATE OF ITS OWN** — *in the domain **and**
+the run reached it* — added at Task 2 and **not** a narrowing of `is_eligible`, whose values are
+already in committed artifacts and whose `audit_report` reader is open question 25's filed subject.
+It excludes `NOT_APPLICABLE` because the point is not in the domain and `NOT_ATTEMPTED` because the
+run never got there: **two exclusions, two different reasons, stated at its table.** The fitted
+denominator is `Outcome.is_fit_verdict`. **`NOT_ATTEMPTED` is out of both denominators and COUNTED
+in the branch table**: it is the absence of information, and an interrupted run must say how much of
+its grid it never reached.
+
+> **AND THE REASON THIS IS NOT A TIDY-UP.** §12.5 gives `NOT_ATTEMPTED` the entry *"n/a, and a
+> finished store should hold none"* — true of a finished store, and **D6 and criterion 19 put
+> UNFINISHED stores in scope deliberately.** There the member scales with how far the run did not
+> get, so counting it in a coverage denominator makes **a run killed earlier report a better rate**.
+> No fixture that finishes can show it, which is why Task 2 carries a three-arm interruption ladder.
+
+**THE FOUR PREDICATES NEST**: `is_failure` ⊂ `is_fit_verdict` ⊂ `is_covered` ⊂ `is_eligible`,
+asserted over the whole enum with each step proved proper by a named witness. That chain is what
+makes the two rates share a numerator, and what makes `fitted == 0` their single shared
+unavailability condition.
 
 **Invariants.**
 

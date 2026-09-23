@@ -34,9 +34,19 @@ FAILURE_RATE_SITE_TABLE: dict[str, int] = {
     "metamer/core/fit.py": 0,
     "metamer/core/objective.py": 0,
     "metamer/core/optimize.py": 3,
-    "metamer/core/outcomes.py": 1,
+    # 1 -> 2 at 2f Task 2, DELIBERATELY: the second denominator's division,
+    # `failed / covered`. Put here rather than in the report, because a
+    # rate computed at its consumer is a second definition of it.
+    "metamer/core/outcomes.py": 2,
     "metamer/progress.py": 1,
     "metamer/report/reader.py": 1,
+    # ADDED DELIBERATELY at 2f Task 2, and the ZERO is the assertion.
+    # The report prints; it computes nothing. Both failure rates are
+    # fields of `failure_tally`, so a division appearing in this module
+    # is a second definition of a quantity that has one -- which is the
+    # exact defect this table exists to catch, in the exact module the
+    # ruling predicted would be its first real test.
+    "metamer/report/numbers.py": 0,
 }
 
 
@@ -71,6 +81,39 @@ def _outcome_referencing_modules() -> dict[str, int]:
         if "Outcome" in names:
             table[path.relative_to(root).as_posix()] = divisions
     return table
+
+
+def _predicate_table_from_docstring() -> dict[Outcome, tuple[bool, bool, bool, bool]]:
+    """Parse `Outcome`'s four-predicate table out of its own docstring.
+
+    Rows are `| `MEMBER` | yes | no | ... |` and nothing else is accepted: a
+    cell that is neither `yes` nor `no`, or a member name the enum does not
+    know, raises rather than being skipped. **A parser that silently drops a
+    malformed row would make the table shrink and the comparison still pass**,
+    which is the (c7) failure -- a reading that does not assert the size of
+    what it found.
+    """
+    docstring = Outcome.__doc__ or ""
+    table: dict[Outcome, tuple[bool, bool, bool, bool]] = {}
+    for line in docstring.splitlines():
+        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+        if len(cells) != 5 or not cells[0].startswith("`"):
+            continue
+        name = cells[0].strip("`")
+        if name == "member":
+            continue
+        member = Outcome[name]
+        flags = tuple(_yes_or_no(cell, name) for cell in cells[1:])
+        assert len(flags) == 4
+        table[member] = flags
+    return table
+
+
+def _yes_or_no(cell: str, row: str) -> bool:
+    """One table cell, refused rather than guessed."""
+    if cell not in {"yes", "no"}:
+        raise ValueError(f"row {row}: {cell!r} is neither 'yes' nor 'no'")
+    return cell == "yes"
 
 
 def test_insufficient_data_is_not_a_failure():
@@ -282,69 +325,131 @@ def test_is_eligible_is_not_trivially_constant():
     assert Outcome.OK.is_eligible is True
 
 
-def test_every_member_is_classified_by_all_three_properties_in_one_table():
-    """The whole taxonomy in one place, rather than three exclusion lists.
+def test_every_member_is_classified_by_every_predicate_in_one_table():
+    """The whole taxonomy in one place, read out of the module's own docstring.
 
     Expected values determined independently: design doc section 8.6's taxonomy
     table for the fit verdicts, and section 12.5's non-fit grouping table -- the
     one whose heading says it is what section 14.2's denominator reads -- for the
-    codes that are decisions rather than verdicts. Read off both by hand.
+    codes that are decisions rather than verdicts. Read off both by hand into
+    `Outcome`'s docstring, which this test parses and compares against what the
+    four properties actually return.
+
+    **THE ORACLE IS THE DOCSTRING AND THAT IS THE POINT.** The previous form of
+    this test carried the table as a dict in the test file, where it was correct
+    and invisible -- nobody reading `outcomes.py` could see all the
+    classifications at once, which is precisely the reading that prevents asking
+    one predicate and meaning another. Moving the table into the module and
+    asserting against it makes the documentation load-bearing: a member
+    reclassified in code and not in the table fails here, and so does a table
+    edited without the code.
 
     **The decided-skip group is the middle block and it is the one that keeps
     being got wrong:** `NOT_ATTEMPTED`, `SCREENED_OUT` and `CANDIDATE_DROPPED`
-    are all "the run did not fit this, on purpose", all eligible, none a
-    failure. `INSUFFICIENT_DATA` and `NOT_APPLICABLE` are the other shape --
-    not failures and **not eligible either**, because they are not points the
-    rate is over.
+    are all "the run did not fit this", all eligible, none a failure -- **and
+    they are no longer alike in the fourth column.** `SCREENED_OUT` and
+    `CANDIDATE_DROPPED` are decisions taken AT a point the run reached;
+    `NOT_ATTEMPTED` means nothing wrote there at all, which is why it is the
+    one member outside `is_covered` but inside `is_eligible`.
 
-    Bug this catches: a new member landing in neither group or in both. The
-    properties are implemented as separate membership sets, so a member added to
-    one and forgotten in another is a single-line omission that reads as
-    complete -- and there is no single place, other than this table, where all
-    three can be seen together.
+    Bug this catches: a new member landing in some columns and not others. The
+    properties are four separate membership sets, so a member added to one and
+    forgotten in another is a single-line omission that reads as complete.
 
-    **THE THIRD COLUMN IS `is_fit_verdict`, ADDED 2026-09-19 (open question 24's
-    check).** Its expected values are section 12.5's non-fit grouping table read
-    off by hand: the five codes that table names -- `NOT_ATTEMPTED`,
-    `SCREENED_OUT`, `CANDIDATE_DROPPED`, `NOT_APPLICABLE` and
-    `INSUFFICIENT_DATA` -- are exactly the codes for which the store is making
-    no fit claim, and the remaining nine are section 8.6's fit verdicts. **It is
-    not `is_eligible`'s complement and not its negation**: `SCREENED_OUT` and
-    `CANDIDATE_DROPPED` are eligible and are not fit verdicts, which is the pair
-    that makes the two questions different and is why asking one in place of the
-    other is a defect rather than a style.
-
-    **`INSUFFICIENT_DATA`'s row follows section 8.6, which section 12.5
-    contradicts** -- open question 24, filed to 2f. This table pins what the code
-    does today so the question is about a known value.
-
-    **PROVED TO BITE 2026-09-14:** `CANDIDATE_DROPPED` was put back into the
-    failure set and FOUR tests failed -- this one, the set-equality guard, the
-    decided-skip guard, and the vectorised arithmetic in
+    **PROVED TO BITE 2026-09-14** (as the three-column form): `CANDIDATE_DROPPED`
+    was put back into the failure set and FOUR tests failed -- this one, the
+    set-equality guard, the decided-skip guard, and the vectorised arithmetic in
     `tests/test_audit_report.py`. **The fourth is the one that matters**: the
     property and the lookup table are two things, and only that test asserts the
     half that reaches a report.
     """
-    expected = {
-        Outcome.OK: (False, True, True),
-        Outcome.ITER_CAP_SMALL_GRAD: (True, True, True),
-        Outcome.ITER_CAP_LARGE_GRAD: (True, True, True),
-        Outcome.DIAGNOSTIC_LIMIT: (True, True, True),
-        Outcome.TRUST_RADIUS_COLLAPSED: (True, True, True),
-        Outcome.NONFINITE_OBJECTIVE: (True, True, True),
-        Outcome.RANK_DEFICIENT_X: (True, True, True),
-        Outcome.ILL_CONDITIONED_X: (True, True, True),
-        Outcome.DEGENERATE_HESSIAN: (True, True, True),
-        Outcome.NOT_ATTEMPTED: (False, True, False),
-        Outcome.SCREENED_OUT: (False, True, False),
-        Outcome.CANDIDATE_DROPPED: (False, True, False),
-        Outcome.INSUFFICIENT_DATA: (False, True, False),
-        Outcome.NOT_APPLICABLE: (False, False, False),
+    table = _predicate_table_from_docstring()
+
+    assert len(table) == len(Outcome), (
+        f"the docstring table has {len(table)} rows and the enum has "
+        f"{len(Outcome)} members; a member was added without a row, or a row "
+        "names something that is not a member"
+    )
+    assert table == {
+        member: (
+            member.is_failure,
+            member.is_fit_verdict,
+            member.is_covered,
+            member.is_eligible,
+        )
+        for member in Outcome
     }
 
-    assert {
-        m: (m.is_failure, m.is_eligible, m.is_fit_verdict) for m in Outcome
-    } == expected
+
+def test_the_four_predicates_form_one_nesting_chain_with_no_step_collapsed():
+    """`is_failure` < `is_fit_verdict` < `is_covered` < `is_eligible`, strictly.
+
+    Expected values determined independently from what each predicate ASKS,
+    not from its membership set: a failure is a kind of fit verdict; a fit
+    verdict can only exist where the run reached an in-domain point; a point
+    the run reached is in the domain, which is all `is_eligible` requires.
+
+    **THE CHAIN IS LOAD-BEARING IN THREE WAYS, WHICH IS WHY IT IS PINNED
+    RATHER THAN LEFT AS A PROPERTY THAT HAPPENS TO HOLD:**
+
+    1. `is_failure` inside `is_fit_verdict` makes the NUMERATOR common to both
+       failure rates, so `failed/fitted` and `failed/covered` differ in their
+       denominator alone. That is what makes "the gap between them is the
+       store's exposure" a fact rather than a slogan -- any other difference
+       would put two quantities into one subtraction.
+    2. `is_fit_verdict` inside `is_covered` means `fitted > 0` implies
+       `covered > 0`, so the coverage column can never divide by zero while
+       the fitted column computes. **The two share exactly ONE unavailability
+       condition**, which is why `FailureTally` states it once.
+    3. A future member that breaks the chain fails HERE, rather than landing
+       in one population and not another and being found by a rate that moved.
+
+    Bug this catches: a new `Outcome` member added to `is_fit_verdict` and
+    forgotten in `is_covered`, which would put a fit verdict outside the
+    coverage denominator -- `failed/covered` could then exceed 1.0, a rate
+    above 100% that no assertion on either predicate alone would catch.
+
+    **EACH STEP IS ASSERTED STRICT, WITH ITS WITNESS.** A containment test
+    alone passes when two predicates are the SAME set, which is exactly the
+    collapse this taxonomy keeps suffering -- section 14.1 asked `is_eligible`
+    while meaning `is_fit_verdict` precisely because they agreed on every
+    member anyone had looked at.
+    """
+    for member in Outcome:
+        if member.is_failure:
+            assert member.is_fit_verdict, f"{member} fails without a fit verdict"
+        if member.is_fit_verdict:
+            assert member.is_covered, f"{member} is a fit verdict the run did not reach"
+        if member.is_covered:
+            assert member.is_eligible, f"{member} is covered but not eligible"
+
+    # The witnesses that keep each step PROPER. Named individually: a count
+    # would pass on the wrong member.
+    assert Outcome.OK.is_fit_verdict and not Outcome.OK.is_failure
+    assert Outcome.SCREENED_OUT.is_covered and not Outcome.SCREENED_OUT.is_fit_verdict
+    assert Outcome.NOT_ATTEMPTED.is_eligible and not Outcome.NOT_ATTEMPTED.is_covered
+
+
+def test_not_attempted_is_the_only_member_between_covered_and_eligible():
+    """The one member the two denominators disagree about, named.
+
+    Expected value determined independently: `is_eligible` excludes
+    `NOT_APPLICABLE` alone, and `is_covered` excludes that member plus
+    `NOT_ATTEMPTED`. The difference is therefore exactly one member, by
+    construction of the two sets rather than by counting them.
+
+    Bug this catches: a second member drifting into the gap -- at which point
+    "the gap between the two rates is the run's unreached fraction" stops
+    being true and the coverage rate silently answers a third question.
+    **`test_the_dilution_is_proportional_to_how_far_the_run_did_not_get` in
+    `tests/test_report_numbers.py` is the behavioural half of this claim**;
+    this is the structural half, and it is the one that fails the day a member
+    is added.
+    """
+    covered = {m for m in Outcome if m.is_covered}
+    eligible = {m for m in Outcome if m.is_eligible}
+
+    assert eligible - covered == {Outcome.NOT_ATTEMPTED}
 
 
 def test_no_committed_artifact_carries_insufficient_data():
@@ -565,12 +670,110 @@ def test_an_unknown_outcome_name_is_refused_rather_than_ignored():
         failure_tally({"not_a_real_outcome": 1})
 
 
+def test_both_denominators_come_from_one_call_and_differ_by_the_unreached():
+    """Both rates, both denominators, one function -- and the gap is readable.
+
+    Expected values computed BY HAND from the census below, which is written to
+    make the two rates different rather than to exercise a code path: 4 failed,
+    2 OK, so 6 fit verdicts; plus 2 `SCREENED_OUT` (covered, not fitted), 3
+    `NOT_ATTEMPTED` (eligible, NOT covered) and 5 `NOT_APPLICABLE` (neither).
+    So fitted = 6, covered = 6 + 2 = 8, eligible = 8 + 3 = 11, points = 16.
+    `failed/fitted` = 4/6 = 0.666..., `failed/covered` = 4/8 = 0.5.
+
+    Bug this catches: a coverage denominator built by subtracting one member at
+    a call site rather than by asking `is_covered`. Such a site agrees with
+    this function on a census like this one and diverges the moment a member is
+    added -- which is the two-definitions failure that cost four days between
+    the verdict and the live counters, arriving in a new place.
+
+    **THE REPORT COMPUTES NOTHING; IT PRINTS.** Both rates are fields, so the
+    division lives at the one definition and a module that wants the second
+    denominator cannot get it by dividing for itself.
+    """
+    tally = failure_tally(
+        {
+            Outcome.DEGENERATE_HESSIAN: 4,
+            Outcome.OK: 2,
+            Outcome.SCREENED_OUT: 2,
+            Outcome.NOT_ATTEMPTED: 3,
+            Outcome.NOT_APPLICABLE: 5,
+        }
+    )
+
+    assert (tally.points, tally.eligible, tally.covered, tally.fitted) == (16, 11, 8, 6)
+    assert tally.failed == 4
+    assert tally.rate == pytest.approx(4 / 6)
+    assert tally.coverage_rate == pytest.approx(0.5)
+    assert tally.unavailable is None
+
+
+def test_a_census_the_run_never_reached_does_not_flatter_the_coverage_rate():
+    """The dilution, at the one definition: unreached points are not a denominator.
+
+    Expected values computed by hand from two censuses that differ ONLY in how
+    far the run got. Both have 3 failed of 4 fitted. The first adds no
+    unreached points; the second adds 96 `NOT_ATTEMPTED`. **Both must report
+    the same two rates**, because neither rate is about points the run never
+    reached.
+
+    Bug this catches: `NOT_ATTEMPTED` inside the coverage denominator, which is
+    what `is_eligible` would have given -- the second census would then report
+    3/100 = 3% where the truth is 75%, and **the earlier a run was killed the
+    better it would look.** An interrupted ten-hour run would report a
+    flattering number precisely when a reader is deciding whether to restart
+    it.
+
+    **THE TWO ARMS ARE THE DISCRIMINATION** -- (a10). A single census cannot
+    show this: any denominator produces *some* number, and only the pair shows
+    that the number does not move with the interruption.
+    """
+    finished = failure_tally({Outcome.DEGENERATE_HESSIAN: 3, Outcome.OK: 1})
+    interrupted = failure_tally(
+        {Outcome.DEGENERATE_HESSIAN: 3, Outcome.OK: 1, Outcome.NOT_ATTEMPTED: 96}
+    )
+
+    assert finished.coverage_rate == pytest.approx(0.75)
+    assert interrupted.coverage_rate == pytest.approx(0.75)
+    assert interrupted.covered == 4
+    assert interrupted.eligible == 100, "eligible still counts them, by its own rule"
+    assert interrupted.points == 100
+
+
+def test_when_nothing_was_fitted_BOTH_rates_are_unavailable_for_one_stated_reason():
+    """One unavailability condition, because the chain says there is only one.
+
+    Expected value determined independently from the nesting: `is_fit_verdict`
+    is inside `is_covered`, so `fitted == 0` is the only way either denominator
+    can be zero while the other is not. A census of nothing but decided skips
+    has covered = 20 and fitted = 0.
+
+    Bug this catches: the coverage column reporting **0.0** for a candidate
+    that was never tried -- 0/20 is arithmetically fine and reads as a perfect
+    score. That is the same collapse section 14.1's `no_evidence` verdict
+    exists to prevent, one granularity down, and it is the defect that would
+    have shipped if only the fitted column had been repaired.
+
+    **AND THE COUNT SURVIVES THE RATE'S ABSENCE.** `covered` is still 20, so a
+    reader sees the size of what was skipped rather than a blank.
+    """
+    tally = failure_tally({Outcome.SCREENED_OUT: 20})
+
+    assert tally.fitted == 0
+    assert tally.covered == 20
+    assert tally.rate is None
+    assert tally.coverage_rate is None
+    assert tally.unavailable is not None
+    assert "fitted" in tally.unavailable
+
+
 def test_every_failure_rate_in_src_comes_from_the_one_definition():
     """The quantity has ONE definition, and these are exactly its consumers.
 
-    Expected value determined independently by an `ast` walk of `src/` on
-    2026-09-21: two modules call `failure_tally` -- `progress.LiveCounters.
-    lines` and `abort._rate_for`.
+    Expected value determined independently by an `ast` walk of `src/`:
+    **three** modules call `failure_tally` -- `progress.LiveCounters.lines`,
+    `abort._rate_for`, and, since 2f Task 2, `report.numbers.compute`. The
+    third arrived with **both** rates rather than dividing for itself, which is
+    why the golden table records it at zero divisions.
 
     Bug this catches: a consumer REMOVED, which means it has grown its own
     arithmetic. Section 14.1's verdict and the live counters each had one, the
@@ -594,7 +797,11 @@ def test_every_failure_rate_in_src_comes_from_the_one_definition():
         and "failure_tally(" in path.read_text(encoding="utf-8")
     )
 
-    assert callers == ["metamer/batch/abort.py", "metamer/progress.py"], (
+    assert callers == [
+        "metamer/batch/abort.py",
+        "metamer/progress.py",
+        "metamer/report/numbers.py",
+    ], (
         "the set of failure_tally consumers moved. If a site was ADDED, check "
         "it is not a third arithmetic for the same quantity; if one was "
         "REMOVED, it has grown its own"
