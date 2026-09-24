@@ -4,10 +4,23 @@
 CONTESTED BOTH ARE PRINTED.** Design doc section 14.2's failure rate has two
 defensible populations -- the points that carried a fit verdict, and the
 points the run reached inside the domain -- and choosing one silently is how a
-rate becomes uninterpretable. So this module reports both, side by side, and
-**the gap between them is the store's own exposure**: on a box with no land
-and a finished run they are identical, and the reader learns that the exposure
-is nil rather than learning nothing.
+rate becomes uninterpretable. So this module reports both, side by side, with
+**the gap between them broken down BY MEMBER**.
+
+**~~"The gap is the store's land exposure"~~ -- STRUCK 2026-09-23, AND IT WAS
+WRITTEN HERE TWO DAYS AFTER THE SAME DEFECT WAS FOUND IN THE PLAN.** True land
+is `NOT_APPLICABLE` and sits outside BOTH denominators, so it cannot separate
+them at all; the reading looked right only because land reaches the covered
+population as `INSUFFICIENT_DATA` until design doc section 13.6 declares a
+mask. **That is a claim about what a label currently CONTAINS wearing the
+clothes of a claim about what it MEANS** -- the conflation D2's reframing
+exists to undo.
+
+**Stated correctly, the gap is `covered - fitted`, and it is three populations
+with three causes**: a record too thin to fit, a decision not to fit, and an
+early-abort verdict. `failure_tally` returns the breakdown by member and this
+module prints it, because a single figure invites the gloss and a gloss is how
+a stray `SCREENED_OUT` gets debugged as a land bug.
 
 **THIS MODULE COMPUTES NO RATE.** Every division lives at
 `metamer.core.outcomes.failure_tally`, which is the project's one definition of

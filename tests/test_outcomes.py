@@ -47,6 +47,11 @@ FAILURE_RATE_SITE_TABLE: dict[str, int] = {
     # exact defect this table exists to catch, in the exact module the
     # ruling predicted would be its first real test.
     "metamer/report/numbers.py": 0,
+    # ADDED DELIBERATELY at 2f Task 3, and zero for the same reason: the
+    # drop row's rate is the one the verdict was decided on, carried in
+    # the store's own record, and the recomputation goes through
+    # `failure_tally`. Nothing here divides.
+    "metamer/report/drop.py": 0,
 }
 
 
@@ -365,20 +370,35 @@ def test_every_member_is_classified_by_every_predicate_in_one_table():
     """
     table = _predicate_table_from_docstring()
 
+    # **PARSE FAILURE AND DISAGREEMENT GET DIFFERENT MESSAGES, DELIBERATELY.**
+    # One message for two causes teaches a reader to fix the parser when the
+    # TABLE is wrong -- the same trap as a fixture builder whose failure reads
+    # as the subject failing, and the documented end state is a check that
+    # gets loosened until it stops checking.
     assert len(table) == len(Outcome), (
-        f"the docstring table has {len(table)} rows and the enum has "
-        f"{len(Outcome)} members; a member was added without a row, or a row "
-        "names something that is not a member"
+        f"TABLE UNPARSEABLE OR INCOMPLETE: {len(table)} rows parsed out of "
+        f"Outcome.__doc__ against {len(Outcome)} enum members. This is a "
+        "defect in the TABLE or in this test's parser, NOT in the predicates "
+        "-- a member was added without a row, a row names something that is "
+        "not a member, or a row's pipes do not line up"
     )
-    assert table == {
-        member: (
-            member.is_failure,
-            member.is_fit_verdict,
-            member.is_covered,
-            member.is_eligible,
+    predicates = ("is_failure", "is_fit_verdict", "is_covered", "is_eligible")
+    disagreements = [
+        f"{member.name}.{name}: table says {stated}, code says {actual}"
+        for member, row in table.items()
+        for name, stated, actual in zip(
+            predicates, row, [getattr(member, p) for p in predicates], strict=True
         )
-        for member in Outcome
-    }
+        if stated != actual
+    ]
+
+    assert not disagreements, (
+        "TABLE DISAGREES WITH THE PREDICATES: "
+        + "; ".join(disagreements)
+        + ". One of the two is wrong and this test does not know which -- if "
+        "the CODE was changed deliberately, the table is the record that has "
+        "to change with it"
+    )
 
 
 def test_the_four_predicates_form_one_nesting_chain_with_no_step_collapsed():
@@ -766,14 +786,132 @@ def test_when_nothing_was_fitted_BOTH_rates_are_unavailable_for_one_stated_reaso
     assert "fitted" in tally.unavailable
 
 
+def test_the_covered_population_is_broken_down_by_member_not_summarised():
+    """The gap between the two rates is THREE causes, and they are named.
+
+    Expected values computed by hand: 4 failed and 6 OK give 10 fit verdicts;
+    the covered-but-unfitted population is 7 `INSUFFICIENT_DATA`, 5
+    `SCREENED_OUT` and 3 `CANDIDATE_DROPPED`, so covered = 25 and the gap is
+    15. **`NOT_APPLICABLE` and `NOT_ATTEMPTED` are in neither**, so neither
+    appears in the breakdown.
+
+    Bug this catches: **a single gap figure carrying an interpretation.** The
+    obvious summary is "15 points the run reached and did not fit", and the
+    obvious gloss is "the store's land exposure" -- which is true only because
+    land is written as `INSUFFICIENT_DATA` until section 13.6 declares a mask.
+    That is a statement about what a label currently CONTAINS dressed as a
+    statement about what it MEANS, which is the conflation that mis-classified
+    `INSUFFICIENT_DATA` for four sub-phases. **A stray `SCREENED_OUT` then gets
+    debugged as a land bug.**
+
+    Three named causes cannot be glossed: a reader sees a decision, a data
+    limitation and a verdict, and interprets each.
+    """
+    tally = failure_tally(
+        {
+            Outcome.DEGENERATE_HESSIAN: 4,
+            Outcome.OK: 6,
+            Outcome.INSUFFICIENT_DATA: 7,
+            Outcome.SCREENED_OUT: 5,
+            Outcome.CANDIDATE_DROPPED: 3,
+            Outcome.NOT_APPLICABLE: 2,
+            Outcome.NOT_ATTEMPTED: 9,
+        }
+    )
+
+    assert tally.covered == 25
+    assert tally.fitted == 10
+    assert tally.covered_not_fitted == {
+        Outcome.INSUFFICIENT_DATA: 7,
+        Outcome.SCREENED_OUT: 5,
+        Outcome.CANDIDATE_DROPPED: 3,
+    }
+
+
+def test_a_dropped_candidate_names_its_verdict_and_not_a_lack_of_evidence():
+    """ "Nothing fitted" is true of a dropped candidate and describes it wrongly.
+
+    Expected value determined independently: in pass 2 a dropped candidate is
+    `CANDIDATE_DROPPED` at every point, so `fitted == 0` and both rates are
+    unavailable -- and the run's own DECISION is the whole content of that
+    census.
+
+    Bug this catches: **the early-abort verdict disappearing into "no point was
+    fitted".** That reads as a gap in the data, and it is the opposite: the run
+    looked, judged, and demoted the candidate. **This is D1's collapse in
+    reverse** -- D1 stopped an unjudged candidate printing as a clean pass;
+    this stops a judged-and-dropped one printing as unjudged. The two look
+    nothing alike in the code that produces them, which is why the mirror is
+    written down.
+    """
+    dropped = failure_tally({Outcome.CANDIDATE_DROPPED: 900})
+
+    assert dropped.rate is None
+    assert dropped.unavailable is not None
+    assert "candidate_dropped" in dropped.unavailable
+    assert "900" in dropped.unavailable
+
+
+def test_a_screened_out_candidate_still_names_screened_out():
+    """The new reason does not overwrite the case that already worked.
+
+    Expected value determined independently: a candidate screened out at every
+    point has the same shape as a dropped one -- `fitted == 0`, no rate -- and
+    a different cause, which is the only thing that distinguishes them.
+
+    Bug this catches: a reason written for `CANDIDATE_DROPPED` that names it
+    unconditionally, or one that names whichever member the implementation
+    happens to check first. **Two censuses of the same shape and different
+    content must print differently**, and asserting only the dropped case
+    cannot tell a correct breakdown from a hard-coded string.
+    """
+    screened = failure_tally({Outcome.SCREENED_OUT: 900})
+
+    assert screened.unavailable is not None
+    assert "screened_out" in screened.unavailable
+    assert "candidate_dropped" not in screened.unavailable
+
+
+def test_the_unavailable_reason_lists_every_member_and_not_the_largest():
+    """A mixed covered population is reported in full.
+
+    Expected values computed by hand: 500 `CANDIDATE_DROPPED`, 300
+    `SCREENED_OUT` and 100 `INSUFFICIENT_DATA` with nothing fitted -- three
+    members, three counts, all present.
+
+    Bug this catches: a reason that names only the dominant member, which is
+    the natural implementation (`max` over the census) and which is wrong
+    exactly when the smaller members are the interesting ones -- a candidate
+    mostly dropped but screened out in a hundred places was treated two
+    different ways, and the hundred is what a reader needs to see.
+    """
+    mixed = failure_tally(
+        {
+            Outcome.CANDIDATE_DROPPED: 500,
+            Outcome.SCREENED_OUT: 300,
+            Outcome.INSUFFICIENT_DATA: 100,
+        }
+    )
+
+    assert mixed.unavailable is not None
+    for member, count in (
+        ("candidate_dropped", 500),
+        ("screened_out", 300),
+        ("insufficient_data", 100),
+    ):
+        assert member in mixed.unavailable
+        assert str(count) in mixed.unavailable
+
+
 def test_every_failure_rate_in_src_comes_from_the_one_definition():
     """The quantity has ONE definition, and these are exactly its consumers.
 
     Expected value determined independently by an `ast` walk of `src/`:
-    **three** modules call `failure_tally` -- `progress.LiveCounters.lines`,
-    `abort._rate_for`, and, since 2f Task 2, `report.numbers.compute`. The
-    third arrived with **both** rates rather than dividing for itself, which is
-    why the golden table records it at zero divisions.
+    **four** modules call `failure_tally` -- `progress.LiveCounters.lines`,
+    `abort._rate_for`, `report.numbers.compute` (2f Task 2) and
+    `report.drop._pass1_defects` (2f Task 3). **Both report modules are at
+    zero divisions in the golden table**, which is what "the report prints and
+    computes nothing" looks like mechanically.
 
     Bug this catches: a consumer REMOVED, which means it has grown its own
     arithmetic. Section 14.1's verdict and the live counters each had one, the
@@ -800,6 +938,7 @@ def test_every_failure_rate_in_src_comes_from_the_one_definition():
     assert callers == [
         "metamer/batch/abort.py",
         "metamer/progress.py",
+        "metamer/report/drop.py",
         "metamer/report/numbers.py",
     ], (
         "the set of failure_tally consumers moved. If a site was ADDED, check "

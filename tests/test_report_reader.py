@@ -112,13 +112,21 @@ _PROBE = textwrap.dedent(
 #: probe and the reading describes the fixture builder, which is a `run()` and
 #: drags in everything the boundary excludes. The subject and its positive
 #: control differ by the injected `preamble` alone.
+#:
+#: **IT EXERCISES EVERY REPORT MODULE, NOT JUST THE READER.** 2f Task 3 added
+#: `metamer.report.drop`, which imports `metamer.batch.decimate` for the
+#: pass-1 path convention -- a `metamer.batch` submodule, which is exactly the
+#: kind of arrival this boundary exists to notice. A probe aimed at the reader
+#: alone would have been silent about it: **a control proves the detector, not
+#: what it is pointed at.** Every new report module is added here.
 _RUNTIME_PROBE = textwrap.dedent(
     """
     import json, sys
     {preamble}
     from metamer.report.reader import read_store
+    from metamer.report.drop import describe
     at_import = sorted(m for m in sys.modules if m in {forbidden!r})
-    read_store({store!r})
+    describe(read_store({store!r}))
     print(json.dumps({{
         "at_import": at_import,
         "after_call": sorted(m for m in sys.modules if m in {forbidden!r}),
@@ -322,11 +330,19 @@ def test_the_runtime_probe_can_see_a_violation(finished_store):
 def test_the_report_module_graph_stays_under_its_ceiling(runtime_reading):
     """A SIZE assertion, because a denylist cannot see a fifth arrival.
 
-    Expected value determined independently: **933** modules after
-    `read_store` has run on a real store, measured 2026-09-21. The ceiling is
-    **980**, and the margin's basis is the OBSERVED SPREAD rather than a round
-    percentage -- this project does not carry an estimate where it has a
-    measurement.
+    Expected value determined independently: **935** modules after the report
+    modules have been imported and run on a real store, measured 2026-09-23.
+    The ceiling is **980**, and the margin's basis is the OBSERVED SPREAD
+    rather than a round percentage -- this project does not carry an estimate
+    where it has a measurement.
+
+    **THE SUBJECT CHANGED AT 2f TASK 3 AND THAT IS NOT DRIFT.** The probe read
+    **933** while it exercised the reader alone; it now also imports and calls
+    `metamer.report.drop`, which brings `metamer.batch.decimate`. **A band
+    describes a SUBJECT**, so when the subject grows the band is RE-MEASURED,
+    not compared against -- the re-derivation rule below is about a reading
+    moving under a fixed subject, which is a different event and means
+    something different.
 
     **~~"comfortably above the measurement, well below `metamer.batch.run`'s
     1002"~~ -- THAT ARGUMENT IS GONE, AND THE CEILING IS A BACKSTOP FOR
@@ -351,19 +367,22 @@ def test_the_report_module_graph_stays_under_its_ceiling(runtime_reading):
     **FOUR ENVIRONMENTS, FOUR COUNTS -- measured 2026-09-22 from CI run
     35698698743, every one of them GREEN:**
 
-    | environment | modules |
-    |---|---|
-    | CI, 3.12 | 912 |
-    | CI, 3.13 | 913 |
-    | CI, 3.14 | 920 |
-    | local, 3.13 | **933** |
+    | environment | modules (reader only) | modules (reader + drop) |
+    |---|---|---|
+    | CI, 3.12 | 912 | **owed: first green run after 2f Task 3** |
+    | CI, 3.13 | 913 | **owed** |
+    | CI, 3.14 | 920 | **owed** |
+    | local, 3.13 | 933 | **935** |
 
-    **THE MARGIN IS DERIVED FROM THE SPREAD, AND HERE IS THE ARITHMETIC.** The
-    observed band is 912 to 933, a spread of **21** modules across four
-    environments that all pass. The ceiling sits **47** above the highest
-    reading -- **more than twice the observed spread** -- which is why it
-    holds: drift of the kind already seen cannot reach it, and an arrival
-    larger than everything drift has ever done can.
+    **THE MARGIN IS DERIVED FROM THE SPREAD, AND HERE IS THE ARITHMETIC.** On
+    the reader-only subject the observed band was 912 to 933, a spread of
+    **21** modules across four environments that all pass, and the local
+    reading moved **+2** when the drop module joined the subject. The ceiling
+    sits **45** above the highest reading -- **more than twice the observed
+    spread** -- which is why it holds: drift of the kind already seen cannot
+    reach it, and an arrival larger than everything drift has ever done can.
+    **CI's three readings on the new subject are owed at the next green run**,
+    and are expected to move by about the same +2.
 
     **WHAT THE SPREAD IS MADE OF**: 8 modules across interpreter versions, and
     **20 between local 3.13 and CI 3.13 -- the same interpreter, so that gap is
@@ -391,13 +410,15 @@ def test_the_report_module_graph_stays_under_its_ceiling(runtime_reading):
     # only when the bound fires has no source for it on a green run. This is
     # the channel `conftest.DIAGNOSTIC_LINES` exists for.
     conftest.DIAGNOSTIC_LINES.append(
-        f"report module graph: {count} modules after read_store "
-        "(ceiling 980; local reference 933, 2026-09-21)"
+        f"report module graph: {count} modules after the report modules ran "
+        "(ceiling 980; local reference 935, 2026-09-23)"
     )
     assert count < 980, (
-        f"reading a store now loads {count} modules against a ceiling of 980, "
-        "measured at 933 on 2026-09-21. Something heavy has entered the graph, "
-        "most likely through metamer/core/__init__.py or a family module"
+        f"the report now loads {count} modules against a ceiling of 980, "
+        "measured at 935 on 2026-09-23. Something heavy has entered the graph, "
+        "most likely through metamer/core/__init__.py or a family module -- or "
+        "a new report module brought a dependency with it, in which case the "
+        "band is re-measured for the new subject rather than the number bumped"
     )
 
 

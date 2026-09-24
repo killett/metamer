@@ -1039,3 +1039,194 @@ widen a met criterion. Only the pointer was repaired, which is the handoff's pro
 distinction doing exactly the work it was written for.
 
 **AND IT IS THE NINTH THING THE FULL SWEEP HAS CAUGHT THAT A FAST RUN COULD NOT.**
+
+---
+
+## Plan Task 3 — the drop row, audited before any code (2026-09-23)
+
+**THE BRIEF** is the plan's Task 3 as amended by the ruling of 2026-09-23: `CANDIDATE_DROPPED` gets
+its own row outside the failure rate with its own denominator (D11); the carried record is primary
+and is recomputed from `out.pass1.zarr` when present; **the covered-population composition is
+printed by member rather than as one gap figure with an interpretation**; and a dropped candidate
+must not print as *"nothing fitted"*. **Four findings, and the first two are corrections to things
+already written — one of them mine, in shipped code.**
+
+### (a5) "THE GAP IS THE LAND EXPOSURE" IS THE ERA ERROR, AND I SHIPPED IT IN TASK 2's MODULE DOCSTRING
+
+The ruling corrects its own earlier wording, and **the same sentence is in `report/numbers.py`,
+which I wrote two days after finding the defect in the plan**: *"the gap between them is the store's
+own exposure: on a box with no land and a finished run they are identical."*
+
+**IT IS ONLY TRUE BECAUSE OF WHAT TODAY'S DATA HAPPENS TO CONTAIN.** Land reaches the covered
+population as `INSUFFICIENT_DATA` until §13.6's mask lands, so "the gap is land" describes the
+current *contents* of a label rather than the label's *meaning* — **which is exactly the conflation
+D2's reframing was written to undo**, and the reason `INSUFFICIENT_DATA` was mis-classified for four
+sub-phases. I found that defect in the plan's Task 2 text on 2026-09-22 and reproduced it in my own
+module docstring on the same day.
+
+**STATED CORRECTLY, THE GAP IS `covered - fitted`, AND IT IS THREE POPULATIONS WITH THREE CAUSES:**
+
+| member | why it is covered and not fitted |
+|---|---|
+| `INSUFFICIENT_DATA` | the record is too thin to fit — **plus land, until §13.6 declares a mask** |
+| `SCREENED_OUT` | a decision was taken not to fit this candidate here |
+| `CANDIDATE_DROPPED` | the early-abort verdict demoted the candidate run-wide |
+
+**SO THE REPAIR IS NOT A BETTER SENTENCE, IT IS A DIFFERENT OUTPUT.** A single gap figure carrying
+an interpretation is how a stray `SCREENED_OUT` gets debugged as a land bug; **print the
+composition, by member, with counts, and let the reader interpret three named causes.** Computed
+inside `failure_tally` so there is still one definition, derived from counts alone so it keeps
+working on someone else's store — and the report still computes nothing.
+
+> **(a6) SWEEP THE DESCRIPTIONS, INCLUDING THE ONES YOU JUST WROTE.** Task 2's module docstring, its
+> `ReportNumbers` prose and the test named
+> `test_the_two_rates_separate_where_a_reached_point_carries_no_fit_verdict` all carry the "exposure"
+> reading to some degree. The test's own name is already right — *a reached point carrying no fit
+> verdict* — which is the correct statement, so the defect is in the prose around a test whose
+> subject was never wrong.
+
+### (c5) A DROPPED CANDIDATE READS AS "NOTHING FITTED", WHICH IS THE `no_evidence` COLLAPSE IN REVERSE
+
+In pass 2 a dropped candidate is `CANDIDATE_DROPPED` at **every** point, so `fitted == 0` and both
+rates are unavailable under the shared condition — with the reason *"no point was fitted"*.
+**Literally true and misleading: it presents a DECISION THE RUN TOOK as a LACK OF EVIDENCE.**
+
+**D1 stopped "unjudged" from printing as a clean pass; this is the mirror**, and the mirror needs
+saying because the two failures look nothing alike from inside the code that produces them — one is
+a rate of `0.0`, the other is no rate at all. **Both are a report describing the run's own decision
+as a property of the data.**
+
+**ONE CALCULATION SERVES BOTH BRANCHES**, which is why this is the same finding as the one above and
+not a second feature: the covered-population composition is what makes *"nothing fitted: 900
+`CANDIDATE_DROPPED`"* different from *"nothing fitted: 900 `SCREENED_OUT`"*, and it is the same
+breakdown printed beside the rates when `fitted > 0`.
+
+**THE THREE TESTS, EACH WITH ITS BUG**, from the ruling and written here so they are owed before the
+code: a dropped candidate's pass-2 row **names `CANDIDATE_DROPPED`** (catches the verdict
+disappearing into "nothing fitted"); a candidate screened out everywhere **still names
+`SCREENED_OUT`** (catches the new reason overwriting the old case); a mixed covered population
+**lists every member with its count** (catches a reason naming only the largest member).
+
+### AND THE DROP ROW'S DENOMINATOR RESTS ON A PREMISE NOBODY HAS WRITTEN DOWN
+
+**The carried record predates `is_covered` and cannot be repaired retroactively.**
+`twopass._verdict_attrs` writes, per candidate, `failed` / `eligible` / `fitted` / `rate` — **no
+`covered`**, because the predicate did not exist when 2e wrote it. 2e's criterion 14 establishes the
+drop row's denominator as *"pass 1's eligible points for that candidate … what the recorded
+verdict's `eligible` equals"*.
+
+**SO THE DROP ROW'S DENOMINATOR IS `eligible`, AND `eligible` IS THE ONE WE JUST PROVED DILUTES.**
+It counts `NOT_ATTEMPTED`. The carried number is safe only while **pass 1 holds no `NOT_ATTEMPTED`**
+— true of a *finished* pass 1, and a verdict is only reached after pass 1 completes.
+
+> **THAT IS THE SAME SHAPE AS §12.5's "a finished store should hold none", WHICH IS THE PREMISE THIS
+> SUB-PHASE ALREADY BROKE ONCE.** A number defensible under a completeness assumption, with the
+> assumption stated nowhere near it. **So state it and assert it**: when `out.pass1.zarr` is
+> present, the recomputation asserts `covered == eligible` on pass 1 alongside asserting the rates
+> agree. If that ever fails, the drop row's denominator is diluted and it fails loudly instead of
+> reading low. When pass 1 is absent the row is labelled carried and the premise is **unchecked**,
+> which the label already says and which is now said about the denominator too.
+
+### 2e's CRITERION 14 DOES NOT FLIP TO MET — RULED 2026-09-23
+
+The plan says Task 3 *"closes 2e's criterion 14"* and the standing requirement says no 2a–2e verdict
+moves. **Read as a flip, those conflict; read under the 2026-09-20 distinction, they do not.** A
+verdict's RECORD may be corrected; its VALUE is not re-argued.
+
+**2e's 14 records what 2e DELIVERED, and 2e did not deliver the drop row. It stays
+`MET_WITH_REDUCED_SCOPE`.** Its record gains a dated forward pointer naming where the scope was
+completed — **2f's criteria 8 and 9** — and whether the drop row now exists is answered by 2f's own
+criterion, not by editing 2e's. **Otherwise "what 2e delivered" becomes a statement that is
+historically false**, and a reader reconstructing the project's sequence from its records is misled
+by the records themselves.
+
+**THE PLAN'S TASK 3 TEXT CARRIES THE FORWARD-POINTER FORM** so *"closes"* cannot be read the other
+way, and the standing requirements' inherited list reads **"2e's 14 reduced, scope completed in
+2f"** — the entry stays visible rather than being dropped once it is satisfied.
+
+**THE SHA HAS ONE OWNER**: 2f's criteria record, written at Task 10, is where 2f's verdicts are
+taken and where the delivering commit is stable and knowable. The forward pointer names the criteria
+now; **Task 10 fills the sha**, and that obligation is on Task 10's row rather than floating.
+
+### THE EVIDENCE-NAME GUARD ALREADY EXISTS IN EVERY SUITE THAT HAS RECORDS, AND IT FIRED
+
+**The ruling's premise is that criterion 8's pointer "broke silently". It did not break silently —
+it broke LOUDLY, and the guard the ruling asks for is the test that caught it.**
+
+`test_every_criterion_names_evidence_that_exists` exists in **2b, 2c, 2d and 2e**, one per suite,
+each `ast`-parsing every `tests/test_*.py` for `def test_…` and asserting every name in every
+criterion's `established_by` resolves. 2e's own docstring says it catches *"a test renamed during a
+refactor"* and names two earlier renames. **Nothing is missing and nothing needs adding for the
+phases that have records.**
+
+**THE SILENCE WAS MINE, AND IT WAS A PROCESS FAILURE RATHER THAN A COVERAGE ONE.** I ran
+`tests/test_outcomes.py` and `tests/test_report_numbers.py` — the files I was editing — and the
+guard lives in a file I was not editing. **That is the whole point of the sweep running last**, and
+the sweep did its job on the first attempt. The lesson is not "add a guard"; it is that **a rename
+is a change whose blast radius is every file that spells the name**, which the handoff already
+states as *an output is an interface — grep for the string, not for the module*.
+
+**2a IS NOT A GAP EITHER**: its suite has no `established_by` records at all — its criteria ARE test
+functions named `test_criterion_N_…` by convention, so there is no pointer that can dangle.
+
+**TWO RESIDUAL GAPS ARE REAL AND BOTH BELONG TO TASK 10:**
+
+1. **2f has no criteria suite yet**, so 2f's own records are guarded by nothing until Task 10 writes
+   them. The guard must ship WITH the records, not after.
+2. **A test named in PROSE is invisible to the guard, which reads `established_by` only.** Measured
+   today across all four record modules: 26 / 34 / 29 / 44 structured names, and **zero** names that
+   appear only in prose — so there is no live instance. **But 2f's plan already has one**: criterion
+   21's reading cites `tests/test_hashing.py::test_compat_relevance_is_an_allowlist_golden_set` by
+   name, in prose. **It must land in `established_by` at Task 10 or the guard will not see it.**
+
+### (a10) THE DOCSTRING-TABLE TEST FAILS FOR TWO REASONS WITH ONE MESSAGE
+
+`test_every_member_is_classified_by_every_predicate_in_one_table` can fail because **the table is
+unparseable** or because **the table disagrees with a predicate**. One message for two causes
+teaches the reader to fix the parser when the table is wrong — **the same trap as a fixture builder
+whose failure reads as the subject failing**, and the documented end state is a check that gets
+loosened. Split: a parse failure names the line it could not read; a disagreement names the member,
+the predicate, the table's value and the code's.
+
+### TASK 3, AS BUILT (2026-09-23) — AND ONE CORRECTION TO THIS ENTRY'S OWN PROPOSAL
+
+**THE PRE-FLIGHT SAID "ASSERT `covered == eligible` ON PASS 1". THE CODE REPORTS IT INSTEAD.**
+An assertion inside `describe` would make the report **refuse** a store whose pass 1 holds unreached
+points, and **D6 says an unfinished or inconsistent store is DESCRIBED, not refused** — a report
+that raises cannot be run on the store that has the problem, which is the property §14.2 exists for.
+So the premise is a **named defect** in the section's output and an **assertion in the test**, where
+refusing is the right behaviour. **Two homes for one check, each doing what its context allows** —
+and the pre-flight's wording was the wrong one for the half that ships.
+
+**WHAT LANDED**: `report/drop.py`, at **zero** division nodes in the golden table like its sibling.
+The row's denominator is pass 1's live population (**9** on the criterion-14 fixture, against pass
+2's **36** — a row computed over pass 2 cannot produce 9). The carried record is primary; when the
+pass-1 sibling is present its arrays are recomputed and compared, and disagreements are reported and
+never resolved. `no_evidence` prints as itself; a store with no verdict prints its reason and no
+empty drop table, because *"the question was never asked"* and *"nobody was dropped"* are different
+facts and an empty table cannot distinguish them.
+
+**THE TAMPER TEST IS THE (a10) HALF THAT THE AGREEMENT TEST CANNOT PROVIDE.** A `describe` that
+reads the record, sees pass 1 present, and stamps *"recomputed"* without comparing passes the
+agreement test on every store whose record is right. One field edited by +1 is what tells a
+comparison from a constant.
+
+### AND THE IMPORT BOUNDARY WAS AIMED AT THE READER ALONE, WHICH TASK 3 MADE VISIBLE
+
+`report/drop.py` imports `metamer.batch.decimate` for the pass-1 path convention — **a
+`metamer.batch` submodule, which is exactly the kind of arrival the boundary exists to notice** —
+and the run-time probe only ever imported `read_store`. **It would have been silent.** Measured
+before writing the import: `metamer.batch.decimate` is **712** modules with no forbidden member, so
+reusing the convention is safe and the alternative — the report deriving the path itself — would
+have been a second definition of it.
+
+**The probe now imports and calls both report modules**, and the docstring says every new report
+module is added to it. *A control proves the detector, not what it is pointed at*, one sub-phase
+after that rule was written, in the instrument it was written about.
+
+> **AND THE READING MOVED 933 → 935, WHICH IS NOT DRIFT AND MUST NOT BE READ AS IT.** The ceiling's
+> re-derivation rule is about a reading moving **under a fixed subject**; here the SUBJECT grew by a
+> module. **A band describes a subject**, so it is RE-MEASURED rather than compared against, and the
+> distinction is stated at the test: a number that would have been a rule violation under one
+> reading is an expected re-baseline under the other, and only the docstring can tell them apart.
+> **CI's three readings on the new subject are owed at the next green run.**

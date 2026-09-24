@@ -102,7 +102,10 @@ class CandidateRate:
 
     **`eligible` IS STILL COUNTED AND RECORDED**, because section 14.2's report
     is over that population and the gap between the two counts is the store's
-    land-and-thin-record exposure -- a quantity worth printing, not discarding.
+    covered-but-unfitted population -- a quantity worth printing, not
+    discarding, and printed BY MEMBER rather than as one figure: it holds
+    thin records (plus land until section 13.6), decided skips and dropped
+    candidates, which are three causes and not one exposure.
 
     **SEVENTH INSTANCE OF ONE ROOT CAUSE:** `is_eligible` was doing two jobs.
     The first repair moved judgeability off it; this moves the rate off it.

@@ -344,7 +344,18 @@ PHASE_2E_EXIT_CRITERIA: tuple[ExitCriterion, ...] = (
             "is what the recorded verdict's `eligible` equals; and it is strictly "
             "smaller than the pass-2 population the drop wrote into, so a rate "
             "over pass 2 would report the decision (D9). No row is printed, so "
-            "no row is read; the reduction closes when 2f prints one"
+            "no row is read. "
+            "~~THE REDUCTION CLOSES WHEN 2f PRINTS ONE~~ -- REPHRASED 2026-09-23: "
+            "THIS VERDICT DOES NOT MOVE AND NEVER WILL. It records what 2e "
+            "DELIVERED, and 2e did not deliver the row; a later phase delivering "
+            "it does not make 2e's scope wider in retrospect, and editing this to "
+            "MET would make 'what 2e shipped' historically false. FORWARD "
+            "POINTER: the scope was completed in sub-phase 2f, Task 3, and is "
+            "read by 2f's own exit criteria 8 (the row over the coarse "
+            "population) and 9 (the row surviving a missing pass-1 store, "
+            "labelled carried). Whether the drop row exists TODAY is answered "
+            "there, not here. 2f's criteria record, written at its Task 10, "
+            "carries the delivering commit"
         ),
         established_by=(
             "test_criterion_14_the_live_denominator_is_pass_ones_and_is_computable",

@@ -614,8 +614,11 @@ And two clarifications that are not defects:
   quoted from there.
 
   The inherited verdicts stay visible: **2b's 6 and 7 FAILED, 2c's 11 reduced, 2d's 6, 11 and 14
-  failed with 12 reduced, 2e's 14 reduced, and 2e's 9 CORRECTED — reading narrowed, verdict
-  unchanged** (see below). 2e's 14 is the drop row, which is 2f's Task 3.
+  failed with 12 reduced, 2e's 14 reduced — SCOPE COMPLETED IN 2f, verdict unchanged — and 2e's 9
+  CORRECTED — reading narrowed, verdict unchanged** (see below). 2e's 14 is the drop row, delivered
+  by 2f's Task 3 and read by 2f's criteria 8 and 9. **The entry stays in this list after the scope
+  is completed rather than being dropped from it**: a verdict that disappears once somebody else
+  satisfies it leaves no record that the sub-phase which owned it did not.
 
   **WHY 2e's 9 IS RECORDED AS CORRECTED RATHER THAN REDUCED, ARGUED RATHER THAN ASSUMED.** Review
   proposed MET → MET WITH REDUCED SCOPE, on the ground that the criterion was met on a narrower
@@ -864,7 +867,24 @@ denominator named at the row (D11). The `early_abort` attrs are read for action,
 and the coarse rates; when `out.pass1.zarr` is present beside the store, the rates are **recomputed
 from its arrays and asserted to agree**; when it is absent the number is **labelled as carried**.
 
-**This closes 2e's criterion 14**, which was met with reduced scope because the row was 2f's.
+**~~This closes 2e's criterion 14~~ — RULED 2026-09-23: 2e's CRITERION 14 DOES NOT MOVE.** It was
+met with reduced scope because the row was 2f's, and **it stays
+`MET_WITH_REDUCED_SCOPE` permanently**: a verdict records what its own sub-phase delivered, and 2e
+did not deliver the row. A later phase delivering it does not widen 2e's scope in retrospect —
+editing that verdict to MET would make *"what 2e shipped"* historically false, and a reader
+reconstructing the project's sequence from its records would be misled by the records themselves.
+
+**WHAT ACTUALLY HAPPENS IS A FORWARD POINTER.** 2e's criterion 14 gains a dated note naming where
+the scope was completed — **this task, read by 2f's own exit criteria 8 and 9** — and whether the
+drop row exists today is answered by 2f's criterion, not by 2e's. The standing requirements'
+inherited list keeps the entry and reads **"2e's 14 reduced, scope completed in 2f"**. **The sha has
+one owner**: 2f's criteria record, written at Task 10, is where 2f's verdicts are taken and the
+delivering commit is stable.
+
+> This is the 2026-09-20 distinction doing its job: **a verdict's RECORD may be corrected; its VALUE
+> is not re-argued by a later phase.** Adding a forward pointer is a record correction. Flipping the
+> verdict is the thing the standing requirement forbids, and *"closes"* read the other way would
+> have been exactly that.
 
 **Invariants.**
 

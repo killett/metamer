@@ -366,6 +366,17 @@ class FailureTally:
             population; see the correction above.
         covered: Points in the domain that the run reached. **The coverage
             rate's denominator.**
+        covered_not_fitted: The gap between the two denominators, **broken
+            down by member rather than summed**. Three members can appear and
+            they have three different causes -- `INSUFFICIENT_DATA` (the
+            record is too thin, plus land until section 13.6 declares a mask),
+            `SCREENED_OUT` (a decision not to fit) and `CANDIDATE_DROPPED`
+            (the early-abort verdict). **A single figure here would carry an
+            interpretation**, and the available one -- "the store's land
+            exposure" -- is true only of what the labels currently CONTAIN,
+            not of what they MEAN. That is the conflation that mis-classified
+            `INSUFFICIENT_DATA` for four sub-phases, and it is how a stray
+            `SCREENED_OUT` gets debugged as a land bug.
         fitted: Points carrying a fit verdict. **The rate's denominator.**
         failed: Fitted points that failed, by `Outcome.is_failure`.
         rate: `failed / fitted`, or **None when nothing was fitted**.
@@ -383,9 +394,50 @@ class FailureTally:
     covered: int
     fitted: int
     failed: int
+    covered_not_fitted: Mapping[Outcome, int]
     rate: float | None
     coverage_rate: float | None
     unavailable: str | None
+
+
+def _nothing_fitted_reason(covered_not_fitted: Mapping[Outcome, int]) -> str:
+    """Why there is no rate, naming WHAT the run reached instead of fitting.
+
+    **"Nothing fitted" is true of a dropped candidate and describes it
+    wrongly.** In pass 2 an early-abort drop writes `CANDIDATE_DROPPED` at
+    every point, so a bare "no point was fitted" presents a DECISION THE RUN
+    TOOK as a LACK OF EVIDENCE. That is design doc section 14.1's `no_evidence`
+    collapse in reverse: D1 stopped an unjudged candidate printing as a clean
+    pass, and this stops a judged-and-dropped one printing as unjudged.
+
+    **EVERY MEMBER IS NAMED, NOT THE LARGEST.** A candidate mostly dropped but
+    screened out in a hundred places was treated two different ways, and the
+    hundred is the part a reader needs. Members are listed in taxonomy order
+    so two reports over the same census read alike.
+
+    Args:
+        covered_not_fitted: The covered population, by member. Empty when the
+            run reached nothing at all.
+
+    Returns:
+        The reason, always beginning "nothing fitted".
+    """
+    if not covered_not_fitted:
+        return (
+            "nothing fitted, and nothing was reached either: 0/0 is not a "
+            "score, and 0.0 would read identically to a candidate fitted "
+            "everywhere that passed"
+        )
+    breakdown = ", ".join(
+        f"{count} {member.value}"
+        for member, count in sorted(
+            covered_not_fitted.items(), key=lambda item: list(Outcome).index(item[0])
+        )
+    )
+    return (
+        f"nothing fitted: {breakdown}. 0/0 is not a score, and 0.0 would read "
+        "identically to a candidate fitted everywhere that passed"
+    )
 
 
 def failure_tally(
@@ -424,6 +476,7 @@ def failure_tally(
             reader.
     """
     points = eligible = covered = fitted = failed = 0
+    covered_not_fitted: dict[Outcome, int] = {}
     for key, count in census.items():
         try:
             member = key if isinstance(key, Outcome) else Outcome(key)
@@ -437,6 +490,14 @@ def failure_tally(
             eligible += int(count)
         if member.is_covered:
             covered += int(count)
+            if not member.is_fit_verdict and count:
+                # **THE GAP'S COMPOSITION, BUILT HERE AND NOWHERE ELSE.** It is
+                # derived from counts alone, so it works on a store this
+                # process did not write, and it keeps the report free of any
+                # arithmetic of its own.
+                covered_not_fitted[member] = covered_not_fitted.get(member, 0) + int(
+                    count
+                )
         if member.is_fit_verdict:
             fitted += int(count)
             if member.is_failure:
@@ -449,13 +510,10 @@ def failure_tally(
             covered=covered,
             fitted=0,
             failed=0,
+            covered_not_fitted=covered_not_fitted,
             rate=None,
             coverage_rate=None,
-            unavailable=(
-                "no point was fitted, so there is no rate: 0/0 is not a score, "
-                "and 0.0 would read identically to a candidate fitted "
-                "everywhere that passed"
-            ),
+            unavailable=_nothing_fitted_reason(covered_not_fitted),
         )
     return FailureTally(
         points=points,
@@ -463,6 +521,7 @@ def failure_tally(
         covered=covered,
         fitted=fitted,
         failed=failed,
+        covered_not_fitted=covered_not_fitted,
         rate=failed / fitted,
         # **THE SECOND DENOMINATOR IS COMPUTED HERE OR IT IS COMPUTED TWICE.**
         # `covered >= fitted > 0` is guaranteed by the nesting chain, so this
