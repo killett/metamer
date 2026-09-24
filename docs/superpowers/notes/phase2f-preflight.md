@@ -1230,3 +1230,71 @@ after that rule was written, in the instrument it was written about.
 > distinction is stated at the test: a number that would have been a rule violation under one
 > reading is an expected re-baseline under the other, and only the docstring can tell them apart.
 > **CI's three readings on the new subject are owed at the next green run.**
+
+---
+
+## Task 3's DEFECT — the drop row showed a rate the gate never used (2026-09-23)
+
+**FOUND BY THE USER, THE DAY TASK 3 LANDED, AND MY OWN "PREMISE" CHECK WALKED PAST IT.** I found
+that the drop row's carried denominator is `eligible`, established that `eligible` counts
+`NOT_ATTEMPTED`, and guarded the case where pass 1 holds unreached points. **That guard is real and
+it is about dilution. It is not the larger problem sitting in the same field.**
+
+### THE DEFECT
+
+**Since `f4eb42f` the gate decides on `failed / fitted` (D2b). The row printed the recorded `rate`
+— which IS the gate's — beside `live = eligible`, which is NOT the rate's denominator.** The rate
+and the number under it described different populations.
+
+On criterion 12's own fixture: **the gate drops a candidate at 12/12 = 1.00 against a threshold of
+0.90, and the row reports 12/20 = 0.60.** A dropped candidate displayed **below the threshold that
+dropped it**. Any reader concludes the gate is broken.
+
+> **THIS IS D2b's DEFECT, ON THE ONE ROW WHOSE JOB IS TO REPORT THAT DECISION.** D11 already states
+> the principle — *a decision's evidence is what the run saw when it made the decision* — and I
+> implemented the row against D11 while breaking exactly that sentence. **A principle quoted in a
+> docstring is not a principle applied**, and the check that would have caught it is the one now
+> added: re-apply the gate's own comparison to the displayed rate and confirm it reproduces the
+> recorded decision.
+
+### WHAT LANDED, IN THREE PARTS
+
+**(1) The row shows the denominator the WRITING GATE used**, named at the row: `fitted` for a store
+written after the move, `eligible` for an older one — **correct for that store, because its gate
+really did threshold on `eligible`**. `eligible` is still printed, as a count, because the gap
+between it and `fitted` is a real statement about the coarse sample; it is simply not this rate's
+denominator.
+
+**(2) The denominator is INFERRED today and must be RECORDED tomorrow.** `fitted` arrived at
+`49f3db1` and the gate moved at `f4eb42f`, so **a store written between them carries `fitted` and
+was decided on `eligible` — field presence cannot separate those two cases.** The ambiguity is
+stated at `gate_denominator` rather than hidden, and is safe only because no committed store comes
+from that one-day window. **Task 4's additive write owes the recorded name**, which has the same
+shape as `threshold` and `policy`: a fact that exists nowhere else in the store.
+
+**(3) The report checks itself against the decision, at run time.** For every judged candidate — not
+only the dropped ones — the displayed rate is compared to the recorded threshold using **the gate's
+own strict `>`**, and the result checked against the recorded `above_threshold`. A mismatch is a
+named defect, never silently resolved. **That makes the invariant hold on someone else's store
+rather than on our fixtures**, which is the only place it matters.
+
+**AND THE MISMATCH IS ONE-DIRECTIONAL, WHICH IS WHY THE DROPPED CASE IS THE DANGEROUS ONE.**
+`eligible >= fitted` by the nesting chain, so `failed / eligible <= failed / fitted`: a wrong
+denominator can only make a rate look **smaller**. A kept candidate stays below the threshold either
+way; a dropped one can be shown below it. **The check covers both anyway** — "which direction can it
+fail in" is an argument, and an argument is not a test.
+
+### AND THE PROBE'S SCOPE WAS A HAND-PICKED LIST, WHICH IS THE GOLDEN TABLE'S LESSON UNLEARNED
+
+Yesterday the probe was aimed at the reader and missed `drop.py`; I repaired it by **naming both
+modules**, which misses `maps.py` exactly as surely. **The scope is now discovered** —
+`pkgutil.walk_packages` over `metamer.report`, every module imported, the numbers path then run —
+and **the discovered set is asserted against the directory**, because a walk that returned nothing
+would make the whole probe vacuous in precisely the way the 65-module ceiling was. **Task 8's entry
+point replaces it with `python -m metamer.report <store>`**, which needs no list at all.
+
+**THE READING MOVED 935 → 936, THE SECOND SUBJECT CHANGE IN ONE DAY.** Recorded with what changed,
+because only the docstring can distinguish a re-baseline from the drift the re-derivation rule is
+about. **CI's readings on the drop subject came in at 914/915/922 — exactly the +2 predicted** —
+which is the first evidence that the local-versus-CI gap is a constant offset rather than something
+that moves with the subject.

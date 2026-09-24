@@ -113,24 +113,46 @@ _PROBE = textwrap.dedent(
 #: drags in everything the boundary excludes. The subject and its positive
 #: control differ by the injected `preamble` alone.
 #:
-#: **IT EXERCISES EVERY REPORT MODULE, NOT JUST THE READER.** 2f Task 3 added
-#: `metamer.report.drop`, which imports `metamer.batch.decimate` for the
-#: pass-1 path convention -- a `metamer.batch` submodule, which is exactly the
-#: kind of arrival this boundary exists to notice. A probe aimed at the reader
-#: alone would have been silent about it: **a control proves the detector, not
-#: what it is pointed at.** Every new report module is added here.
+#: **THE SCOPE IS DISCOVERED BY WALKING THE PACKAGE, NOT HAND-PICKED.** The
+#: probe was aimed at the reader alone and would have been silent about 2f
+#: Task 3's `metamer.report.drop`, which imports `metamer.batch.decimate` --
+#: exactly the kind of arrival this boundary exists to notice. **A hand-picked
+#: list misses the NEXT module as surely as it missed that one**, which is the
+#: golden table's lesson one instrument over: define the scope mechanically and
+#: a new member is covered on the day it lands rather than the day somebody
+#: remembers. `pkgutil.walk_packages` decides the set; the numbers-path
+#: functions are then called on the parent-built fixture.
+#:
+#: **WHEN TASK 8 ADDS THE ENTRY POINT THIS BECOMES `python -m metamer.report
+#: <store>`**, which exercises the whole path by construction and needs no
+#: list at all.
 _RUNTIME_PROBE = textwrap.dedent(
     """
-    import json, sys
+    import importlib, json, pkgutil, sys
     {preamble}
-    from metamer.report.reader import read_store
-    from metamer.report.drop import describe
+    import metamer.report
+    # **THE SCOPE IS DISCOVERED, NOT LISTED.** Every module under the package,
+    # walked and imported, so the next one is covered on the day it lands.
+    discovered = sorted(
+        name
+        for _, name, _ in pkgutil.walk_packages(
+            metamer.report.__path__, "metamer.report."
+        )
+    )
+    for name in discovered:
+        importlib.import_module(name)
     at_import = sorted(m for m in sys.modules if m in {forbidden!r})
-    describe(read_store({store!r}))
+    from metamer.report.drop import describe
+    from metamer.report.numbers import compute
+    from metamer.report.reader import read_store
+    view = read_store({store!r})
+    compute(view)
+    describe(view)
     print(json.dumps({{
         "at_import": at_import,
         "after_call": sorted(m for m in sys.modules if m in {forbidden!r}),
         "modules": len(sys.modules),
+        "discovered": discovered,
     }}))
     """
 )
@@ -297,6 +319,23 @@ def test_reading_a_store_imports_no_forbidden_module(runtime_reading):
     assert runtime_reading["at_import"] == []
     assert runtime_reading["after_call"] == []
 
+    # **(c7): ASSERT THE SIZE OF WHAT THE DISCOVERY MECHANISM FOUND.** A
+    # `walk_packages` that returned nothing would make every assertion above
+    # trivially true -- the same vacuity the ceiling had when it read 65
+    # modules. The oracle is the directory, listed here rather than inside the
+    # probe, so the walk is checked against something that did not do the walk.
+    package = Path(__file__).resolve().parents[1] / "src" / "metamer" / "report"
+    on_disk = sorted(
+        f"metamer.report.{path.stem}"
+        for path in package.glob("*.py")
+        if path.stem != "__init__"
+    )
+    assert runtime_reading["discovered"] == on_disk, (
+        "the package walk and the directory disagree about which report "
+        "modules exist; a walk that finds fewer makes this whole probe vacuous"
+    )
+    assert len(on_disk) >= 3, on_disk
+
 
 def test_the_runtime_probe_can_see_a_violation(finished_store):
     """THE POSITIVE CONTROL for the run-time probe, on both of its readings.
@@ -330,19 +369,23 @@ def test_the_runtime_probe_can_see_a_violation(finished_store):
 def test_the_report_module_graph_stays_under_its_ceiling(runtime_reading):
     """A SIZE assertion, because a denylist cannot see a fifth arrival.
 
-    Expected value determined independently: **935** modules after the report
-    modules have been imported and run on a real store, measured 2026-09-23.
+    Expected value determined independently: **936** modules after every module
+    under `metamer.report` has been imported and the numbers path run on a real
+    store, measured 2026-09-23.
     The ceiling is **980**, and the margin's basis is the OBSERVED SPREAD
     rather than a round percentage -- this project does not carry an estimate
     where it has a measurement.
 
-    **THE SUBJECT CHANGED AT 2f TASK 3 AND THAT IS NOT DRIFT.** The probe read
-    **933** while it exercised the reader alone; it now also imports and calls
-    `metamer.report.drop`, which brings `metamer.batch.decimate`. **A band
+    **THE SUBJECT CHANGED TWICE ON 2026-09-23 AND NEITHER MOVE IS DRIFT.** The
+    probe read **933** while it exercised the reader alone; **935** once it
+    imported and called `metamer.report.drop`, which brings
+    `metamer.batch.decimate`; and **936** once the scope became a
+    `pkgutil` walk of the package rather than a hand-picked list. **A band
     describes a SUBJECT**, so when the subject grows the band is RE-MEASURED,
     not compared against -- the re-derivation rule below is about a reading
-    moving under a fixed subject, which is a different event and means
-    something different.
+    moving under a FIXED subject, which is a different event and means
+    something different. Only this docstring can tell the two apart, which is
+    why each move is recorded with what changed.
 
     **~~"comfortably above the measurement, well below `metamer.batch.run`'s
     1002"~~ -- THAT ARGUMENT IS GONE, AND THE CEILING IS A BACKSTOP FOR
@@ -367,22 +410,26 @@ def test_the_report_module_graph_stays_under_its_ceiling(runtime_reading):
     **FOUR ENVIRONMENTS, FOUR COUNTS -- measured 2026-09-22 from CI run
     35698698743, every one of them GREEN:**
 
-    | environment | modules (reader only) | modules (reader + drop) |
-    |---|---|---|
-    | CI, 3.12 | 912 | **owed: first green run after 2f Task 3** |
-    | CI, 3.13 | 913 | **owed** |
-    | CI, 3.14 | 920 | **owed** |
-    | local, 3.13 | 933 | **935** |
+    | environment | reader only | + drop | + package walk |
+    |---|---|---|---|
+    | CI, 3.12 | 912 | 914 | **owed: next green run** |
+    | CI, 3.13 | 913 | 915 | **owed** |
+    | CI, 3.14 | 920 | 922 | **owed** |
+    | local, 3.13 | 933 | 935 | **936** |
+
+    **CI's SECOND COLUMN CAME IN AT EXACTLY +2, AS PREDICTED** (run
+    `35954296638`, all green), which is the first evidence that the
+    environment gap is a constant offset rather than something that moves with
+    the subject.
 
     **THE MARGIN IS DERIVED FROM THE SPREAD, AND HERE IS THE ARITHMETIC.** On
-    the reader-only subject the observed band was 912 to 933, a spread of
-    **21** modules across four environments that all pass, and the local
-    reading moved **+2** when the drop module joined the subject. The ceiling
-    sits **45** above the highest reading -- **more than twice the observed
-    spread** -- which is why it holds: drift of the kind already seen cannot
-    reach it, and an arrival larger than everything drift has ever done can.
-    **CI's three readings on the new subject are owed at the next green run**,
-    and are expected to move by about the same +2.
+    each subject the band has spanned **21-22** modules across four
+    environments that all pass, and each subject change has moved every
+    reading by the same small amount. The ceiling sits **44** above the
+    highest reading -- **twice the observed spread** -- which is why it holds:
+    drift of the kind already seen cannot reach it, and an arrival larger than
+    everything drift has ever done can. **CI's three readings on the walked
+    subject are owed at the next green run**, and are expected at about +1.
 
     **WHAT THE SPREAD IS MADE OF**: 8 modules across interpreter versions, and
     **20 between local 3.13 and CI 3.13 -- the same interpreter, so that gap is
@@ -410,12 +457,12 @@ def test_the_report_module_graph_stays_under_its_ceiling(runtime_reading):
     # only when the bound fires has no source for it on a green run. This is
     # the channel `conftest.DIAGNOSTIC_LINES` exists for.
     conftest.DIAGNOSTIC_LINES.append(
-        f"report module graph: {count} modules after the report modules ran "
-        "(ceiling 980; local reference 935, 2026-09-23)"
+        f"report module graph: {count} modules after the whole package ran "
+        "(ceiling 980; local reference 936, 2026-09-23)"
     )
     assert count < 980, (
         f"the report now loads {count} modules against a ceiling of 980, "
-        "measured at 935 on 2026-09-23. Something heavy has entered the graph, "
+        "measured at 936 on 2026-09-23. Something heavy has entered the graph, "
         "most likely through metamer/core/__init__.py or a family module -- or "
         "a new report module brought a dependency with it, in which case the "
         "band is re-measured for the new subject rather than the number bumped"

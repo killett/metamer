@@ -80,12 +80,17 @@ def test_a_real_drop_reports_the_coarse_denominator_and_pass_one_agrees(dropped_
     arrays are present, so they are read and compared.
     """
     section = describe(read_store(dropped_run))
-    (row,) = section.rows
+    (row,) = section.dropped_rows
 
     assert section.evaluated is True
     assert section.action == "drop"
+    assert len(section.rows) == 2, (
+        "every judged candidate gets a row, not only the dropped one"
+    )
     assert row.candidate == _labels(dropped_run)[1]
     assert row.live == 9
+    assert row.denominator == "fitted"
+    assert row.eligible == 9
     assert row.provenance == RECOMPUTED
     assert row.defects == ()
     assert (_outcome(dropped_run)[:, :, 1] == Outcome.CANDIDATE_DROPPED.code).all()
@@ -143,7 +148,7 @@ def test_the_row_survives_a_missing_pass_one_store_and_says_it_is_carried(
     assert not pass1_store_path(copied).exists()
 
     section = describe(read_store(copied))
-    (row,) = section.rows
+    (row,) = section.dropped_rows
 
     assert row.live == 9
     assert row.provenance == CARRIED
@@ -181,7 +186,7 @@ def test_a_tampered_rate_disagreeing_with_pass_one_is_reported_as_a_defect(
     group.attrs["early_abort"] = record
 
     section = describe(read_store(copied))
-    (row,) = section.rows
+    (row,) = section.dropped_rows
 
     assert row.provenance == RECOMPUTED
     assert row.defects, "a tampered record was reported as agreeing"
@@ -226,7 +231,7 @@ def test_a_no_evidence_store_prints_as_itself_and_not_as_a_clean_pass(
 
     assert section.evaluated is True
     assert section.is_no_evidence is True
-    assert section.rows == ()
+    assert section.dropped_rows == ()
     assert _early_abort(pathlib.Path(report.store_path))["action"] == "no_evidence"
 
 
@@ -252,6 +257,7 @@ def test_a_store_with_no_verdict_prints_its_reason_and_no_drop_row(tmp_path):
     assert section.evaluated is False
     assert section.action is None
     assert section.rows == ()
+    assert section.dropped_rows == ()
     assert section.reason == "--no-early-abort"
 
 
@@ -276,3 +282,171 @@ def _bare_view(store: pathlib.Path) -> StoreView:
         completion=Completion(complete=1, total=1),
         disagreements=(),
     )
+
+
+#: Criterion 12's fixture, as the gate records it. **Transcribed from 2e's own
+#: `test_criterion_12_...`, which asserts these exact numbers off two real
+#: stores**: candidate 0 fails 12 of 12 fitted with 8 land points carrying no
+#: fit verdict, so `eligible` is 20; candidate 1 fails 3 of 12.
+CRITERION_12_RECORD: dict[str, Any] = {
+    "evaluated": True,
+    "population": "pass 1 coarse grid",
+    "action": "drop",
+    "dropped": ["white"],
+    "above_threshold": ["white"],
+    "threshold": 0.90,
+    "policy": "drop",
+    "reason": "criterion 12's fixture",
+    "rates": [
+        {"candidate": "white", "failed": 12, "eligible": 20, "fitted": 12, "rate": 1.0},
+        {
+            "candidate": "matern",
+            "failed": 3,
+            "eligible": 20,
+            "fitted": 12,
+            "rate": 0.25,
+        },
+    ],
+}
+
+
+def _planted(store: pathlib.Path, record: dict[str, Any]) -> StoreView:
+    """A view carrying a planted early-abort record and nothing else.
+
+    **THE ARITHMETIC IS WHAT IS UNDER TEST, AND IT IS THE REPORT'S.** The
+    numbers here are the ones 2e's criterion-12 test measured off two real
+    stores; what this file adds is what the REPORT does with them, which is a
+    property of the attrs alone. `dropped_run` above is the real-store arm that
+    ties the planted shape to what a run actually writes.
+    """
+    zarr.open_group(str(store), mode="w").attrs["early_abort"] = record
+    return _bare_view(store)
+
+
+def test_the_drop_row_shows_the_rate_the_gate_decided_on_not_the_wider_one(tmp_path):
+    """12 failed of 12 fitted is 1.00, above a threshold of 0.90.
+
+    Expected values computed by hand from the literal counts in
+    `CRITERION_12_RECORD`: 12 / 12 = 1.0 on the gate's denominator, and
+    12 / 20 = 0.6 on the eligible population. **The threshold is 0.90, so the
+    two readings fall on OPPOSITE SIDES of it.**
+
+    Bug this catches: the row showing **0.60 for a candidate dropped at
+    0.90** -- a dropped candidate displayed below the threshold that dropped
+    it, from which any reader concludes the gate is broken. Since `f4eb42f`
+    the gate thresholds on `failed / fitted` (D2b), so a row over `eligible`
+    shows a rate **the decision never used**. That is D2b's defect arriving on
+    the one row whose whole job is to report that decision.
+
+    **THE 8-POINT GAP IS STILL PRINTED, AS A COUNT.** `eligible` is a real
+    statement about the coarse sample; it is simply not this rate's
+    denominator.
+    """
+    section = describe(_planted(tmp_path / "out.zarr", CRITERION_12_RECORD))
+    (row,) = section.dropped_rows
+
+    assert row.rate == 12 / 12
+    assert row.live == 12
+    assert row.denominator == "fitted"
+    assert row.rate is not None and row.rate > CRITERION_12_RECORD["threshold"]
+    assert row.eligible == 20
+    assert row.eligible - row.fitted == 8
+    assert row.defects == ()
+
+
+def test_a_kept_candidate_is_checked_too_and_shows_as_kept(tmp_path):
+    """The consistency check covers every judged candidate, not just the dropped.
+
+    Expected values computed by hand: candidate `matern` fails 3 of 12 fitted,
+    so 3 / 12 = 0.25, which is at or below the threshold of 0.90 and is
+    therefore kept -- and the store's `above_threshold` lists only `white`.
+
+    Bug this catches: a check that runs only over `dropped`, which would be
+    blind to a kept candidate whose displayed rate says it should have been
+    dropped. **The row exists for every candidate the verdict judged**, which
+    is what makes that check possible at all.
+
+    **AND THE MISMATCH IS ONE-DIRECTIONAL, WHICH IS WHY THE DROPPED CASE IS
+    THE DANGEROUS ONE.** `eligible >= fitted` always -- the nesting chain --
+    so `failed / eligible <= failed / fitted`: a wrong denominator can only
+    make a rate look SMALLER. A kept candidate stays below the threshold
+    either way; a dropped one can be shown below it. The check covers both
+    because "which direction can it fail in" is an argument, and an argument
+    is not a test.
+    """
+    section = describe(_planted(tmp_path / "out.zarr", CRITERION_12_RECORD))
+    kept = [row for row in section.rows if not row.dropped]
+
+    assert [row.candidate for row in kept] == ["matern"]
+    assert kept[0].rate == 3 / 12
+    assert kept[0].rate is not None
+    assert kept[0].rate <= CRITERION_12_RECORD["threshold"]
+    assert kept[0].defects == ()
+
+
+def test_a_row_that_does_not_reproduce_the_decision_is_reported_as_a_defect(tmp_path):
+    """A displayed rate that contradicts the recorded decision is named.
+
+    Expected value determined independently: the record is edited so `white`'s
+    rate reads 0.10 while the store still records it as dropped and above a
+    threshold of 0.90. 0.10 is not above 0.90, so the displayed rate cannot
+    reproduce the decision, and the defect must name both facts.
+
+    Bug this catches: a consistency check that exists on paper and never runs
+    -- which is indistinguishable from a working one on every store where the
+    record happens to be self-consistent, including all of ours. **This is the
+    (a10) half**: the two tests above cannot tell a real comparison from a
+    function that returns no defects.
+
+    **REPORTED, NOT RESOLVED**, and not raised: D6's rule for the bitmap
+    disagreement applies here too, and a report that quietly recomputed the
+    number would destroy the only evidence that something is wrong.
+    """
+    record = {
+        **CRITERION_12_RECORD,
+        "rates": [{**CRITERION_12_RECORD["rates"][0], "rate": 0.10}],
+    }
+    section = describe(_planted(tmp_path / "out.zarr", record))
+    (row,) = section.dropped_rows
+
+    assert row.defects, "a row contradicting its own decision was reported as clean"
+    assert any("does not reproduce the recorded decision" in d for d in row.defects)
+    assert any("0.9" in d for d in row.defects)
+
+
+def test_a_store_predating_the_fitted_field_is_read_on_its_own_denominator(tmp_path):
+    """An older store's gate really did threshold on `eligible`.
+
+    Expected value determined independently: before `49f3db1` the record
+    carried no `fitted` field at all, and `eligible` is the only denominator
+    any gate used before `f4eb42f`. So a record without `fitted` is read on
+    `eligible` -- 19 / 20 = 0.95 here -- and that is CORRECT for that store.
+    **The fixture is self-consistent on its own terms**: 0.95 is above the
+    0.90 threshold, so the recorded drop is exactly what that gate would have
+    done, and the consistency check passes for the right reason rather than
+    because both sides happen to say "not above".
+
+    Bug this catches: applying today's denominator to yesterday's record,
+    which would misreport an old store exactly as reading `eligible` today
+    misreports a new one. **The rule is the same in both directions: show the
+    rate that corresponds to the recorded decision.**
+
+    **THE AMBIGUITY THIS CANNOT RESOLVE IS STATED AT `gate_denominator`**: a
+    store written between `49f3db1` and `f4eb42f` carries `fitted` and was
+    decided on `eligible`, and field presence cannot separate those. The fix
+    is a recorded denominator name, owed at Task 4's additive write.
+    """
+    record = {
+        **CRITERION_12_RECORD,
+        "rates": [
+            {"candidate": "white", "failed": 19, "eligible": 20, "rate": 19 / 20}
+        ],
+    }
+    section = describe(_planted(tmp_path / "out.zarr", record))
+    (row,) = section.dropped_rows
+
+    assert row.denominator == "eligible"
+    assert row.live == 20
+    assert row.rate == 19 / 20
+    assert row.rate is not None and row.rate > CRITERION_12_RECORD["threshold"]
+    assert row.defects == ()
