@@ -41,7 +41,7 @@ from numpy.typing import NDArray
 
 from metamer.batch.completion import completed_tiles
 from metamer.batch.resume import _refuse
-from metamer.core.outcomes import Outcome, failure_tally
+from metamer.core.outcomes import Outcome, failure_tally, is_above_threshold
 
 #: Section 14.1's default. **Strictly greater**: a candidate at exactly this
 #: rate continues. The sentence is *"> 90% failure"*, the side is invisible on
@@ -325,7 +325,7 @@ def _decide(
             ),
         )
 
-    over = [rate for rate in judgeable if (rate.rate or 0.0) > threshold]
+    over = [rate for rate in judgeable if is_above_threshold(rate.rate, threshold)]
     percent = f"{threshold:.0%}"
     if len(over) == len(judgeable):
         return AbortVerdict(

@@ -23,7 +23,7 @@ import xarray as xr
 
 from metamer.batch.run import run
 from metamer.core.outcomes import Outcome
-from metamer.report.numbers import NO_DOMAIN_MASK_CAVEAT, compute
+from metamer.report.numbers import compute
 from metamer.report.reader import Completion, StoreView, read_store
 
 pytestmark = pytest.mark.filterwarnings("ignore::UserWarning")
@@ -329,24 +329,70 @@ def test_a_candidate_that_fitted_nothing_reports_both_columns_unavailable():
     assert fitted.tally.coverage_rate == pytest.approx(0.1)
 
 
-def test_the_caveat_is_present_without_a_domain_mask_and_absent_with_one():
-    """The caveat tracks the store, not the calendar.
+def test_the_caveat_reads_the_domain_mask_VALUE_and_not_its_presence():
+    """`false` keeps the caveat, and that is the whole point of the field.
 
-    Expected value determined independently: design doc section 13.6's declared
-    domain mask is Task 4's field, so **every store in existence lacks it**
-    today and the caveat applies to all of them; a store that declares one does
-    not need it.
+    Expected values determined independently from the plan's own wording:
+    **"absent or false"** means the denominator unions thin records and land,
+    so the caveat applies; **true** means a mask was declared and it drops.
+    Three states, three answers.
 
-    Bug this catches: a hard-coded caveat, which is wrong the day after section
-    13.6 lands and then stays wrong -- and a missing one, which is wrong today.
-    Both arms are asserted because a caveat that is always present and one that
-    is correct are indistinguishable on today's stores.
+    Bug this catches: deciding on `"domain_mask" in attrs`. That agrees with
+    the truth on every store that exists **because no store carries the field
+    at all** -- and Task 4 is the commit that separates them, writing `false`
+    for every run until section 13.6 lands. **The caveat would silently drop
+    on the day the field arrived**, and the report would claim an exactness it
+    does not have, through the field added to give it one.
+
+    **THE THIRD INSTANCE IN FOUR DAYS OF ONE SHAPE**: code that is right only
+    because of what the data currently CONTAINS -- "the gap is the land
+    exposure" and `NOT_ATTEMPTED`'s eligibility were the other two. The tell
+    each time is a predicate that agrees with its subject on every value
+    anyone has seen.
+
+    **AND THE TWO FALSY STATES SAY DIFFERENT THINGS.** "The run declared no
+    mask" and "the run that wrote this store did not record whether it had
+    one" are different sentences; D6's vocabulary already distinguishes them
+    and the report does too.
+
+    **THE TRUE ARM IS CONSTRUCTIBLE BUT NOT YET PRODUCIBLE, AND THAT IS SAID
+    HERE SO NOBODY INFERS OTHERWISE.** No run can write `domain_mask: true`
+    until design doc section 13.6 lands a declared mask, so this arm is planted
+    rather than produced -- the same standing the completeness-disagreement
+    fixture has. **A test for an unreachable state that does not say so invites
+    a later reader to assume the state occurs**, and to reason about real
+    stores from a branch nothing has ever written.
     """
-    without = compute(_view({Outcome.OK: 4}))
-    with_mask = compute(_view({Outcome.OK: 4}, attrs={"domain_mask": "declared"}))
+    absent = compute(_view({Outcome.OK: 4}))
+    declared_false = compute(_view({Outcome.OK: 4}, attrs={"domain_mask": False}))
+    declared_true = compute(_view({Outcome.OK: 4}, attrs={"domain_mask": True}))
 
-    assert without.caveat == NO_DOMAIN_MASK_CAVEAT
-    assert with_mask.caveat is None
+    assert declared_true.caveat is None
+    assert declared_false.caveat is not None
+    assert absent.caveat is not None
+    assert declared_false.caveat != absent.caveat, (
+        "a run that declared no mask and a run that recorded nothing are "
+        "different facts and must not print the same sentence"
+    )
+    assert "not record" in absent.caveat
+
+
+def test_a_truthy_non_boolean_domain_mask_does_not_drop_the_caveat():
+    """Only `True` drops it -- not a string, not a number.
+
+    Expected value determined independently: the field is a boolean by the
+    plan's own wording ("absent or false" against "true"), so anything else is
+    a store saying something this report does not understand.
+
+    Bug this catches: `if attrs.get("domain_mask")`, which is presence-testing
+    wearing a value test's clothes -- **the exact mistake this pair of tests
+    replaced**, and one that a fixture using a truthy string like `"declared"`
+    would wave straight through. That fixture is what the previous version of
+    this test used.
+    """
+    odd = compute(_view({Outcome.OK: 4}, attrs={"domain_mask": "declared"}))
+
+    assert odd.caveat is not None
 
 
 def test_the_incompleteness_travels_with_the_numbers():

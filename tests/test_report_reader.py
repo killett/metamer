@@ -41,6 +41,11 @@ criteria = ["aic", "hqic"]
 #: **The four are not the same kind of claim and the distinction is
 #: load-bearing** -- a later reader who cannot tell them apart will either
 #: over-protect the soft ones or relax the hard ones.
+#: The report's module-graph ceiling. **A BOUND, NOT A PIN** -- the ceiling
+#: test carries the spread it is derived from and the triggers that
+#: re-derive it.
+CEILING = 980
+
 FORBIDDEN: dict[str, str] = {
     # PORTABILITY. Lives behind the [report] extra, so it may genuinely be
     # ABSENT on a machine that can read a store. Importing it at module scope
@@ -369,78 +374,40 @@ def test_the_runtime_probe_can_see_a_violation(finished_store):
 def test_the_report_module_graph_stays_under_its_ceiling(runtime_reading):
     """A SIZE assertion, because a denylist cannot see a fifth arrival.
 
-    Expected value determined independently: **936** modules after every module
-    under `metamer.report` has been imported and the numbers path run on a real
-    store, measured 2026-09-23.
-    The ceiling is **980**, and the margin's basis is the OBSERVED SPREAD
+    Expected value determined independently: the reading this test emits on
+    the current subject -- every module under `metamer.report` imported and the
+    numbers path run on a real store. **The figure lives in the diagnostic line
+    this test writes on every run**, not transcribed here, because every task
+    from 5 to 9 adds a module and a transcribed figure would make each one buy
+    a docstring edit.
+    The ceiling is `CEILING`, and the margin's basis is the OBSERVED SPREAD
     rather than a round percentage -- this project does not carry an estimate
     where it has a measurement.
 
-    **THE SUBJECT CHANGED TWICE ON 2026-09-23 AND NEITHER MOVE IS DRIFT.** The
-    probe read **933** while it exercised the reader alone; **935** once it
-    imported and called `metamer.report.drop`, which brings
-    `metamer.batch.decimate`; and **936** once the scope became a
-    `pkgutil` walk of the package rather than a hand-picked list. **A band
-    describes a SUBJECT**, so when the subject grows the band is RE-MEASURED,
-    not compared against -- the re-derivation rule below is about a reading
-    moving under a FIXED subject, which is a different event and means
-    something different. Only this docstring can tell the two apart, which is
-    why each move is recorded with what changed.
+    **THE BASIS, NOT THE HISTORY.** The band has spanned about **21 modules**
+    across four environments on every subject measured so far, and each change
+    of subject has moved every environment by the same small amount -- so the
+    local-versus-CI gap is a constant offset rather than something that scales.
+    The ceiling sits more than **twice that spread** above the highest reading,
+    which is why it holds: drift of the kind already seen cannot reach it, and
+    an arrival larger than everything drift has ever done can.
 
-    **~~"comfortably above the measurement, well below `metamer.batch.run`'s
-    1002"~~ -- THAT ARGUMENT IS GONE, AND THE CEILING IS A BACKSTOP FOR
-    UNNAMED DEPENDENCIES RATHER THAN A SECOND COPY OF THE DENYLIST.**
-    `pydantic` and `metamer.batch.run` are caught BY NAME, so `batch.run`'s
-    1002 is not the figure this bound has to discriminate against; it exists
-    for the fifth arrival nobody listed. The margin is 5% because module
-    counts drift with a lockfile update and with the platform, and **a bound
-    tight enough to fire on routine drift becomes a number people bump without
-    reading it** -- the old 900 was such a number in the other direction: it
-    passed on 65 while the real subject stood at 933.
+    **EVERY RUN'S READING IS EMITTED THROUGH `DIAGNOSTIC_LINES`, AND THAT IS
+    WHERE THE HISTORY LIVES** -- in CI logs and commit messages, not in this
+    docstring. Logging each reading here turned it into a changelog, and every
+    task from 5 to 9 adds a module, so every task would have bought a docstring
+    edit plus a hunt through CI logs for three numbers.
 
-    Bug this catches: the failure the four named modules structurally cannot.
-    `metamer/core/__init__.py`'s registration side effect is load-bearing and
-    is staying, which makes this graph hostage to the spine: anyone adding a
-    heavy dependency there or to `families/` lands it in the report silently.
+    **A CHANGE OF SUBJECT IS NOT DRIFT.** The probe's reading moves when the
+    package grows, because the probe walks the package; the re-derivation rule
+    below is about a reading moving under a FIXED subject. Re-derive on the
+    ruled triggers only: a reading outside the expected shift, or headroom
+    shrinking below the spread -- plus one deliberate re-derivation at Task 8,
+    when the subject becomes the entry point rather than a package walk.
 
-    **Handoff (c7) reaching a new place**: assert the SIZE of what a discovery
-    mechanism found, not only the values it found. An unasserted enumeration
-    is a silent denominator.
-
-    **FOUR ENVIRONMENTS, FOUR COUNTS -- measured 2026-09-22 from CI run
-    35698698743, every one of them GREEN:**
-
-    | environment | reader only | + drop | + package walk |
-    |---|---|---|---|
-    | CI, 3.12 | 912 | 914 | **owed: next green run** |
-    | CI, 3.13 | 913 | 915 | **owed** |
-    | CI, 3.14 | 920 | 922 | **owed** |
-    | local, 3.13 | 933 | 935 | **936** |
-
-    **CI's SECOND COLUMN CAME IN AT EXACTLY +2, AS PREDICTED** (run
-    `35954296638`, all green), which is the first evidence that the
-    environment gap is a constant offset rather than something that moves with
-    the subject.
-
-    **THE MARGIN IS DERIVED FROM THE SPREAD, AND HERE IS THE ARITHMETIC.** On
-    each subject the band has spanned **21-22** modules across four
-    environments that all pass, and each subject change has moved every
-    reading by the same small amount. The ceiling sits **44** above the
-    highest reading -- **twice the observed spread** -- which is why it holds:
-    drift of the kind already seen cannot reach it, and an arrival larger than
-    everything drift has ever done can. **CI's three readings on the walked
-    subject are owed at the next green run**, and are expected at about +1.
-
-    **WHAT THE SPREAD IS MADE OF**: 8 modules across interpreter versions, and
-    **20 between local 3.13 and CI 3.13 -- the same interpreter, so that gap is
-    the ENVIRONMENT** (a dev environment against the declared dependency set),
-    and it is the larger half.
-
-    **A PIN WOULD HAVE FAILED THREE OF THESE FOUR GREEN RUNS.**
-    Pin-versus-bound was ruled on an *expectation* of drift; this measures it.
-
-    **IF A NEW ENVIRONMENT READS OUTSIDE 912-933, RE-DERIVE THE MARGIN FROM
-    THE NEW BAND -- DO NOT BUMP THE NUMBER.** A threshold raised to admit a
+    **IF A READING LANDS OUTSIDE THE EXPECTED SHIFT, OR HEADROOM DROPS BELOW
+    THE SPREAD, RE-DERIVE THE MARGIN FROM THE NEW BAND -- DO NOT BUMP THE
+    NUMBER.** A threshold raised to admit a
     reading nobody explained is the guard decaying into a ritual, which is the
     failure mode a bound has and a pin does not.
 
@@ -458,14 +425,14 @@ def test_the_report_module_graph_stays_under_its_ceiling(runtime_reading):
     # the channel `conftest.DIAGNOSTIC_LINES` exists for.
     conftest.DIAGNOSTIC_LINES.append(
         f"report module graph: {count} modules after the whole package ran "
-        "(ceiling 980; local reference 936, 2026-09-23)"
+        f"(ceiling {CEILING}, headroom {CEILING - count})"
     )
-    assert count < 980, (
-        f"the report now loads {count} modules against a ceiling of 980, "
-        "measured at 936 on 2026-09-23. Something heavy has entered the graph, "
-        "most likely through metamer/core/__init__.py or a family module -- or "
-        "a new report module brought a dependency with it, in which case the "
-        "band is re-measured for the new subject rather than the number bumped"
+    assert count < CEILING, (
+        f"the report now loads {count} modules against a ceiling of {CEILING}. "
+        "Something heavy has entered the graph, most likely through "
+        "metamer/core/__init__.py or a family module -- or a new report module "
+        "brought a dependency with it, in which case the band is re-measured "
+        "for the new subject rather than the number bumped"
     )
 
 

@@ -28,7 +28,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from metamer.batch.decimate import pass1_store_path
-from metamer.core.outcomes import Outcome, failure_tally
+from metamer.core.outcomes import Outcome, failure_tally, is_above_threshold
 from metamer.report.reader import StoreView, read_store
 
 #: Said when pass 1's store is not beside the output store.
@@ -199,11 +199,22 @@ def _decision_defects(
 ) -> tuple[str, ...]:
     """Does the rate this row displays reproduce the decision the store records?
 
-    **THE GATE'S OWN COMPARISON, WHICH IS STRICT.** `abort._decide` drops a
-    candidate when `rate > threshold`, and a candidate with no rate is never
-    above it. Re-applying that comparison to the displayed rate and comparing
-    against the recorded `above_threshold` is what makes the row's consistency
-    a property of **someone else's store** rather than of our fixtures.
+    **THE GATE'S OWN COMPARISON, IMPORTED AND NOT RE-SPELLED.**
+    `core.outcomes.is_above_threshold` is the one definition -- it lives there
+    rather than in `abort` because the report cannot import `abort`, which
+    pulls `pydantic`; the report calls it
+    rather than writing `>` again. It was already spelled three times across
+    `abort`, `twopass` and `__main__` before that function existed, and **a
+    fourth copy here is how `>` becomes `>=` in one place and not the others**
+    -- at which point this check would report defects in the store that are
+    really defects in the check. Applying the gate's own rule to the displayed
+    rate and comparing against the recorded `above_threshold` is what makes the
+    row's consistency a property of **someone else's store** rather than of our
+    fixtures.
+
+    **THE TESTS OF THIS CHECK STILL ASSERT LITERAL EXPECTED DECISIONS**, which
+    is not a contradiction: the shared-definition rule governs the runtime
+    check, and the external-oracle rule governs its tests.
 
     **REPORTED, NEVER RESOLVED** -- D6's rule for the bitmap disagreement,
     applied here. A report that silently corrected the number would hide the
@@ -220,7 +231,7 @@ def _decision_defects(
     """
     if above is None:
         return ()
-    shown_above = row.rate is not None and row.rate > threshold
+    shown_above = is_above_threshold(row.rate, threshold)
     recorded_above = row.candidate in above
     if shown_above == recorded_above:
         return ()

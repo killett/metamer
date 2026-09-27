@@ -91,7 +91,8 @@ from metamer.batch.ragged import (
     model_label,
     noise_param_coordinates,
 )
-from metamer.core import hashing
+from metamer.core import hashing, resolution
+from metamer.core.capability import Objective
 from metamer.core.outcomes import Outcome
 from metamer.core.registry import REGISTRY_VERSION
 
@@ -342,6 +343,7 @@ def provenance_attrs(
     source: Mapping[str, Any] | None = None,
     calibration: Mapping[str, Any] | None = None,
     decimation: Mapping[str, Any] | None = None,
+    domain_mask: bool = False,
 ) -> dict[str, Any]:
     """Build the root attrs of a store.
 
@@ -357,6 +359,14 @@ def provenance_attrs(
         tile_sides: Tile side per regressor regime, both branches, because one
             config field moves it by 3.44x in area and a sizing figure without
             its regime is not a figure.
+        domain_mask: Whether this run applied a declared domain mask (design
+            doc section 13.6). **`False` is a fact the run knows and records;
+            ABSENCE is a store whose writer never asked the question**, which
+            is every store written before 2f Task 4. Those are different
+            sentences and section 14.2's report prints them differently -- a
+            reader of an older store must not be told the run declared no mask
+            when the run never decided. Not in `REQUIRED_ATTRS`, on the
+            `calibration` and `decimation` precedent.
         decimation: For a PASS-1 store only: `parent_geometry_hash`, the
             fingerprint of the **undecimated** input; `parent_fit_hash`,
             `config.fit_hash(parent_geometry_hash)`; and `parent_fit_payload`,
@@ -523,6 +533,44 @@ def provenance_attrs(
         "unique_dt_count": int(unique_dt_count),
         "warm_start_used": bool(warm_start_used),
     }
+    # **THE RESOLVED-CANDIDATE BLOCK (D12), WRITTEN AT RUN START.**
+    # Section 14.2 wants the per-candidate resolved capabilities and the store
+    # only had the request: root `engine` and `objective` are run-level and
+    # `candidate_spec_hashes` is one-way, so this was not recoverable from a
+    # finished store at all.
+    #
+    # **IT IS RESOLVED HERE, BEFORE ANY FIT, AND THE LABEL SAYS SO.** That is
+    # the honest statement of what D12 permits and what it refuses: this
+    # resolves against the registry the fits are ABOUT TO USE, whose version
+    # sits beside it in these same attrs, whereas Phase 5 would re-resolve
+    # later against whatever registry existed then and answer "what would this
+    # config resolve to NOW". Writing at run start is also what D6 needs --
+    # an interrupted store still carries the block.
+    #
+    # **AND NOTHING IN THE FIT PATH CAN MOVE A SERIES' RESOLUTION AFTERWARDS**,
+    # checked rather than assumed: `resolve_gradient_mode` is called once per
+    # candidate before the per-series loop, from `(spec, objective)` alone, and
+    # it RAISES rather than downgrading a declared-but-unimplemented mode; the
+    # engine is bound once per `fit()` call; and the one genuinely per-series
+    # fallback -- the starting-value rung -- is a different quantity and is
+    # already persisted per (series, candidate).
+    attrs["resolved_candidates"] = {
+        "resolved_at": (f"run start, against registry version {REGISTRY_VERSION}"),
+        "engine_resolution": resolution.ENGINE_NOT_RESOLVED,
+        "candidates": [
+            resolution.resolve_candidate(
+                spec, model_label(spec), Objective(config.objective)
+            ).as_record()
+            for spec in config.process_specs()
+        ],
+    }
+    # **THE ERA, READABLE FROM THE STORE.** Absent means the run never recorded
+    # the question, which is every store written before this task; `false`
+    # means it recorded that it applied no declared mask. Those are different
+    # sentences and section 14.2's report prints them differently -- collapsing
+    # them would make an older store claim something its writer never decided,
+    # which is the back-fill D12 refuses.
+    attrs["domain_mask"] = domain_mask
     if calibration is not None:
         attrs["calibration"] = json.loads(hashing.canonical_json(calibration))
     if decimation is not None:

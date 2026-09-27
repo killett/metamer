@@ -400,6 +400,42 @@ class FailureTally:
     unavailable: str | None
 
 
+def is_above_threshold(rate: float | None, threshold: float) -> bool:
+    """Whether this candidate's rate trips the early-abort gate.
+
+    **IT LIVES HERE RATHER THAN IN THE GATE, AND THE IMPORT BOUNDARY IS WHY.**
+    `metamer.batch.abort` pulls `pydantic` transitively (through
+    `batch.completion` and `batch.resume`), and sub-phase 2f's report must not
+    -- a user with a store and no config cannot be made to load the validator
+    for a config they do not have. **So the gate's own rule could not stay in
+    the gate's own module and still have one definition**; it belongs beside
+    `failure_tally` for the same reason `failure_tally` is here, and the gate
+    imports it.
+
+    **THE COMPARISON IS STRICT, AND THIS IS ITS ONE DEFINITION.** It was
+    spelled three times before this function existed -- `_decide` as
+    `(rate or 0.0) > threshold`, `twopass._verdict_attrs` and `__main__` as
+    `rate is not None and rate > threshold` -- two spellings of one rule across
+    three modules. They agree for every threshold in [0, 1], which is the only
+    range a rate can be thresholded at, **and agreeing is not the same as being
+    one rule**: section 14.2's report needed a fourth copy to check that a
+    displayed rate reproduces the recorded decision, and a fourth copy is how
+    `>` becomes `>=` in one place and not the others.
+
+    **A CANDIDATE WITH NO RATE IS NEVER ABOVE THE THRESHOLD.** `None` means
+    nothing was fitted, which is an absence of evidence and not a failure --
+    the same rule `no_evidence` exists to state one level up.
+
+    Args:
+        rate: The candidate's failure rate, or None where it has none.
+        threshold: The gate's threshold.
+
+    Returns:
+        Whether the gate counts this candidate as over.
+    """
+    return rate is not None and rate > threshold
+
+
 def _nothing_fitted_reason(covered_not_fitted: Mapping[Outcome, int]) -> str:
     """Why there is no rate, naming WHAT the run reached instead of fitting.
 

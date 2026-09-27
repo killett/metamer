@@ -1298,3 +1298,232 @@ because only the docstring can distinguish a re-baseline from the drift the re-d
 about. **CI's readings on the drop subject came in at 914/915/922 — exactly the +2 predicted** —
 which is the first evidence that the local-versus-CI gap is a constant offset rather than something
 that moves with the subject.
+
+---
+
+## Plan Task 4 — the primitives sections and the resolved-candidate record, audited before any code (2026-09-25)
+
+**THE BRIEF** is the plan's Task 4: an additive root-attrs block written by the RUN recording, per
+candidate, the resolved engine / cost class / gradient mode / objective, plus a `domain_mask`
+provenance field; and the report's single-store sections — `n_valid`'s distribution, the iteration
+histogram, the resolved config with its three hashes. **Plus one thing the plan does not list: the
+`denominator` name Task 3's defect fix left owed.** Five findings, and the first is a live defect in
+code I wrote three days ago.
+
+### (a5) THE `domain_mask` CAVEAT TESTS PRESENCE AND THE PLAN REQUIRES THE VALUE — THE ERA ERROR, THIRD INSTANCE
+
+`report/numbers.py` decides the caveat with
+
+    caveat=None if "domain_mask" in view.attrs else NO_DOMAIN_MASK_CAVEAT
+
+— **presence**. The plan says: *"**Absent or false**, `INSUFFICIENT_DATA` unions thin records and
+land … **True**, the caveat drops."* Those agree on every store that exists **because no store
+carries the field at all**, so presence and truth are the same question today.
+
+**TASK 4 IS THE COMMIT THAT SEPARATES THEM.** It writes the field — including `false`, for a run
+with no declared mask, which is every run until §13.6 lands. **On that day the caveat silently
+drops while the denominator is still approximate**, and the report claims an exactness it does not
+have. That is the defect the caveat exists to prevent, arriving **through the field added to fix
+it**.
+
+> **THIS IS THE SAME SHAPE AS "THE GAP IS THE LAND EXPOSURE" AND AS `NOT_ATTEMPTED`'s ELIGIBILITY:
+> code that is right only because of what the data currently CONTAINS.** Three instances in four
+> days, two of them mine, and the tell is identical each time — **a predicate that agrees with its
+> subject on every value anyone has seen.** The repair is the same shape too: test the thing you
+> mean. `attrs.get("domain_mask") is True`, with `False` and absence both keeping the caveat and
+> **saying which**, because *"the run declared no mask"* and *"the run that wrote this store did not
+> record whether it had one"* are different sentences and D6's vocabulary already distinguishes
+> them.
+
+**AND MY TASK 2 TEST CANNOT CATCH IT**, which is why it is (a5) and not a typo:
+`test_the_caveat_is_present_without_a_domain_mask_and_absent_with_one` passes
+`{"domain_mask": "declared"}` — a truthy string. It exercises presence twice and the value never.
+**Both arms of a two-arm test can sit on the same side of the distinction the test is named for.**
+
+### THE ADDITIVE BLOCK HAS A PRECEDENT IN THE TREE, ARGUED, AND IT IS CITED RATHER THAN RE-ARGUED
+
+`store.py`'s `decimation` block already carries the exact argument Task 4 needs, in its own comment:
+**not in `REQUIRED_ATTRS`** (which "would refuse every store written before this task"), **absence
+is the answer**, and **no schema bump is owed** — *"a bump is for a question an older store CANNOT
+answer, and every earlier store's silence here is unambiguous"*. `calibration` is the second
+instance and `source_*` the third.
+
+**So D12's three constraints are already implemented twice and the work is to follow the pattern,
+not to invent it.** The one thing to check rather than assume: `create_store` refuses on
+`REQUIRED_ATTRS`, so **adding either new key there would refuse every existing store** — the block
+and the `domain_mask` field are optional by construction.
+
+### THE HASH ASSERTION IS OWED EVEN THOUGH THE STRUCTURAL ARGUMENT IS SOUND
+
+The three hashes are computed from `normalize(config)`, not from attrs, and the block records what
+resolution **produced** rather than what the config **said** — so it cannot reach a payload. **D12
+says "asserted, not assumed" and it is right to**: the argument is about where the block comes from,
+and a later change that derived a block field from a config field would break it silently. The test
+is the three hashes of a store carrying the block against the same config without it, and 2f's
+criterion 21 additionally cites `tests/test_hashing.py::test_compat_relevance_is_an_allowlist_golden_set`
+by name — **in prose, where the evidence-name guard cannot see it**, which is Task 10's second owed
+item.
+
+### THE FILL CONSTANTS HAVE ONE DEFINITION AND THE REPORT MUST IMPORT IT
+
+`N_VALID_UNSET = -1` and `ITERATIONS_UNSET = 65535` live in `metamer.batch.store`. **Re-spelling
+either in the report is a second definition of a sentinel**, which is the defect this sub-phase has
+now paid for twice under a different name. Measured before relying on it: `metamer.batch.store` is
+**928** modules and carries no forbidden member — `pydantic` arrives with `batch.run`, not with
+`store` — so importing the constants costs the report nothing it has not already paid.
+
+**AND THE EXCLUSION IS ONLY HALF THE RULE.** The plan says the fill values are excluded from the
+distributions **and counted separately**: a histogram with a spike at 65535 reads as a real
+population, and a histogram that silently drops them reads as a smaller grid. Both halves are the
+same defect the branch table already solved for `NOT_ATTEMPTED` — **counted, never divided by**.
+
+### AND TASK 3's FIX LEFT AN OWED WRITE, WHICH BELONGS IN THIS TASK'S ADDITIVE CHANGE
+
+`gate_denominator` infers which population the early-abort gate thresholded on, from field presence,
+because `fitted` arrived at `49f3db1` and the gate moved at `f4eb42f` — **a store written between
+them carries `fitted` and was decided on `eligible`, and presence cannot separate those.** Task 4
+writes the name into `early_abort` attrs, on the same rule as `threshold` and `policy`: **a fact
+that exists nowhere else in the store.** §17's measure/print rule, fourth instance.
+
+**IT IS A SECOND WRITE SITE, NOT THE SAME ONE** — `_verdict_attrs` in `twopass.py`, not
+`provenance_attrs` in `store.py` — and it inherits the same three constraints: additive, absent on
+older stores, and absence means `eligible`. **When the name is present nothing is inferred**, and
+the ambiguity window closes for every store written after this task.
+
+### (e) THE PLAN'S FOURTH TEST CANNOT BE BUILT AS WRITTEN, AND WHAT REPLACES IT BITES HARDER
+
+The plan wants a test where *"the recorded resolved engine differs from the run-level `engine` attr
+for a candidate whose capability intersection narrows it"*. **Measured against the tree: the run
+never narrows the engine.** `run.py` passes `engine=config.engine` into the fit path and `fit()`
+uses it; **`engine_costs()` has no consumer anywhere outside `terms.py` and `capability.py`** — no
+batch module calls it. So `resolved engine == requested engine` for every candidate, always, and a
+test asserting they differ would have to fabricate the condition it checks.
+
+**WHAT DOES NARROW PER CANDIDATE IS THE OTHER TWO, AND THEY NARROW FOR DIFFERENT REASONS:**
+
+| field | narrows? | by what rule |
+|---|---|---|
+| engine | **no** — the request passes straight through | nothing in the batch path intersects it |
+| **cost class** | **yes** | `intersect_engine_costs` takes the **worst** cost across terms, so a composite is dearer than its cheapest term |
+| **gradient mode** | **yes** | `ANALYTIC` only if **every** term declares *and implements* it; one finite-difference term makes the composite finite-difference |
+| objective | no | run-level, recorded per candidate for completeness |
+
+**So the test is rewritten onto the fields that can actually move**: a single-term candidate and a
+composite over the same config, whose recorded cost class and gradient mode differ from each other.
+**That catches the defect the plan's bullet was aimed at** — a block recording the request rather
+than the resolution — and it catches it on a fixture the tree can produce.
+
+> **AND THE ENGINE ROW IS A FINDING RATHER THAN A GAP TO FILL HERE.** §4.2's capability intersection
+> exists and the batch path does not consult it, so a candidate whose surviving set excludes the
+> requested engine is run on it anyway. **That is not 2f's to fix** — 2f reports what the run did —
+> but recording the resolved engine beside the requested one is what would make it VISIBLE, which is
+> the measure/print rule's whole point. Filed as an observation with the block, not taken.
+
+### AND THE RESOLUTION IS COMPUTED PER FIT AND THROWN AWAY — (a2c)'s FIFTH INSTANCE
+
+`FitResult` carries `engine`, `objective` and `gradient_mode`, resolved inside `fit()` by
+`resolve_gradient_mode`. **`gradient_mode` appears nowhere in `src/metamer/batch/` at all.** The run
+resolves it, records it in the result, and drops it before the store — *a value the driver holds and
+does not persist*, which is exactly why D12 is right that §14.2's bullet is not computable from the
+store.
+
+**THAT SETTLES WHERE THE BLOCK'S NUMBERS COME FROM, AND IT IS A REAL CHOICE.** `provenance_attrs`
+runs at store creation, **before any fit**, so the block cannot copy a `FitResult`. It must resolve
+from `(spec, requested engine, objective, registry)` — and D12 refuses exactly that shape for Phase
+5, on the ground that it answers *"what would this config resolve to NOW"*.
+
+**THE TWO ARE DIFFERENT AND THE DIFFERENCE IS THE REGISTRY.** Phase 5 would re-resolve against
+*a later* registry; the block resolves inside the run, against **the registry the fits are about to
+use**, whose version is already in root attrs beside it. The resolution is deterministic in those
+four inputs and none of them moves during a run, so the block's answer is the answer the fits
+produce. **That is an argument, and an argument is not a test** — so the binding test asserts the
+block's recorded resolution **equals what `FitResult` carries** for the same candidate on a real
+run. If the two ever disagree, the block is describing something the run did not do, which is the
+whole risk D12 names.
+
+### TASK 4, AS BUILT (2026-09-26) — AND THE BOUNDARY MOVED THE SHARED DEFINITION
+
+**THE ENGINE COLUMN IS FILLED THROUGH THE RESOLUTION PATH OR NOT AT ALL.**
+`core/resolution.py` computes each candidate's resolution **from the spec alone** — it never receives
+`config.engine` — and the engine column carries `ENGINE_NOT_RESOLVED`, *"requested; not resolved per
+candidate in this version"*. The two columns that genuinely narrow today are asserted to differ on a
+fixture that makes them: **`matern32` withholds `celerite2`**, so `white` survives on four engines
+and `white + matern32` on three. **The gradient-mode column does not discriminate on that fixture**
+— no family in the set implements analytic gradients — and the test says so rather than leaving it
+to be discovered.
+
+**THE ENGINE-NARROWING TEST IS FILED AT A TRIGGER**, in PROGRESS beside P4″: the second engine.
+
+### NO RUNTIME PATH MOVES A SERIES' RESOLUTION, AND THAT IS WHY THE PRE-FIT LABEL IS THE WHOLE TRUTH
+
+The ruling asked for this to be established rather than assumed. **Four pieces of evidence, none of
+them a docstring's say-so:**
+
+| checked | found |
+|---|---|
+| where the gradient mode is resolved | `fit()` calls `resolve_gradient_mode(spec, objective)` **once per candidate, before the per-series loop** — it cannot vary by series |
+| whether it can downgrade | it **raises** `AnalyticGradientError` rather than downgrading, and says why: *"a mode corrected behind the caller's back is not a reported mode"* |
+| whether the engine can swap | bound once per `fit()` call from the caller's argument; `run.py` passes one engine for the whole run |
+| whether any per-series fallback exists | **one does** — the starting-value rung, explicitly *"per series"* — **and it is a different quantity, already persisted per (series, candidate)** |
+
+**So the label is `"run start, against registry version N"` and it is complete.** Had a fallback
+existed, the binding test's fixture would have had to trigger it, the test would have failed on that
+series, and **that failure would have been the correct signal** — the label would then have read
+*"plan at run start; per-series fallback not recorded"* with the missing record filed as a gap. It
+does not, so it does not.
+
+> **AND THE BINDING TEST'S LIMIT IS WRITTEN AT THE TEST.** It binds the block to the RESOLVER; what
+> binds the resolver to the fit path is the finding above. **If a runtime fallback is ever added the
+> test keeps passing and the label becomes false**, so the finding lives where the label is rather
+> than in this document alone.
+
+### THE THRESHOLD COMPARISON HAD THREE SPELLINGS BEFORE I ADDED A FOURTH
+
+The ruling said to import the gate's comparison rather than re-spell it. **Measured: it was already
+spelled three times** — `abort._decide` as `(rate.rate or 0.0) > threshold`, and
+`twopass._verdict_attrs` and `__main__` as `rate.rate is not None and rate.rate > threshold`. Two
+spellings, three modules, one rule. They agree for every threshold in [0, 1], **and agreeing is not
+being one rule**.
+
+**AND THE IMPORT BOUNDARY REFUSED THE OBVIOUS HOME, WHICH IS THE FINDING.** The ruling expected
+`abort` to be importable — *"abort isn't on the forbidden list, and your walked-package probe will
+confirm"*. **The probe's logic confirmed the opposite, before the commit**: importing
+`metamer.batch.abort` pulls **`pydantic`** transitively, through `batch.completion` and
+`batch.resume`, taking the graph to 999 modules with a forbidden member present. So the gate's own
+rule **could not live in the gate's own module and still have one definition**. It went to
+`core.outcomes`, beside `failure_tally`, for exactly the reason `failure_tally` is there — and all
+four consumers now call it.
+
+### THE CEILING DOCSTRING IS A BASIS AGAIN, NOT A CHANGELOG
+
+The per-subject table and its CI triples are gone. What stays: **the spread (~21 modules across four
+environments, measured on two subjects, moving together)** and the rule that the margin must exceed
+it. The diagnostic line now prints `headroom` alongside the count, so **every run states its own
+margin** and no figure is transcribed into a docstring that five more tasks would each have to edit.
+Re-derivation triggers are the ruled ones, **plus one deliberate re-derivation at Task 8** when the
+subject becomes the entry point.
+
+### WHAT THE SWEEP CAUGHT IN TASK 4 — PROVENANCE THAT DEPENDED ON `PYTHONHASHSEED`
+
+**One failure, in a file I had not touched**:
+`tests/test_store.py::test_the_root_attrs_are_byte_identical_across_processes`. The
+resolved-candidate block's `engine_costs` mapping comes from `intersect_engine_costs`, which builds
+it **from set iteration** — so its key order varies with the interpreter's hash seed. **Measured at
+three seeds: three different orders for identical content.** Two runs of one config therefore wrote
+byte-different root attrs.
+
+**IT IS THE (k) SHAPE, AND (k) IS WHY THE GUARD THAT CAUGHT IT IS CROSS-PROCESS.** The order is a
+property of a *different* process, and no amount of testing inside one process reaches it — every
+one of Task 4's own seven tests passed, because they all drew whatever order their single process
+happened to draw. **The store's cross-process test is the only thing in the tree that could see
+it**, and it is in a file this task never opened.
+
+**The fix is two lines and the lesson is not.** `as_record` sorts by engine name; verified
+byte-identical across four seeds afterwards. The lesson is that **a mapping handed to provenance is
+not data until its order is decided** — `sorted` at the boundary where bytes are produced, not
+hoped for from the producer.
+
+> **AND IT IS THE TENTH THING THE FULL SWEEP HAS CAUGHT THAT A FAST RUN COULD NOT.** The previous
+> one was a renamed test a closed criterion named as its evidence; this one is a hash-seed
+> dependency. **Neither was in a file the task had opened**, which is the property that makes the
+> sweep's cost worth paying and the reason it runs last rather than being sampled.

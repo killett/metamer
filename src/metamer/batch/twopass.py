@@ -75,6 +75,7 @@ from metamer.batch.tiling import Tile
 from metamer.batch.validation import load_config
 from metamer.core.engines.protocol import Engine
 from metamer.core.memory import FloorReport
+from metamer.core.outcomes import is_above_threshold
 
 
 class _SharedRunKwargs(TypedDict):
@@ -422,9 +423,19 @@ def _verdict_attrs(
         "above_threshold": [
             rate.candidate
             for rate in verdict.rates
-            if rate.rate is not None and rate.rate > verdict.threshold
+            if is_above_threshold(rate.rate, verdict.threshold)
         ],
         "threshold": verdict.threshold,
+        # **WHICH POPULATION THE GATE THRESHOLDED ON, RECORDED RATHER THAN
+        # INFERRED.** Section 17's measure/print rule, fourth instance, on the
+        # same ground as `threshold` and `policy` beside it: a fact that exists
+        # nowhere else in the store. `fitted` arrived at 49f3db1 and the gate's
+        # denominator moved to it at f4eb42f, so field presence CANNOT separate
+        # a store written between those two commits -- it carries `fitted` and
+        # was decided on `eligible`. With the name written, the report infers
+        # nothing; without it, absence means `eligible`, the only denominator
+        # any gate used before f4eb42f.
+        "denominator": "fitted",
         "policy": policy.value,
         "reason": verdict.reason,
         # `fitted` IS RECORDED BECAUSE THE VERDICT WAS DECIDED ON IT

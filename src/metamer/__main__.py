@@ -53,6 +53,7 @@ from metamer.batch.run import RunReport, run
 from metamer.batch.tiling import Tile
 from metamer.batch.twopass import run_two_pass
 from metamer.batch.validation import ExitCode, ValidationError, exit_code_for, layer_of
+from metamer.core.outcomes import is_above_threshold
 from metamer.progress import LiveCounters
 
 
@@ -454,7 +455,7 @@ def _above_threshold(verdict: AbortVerdict) -> list[str]:
     return [
         rate.candidate
         for rate in verdict.rates
-        if rate.rate is not None and rate.rate > verdict.threshold
+        if is_above_threshold(rate.rate, verdict.threshold)
     ]
 
 

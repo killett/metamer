@@ -35,6 +35,7 @@ from __future__ import annotations
 
 from collections import Counter
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 from numpy.typing import NDArray
@@ -42,14 +43,28 @@ from numpy.typing import NDArray
 from metamer.core.outcomes import FailureTally, Outcome, failure_tally
 from metamer.report.reader import StoreView
 
-#: Said beside the coverage rate when the store declares no domain mask.
-#: **Present by default, because every store in existence lacks the field**
-#: until design doc section 13.6's mask lands: a caveat that has to be switched
-#: on is one nobody switches on.
+#: Said when the run recorded that it applied NO declared domain mask.
+#: **Present by default, because every run lacks a mask** until design doc
+#: section 13.6's lands: a caveat that has to be switched on is one nobody
+#: switches on.
 NO_DOMAIN_MASK_CAVEAT = (
-    "this store declares no domain mask, so out-of-domain points are "
-    "distinguishable from unreached ones only where the run wrote "
-    "NOT_APPLICABLE; the coverage denominator is a lower bound on the domain"
+    "the run that wrote this store applied no declared domain mask, so "
+    "out-of-domain points are distinguishable from unreached ones only where "
+    "it wrote NOT_APPLICABLE; the coverage denominator is a lower bound on "
+    "the domain"
+)
+
+#: Said when the store does not record the question either way.
+#: **NOT THE SAME SENTENCE AS THE ONE ABOVE, AND THE DIFFERENCE IS THE POINT.**
+#: "The run declared no mask" is a fact about the run; "this store does not say"
+#: is a fact about the record, and only the second can be resolved by a newer
+#: writer. Collapsing them would make a store written before Task 4 claim
+#: something its writer never decided -- the back-fill D12 refuses, arriving
+#: through a caveat instead of through an attr.
+UNRECORDED_DOMAIN_MASK_CAVEAT = (
+    "the run that wrote this store did not record whether it applied a "
+    "declared domain mask, so the coverage denominator is a lower bound on "
+    "the domain and no newer reading can settle it for this store"
 )
 
 
@@ -116,6 +131,33 @@ def _census(codes: NDArray[np.uint8]) -> dict[Outcome, int]:
     return {member: counted[member.code] for member in Outcome if counted[member.code]}
 
 
+def _domain_mask_caveat(attrs: dict[str, Any]) -> str | None:
+    """Whether the coverage denominator is caveated, and why.
+
+    **THE VALUE IS THE SUBJECT, NOT THE KEY.** Deciding on `"domain_mask" in
+    attrs` agrees with the truth on every store that exists today -- because no
+    store carries the field at all -- and stops agreeing the moment Task 4
+    writes it, which it does as `false` for every run until section 13.6
+    lands. **The caveat would drop on the day the field arrived**, and the
+    report would claim an exactness it does not have, through the field added
+    to give it one. Three states, three answers.
+
+    **ONLY `True` DROPS IT.** Not a truthy string, not a number: the field is a
+    boolean by the plan's own wording, so anything else is a store saying
+    something this report does not understand, and the conservative reading is
+    the caveat.
+
+    Args:
+        attrs: The store's root attrs.
+
+    Returns:
+        The caveat, or None when a mask was declared.
+    """
+    if "domain_mask" not in attrs:
+        return UNRECORDED_DOMAIN_MASK_CAVEAT
+    return None if attrs["domain_mask"] is True else NO_DOMAIN_MASK_CAVEAT
+
+
 def compute(view: StoreView) -> ReportNumbers:
     """Task 2's numbers, from a store the report never writes to.
 
@@ -149,5 +191,5 @@ def compute(view: StoreView) -> ReportNumbers:
         aggregate=failure_tally(by_branch),
         complete=view.completion.complete,
         total=view.completion.total,
-        caveat=None if "domain_mask" in view.attrs else NO_DOMAIN_MASK_CAVEAT,
+        caveat=_domain_mask_caveat(view.attrs),
     )
