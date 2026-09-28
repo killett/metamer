@@ -47,6 +47,11 @@ FAILURE_RATE_SITE_TABLE: dict[str, int] = {
     # exact defect this table exists to catch, in the exact module the
     # ruling predicted would be its first real test.
     "metamer/report/numbers.py": 0,
+    # ADDED DELIBERATELY at 2f Task 5, and zero for the third time. The
+    # selectability section counts array cells; the one relationship it
+    # checks -- `converged == fitted - failed` -- is a subtraction, not a
+    # rate, and the rates it might have been tempted to print are Task 2's.
+    "metamer/report/selectability.py": 0,
     # ADDED DELIBERATELY at 2f Task 3, and zero for the same reason: the
     # drop row's rate is the one the verdict was decided on, carried in
     # the store's own record, and the recomputation goes through

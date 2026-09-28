@@ -1527,3 +1527,151 @@ hoped for from the producer.
 > one was a renamed test a closed criterion named as its evidence; this one is a hash-seed
 > dependency. **Neither was in a file the task had opened**, which is the property that makes the
 > sweep's cost worth paying and the reason it runs last rather than being sampled.
+
+---
+
+## Plan Task 5 — selectability, audited before any code (2026-09-27)
+
+**THE BRIEF** is the plan's Task 5: three quantities from stored arrays — **fits** from
+`/selection/n_valid`, **contention** as `count(isfinite(delta_ic))` per criterion, **no winner** as
+`selected == -1` per criterion — with denominators excluding `NOT_APPLICABLE`. **Four findings, and
+the first would have shipped two different quantities under one word in one report.**
+
+### (a5) "FITS" IS ALREADY TAKEN IN THIS REPORT, AND IT MEANS SOMETHING ELSE
+
+Measured in the tree rather than read off the plan:
+
+| quantity | definition | where |
+|---|---|---|
+| `n_valid` | **`count_nonzero(outcome == OK)`** per point | `criteria.py:373`, criterion-independent by construction and by a runtime check in `write.py` |
+| Task 2's `fitted` | `count(Outcome.is_fit_verdict)` — **OK plus the eight failure codes** | `core.outcomes.failure_tally`, shipped at `c15e74e` |
+| contention | `scored & isfinite(values)` — **narrower than `n_valid`** | `criteria.py:349` |
+
+**The plan calls `n_valid` "fits". Task 2's report already prints a column called `fitted` that
+means something strictly larger.** On any store where a candidate failed, the selectability section
+and the per-candidate table would print different numbers for what a reader reasonably takes to be
+one quantity — **in the same document**. That is D1's tell, and it is not hypothetical wording: the
+tree already carries it at `criteria.py:211`, where `n_valid`'s own attribute doc reads *"Number of
+candidates that **fitted**"* for a count of `OK`.
+
+**SO THE SECTION DOES NOT USE THE WORD.** `n_valid` is *candidates that converged*; `fitted` stays
+Task 2's `is_fit_verdict` count; and the section states the relationship rather than leaving a
+reader to discover it by subtracting two numbers that look like they should match.
+
+### AND THE RELATIONSHIP IS AN IDENTITY, SO IT IS ASSERTED RATHER THAN DESCRIBED
+
+`is_fit_verdict` partitions into `OK` and the eight failures — exactly, with no third case, which is
+Task 2's nesting chain read at one point instead of over the enum. So **per point:**
+
+    n_valid == fitted − failed
+
+**That binds the two sections to each other.** If either drifts — a new member classified into
+`is_fit_verdict` but not into the OK/failure split, or a selectability section that starts counting
+`rankable` — the identity breaks and says so. **A relationship stated in prose is a claim; this one
+is arithmetic over two sections' own outputs**, which is the strongest form available and costs one
+assertion.
+
+### THE THREE QUANTITIES NEST, AND THAT IS WHY THE PLAN SAYS "THREE FACTS, NOT ONE"
+
+    rankable (contention) ⊆ n_valid (converged) ⊆ fitted (fit verdict)
+
+**Both inclusions can be strict and each strictness has its own cause.** `rankable ⊂ n_valid` when a
+fit succeeds and its criterion value is not finite — §12.5's construction, AICc at `n ≤ k + 1`,
+which is why the same point can be contended under AIC and not under HQIC. `n_valid ⊂ fitted` when a
+candidate produced a fit verdict that failed. **The plan's own invariant — "`n_valid == 1` is not
+'the selection was forced'" — is this nesting stated at one value**, and the report must not collapse
+it: a point with `n_valid == 1` may have had ten rankable candidates under another criterion.
+
+### THE FLOAT32 CAVEAT IS CONSTRUCTIBLE, SILENT, AND WARNED — ALL THREE MEASURED
+
+`/selection/delta_ic` is **float32** and the ranker computes in **float64**, so a delta finite in
+float64 and larger than ~3.4e38 becomes `inf` on write. **Measured: `np.float32` takes 1e39 to
+`inf`, emitting a `RuntimeWarning` and no error.** So a contention count taken over the stored array
+is biased by the storage dtype, silently, in the direction of *fewer* rankable candidates.
+
+**REACHABILITY IS STATED RATHER THAN ASSUMED, AS IT WAS FOR THE DOMAIN MASK'S TRUE ARM.** The test
+plants the value; whether real data reaches 1e39 in a delta-IC is **not established here** and the
+test says so. §14.2 calls this worth a test rather than a schema change, and a test for a state
+nobody has observed must say that nobody has observed it — otherwise a later reader reasons about
+real stores from a branch nothing has ever written.
+
+### AND `selected` HAS THREE STATES, TWO OF WHICH ARE NEGATIVE
+
+`-1` is *no winner* and `-2` is `SELECTED_UNSET`, *nothing wrote here*. **Any test of "is this a
+no-winner point" written as a truthiness or a sign check reads them alike** — `bool(-1)` and
+`bool(-2)` are both `True`, and `< 0` catches both. The store's own fill-value table exists because
+this distinction is load-bearing: an interrupted run is full of `-2`, and counting those as
+no-winner would report a selection failure that is really an absence of information. **The same
+shape as `NOT_ATTEMPTED` in the branch table**, one array over.
+
+---
+
+## Plan Task 6 — the clustering statistic and its null, audited before any code (2026-09-27)
+
+**THE BRIEF** is the plan's Task 6: join-count on the binary failure indicator, rook adjacency in
+index space, over the `is_fit_verdict` population (D3), per candidate with an aggregate (D7),
+against a permutation null holding the eligible mask fixed (D5), reported as count / null median and
+quantiles / z / p. **Four findings, and the first is an enumeration that is one member short of the
+population it describes.**
+
+### (c5) THE LAST TEST NAMES FOUR NON-FIT MEMBERS AND `is_fit_verdict` EXCLUDES FIVE
+
+The plan's final test says *"`NOT_APPLICABLE`, `CANDIDATE_DROPPED`, `SCREENED_OUT` and
+`NOT_ATTEMPTED` cells are all absent from the graph"*. **§12.5's grouping table names five non-fit
+codes, and the fifth is `INSUFFICIENT_DATA`** — confirmed against `Outcome`'s own predicate table,
+where it reads `is_fit_verdict: no`.
+
+**AND IT IS THE ONE MOST LIKELY TO BE GOT WRONG, WHICH IS WHY THE OMISSION MATTERS.** It is the
+member open question 24 moved: `is_eligible` went False → True on 2026-09-20, and it is now
+**eligible, covered, and not a fit verdict** — the only member with that combination. A graph built
+on `is_eligible` rather than `is_fit_verdict` admits it, which is precisely the failure the test
+exists to catch, and **the test as written would not look for it.** The enumeration is over the
+predicate, not a list: every member with `is_fit_verdict: no` is absent, asserted as a set.
+
+### THE ALGORITHM ALREADY EXISTS IN A FROZEN HARNESS, AND A SECOND IMPLEMENTATION IS CORRECT HERE
+
+`docs/superpowers/notes/phase2f-clustering-harness.py` carries `rook_edges`, `join_count` and
+`permutation_null` — Task 0's apparatus, and **the apparatus of numbers this project is still
+quoting**. (j8)'s third register: rewriting it rewrites closed evidence, so it does not move and
+production code is written beside it in `src`.
+
+**THAT IS A SECOND SPELLING OF ONE ALGORITHM, AND THE HANDOFF NAMES THIS AS THE EXCEPTION TO (j9)
+RATHER THAN A VIOLATION OF IT**: *"one is the current value, the other is a record of a past value.
+Collapsing them destroys the record."* The test of which you are looking at is whether changing the
+production code **should** change the harness — it should not.
+
+**SO THE DIVERGENCE IS CLOSED THE WAY PHASE 2d CLOSED IT: BY BINDING THE NEW CODE TO THE COMMITTED
+RECORD.** `phase2f-clustering-measured.jsonl` carries **deterministic, RNG-free** quantities —
+`unwrapped_edges = 12798` and `unwrapped_observed = 340` at `height = 90` in the P4 seam record — so
+the production `rook_edges` and `join_count` reproduce a number **taken from the committed artifact,
+not from the harness's source**. A binding that read the harness would be comparing the new
+implementation against the old implementation; this compares it against the old implementation's
+published output, which is what the record is for.
+
+### `CLUSTERING_SEED` IS A TASK-6 EXIT ITEM AND IT IS MECHANICAL
+
+The do-not-move list is in the plan's **standing requirements** and currently reads
+`PUBLISHED_TILE_SIDE`, `resident_bytes_per_series`, `output_slot_bytes`, `SVD_CHUNK_SERIES`,
+`HEADROOM_FRACTION`, `ALGORITHM_VERSION`, `FIELD_SEED`, `HESSIAN_COND_LIMIT`, or any `Outcome` code.
+**Task 6 is not done until `CLUSTERING_SEED` is on it**, because D5's *"joins that list"* is a
+promise with no owner while the constant does not exist.
+
+**AND IT IS A NEW CONSTANT, NOT `SPIKE_SEED`.** The harness's `SPIKE_SEED = 20260919` is a **record
+of the draw Task 0 took**; the production seed keys every p the report will publish. Two different
+things, and the 2d field-seed instance is the precedent for keeping both: consolidating the current
+value into `src` was right, rewriting the harnesses to import it was not.
+
+> **AND THE BUILDER TAKES ITS SEED EXPLICITLY**, per the same handoff paragraph: *"a value that KEYS
+> THE DRAW arriving silently at a caller that never named it is the failure the constant exists to
+> make visible — a default would automate it."* So the null's entry point requires the seed rather
+> than defaulting to the constant, and the report passes it.
+
+### THE FLOOR'S WORDING IS THE FINDING, NOT THE FLOOR
+
+500 is **a ladder rung, not a boundary**: 200 failed and 500 passed, so the true threshold lies in
+**(200, 500]** and 500 is *the smallest tested size demonstrated uniform*. **The invariant is stated
+that way in the code, or a later reader takes it for a measured threshold with a precision it does
+not have** — the same discipline as a constant that names which side of it was measured.
+
+**AND THE UNAVAILABILITY MESSAGE NAMES THE FLOOR AND ITS PROVENANCE**, because an unavailable
+quantity that does not say why is the (a2b) defect this sub-phase has refused four times already.
