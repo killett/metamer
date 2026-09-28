@@ -62,6 +62,12 @@ class StoreView:
             fit ran.
         model_labels: The `m` axis's labels, as the store carries them.
         criterion_labels: The `c` axis's labels.
+        spatial: The grid's coordinate values, keyed by **this store's own
+            axis names** -- `x`/`y` on an indexed input, `longitude`/`latitude`
+            on a geographic one. **Empty when the store wrote none**, which is
+            the answer rather than a failure. Added at 2f Task 6, which needs
+            the `x` span to decide whether a grid is global; before that
+            nothing in the report read a coordinate, so nothing surfaced one.
         attrs: The root attributes.
         completion: The bitmap's counts.
         disagreements: Contradictions between two records in this store,
@@ -76,9 +82,46 @@ class StoreView:
     iterations: NDArray[np.uint16]
     model_labels: tuple[str, ...]
     criterion_labels: tuple[str, ...]
+    spatial: dict[str, NDArray[np.float64]]
     attrs: dict[str, Any]
     completion: Completion
     disagreements: tuple[str, ...]
+
+
+def _spatial(root: zarr.Group) -> dict[str, NDArray[np.float64]]:
+    """The grid's coordinate values, by the store's own axis names.
+
+    **READ FROM `/status/`, WHICH IS WHERE THE OUTCOME ARRAY LIVES.** The
+    writer puts a copy of each spatial coordinate into every group that has
+    spatial dimensions, so any of them would do; taking them from the group the
+    clustering population comes from is the one that cannot describe a
+    different grid from the one being counted.
+
+    **ABSENT IS THE ANSWER, NOT AN ERROR.** A store that wrote no coordinates
+    -- `spatial_coordinates_written` empty -- yields an empty mapping, and the
+    caller treats an unmeasurable span the way design doc D4 says to: as not
+    global.
+
+    Args:
+        root: The opened store.
+
+    Returns:
+        Axis name to values, empty when the store carries none.
+    """
+    written = root.attrs.get("spatial_coordinates_written")
+    if not isinstance(written, list):
+        return {}
+    values: dict[str, NDArray[np.float64]] = {}
+    for name in written:
+        try:
+            values[str(name)] = np.asarray(
+                _array(root, f"status/{name}")[:], dtype=np.float64
+            )
+        except InputContractError:
+            # The attr names an axis the group does not carry. Reported by
+            # absence rather than by raising: D6, a store is described.
+            continue
+    return values
 
 
 def _array(root: zarr.Group, path: str) -> zarr.Array[Any]:
@@ -239,6 +282,7 @@ def read_store(path: Path | str) -> StoreView:
         criterion_labels=tuple(
             str(name) for name in np.asarray(_array(root, "selection/c")[:]).tolist()
         ),
+        spatial=_spatial(root),
         attrs=attrs,
         completion=Completion(
             complete=int(np.count_nonzero(tiles)), total=int(tiles.size)

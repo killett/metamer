@@ -1675,3 +1675,41 @@ not have** — the same discipline as a constant that names which side of it was
 
 **AND THE UNAVAILABILITY MESSAGE NAMES THE FLOOR AND ITS PROVENANCE**, because an unavailable
 quantity that does not say why is the (a2b) defect this sub-phase has refused four times already.
+
+### TASK 6, AS BUILT (2026-09-28) — TWO THINGS THE CODE TURNED UP
+
+**1. THE READER DID NOT EXPOSE A COORDINATE, AND THE TWO-ARM ZONE IS DEFINED IN DEGREES.** D4 fires
+both arms when the `x` span is *within a couple of cells of 360°* — a measurement in the grid's own
+units — and `StoreView` carried no spatial coordinates at all. They exist in the store (`/status/x`,
+`/status/y`, keyed by **this store's own axis names**, with `spatial_coordinates_written` in root
+attrs) and nothing in the report had ever needed one, so nothing surfaced one.
+
+**The reader gained the field rather than clustering opening the store itself**, which would have
+been a second reader of the same bytes — the defect this sub-phase has now refused under three
+different names. It is additive: absent coordinates yield an empty mapping, which is the answer and
+not a failure.
+
+> **AND THE AMBIGUITY RULE WAS ALREADY DECIDED, WHICH MADE THE REST MECHANICAL.** D4 says *every
+> ambiguous case fails toward not-wrapping* — so an unrecognised axis name, a store with no
+> coordinates, or fewer than two values all yield **no span**, and an unknown span is not a global
+> grid. The report prints which of those it found instead of asserting a policy.
+
+**2. A TOLERANCE PICKED BY EYE FAILED, AND THE FIX WAS TO DERIVE IT.** The seed-reproducibility test
+first asserted that two seeds' `z` agree within **5%**; the measured difference was **5.5%**, and my
+reflex was that the bound was nearly right. **It was not derived at all.**
+
+`z = (observed - mean) / sd`, so at large `z` the relative error is dominated by the relative error
+in the null's `sd`, whose sampling standard deviation over `P` draws is `1 / sqrt(2(P - 1))`. Two
+independent seeds differ by `sqrt(2)` times that: at `P = 999`, one sigma is **3.2%** and three
+sigma is **9.5%**. The measured 5.5% is **1.7 sigma — an ordinary draw.**
+
+> **A TOLERANCE THAT CANNOT BE DERIVED IS ONE THAT GETS LOOSENED UNTIL IT PASSES, AND THE LOOSENING
+> IS INDISTINGUISHABLE FROM THE DEFECT.** This is the eps-derived-constants rule arriving in a test
+> rather than in `src`: count what the quantity is made of and read the exponent off, rather than
+> picking a round number and tuning it when it fires. **The failing run is what made it visible** —
+> a 5% bound that happened to pass would have shipped as a number nobody could justify.
+
+**AND THE GOLDEN TABLE RECORDS THE FIRST REPORT MODULE THAT IS NOT ZERO.** `clustering.py` has
+**three** divisions — the z, the p, and the cell width the span is measured in. **None is a failure
+rate**, which is the quantity that table protects, and the row says so: a fourth division appearing
+there should be read as one until shown otherwise.

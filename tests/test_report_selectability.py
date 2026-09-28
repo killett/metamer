@@ -59,6 +59,7 @@ def _view(
         criterion_labels=criteria,
         attrs={},
         completion=Completion(complete=1, total=1),
+        spatial={},
         disagreements=(),
     )
 

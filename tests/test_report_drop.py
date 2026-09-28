@@ -280,6 +280,7 @@ def _bare_view(store: pathlib.Path) -> StoreView:
         criterion_labels=("aic",),
         attrs=dict(zarr.open_group(str(store), mode="r").attrs),
         completion=Completion(complete=1, total=1),
+        spatial={},
         disagreements=(),
     )
 

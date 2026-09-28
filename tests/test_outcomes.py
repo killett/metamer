@@ -52,6 +52,16 @@ FAILURE_RATE_SITE_TABLE: dict[str, int] = {
     # checks -- `converged == fitted - failed` -- is a subtraction, not a
     # rate, and the rates it might have been tempted to print are Task 2's.
     "metamer/report/selectability.py": 0,
+    # ADDED AT 2f Task 6, AND IT IS THE FIRST REPORT MODULE THAT IS NOT
+    # ZERO -- so the reason is here rather than left for a reviewer to
+    # reconstruct. The three divisions are the STATISTIC itself, not a
+    # rate over the taxonomy: `(observed - mean) / sd` is the z,
+    # `(1 + at_least) / (1 + permutations)` is the p, and
+    # `span / (columns - 1)` is the cell width the two-arm zone is
+    # measured in. **None of them is a failure rate**, which is the
+    # quantity this table protects; a fourth division appearing here
+    # should be read as one until shown otherwise.
+    "metamer/report/clustering.py": 3,
     # ADDED DELIBERATELY at 2f Task 3, and zero for the same reason: the
     # drop row's rate is the one the verdict was decided on, carried in
     # the store's own record, and the recomputation goes through

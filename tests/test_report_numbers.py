@@ -74,6 +74,7 @@ def _view(
         criterion_labels=("aic",),
         attrs=attrs if attrs is not None else {},
         completion=Completion(complete=completion[0], total=completion[1]),
+        spatial={},
         disagreements=(),
     )
 

@@ -642,7 +642,16 @@ And two clarifications that are not defects:
   say so and it becomes REDUCED**; this is the one finding of the ten I did not take as written.
 - **No task moves** `PUBLISHED_TILE_SIDE`, `resident_bytes_per_series`, `output_slot_bytes`,
   `SVD_CHUNK_SERIES`, `HEADROOM_FRACTION`, `ALGORITHM_VERSION`, `FIELD_SEED`, `HESSIAN_COND_LIMIT`,
-  or any `Outcome` code. **2f adds no `Outcome` member.**
+  **`CLUSTERING_SEED`** (added 2026-09-28 at Task 6, which is when the constant began to exist —
+  D5 said it "joins" this list, and a list cannot contain a constant that does not exist yet, so
+  until Task 6 landed that was a promise with no owner), or any `Outcome` code. **2f adds no
+  `Outcome` member.**
+
+  > **`CLUSTERING_SEED` IS NOT THE SPIKE'S SEED AND BOTH STAY.** Task 0's harness carries
+  > `SPIKE_SEED = 20260919`, which is *a record of the draw Task 0 took*; `CLUSTERING_SEED` keys
+  > every p the report publishes. The handoff names this as the stated exception to (j9) — one is
+  > the current value, the other a record of a past one — and the Phase 2d field-seed instance is
+  > the precedent for keeping both rather than collapsing them.
 - **The report never writes to the store it reads.** Task 4's write-path change is the run's, not the
   report's, and says so.
 - **Every rate names its denominator at the row**, and every unavailable quantity names its reason
