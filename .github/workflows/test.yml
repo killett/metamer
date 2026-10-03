@@ -42,6 +42,36 @@ jobs:
         # here overstates what is supported.
         os: [ubuntu-latest]
         python-version: ["3.12", "3.13", "3.14"]
+        # **EXACTLY ONE JOB INSTALLS [report], AND THAT IS DELIBERATE (T7-2).**
+        # matplotlib is behind that extra and `report/maps.py` imports it inside
+        # the function, so D10 has two halves that need two environments: WITH the
+        # extra the maps are actually drawn and their colour limits checked; WITHOUT
+        # it the no-matplotlib path runs and the report's "maps were not drawn"
+        # sentence is exercised. One environment can only ever test one half.
+        #
+        # Before this, CI had no matplotlib at all -- which is why
+        # tests/test_readme_figure.py failed in CI on its first push -- so the
+        # drawing tests skipped in every job and nothing checked them. A silent
+        # skip in all three jobs looks exactly like a pass.
+        #
+        # The extras are spelled per entry rather than defaulted, so adding a
+        # Python version makes its maps environment a decision rather than an
+        # inherited blank. `tests/test_report_maps.py` asserts that this matrix
+        # still covers both halves, and every run prints which half it was.
+        #
+        # **EVERY `include` ENTRY MATCHES AN EXISTING `python-version`, AND THAT IS
+        # LOAD-BEARING RATHER THAN STYLISTIC.** An `include` whose keys are all NEW
+        # is merged into *every* combination, so dropping `python-version` from the
+        # base matrix and listing it only here does not produce three jobs -- it
+        # produces one, with three includes competing to set the same key. The
+        # version must be in the base matrix for `extras` to attach per job.
+        include:
+          - python-version: "3.12"
+            extras: "test,batch"
+          - python-version: "3.13"
+            extras: "test,batch,report"
+          - python-version: "3.14"
+            extras: "test,batch"
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -59,8 +89,8 @@ jobs:
       # sys.modules after importing metamer.core, so it measures the import graph
       # rather than what happens to be installed; and by tests/test_packaging.py,
       # which builds its own venv and installs the wheel with --no-deps.
-      - name: Install the package with its test and batch extras
-        run: pip install ".[test,batch]"
+      - name: Install the package with this job's extras
+        run: pip install ".[${{ matrix.extras }}]"
       # pytest is configured with pythonpath = ["src"], so the suite below runs
       # against the working tree rather than the installed distribution. This step
       # is what actually exercises the installed package: it runs from outside the

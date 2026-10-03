@@ -67,6 +67,37 @@ FAILURE_RATE_SITE_TABLE: dict[str, int] = {
     # the store's own record, and the recomputation goes through
     # `failure_tally`. Nothing here divides.
     "metamer/report/drop.py": 0,
+    # ADDED AT 2f Task 7, AND THE COUNT IS 4 WHILE THE MODULE's ONLY REAL
+    # DIVISION IS NOT ONE OF THEM -- so this row records two blind spots in
+    # the instrument rather than four divisions.
+    #
+    # The four `ast` division nodes are: `-(-length // MAX_BLOCKS)` and the
+    # two halves of `-(-rows // side[0]), -(-columns // side[1])`, which are
+    # CEIL DIVISIONS computing a downsampled shape; and
+    # `out_dir / f"{stem}.png"`, which is **`pathlib.Path.__truediv__` -- a
+    # path join, not arithmetic at all.**
+    #
+    # **AND THE BLOCK FRACTION, WHICH IS THE ONE QUANTITY HERE A READER WOULD
+    # WANT THIS TABLE TO SEE, IS INVISIBLE TO IT.** It is written
+    # `np.divide(counts, totals, out=..., where=...)` -- an `ast.Call`, not an
+    # `ast.BinOp` -- so the walker does not count it. The count would be
+    # IDENTICAL if that line were deleted.
+    #
+    # So the row is pinned at what the instrument observes, which is this
+    # table's stated discipline (don't count what you can't classify; pin what
+    # you can observe), with the gap named: **a division expressed as a
+    # function call is outside this table's reach**, and that now includes
+    # every `np.divide`, `np.true_divide` and `operator.truediv`. The third
+    # named gap, beside "a new harness need not call `failure_tally`" and "a
+    # rate over raw integer codes never referencing `Outcome`".
+    #
+    # On the fraction itself: it is failures over the SAME predicate the
+    # statistic uses (D9's invariant), applied per block rather than per
+    # store, and it does not go through `failure_tally` because that returns a
+    # scalar tally for a census and this needs a per-block array. Not a second
+    # definition of the store-level rate -- the same population, reduced
+    # differently.
+    "metamer/report/maps.py": 4,
 }
 
 

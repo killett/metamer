@@ -57,6 +57,17 @@ test = [
     "build>=1.2",
     "hatchling>=1.27",
     "hatch-vcs>=0.4",
+    # PyYAML is here because tests/test_report_maps.py READS THE CI WORKFLOW to
+    # assert that one matrix job installs [report] and at least one does not
+    # (T7-2). It is present in the pixi dev environment as a transitive
+    # dependency of pre-commit and is a dependency of NOTHING in this extra, so
+    # the test passed locally and would have died in CI on
+    # `ModuleNotFoundError: No module named 'yaml'`.
+    #
+    # Third instance of the same shape: build/hatchling above, and
+    # tests/test_readme_figure.py's matplotlib. The development environment
+    # cannot test the shipped artifact -- see the handoff's standing rule.
+    "pyyaml>=6",
 ]
 # The batch layer -- metamer.batch and metamer.config -- and nothing else. These
 # are deliberately NOT in [project.dependencies]: metamer.core must stay usable
@@ -87,6 +98,25 @@ batch = [
     # is invisible to it. That check guards "imported but undeclared"; this entry
     # is a case it cannot reach, and it is declared by hand for that reason.
     "cftime>=1.6",
+]
+# The maps, and nothing else. `metamer.report`'s numbers path is the half that
+# has to work on someone else's store, so matplotlib is NOT in [batch]: putting
+# it there would make every headless compute node running a fit install a
+# plotting stack, which is not what that extra means (D10).
+#
+# THE LAZY IMPORT DOES NOT REPLACE THIS DECLARATION AND WAS NEVER MEANT TO.
+# `maps.py` imports matplotlib inside `draw`, which buys portability AT RUN TIME
+# -- the report emits every number where matplotlib is absent. Declaration is a
+# different claim, about what the distribution asks for. tests/test_packaging.py
+# walks function bodies with `ast`, so a lazily imported third-party module is a
+# declared-dependency question exactly like an eager one and fails that test
+# until it appears both here and in _MODULE_TO_DISTRIBUTION.
+#
+# matplotlib's floor is bounded rather than pinned, per the handoff's
+# pin-versus-bound rule: `with_extremes` and `colormaps` are both long-settled
+# API and harmless drift is the common case here.
+report = [
+    "matplotlib>=3.9",
 ]
 
 [project.urls]
@@ -192,6 +222,15 @@ ignore_missing_imports = true
 # or `360_day` axis. Declared centrally, same pattern as scipy above.
 [[tool.mypy.overrides]]
 module = ["cftime.*"]
+ignore_missing_imports = true
+
+# PyYAML's stubs are a separate distribution (types-PyYAML) and the only importer
+# is tests/test_report_maps.py, which parses the CI workflow to hold T7-2's
+# two-environment matrix in place. Declaring ignore_missing_imports here rather
+# than adding a stub-only package to the test extra: the test reads two keys out
+# of a dict and gains nothing from the stubs, and the extra is what CI installs.
+[[tool.mypy.overrides]]
+module = ["yaml"]
 ignore_missing_imports = true
 
 # threadpoolctl ships no type stubs. It is the mechanism behind the OBSERVED

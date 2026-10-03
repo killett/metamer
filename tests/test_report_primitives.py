@@ -21,6 +21,7 @@ import xarray as xr
 
 from metamer.batch.run import run
 from metamer.batch.store import ITERATIONS_UNSET, N_VALID_UNSET
+from metamer.core.outcomes import Outcome
 from metamer.report.primitives import NOT_RECORDED, compute
 from metamer.report.reader import Completion, StoreView, read_store
 
@@ -33,6 +34,13 @@ signal_terms = ["constant", "trend"]
 candidates = ["white", "white + matern12"]
 criteria = ["aic"]
 """
+
+
+#: The store's own flag attributes, as `reader._legend` returns them. These
+#: helpers plant an outcome cube directly rather than opening a store, so the
+#: legend is supplied the same way -- from `Outcome`, which is what the writer
+#: builds it from.
+_LEGEND = {member.code: str(member.value) for member in Outcome}
 
 
 def _view(
@@ -57,6 +65,7 @@ def _view(
         completion=Completion(complete=1, total=1),
         spatial={},
         disagreements=(),
+        legend=_LEGEND,
     )
 
 

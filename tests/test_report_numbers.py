@@ -37,6 +37,13 @@ criteria = ["aic", "hqic"]
 """
 
 
+#: The store's own flag attributes, as `reader._legend` returns them. These
+#: helpers plant an outcome cube directly rather than opening a store, so the
+#: legend is supplied the same way -- from `Outcome`, which is what the writer
+#: builds it from.
+_LEGEND = {member.code: str(member.value) for member in Outcome}
+
+
 def _plane(census: dict[Outcome, int]) -> list[int]:
     """One candidate's cells, as raw codes, from a census written by hand."""
     codes: list[int] = []
@@ -76,6 +83,7 @@ def _view(
         completion=Completion(complete=completion[0], total=completion[1]),
         spatial={},
         disagreements=(),
+        legend=_LEGEND,
     )
 
 

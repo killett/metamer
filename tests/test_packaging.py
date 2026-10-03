@@ -82,6 +82,11 @@ _MODULE_TO_DISTRIBUTION = {
     "zarr": "zarr",
     "pydantic": "pydantic",
     "threadpoolctl": "threadpoolctl",
+    # Lazily imported inside `report.maps.draw` and declared in the [report]
+    # extra. `_third_party_imports` walks with `ast.walk`, so it finds imports
+    # in function bodies -- which is why a lazy import still has to be routed
+    # through here rather than around it.
+    "matplotlib": "matplotlib",
 }
 
 # Modules the wheel must ship. Enumerated, never counted -- an asserted count is

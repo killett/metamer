@@ -39,6 +39,13 @@ _SPIKE_RECORD = (
 )
 
 
+#: The store's own flag attributes, as `reader._legend` returns them. These
+#: helpers plant an outcome cube directly rather than opening a store, so the
+#: legend is supplied the same way -- from `Outcome`, which is what the writer
+#: builds it from.
+_LEGEND = {member.code: str(member.value) for member in Outcome}
+
+
 def _seam_rows() -> list[dict[str, object]]:
     """Task 0's P4 seam records, read from the committed artifact."""
     return [
@@ -66,6 +73,7 @@ def _view(
         completion=Completion(complete=1, total=1),
         spatial=spatial if spatial is not None else {},
         disagreements=(),
+        legend=_LEGEND,
     )
 
 
@@ -237,11 +245,35 @@ def test_the_same_seed_repeats_and_a_different_seed_lands_within_the_nulls_sprea
     from the permutation count rather than picked.** `z = (observed - mean) /
     sd`, so for a large z the relative error in z is dominated by the relative
     error in the null's `sd`, whose sampling standard deviation over `P` draws
-    is `1 / sqrt(2 (P - 1))`. Two independent seeds differ by `sqrt(2)` times
-    that, so at `P = 999` one standard deviation of `|dz| / |z|` is
-    `sqrt(2 / 1996) = 3.2%` and a 3-sigma bound is **9.5%**. That is the number
-    asserted, and it is a bound on sampling error rather than a threshold
-    fitted to an observed run.
+    is `1 / sqrt(2 (P - 1))` -- **2.238% for ONE seed at `P = 999`.** Two
+    independent seeds differ by `sqrt(2)` times that, so one standard deviation
+    of `|dz| / |z|` is `sqrt(2 / 1996) = 3.165%` and a 3-sigma bound is
+    **9.496%**. That is the number asserted, and it is a bound on sampling error
+    rather than a threshold fitted to an observed run.
+
+    **THE PER-SEED FIGURE IS SPELLED OUT BECAUSE ITS ABSENCE CAUSED AN ERROR.**
+    An account of this derivation written from `sqrt(2 / 1996)` alone reported
+    "3.2% per seed, 4.5% for two" -- each `sqrt(2)` too large, and each
+    contradicting the same account's own conclusions, since three times 4.5% is
+    13.5% rather than 9.5% and 5.5 / 4.5 is 1.22 sigma rather than 1.7. **A
+    derivation wrong in the middle and right at the end is more dangerous than
+    one wrong throughout**, because the end agrees with the code and invites a
+    reader to repair the code to match the middle. Both figures appear here now,
+    so neither has to be re-derived.
+
+    **AND THE FORMULA ASSUMES A NORMAL NULL, WHICH THIS FIXTURE SATISFIES --
+    MEASURED, NOT ASSERTED.** `1 / sqrt(2 (P - 1))` is the normal case; a skewed,
+    sparse-failure null has a standard error larger by `sqrt((kappa - 1) / 2)`
+    for kurtosis `kappa`. On this fixture -- a 20x20 patch in a 40x40 all-true
+    mask -- the null measures **background rate 0.25, skewness +0.0135,
+    kappa 2.8932**, so the inflation factor is **0.9729** and the bound is
+    conservative by 1.028x. Slightly platykurtic, which is the safe direction.
+
+    **THE LIMIT, SO NOBODY GENERALISES THIS BOUND:** 0.25 is dense. The sparse
+    regime the inflation factor warns about is what a real store presents -- a
+    map-scale grid with a 0.5% failure rate -- and there the factor must be
+    computed rather than dismissed. This tolerance is derived for this fixture's
+    regime only.
 
     Bug this catches: an unseeded null, which makes every reported p
     irreproducible and every comparison between two reports meaningless.

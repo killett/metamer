@@ -1743,9 +1743,31 @@ must be routed through this test rather than around it."*
 > once. Task 7 adds: the extra, the `_MODULE_TO_DISTRIBUTION` row, and nothing else to the base
 > dependency set.
 
+### CORRECTION, FOUND WHILE WRITING THE CODE — THE BRIEF CONTRADICTS ITS OWN DECISION, AND THIS ENTRY COPIED THE STALE HALF
+
+**Task 7's *Behaviour* paragraph says *"`viridis`; fixed code-to-colour; legend from the store's own
+`flag_meanings`"*. D9 STRIKES BOTH OF THOSE, BY NAME, AND SAYS WHY:** *"those are properties of the
+categorical design this decision refuses. On a binary fraction map in `viridis` a branch has no
+colour — it has a map — and `flag_meanings` supplies the **title**, not a legend."* Task 7's own
+test list agrees with D9 — its last test reads *"the map's title names the branch from the store's
+own `flag_meanings`"*. **So the Behaviour line is the stale one and the decision plus the tests are
+the live brief.**
+
+> **AND THIS ENTRY REPEATED THE STALE HALF, WHICH IS THE EXACT FAILURE D9 CLOSES WITH.** The
+> paragraph below originally opened *"the plan requires the legend to come from the store's own
+> `flag_meanings`"* — the struck requirement, carried forward as though it were live. D9's closing
+> sentence is *"rejecting a design and keeping two of its requirements is how a refused design
+> survives in its own replacement"*, and a pre-flight written from the Behaviour paragraph instead
+> of from the decision is precisely that mechanism. **(f) is the rule — does the brief contradict
+> something already settled — and the answer was yes, in the brief's own document.**
+
+**WHAT IS BUILT: no legend, no fixed code-to-colour, and `flag_meanings` supplies the title.** The
+reader still needs the legend arrays, because the title needs the meanings — so T7-3 stands
+unchanged, and only the consumer of its field moves.
+
 ### THE READER DOES NOT EXPOSE `flag_meanings`, AND THIS IS THE SECOND TASK RUNNING TO FIND THAT
 
-The plan requires the legend to come from *the store's own `flag_meanings`*. The store writes it —
+**The title** must come from *the store's own `flag_meanings`*. The store writes it —
 `store.py:959`, into the `/status/` arrays' attrs, built from the enum — but **it is an ARRAY
 attribute, not a root one**, and `StoreView.attrs` carries only root attrs. So it is unreachable
 through the reader, exactly as the spatial coordinates were one task ago.
@@ -1953,3 +1975,123 @@ trigger the engine-narrowing test is already filed at, beside P4″. **Filed as 
 paragraph as its evidence; the repair is one line (`Literal` or an `EngineId` coercion at the config
 boundary) and the reason it is not taken here is that a config-validation change belongs to a task
 that sweeps config, not to the maps task.
+
+---
+
+## TASK 7, AS BUILT (2026-10-03) — FIVE THINGS THE RULINGS DID NOT COVER
+
+**T7-1, T7-2 and T7-3 are implemented as written.** What follows is only what the code turned up
+beyond them, per the instruction to add to the pre-flight for nothing else.
+
+### 1. TWO MEMBERS ARE IN NEITHER POPULATION, AND MAPPING THEM OVER COVERED CELLS IS A SECOND FORM OF THE SAME DEFECT
+
+T7-1 gives two populations — fit-verdict cells for failure maps, covered cells for coverage maps.
+**Checked against the enum rather than assumed, and `NOT_ATTEMPTED` (8) and `NOT_APPLICABLE` (13) are
+neither `is_fit_verdict` nor `is_covered`.** The first draft of `plan_maps` sent every non-fit branch
+down the coverage path, which for those two computes `0 / covered` in **every block** — an all-zero
+map of a branch that is **present**, rendering under fixed limits as uniform dark purple and reading
+as *this never happens*.
+
+> **AND THE BRANCH IT HAPPENS TO IS THE ONE AN INTERRUPTED STORE IS FULL OF.** `NOT_ATTEMPTED` is
+> what a killed run leaves behind, so the map that would have lied is exactly the map somebody reads
+> to find out how far a run got. **This is the mean-of-codes defect's shape reached through the
+> denominator instead of the numerator** — not a wrong picture, a plausible one — which is why the
+> repair is to refuse the map and **name the branch in `unmapped` with its reason**, rather than to
+> pick a third denominator. Dropping it silently is the same error one step quieter.
+
+### 2. THE PLAN CONTRADICTS ITS OWN DECISION, AND THIS PRE-FLIGHT HAD COPIED THE STALE HALF
+
+Recorded in full at the correction above. Task 7's **Behaviour** paragraph still says *"fixed
+code-to-colour; legend from the store's own `flag_meanings`"*; **D9 strikes both by name** and says
+`flag_meanings` supplies the **title**. Task 7's own test list agrees with D9. **The decision and the
+tests are the live brief; the Behaviour line is stale** — and the entry written before the code had
+carried the stale line forward, which is (f) answered yes inside a single document.
+
+### 3. THE READER's LEGEND IS READ THROUGH CONSOLIDATED METADATA, WHICH A TEST FOUND BY FAILING
+
+The mismatched-pair test mutated `/status/outcome`'s attrs through `zarr.open_group(mode="r+")` and
+then **read the original legend back**. The store carries **consolidated metadata** and the reader
+opens the group plainly, so the root's consolidated copy of the array attrs is what it sees; an edit
+to the array alone leaves the stale pair in place. The test re-consolidates, and the finding is
+recorded at the test.
+
+> **THE PROPERTY THIS IMPLIES IS NOT TESTED AND IS NAMED HERE RATHER THAN LEFT IMPLICIT:** a store
+> whose consolidated metadata disagrees with its arrays will have the report describe the
+> **consolidated** copy. That is one more instance of *a store is described, not repaired* (D6), and
+> nothing in the suite asserts the two agree. **Filed for Task 8's `_disagreements`**, which already
+> exists to report contradictions between two records in one store and is the right owner.
+
+### 4. A `pyyaml` IMPORT IN A TEST WAS THE `test_readme_figure` TRAP, THIRD INSTANCE
+
+T7-2's matrix is held in place by a test that **reads the workflow**, which needs `yaml`. `pyyaml`
+6.0.3 is in the pixi environment as a transitive dependency of `pre-commit` and is a dependency of
+**nothing in the `[test]` extra** — measured with `importlib.metadata`, and `pytest` does not require
+it. **So the test passed locally and would have died in CI on `ModuleNotFoundError: No module named
+'yaml'`**, which is the failure this project has already had twice: `build`/`hatchling`, and
+`test_readme_figure`'s matplotlib. Declared in `[test]` with that reasoning at the entry.
+
+### 5. A GITHUB ACTIONS `include` WHOSE KEYS ARE ALL NEW COLLAPSES THE MATRIX, AND IT ALMOST SHIPPED
+
+The first version of T7-2's matrix moved `python-version` **out** of the base matrix and listed it
+only under `include`, one entry per version with its extras. **That does not produce three jobs.** An
+`include` entry whose keys are all new is merged into *every* existing combination, so with a base of
+`{os: [ubuntu-latest]}` the three entries compete to set one key on one job — **and the two-environment
+coverage T7-2 exists to create would have silently become one environment.** The version is back in
+the base matrix so each `include` entry *matches* an existing combination and attaches `extras` to it.
+
+> **THE TEST ASSERTS THE EXPANDED JOB COUNT, NOT THE `include` COUNT**, which is the only form that
+> tells the two apart: three include entries are present in both the working and the broken version.
+> **A silent skip in every job is indistinguishable from a pass**, which is T7-2's own argument, and
+> this is that argument one level down in the configuration that implements it.
+
+### AND THE SKIP CHANNEL IS BUILT EVEN THOUGH THE CI JOB MAKES IT OPTIONAL
+
+T7-2 offered the skip-counting as the alternative to the second environment. **Both are built**,
+because the `skipif` marks stay in the source: a matrix that stopped installing the extra — a rename,
+a dropped row, a typo — would skip every drawing test and stay green. So every run now prints
+`maps environment: matplotlib PRESENT|ABSENT` **on both branches**, beside the RSS section, under
+handoff §2's rule that a measurement surfacing only on failure is not a record.
+
+### 6. THE SWEEP FAILED AGAIN IN A FILE THE TASK NEVER OPENED, AND THE GOLDEN TABLE FOUND TWO BLIND SPOTS IN ITSELF
+
+**`pixi run test`: 1 failed, 1592 passed, 1:41:30** — and the one failure was
+`test_the_rate_site_table_is_pinned_over_every_outcome_referencing_module`, in `tests/test_outcomes.py`,
+which Task 7 never touched. **That is the golden table working exactly as designed**: `maps.py`
+references `Outcome`, so it enters the scope mechanically and its division count must be pinned
+deliberately. **Fourth consecutive task whose first full sweep failed in a file it did not open**, and
+(k) again.
+
+**BUT THE COUNT IS 4 AND THE MODULE's ONLY REAL DIVISION IS NOT AMONG THEM.** Enumerated with `ast`
+rather than read off the diff:
+
+| line | node | what it actually is |
+|---|---|---|
+| 106 | `FloorDiv` | `-(-length // MAX_BLOCKS)` — ceil division, a downsampled shape |
+| 150 | `FloorDiv` | `-(-rows // side[0])` — same |
+| 150 | `FloorDiv` | `-(-columns // side[1])` — same |
+| 441 | `Div` | **`out_dir / f"{stem}.png"` — `pathlib.Path.__truediv__`, a path join, not arithmetic** |
+
+**AND THE BLOCK FRACTION — the one quantity in this module a reader would want that table to see — IS
+INVISIBLE TO IT.** It is written `np.divide(counts, totals, out=..., where=...)`, an `ast.Call` and not
+an `ast.BinOp`, so the walker never counts it. **The pinned count would be identical if that line were
+deleted.**
+
+> **SO THE INSTRUMENT HAS A FALSE POSITIVE AND A FALSE NEGATIVE IN ONE MODULE, AND THEY NEARLY
+> CANCEL.** A reader told *"4 divisions in `maps.py`"* would reasonably conclude four arithmetic
+> divisions exist; three are shape arithmetic, one is a filesystem path, and the real division is
+> unseen. **The number is still worth pinning** — the table's discipline is *don't count what you
+> can't classify; pin what you can observe*, and it does catch the module entering scope, which is
+> what made this failure useful. **What was missing is the statement of what the number is made of**,
+> which the row now carries.
+
+**THE THIRD NAMED GAP IN THAT TABLE'S SCOPE**, beside *"the suite does not enforce that a new harness
+calls `failure_tally`"* and *"a rate over raw integer codes never referencing `Outcome`"*: **a division
+expressed as a function call** — every `np.divide`, `np.true_divide` and `operator.truediv` — is
+outside the table's reach. Named rather than repaired: widening the walker to count calls would require
+deciding which calls are divisions, which is the classification the table exists to avoid, and an
+unnamed gap is indistinguishable from an absent one.
+
+**The sweep's other readings:** 6 RSS measurements, **0 INDETERMINATE**, 4 above the 25 ms/s stall
+diagnostic (which skips nothing — open question 19); the report module graph at **941 of a 980
+ceiling**, headroom 39, with `maps.py` present and no `matplotlib` in it, which is D10's lazy import
+measured rather than asserted; and the new channel printing `maps environment: matplotlib PRESENT`.

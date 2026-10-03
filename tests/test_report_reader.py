@@ -9,11 +9,13 @@ contract.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import subprocess
 import sys
 import textwrap
 from pathlib import Path
+from typing import cast
 
 import numpy as np
 import pytest
@@ -24,7 +26,7 @@ from metamer.batch.input import InputContractError
 from metamer.batch.run import run
 from metamer.batch.validation import ExitCode, exit_code_for
 from metamer.core.outcomes import Outcome
-from metamer.report.reader import read_store
+from metamer.report.reader import StoreView, read_store
 from tests import conftest
 
 pytestmark = pytest.mark.filterwarnings("ignore::UserWarning")
@@ -665,3 +667,239 @@ def test_the_reader_opens_the_store_read_only(finished_store, tmp_path):
     read_store(store)
 
     assert digest() == before
+
+
+#: What `StoreView` carries, against where the writer puts it. **The coverage
+#: table T7-3 asks for**, and the mechanism that turns the next missing field
+#: from a discovery into a decision.
+#:
+#: **THREE TASKS RUNNING FOUND THE READER SHORT OF ONE FACT.** Task 6 needed the
+#: `x` coordinate; Task 7 needed `/status/outcome`'s flag attributes. Both were
+#: ARRAY attributes or coordinate arrays, which `StoreView.attrs` -- root attrs
+#: only -- structurally cannot carry, and each was found mid-implementation. The
+#: repair each time was to widen the reader rather than let a second consumer
+#: open the store, because two readers of one store is the defect this sub-phase
+#: has refused under three names.
+_EXPOSED: dict[str, str] = {
+    "status/outcome": "outcome",
+    "status/m": "model_labels",
+    "selection/delta_ic": "delta_ic",
+    "selection/selected": "selected",
+    "selection/n_valid": "n_valid",
+    "selection/c": "criterion_labels",
+    "primitives/iterations": "iterations",
+}
+
+#: Arrays the writer creates that the reader deliberately does not expose, each
+#: with the reason. **Pinned rather than defaulted**: an array absent from both
+#: tables fails the test, so a new one is a decision somebody makes rather than
+#: a silence somebody inherits.
+_NOT_EXPOSED: dict[str, str] = {
+    "status/point_outcome": (
+        "the report recomputes the point aggregate from `outcome` under its own "
+        "any/all rule (D7); reading the stored one would make the report's "
+        "aggregate depend on which rule the WRITER used"
+    ),
+    "primitives/log_lik": "no 2f section reads a likelihood",
+    "primitives/k": "no 2f section reads a parameter count",
+    "primitives/n": "no 2f section reads a sample count",
+    "primitives/n_eff_trend": "no 2f section reads an effective sample size",
+    "primitives/n_eff_bic": "no 2f section reads an effective sample size",
+    "selection/weight": "no 2f section reads an Akaike weight",
+    "selection/ic_best": "no 2f section reads the winning criterion value",
+    "signal/beta": "regression coefficients are not a fit diagnostic",
+    "signal/beta_err": "regression coefficient errors are not a fit diagnostic",
+    "noise/theta": "parameter values are not a fit diagnostic",
+    "noise/theta_err": "parameter errors are not a fit diagnostic",
+    "warmstart/theta_unconstrained": (
+        "a warm-start cache, not a record of what the run produced"
+    ),
+}
+
+
+def test_every_array_the_writer_creates_is_exposed_or_pinned_as_excluded():
+    """T7-3: the writer's arrays, enumerated, each decided for.
+
+    **THE SCOPE IS MECHANICAL** -- `store._array_specs` is the writer's own
+    declaration of every array it creates, so this test cannot drift from the
+    writer by being out of date about it. F3's rule: assert what the enumeration
+    found, never a hand-maintained copy of it.
+
+    Bug this catches: the writer gaining an array and nobody deciding whether the
+    report should read it. That is not hypothetical -- it happened twice in two
+    tasks with array ATTRIBUTES (Task 6's `x`, Task 7's `flag_meanings`), each
+    found mid-implementation after the consumer was already being written. An
+    array in neither table fails here, naming it, which makes the next one a
+    decision at review time instead of a discovery at implementation time.
+
+    **AND IT BITES BOTH WAYS**: a path in `_EXPOSED` that the writer no longer
+    creates fails too, so a renamed array cannot leave a stale row behind
+    claiming coverage.
+    """
+    from metamer.batch.store import StoreShape, _array_specs
+
+    specs = _array_specs(
+        StoreShape(n_y=4, n_x=4, n_beta=2, tile_side=4),
+        n_models=2,
+        n_criteria=1,
+        p_total=3,
+    )
+    written = {
+        f"{group}/{spec.name}" for group, items in specs.items() for spec in items
+    }
+    # The axis-label arrays are created by the coordinate path rather than by
+    # `_array_specs`, and the report reads both, so they are named here with the
+    # reason they are not in the enumeration.
+    written |= {"status/m", "selection/c"}
+
+    decided = set(_EXPOSED) | set(_NOT_EXPOSED)
+    undecided = written - decided
+    assert not undecided, (
+        f"the writer creates arrays the reader neither exposes nor excludes: "
+        f"{sorted(undecided)}. Add each to _EXPOSED (and to StoreView) or to "
+        f"_NOT_EXPOSED with the reason it is not read."
+    )
+    stale = decided - written
+    assert not stale, (
+        f"these paths are decided for but the writer does not create them: "
+        f"{sorted(stale)}. A renamed or removed array must not leave a row "
+        f"behind claiming coverage."
+    )
+
+    # Every exposed path names a field that actually exists on the view.
+    fields = {field.name for field in dataclasses.fields(StoreView)}
+    missing = set(_EXPOSED.values()) - fields
+    assert not missing, f"_EXPOSED names fields StoreView does not carry: {missing}"
+
+
+def test_the_non_array_facts_the_reader_carries_are_pinned_too():
+    """T7-3's other half: the fields that come from attributes, not arrays.
+
+    **THIS IS WHERE BOTH MISSES ACTUALLY HAPPENED**, so a coverage table over
+    arrays alone would have caught neither. `spatial` comes from coordinate
+    arrays named by a ROOT attr; `legend` comes from an ARRAY attr on
+    `/status/outcome`; `attrs` is root attrs; `completion` and `disagreements`
+    are derived.
+
+    Bug this catches: a `StoreView` field added with no statement of where it
+    comes from -- which is how a reader grows a field whose source nobody can
+    find, and how the next task's "the reader does not carry it" becomes a
+    discovery for the third time.
+    """
+    sources = {
+        "path": "the caller's argument, not read from the store",
+        "outcome": "array /status/outcome",
+        "delta_ic": "array /selection/delta_ic",
+        "selected": "array /selection/selected",
+        "n_valid": "array /selection/n_valid",
+        "iterations": "array /primitives/iterations",
+        "model_labels": "array /status/m",
+        "criterion_labels": "array /selection/c",
+        "spatial": "coordinate arrays under /status/, named by root attr "
+        "spatial_coordinates_written (added 2f Task 6)",
+        "legend": "ARRAY attrs flag_values/flag_meanings on /status/outcome "
+        "(added 2f Task 7)",
+        "attrs": "root attrs",
+        "completion": "derived from the completion bitmap",
+        "disagreements": "derived; contradictions between two records, reported "
+        "and never resolved",
+    }
+    fields = {field.name for field in dataclasses.fields(StoreView)}
+
+    assert set(sources) == fields, (
+        "every StoreView field must name where it comes from; unexplained: "
+        f"{sorted(fields - set(sources))}, stale: {sorted(set(sources) - fields)}"
+    )
+    # The two that cost a task each, asserted by name so the lesson is not
+    # carried only by a comment.
+    assert "ARRAY attrs" in sources["legend"]
+    assert "root attr" in sources["spatial"]
+
+
+def test_the_legend_comes_from_the_stores_own_flag_attributes(finished_store):
+    """T7-3: `/status/outcome`'s own `flag_values`/`flag_meanings`, as a mapping.
+
+    **A REAL STORE, NOT A HAND-BUILT ONE.** The writer builds these two attrs
+    from `Outcome` at `store.py:956`, so on a store this build wrote the legend
+    must agree with this build's alphabet exactly -- which is what makes the
+    disagreement case below meaningful.
+
+    Bug this catches: reading the legend from root attrs, where it does not
+    exist, and silently yielding `{}` -- every map titled `code 7` on a store
+    that names its codes perfectly well. That is the shape of the Task 6 miss one
+    task earlier, and `StoreView.attrs` being root-only is exactly why it is
+    reachable.
+    """
+    view = read_store(finished_store)
+
+    assert view.legend, "a real store names its codes"
+    assert view.legend == {member.code: str(member.value) for member in Outcome}
+    # The two that every map title depends on, named rather than left to the
+    # dict comparison, so a failure says which end moved.
+    assert view.legend[Outcome.OK.code] == "ok"
+    assert view.legend[Outcome.DEGENERATE_HESSIAN.code] == "degenerate_hessian"
+
+
+def test_a_flag_pair_that_disagrees_in_length_yields_no_legend(
+    finished_store, tmp_path
+):
+    """A mismatched pair is not half-usable.
+
+    **Hand-derived:** drop one meaning from a 14-member list and `zip` would
+    attach `iter_cap_small_grad` to code 0, `iter_cap_large_grad` to code 1, and
+    a wrong name to **every** code after the divergence. There is no prefix that
+    is safely usable, because the divergence point is not knowable from the two
+    lists.
+
+    Bug this catches: `zip(values, names)` without a length check -- which
+    silently produces a complete-looking legend in which every title is wrong,
+    and `strict=True` would raise instead, turning a describable store into a
+    crash. D6 says a store is described, so the answer is no legend.
+    """
+    import shutil
+
+    store = tmp_path / "mismatched.zarr"
+    shutil.copytree(finished_store, store)
+    root = zarr.open_group(store, mode="r+")
+    values = list(cast("list[int]", root["status/outcome"].attrs["flag_values"]))
+    meanings = str(root["status/outcome"].attrs["flag_meanings"]).split()
+    assert len(values) == len(meanings), "the fixture must start consistent"
+    root["status/outcome"].attrs["flag_meanings"] = " ".join(meanings[:-1])
+    # **RE-CONSOLIDATE, OR THE MUTATION DOES NOT REACH THE READER.** This store
+    # carries consolidated metadata, and the reader opens the group plainly --
+    # so the root's consolidated copy of the array attrs is what it sees, and an
+    # edit to the array alone leaves the stale pair in place. Found while writing
+    # this test: the first version asserted `{}` and read a full legend back.
+    zarr.consolidate_metadata(store)
+
+    view = read_store(store)
+
+    assert view.legend == {}, (
+        "a pair that disagrees in length must yield no legend rather than a "
+        "silently misaligned one"
+    )
+
+
+def test_a_store_with_no_flag_attributes_yields_no_legend(finished_store, tmp_path):
+    """Absent is the answer, not an error -- `_spatial`'s precedent.
+
+    Bug this catches: a `KeyError` on a store written by a build that did not
+    write flag attributes, which would make the whole report unavailable for a
+    missing title rather than titling by code number.
+    """
+    import shutil
+
+    store = tmp_path / "unlabelled.zarr"
+    shutil.copytree(finished_store, store)
+    root = zarr.open_group(store, mode="r+")
+    for name in ("flag_values", "flag_meanings"):
+        del root["status/outcome"].attrs[name]
+    zarr.consolidate_metadata(store)
+
+    view = read_store(store)
+
+    assert view.legend == {}
+    # And the rest of the view is unaffected: a missing legend is not a missing
+    # store.
+    assert view.outcome.size > 0
+    assert view.model_labels

@@ -68,6 +68,16 @@ class StoreView:
             the answer rather than a failure. Added at 2f Task 6, which needs
             the `x` span to decide whether a grid is global; before that
             nothing in the report read a coordinate, so nothing surfaced one.
+        legend: `/status/outcome`'s `flag_values`/`flag_meanings` as code to
+            meaning, which is the store's **own** alphabet rather than this
+            build's `Outcome`. Task 7 needs it for every map title. **Empty
+            when the store wrote neither attr**, on `spatial`'s precedent.
+
+            **THE THIRD FIELD IN THREE TASKS, AND THE LAST ADDED THIS WAY.**
+            Task 6 needed `x`, Task 7 needs the legend, and both were array
+            attributes the reader did not carry. The coverage table in
+            `tests/test_report_reader.py` is what turns the next one from a
+            discovery into a decision -- see T7-3.
         attrs: The root attributes.
         completion: The bitmap's counts.
         disagreements: Contradictions between two records in this store,
@@ -83,6 +93,7 @@ class StoreView:
     model_labels: tuple[str, ...]
     criterion_labels: tuple[str, ...]
     spatial: dict[str, NDArray[np.float64]]
+    legend: dict[int, str]
     attrs: dict[str, Any]
     completion: Completion
     disagreements: tuple[str, ...]
@@ -122,6 +133,51 @@ def _spatial(root: zarr.Group) -> dict[str, NDArray[np.float64]]:
             # absence rather than by raising: D6, a store is described.
             continue
     return values
+
+
+def _legend(root: zarr.Group) -> dict[int, str]:
+    """`/status/outcome`'s own flag attributes, as code to meaning.
+
+    **THE STORE's ALPHABET, NOT THIS BUILD's.** `Outcome` is available here and
+    using it would make every map title describe the code table of whatever
+    version is reading rather than the one that wrote. A store written before a
+    member was added, read by a build that has it, must not have the new name
+    appear in its titles -- so the title's source is the store, and a code the
+    store did not describe is reported by its absence from this mapping.
+
+    **IT IS AN ARRAY ATTRIBUTE AND THAT IS WHY NOTHING SURFACED IT.** The
+    writer puts `flag_values`/`flag_meanings` on `/status/outcome` and
+    `/status/point_outcome`, not on root, so `StoreView.attrs` -- which is root
+    only -- could never carry it. Same shape as the spatial coordinates one
+    task earlier.
+
+    **ABSENT IS THE ANSWER, NOT AN ERROR**, on `_spatial`'s precedent: a store
+    with neither attr yields an empty mapping and the caller titles its maps
+    from the code alone.
+
+    Args:
+        root: The opened store.
+
+    Returns:
+        Code to meaning, empty when the store carries no flag attributes and
+        when the two attributes disagree in length.
+    """
+    try:
+        attrs = _array(root, "status/outcome").attrs
+    except InputContractError:
+        return {}
+    values = attrs.get("flag_values")
+    meanings = attrs.get("flag_meanings")
+    if not isinstance(values, list) or not isinstance(meanings, str):
+        return {}
+    names = meanings.split()
+    if len(names) != len(values):
+        # **A PAIR THAT DISAGREES IS NOT HALF-USABLE.** Zipping the shorter
+        # against the longer would silently attach the wrong name to every code
+        # after the first divergence, which is a titled map that lies. D6 says
+        # a store is described, so this is reported as no legend.
+        return {}
+    return {int(code): str(name) for code, name in zip(values, names, strict=True)}
 
 
 def _array(root: zarr.Group, path: str) -> zarr.Array[Any]:
@@ -283,6 +339,7 @@ def read_store(path: Path | str) -> StoreView:
             str(name) for name in np.asarray(_array(root, "selection/c")[:]).tolist()
         ),
         spatial=_spatial(root),
+        legend=_legend(root),
         attrs=attrs,
         completion=Completion(
             complete=int(np.count_nonzero(tiles)), total=int(tiles.size)

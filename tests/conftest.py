@@ -496,3 +496,36 @@ def _write_diagnostics(terminalreporter: Any) -> None:
     """
     for line in DIAGNOSTIC_LINES:
         terminalreporter.write_line(line)
+    _write_maps_environment(terminalreporter)
+
+
+def _write_maps_environment(terminalreporter: Any) -> None:
+    """Say which maps environment this run was, on every run.
+
+    **T7-2's SECOND HALF, AND IT IS NOT REDUNDANT WITH THE CI MATRIX.** The CI
+    workflow installs the `[report]` extra in exactly one job and leaves the rest
+    without it, so both halves of D10 are exercised by construction. But the
+    `skipif` marks stay in the source, and a matrix that stopped installing the
+    extra -- a renamed extra, a dropped matrix row, a typo -- would make every
+    maps test skip and the run would still be green and silent.
+
+    **SO THE ENVIRONMENT IS A READING, PRINTED WHETHER OR NOT ANYTHING SKIPPED**,
+    the same way the RSS section prints at zero. Handoff section 2's rule: a
+    measurement that only surfaces on failure is not a record, and a number
+    wanted from a green run needs a channel that runs when the run is green.
+
+    Args:
+        terminalreporter: pytest's reporter, or anything with `write_line`.
+    """
+    from metamer.report.maps import REPORT_EXTRA, matplotlib_available
+
+    drawable = matplotlib_available()
+    state = "PRESENT" if drawable else "ABSENT"
+    terminalreporter.write_line(
+        f"maps environment: matplotlib {state} -- "
+        + (
+            "the drawing tests ran"
+            if drawable
+            else f"the drawing tests skipped; [{REPORT_EXTRA}] installs it"
+        )
+    )

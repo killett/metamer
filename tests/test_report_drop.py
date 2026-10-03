@@ -61,6 +61,13 @@ def dropped_run(tmp_path_factory: pytest.TempPathFactory) -> pathlib.Path:
     return pathlib.Path(report.store_path)
 
 
+#: The store's own flag attributes, as `reader._legend` returns them. These
+#: helpers plant an outcome cube directly rather than opening a store, so the
+#: legend is supplied the same way -- from `Outcome`, which is what the writer
+#: builds it from.
+_LEGEND = {member.code: str(member.value) for member in Outcome}
+
+
 def test_a_real_drop_reports_the_coarse_denominator_and_pass_one_agrees(dropped_run):
     """The row's denominator is pass 1's live population, recomputed and agreeing.
 
@@ -282,6 +289,7 @@ def _bare_view(store: pathlib.Path) -> StoreView:
         completion=Completion(complete=1, total=1),
         spatial={},
         disagreements=(),
+        legend=_LEGEND,
     )
 
 

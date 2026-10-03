@@ -34,6 +34,13 @@ criteria = ["aic", "hqic"]
 """
 
 
+#: The store's own flag attributes, as `reader._legend` returns them. These
+#: helpers plant an outcome cube directly rather than opening a store, so the
+#: legend is supplied the same way -- from `Outcome`, which is what the writer
+#: builds it from.
+_LEGEND = {member.code: str(member.value) for member in Outcome}
+
+
 def _view(
     *,
     outcome: list[list[int]],
@@ -61,6 +68,7 @@ def _view(
         completion=Completion(complete=1, total=1),
         spatial={},
         disagreements=(),
+        legend=_LEGEND,
     )
 
 
