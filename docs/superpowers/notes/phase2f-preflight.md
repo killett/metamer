@@ -1713,3 +1713,243 @@ sigma is **9.5%**. The measured 5.5% is **1.7 sigma — an ordinary draw.**
 **three** divisions — the z, the p, and the cell width the span is measured in. **None is a failure
 rate**, which is the quantity that table protects, and the row says so: a fourth division appearing
 there should be read as one until shown otherwise.
+
+---
+
+## Plan Task 7 — the maps and the no-matplotlib path, audited before any code (2026-09-28)
+
+**THE BRIEF** is the plan's Task 7: one PNG per (branch present × candidate) plus one per branch for
+the point-level aggregate, the value at a downsampled block being the **fraction** of that block's
+cells carrying the code (D9); `viridis`, fixed code-to-colour, legend from the store's own
+`flag_meanings`; matplotlib behind a `[report]` extra, imported inside the function (D10). **Four
+findings, and two of them are things that do not exist yet.**
+
+### THE `[report]` EXTRA DOES NOT EXIST, AND THE PACKAGING GUARD MAKES IT MANDATORY RATHER THAN TIDY
+
+`pyproject.toml` declares **`test`** and **`batch`** and no `report`. D10 has assumed it since the
+plan was written, and `tests/test_report_reader.py`'s `FORBIDDEN` table already documents matplotlib
+as *"lives behind the `[report]` extra"* — **a description of something that is not there.**
+
+**AND `tests/test_packaging.py` TURNS THAT INTO A HARD STOP, WHICH IS THE USEFUL PART.** Its
+`_third_party_imports` walks every `.py` under `src/metamer` with `ast.walk` — **so it finds imports
+inside FUNCTION BODIES, not only at module scope.** A lazily imported matplotlib is therefore a
+declared-dependency question exactly like an eager one, and the guard fails naming the module unless
+it is added to `_MODULE_TO_DISTRIBUTION` *and* to `pyproject.toml`: *"a new third-party dependency
+must be routed through this test rather than around it."*
+
+> **SO D10's LAZY IMPORT DOES NOT EVADE THE DECLARATION, AND IT WAS NEVER MEANT TO.** Lazy import
+> buys *portability at run time* — the numbers path works where matplotlib is absent. Declaration is
+> a different claim, about what the distribution asks for, and the extra is what makes both true at
+> once. Task 7 adds: the extra, the `_MODULE_TO_DISTRIBUTION` row, and nothing else to the base
+> dependency set.
+
+### THE READER DOES NOT EXPOSE `flag_meanings`, AND THIS IS THE SECOND TASK RUNNING TO FIND THAT
+
+The plan requires the legend to come from *the store's own `flag_meanings`*. The store writes it —
+`store.py:959`, into the `/status/` arrays' attrs, built from the enum — but **it is an ARRAY
+attribute, not a root one**, and `StoreView.attrs` carries only root attrs. So it is unreachable
+through the reader, exactly as the spatial coordinates were one task ago.
+
+**THAT IS A PATTERN NOW AND IT IS WORTH NAMING BEFORE TASK 8 MEETS IT AGAIN.** The reader was built
+at Task 1 against Task 1's needs, which were the arrays and the completion bitmap. **Every task
+since that needed a fact about the store has found the reader does not carry it** — Task 6 the `x`
+coordinate, Task 7 the flag legend — and each time the right repair was to widen the reader rather
+than let the consumer open the store. The alternative compounds: two readers of one store is the
+defect this sub-phase has refused under three names, and a third consumer opening zarr directly
+would make it four.
+
+> **THE COST IS ONE FIELD PER TASK AND THE ALTERNATIVE IS A SECOND READER PER TASK.** Stated here so
+> Task 8's entry point, which needs the whole record, starts from "what does the reader not carry
+> yet" rather than discovering it mid-implementation.
+
+### THE MEAN-OF-CODES DEFECT IS REAL, AND THE EXACT MEMBERS MAKE IT WORSE THAN THE PLAN SAYS
+
+Verified against the enum rather than taken on trust: `DEGENERATE_HESSIAN` is **7**,
+`ILL_CONDITIONED_X` is **11**, and `mean(7, 11) == 9` — which is **`CANDIDATE_DROPPED`**.
+
+**SO AVERAGING TWO GENUINE FAILURES PRODUCES A DECISION.** Not merely "a different valid-looking
+code", as the plan puts it, but a code from the other side of §12.5's grouping table entirely: the
+two cells say *this fit failed twice over* and their mean says *the run chose not to fit this
+candidate here*. A map rendered that way is not noisy, it is **articulate and wrong** — and on a
+downsampled global map it would be wrong across whole regions while every legend entry remained a
+real member of the alphabet.
+
+**The reduction is over a BINARY INDICATOR per branch and the test asserts the output is a fraction
+in [0, 1]**, which is the mechanical form of "no arithmetic ever reaches a code".
+
+### THE IMPORT PROBE NOW COVERS THE MODULE-SCOPE CASE FOR FREE, AND ONLY THE LAZY ONE IS BLIND
+
+The probe walks `metamer.report` with `pkgutil` and imports **every** module, so `maps.py` is
+covered on the day it lands with no edit — the third dividend from making that scope mechanical. A
+module-scope `import matplotlib` there would put matplotlib in `sys.modules` and fail the forbidden
+check immediately.
+
+**WHAT STAYS BLIND IS THE LAZY IMPORT, WHICH IS EXACTLY WHAT D10 REQUIRES** — a `sys.modules` check
+cannot see an import that has not happened. **So the instrument and the design are aligned rather
+than in tension**: the probe enforces the half that must not happen (module scope) and is silent
+about the half that must (inside the function). The half it is silent about is covered by a
+different test — the no-matplotlib path, which makes the module unimportable and asserts the report
+still exits 0 with every number present.
+
+> **AND THE WALK ITSELF BECOMES A SECOND ASSERTION ONCE `maps.py` EXISTS.** In an environment
+> without matplotlib the walk must still import `maps.py` successfully. That is the lazy import's
+> own requirement, checked by the instrument that was built for something else — (j3): an existing
+> feature is an instrument for a property its own purpose does not concern.
+
+### THE CLOSING SECTION — RULINGS RECEIVED 2026-10-02, VERBATIM
+
+**T7-1. A BLOCK'S FRACTION IS DIVIDED BY THE FIT-VERDICT CELLS IN THAT BLOCK, NOT BY ALL ITS
+CELLS.** This is the denominator defect in map form, and nobody has named it yet. D9's rule says the
+map and the statistic always cover the same population, and D3 sets that population to
+`is_fit_verdict`. If a block's fraction is divided by all its cells, a coastal block that is half
+land shows half its real failure fraction. That's D2b's dilution again, drawn as a map.
+
+- A block with zero fit-verdict cells is MASKED and drawn in a distinct "no data" colour. It is
+  never drawn as 0, because 0 is the bottom of viridis and reads as "no failures." This is the
+  `fitted == 0` rule applied to maps.
+- Every map states its population in its title or caption.
+- Non-fit branches, if they are mapped at all, are COVERAGE maps over covered cells, and are
+  labelled as coverage maps, not failure maps.
+
+Tests:
+
+- A block half-filled with `INSUFFICIENT_DATA` shows the fit-verdict fraction, not a diluted one.
+- A block with no fit-verdict cells renders as masked.
+- With vmin 0 and vmax 1 fixed, a masked block and a block with 0% failures come out different
+  colours.
+
+**T7-2. BOTH ENVIRONMENTS IN CI, ONE IN EACH JOB.** CI currently has no matplotlib. That's why
+`test_readme_figure` failed in CI on its first push. So in CI today the maps path either skips or is
+never exercised. Have one CI job install `[report]`, so maps are drawn and checked, and leave the
+others without it, so the no-matplotlib path and its "maps not drawn" sentence are checked. Then CI
+covers both by construction. If you won't do this, the maps tests must not skip silently. The skip
+gets counted and named in the run's output, the same way INDETERMINATE is.
+
+**T7-3. WIDEN THE READER ONCE, AND STOP THE PATTERN.** Add the legend (`flag_values` and
+`flag_meanings`) to `StoreView` as a typed field. Then fix why this keeps happening, before Task 8
+runs into it a third time. Add a coverage table comparing what the writer writes with what the
+reader exposes:
+
+- every attribute and array the store writes, listed against what `StoreView` carries;
+- deliberate exclusions pinned, each with its reason;
+- the test fails when the writer gains a field and nobody decides whether the reader should expose
+  it.
+
+This is F3's rule (assert what the enumeration found) applied to the reader.
+
+---
+
+### THE DERIVATION CHECK ORDERED WITH THE RULINGS — THE COMMITTED NUMBERS ARE RIGHT, THE CONVERSATIONAL ACCOUNT WAS NOT
+
+**Checked rather than taken either way, because the ruling's premise was that the shipped docstring
+might carry the bad numbers. IT DOES NOT.** `tests/test_report_clustering.py:240` reads
+*"`1 / sqrt(2 (P - 1))`. Two independent seeds differ by `sqrt(2)` times that, so at `P = 999` one
+standard deviation of `|dz| / |z|` is `sqrt(2 / 1996) = 3.2%`"* — and `sqrt(2/1996)` **is** the
+two-seed form, written as an expression rather than as a figure, so the √2 is applied exactly once
+and in the right place. Recomputed: per seed **2.238%**, two-seed **3.165%**, 3σ **9.496%**, and the
+measured 5.5% is **1.74σ**. The assertion is `bound == approx(0.0950)` and it is correct.
+
+**SO THE ERROR WAS CONFINED TO THE PREVIOUS SESSION'S PROSE — *"3.2% per seed, 4.5% for two"* — AND
+PROSE IS WHERE IT DOES THE DAMAGE.** Both figures are √2 too large, and the ruling's test for that
+is the one that matters: they contradict the same account's own conclusions, since 3 × 4.5% = 13.5%
+rather than 9.5%, and 5.5 / 4.5 = 1.22σ rather than 1.7σ. **A derivation wrong in the middle and
+right at the end is more dangerous than one wrong throughout**, because the end agrees with the code
+and invites a reader to repair the code to match the middle.
+
+> **THE REPAIR IS THEREFORE TO STATE THE PER-SEED FIGURE, WHICH NEITHER THE DOCSTRING NOR THIS NOTE
+> EVER DID.** 2.238% appears nowhere; only `sqrt(2/1996)` does. A number that exists only inside an
+> expression is a number the next reader re-derives, and re-derivation is where the √2 went missing.
+
+**AND THE NORMAL ASSUMPTION IS NOW MEASURED RATHER THAN ASSERTED.** `1 / sqrt(2(P - 1))` holds for a
+normal null; a skewed, sparse-failure null has a standard error larger by `sqrt((κ - 1) / 2)`. The
+ruling asked for the fixture's regime to be stated, so it was measured on the fixture itself — the
+20×20 patch in a 40×40 all-true mask, P = 999:
+
+| quantity | measured | normal reference |
+|---|---|---|
+| background rate | **0.25** | — (this is why: dense, not sparse) |
+| null mean / sd | 194.60 / 10.334 | — |
+| skewness | **+0.0135** | 0 |
+| kurtosis κ | **2.8932** | 3 |
+| inflation `sqrt((κ-1)/2)` | **0.9729** | 1 |
+| 3σ two-seed bound | **9.24%** | 9.50% |
+
+**THE FIXTURE IS VERY SLIGHTLY PLATYKURTIC, SO THE SHIPPED BOUND IS CONSERVATIVE BY 1.028× — THE
+SAFE DIRECTION, AND BY A MARGIN THAT IS ITSELF WITHIN SAMPLING ERROR OF κ.** The regime satisfies the
+assumption because the background rate is 0.25: the sparse-failure case the inflation factor warns
+about is the one a real store will present, and **this fixture is not it.** That is the limit worth
+writing down — the bound is derived for *this* fixture's regime, and a map-scale store with a 0.5%
+failure rate would need the inflation factor computed rather than dismissed.
+
+> **OWED, WITH ITS TRIGGER NAMED SO IT DOES NOT LIVE ONLY HERE: Task 7's code commit carries the
+> docstring amendment** — the per-seed 2.238%, the normal assumption, the measured κ, and the
+> sparse-regime limit. It is a `tests/` byte change and therefore needs the sweep, which is why it
+> does not ride in this docs-only commit. **The ruling that forbids deliberate state living in a
+> session's context applies to this paragraph too.**
+
+---
+
+### THE MATERN32 ENGINE QUESTION — NOT IN TASK 5's PRE-FLIGHT, SO IT WAS ESTABLISHED BY RUNNING IT (2026-10-02)
+
+**THE RULING ASKED FOR IT "FROM TASK 5's PRE-FLIGHT" AND IT IS NOT THERE.** Task 5's entry is four
+findings about `fits`, the nesting, the float32 delta-IC and `selected`'s three states; it never
+mentions an engine. The `matern32`-withholds-`celerite2` fixture belongs to **Task 4's** entry, where
+it exists to make the engine-cost column discriminate. So the question was answered against the live
+objects instead.
+
+**THE ANSWER: `kalman`, WHICH `matern32` DECLARES — SO THE HYPOTHESISED DEFECT IS NOT PRESENT.**
+
+| checked | found |
+|---|---|
+| what `fit()` binds when nothing is injected | `fit.py:385` — `engine = KalmanEngine() if engine is None else engine` |
+| that engine's id | `KalmanEngine().engine_id == "kalman"` |
+| what `matern32` declares | `matern32.py:184` — `KALMAN: LINEAR`, `WHITTLE: NLOGN`, `TOEPLITZ: CUBIC` |
+| what it withholds | `CELERITE2` only, and **deliberately**: `matern32.py:159` says `engine_costs` names engines that evaluate the kernel *without altering it* |
+| whether the withheld engine could run at all | `EngineId` has four members and **`capability.py:10` says only KALMAN is implemented in Phase 1** |
+
+**SO THE CANDIDATE RAN ON AN ENGINE ITS TERM DECLARES, AND THE WITHHELD ONE HAS NO IMPLEMENTATION TO
+RUN ON.** The `white + matern32` composite surviving on three engines rather than four is a statement
+about the intersection, not about anything the run did.
+
+#### BUT THE PROBE FOUND AN ADJACENT DEFECT THAT IS REAL, AND IT IS FILED RATHER THAN FIXED HERE
+
+**`engine` IS AN UNVALIDATED `str` IN THE CONFIG, TWO LINES BELOW AN `objective` THAT IS A `Literal`.**
+`config/model.py:301-302`:
+
+    objective: Literal["ml", "reml"] = "ml"
+    engine: str = "kalman"
+
+Measured, on a config otherwise valid — every one of these is **accepted**:
+
+    engine='kalman'        ACCEPTED -> stored as 'kalman'
+    engine='celerite2'     ACCEPTED -> stored as 'celerite2'
+    engine='whittle'       ACCEPTED -> stored as 'whittle'
+    engine='toeplitz'      ACCEPTED -> stored as 'toeplitz'
+    engine='not_an_engine' ACCEPTED -> stored as 'not_an_engine'
+    engine='KALMAN'        ACCEPTED -> stored as 'KALMAN'
+
+**AND THE ACCEPTED STRING IS LOAD-BEARING IN THREE PLACES.** It is written to root attrs
+(`store.py:490`, `"engine": config.engine`); it is a **REQUIRED_ATTR** (`store.py:223`), so a store
+cannot exist without it; and it **reaches `fit_hash`** — measured, `fit_hash` differs between
+`engine="kalman"` and `engine="celerite2"` on an otherwise identical config. Meanwhile every fit runs
+on `KalmanEngine`, and `fit.py:579`/`606` record `engine.engine_id` — the engine **actually used**.
+
+> **SO A STORE CAN CONTRADICT ITSELF, AND NOTHING TODAY NOTICES.** Root attrs would say `celerite2`
+> while the per-fit record says `kalman`. That is D1's tell once more — a name saying one thing while
+> the value is another — in the one field Task 4 went to trouble to keep honest *per candidate*,
+> left unguarded *per run*.
+
+**THE SHARP EDGE IS FORWARD, NOT TODAY, WHICH IS WHY IT IS FILED AND NOT FIXED MID-TASK.** Because
+`engine` reaches `fit_hash`, a store written under `engine: "celerite2"` carries kalman fits under a
+celerite2 fit-hash. **When Phase 3 lands a real second engine, that stale store's `fit_hash` will
+match a genuine celerite2 run's and be reused** — kalman numbers served as celerite2 numbers, past a
+gate whose whole job is to refuse exactly that. `reuse.py:150` then manufactures
+`engines=(EngineId(engine),) * models` from the run-level string, so the reused block asserts the
+engine rather than reading it.
+
+**Today nothing is wrong** — the default is `kalman`, `EngineId("not_an_engine")` would raise on the
+reuse path, and no second engine exists. **The trigger is the second engine**, which is the same
+trigger the engine-narrowing test is already filed at, beside P4″. **Filed as OQ26**, with this
+paragraph as its evidence; the repair is one line (`Literal` or an `EngineId` coercion at the config
+boundary) and the reason it is not taken here is that a config-validation change belongs to a task
+that sweeps config, not to the maps task.

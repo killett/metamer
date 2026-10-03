@@ -3890,6 +3890,39 @@ tests could not see.** `pixi run test-fast` would have shipped both.
   > such a module would not. **2f's D1 already forbids it** (a predicate must read its subject, not
   > an available proxy) and **nothing in the suite catches it.**
 
+- **PRE-FLIGHTS COMMIT ON THEIR OWN, DOCS-ONLY, AS SOON AS THEY ARE WRITTEN.** Added 2026-10-02.
+  The commit history then shows the pre-flight came before the code, instead of the pre-flight
+  saying so about itself.
+
+  **The instance, and it is the rule's own origin:** 2f Tasks 3, 4, 5 and 6 each committed their
+  pre-flight together with their code, on the reasoning that a separate commit would buy its own
+  80-minute sweep. **The cost was misjudged in three ways.** A docs-only commit does not need the
+  local sweep — it needs `pre-commit`, the tests that read docs, and CI. That CI run (~57 min)
+  **overlaps with writing the code**, and the code plus its ~80-minute sweep takes longer than CI
+  does, so one-push-per-run never makes anybody wait. **So committing the pre-flight first costs
+  close to nothing, and bundling it costs the visible ordering.**
+
+  > **AND THE BUNDLING PATTERN IS WHAT PRODUCED THE FAILURE THAT EARNED THE SECOND RULE BELOW.**
+  > A pre-flight written and deliberately left uncommitted is indistinguishable, to the next
+  > session, from a pre-flight a crash interrupted. The ordering claim and the crash ambiguity are
+  > the same defect seen from two ends.
+
+- **NO DELIBERATE STATE MAY EXIST ONLY IN A SESSION'S CONTEXT. IF A SESSION LEAVES THE TREE DIRTY
+  ON PURPOSE, `PROGRESS.md` SAYS WHY — AND BETTER, IT DOES NOT LEAVE IT DIRTY, SINCE A SESSION CAN
+  END AT ANY MOMENT.** Added 2026-10-02.
+
+  **The instance:** the session that wrote Task 7's pre-flight ended with it uncommitted **by
+  decision**, and said so in its last message — *"following the established pattern … to avoid
+  buying its own 80-minute sweep."* **That reason lived only in that session's conversation.**
+  `PROGRESS.md` recorded nothing, so the next session could only read the dirty tree as a crash,
+  and had to reconstruct the intent from a diff.
+
+  **This is the durability rule's missing half.** *"Git is the source of truth, not the
+  conversation"* is usually read as *commit your work*; it also means **a decision not to commit is
+  itself work, and the conversation is not where it lives.** A session's context is the one storage
+  medium with no recovery path — it is not that the note is nice to have, it is that intent held
+  nowhere else is intent destroyed at the session boundary.
+
 ---
 
 ## 3. The number every Phase 2 tile calculation inherits

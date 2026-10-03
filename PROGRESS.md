@@ -4,7 +4,7 @@
 
 1. **Branch `main`, every commit pushed by a hook** — https://github.com/killett/metamer. **No SHA is named anywhere in this head**; `git log --oneline -8` is the authority.
 2. **DONE:** Phase 1, P0–P4, 2a, 2b, 2c, 2d, the real-data spike, wiring one, the selection-map report — and **Phase 2e (COMPLETE 2026-09-18 — 18 met / 1 reduced scope / 0 failed over nineteen criteria, the nineteenth added by decision; Tasks 0–6 by 2026-09-16, the no-evidence decision and Task 7 on 2026-09-18)**. Per-phase closes are in their sections — [2e's is here](#phase-2e-is-closed-2026-09-18--18-met--1-met-with-reduced-scope--0-failed-plus-2bs-two-inherited-failures-2cs-one-reduction-and-2ds-three-failures-and-one-reduction); **none is restated here**.
-3. **NEXT ACTION: 2f Task 7 — the maps, the `[report]` extra, and the no-matplotlib path.** Tasks 2–6 are DONE. **~~TASK 4 OWES THE RECORDED DENOMINATOR NAME~~ — DONE**: `_verdict_attrs` writes `denominator`, so the report infers nothing for any store written after Task 4; absence still means `eligible`. **THREE FURTHER OBLIGATIONS ARE OWED AT TASK 10** and are listed in the open items below; they are the price of 2f having no criteria suite yet. The plan is [`2026-09-19-metamer-phase2f.md`](docs/superpowers/plans/2026-09-19-metamer-phase2f.md), **APPROVED with ten review amendments**; the pre-flight is [`phase2f-preflight.md`](docs/superpowers/notes/phase2f-preflight.md) and every task's entry is written **before** its code. **Task 0 (the clustering spike) and Task 1 (the reader) are DONE.** The queued follow-up is [here](#the-queued-follow-up--2fs-next-commit) and is **SPENT — all five items closed, items 2 and 4 by the follow-up commit.** Both rulings are verbatim at the pre-flight, with an addendum recording the three things the code found that they did not cover.
+3. **NEXT ACTION: 2f Task 7's CODE — the maps, the `[report]` extra, and the no-matplotlib path. ITS PRE-FLIGHT IS COMMITTED, ON ITS OWN, AND CARRIES THREE RULINGS (T7-1, T7-2, T7-3) VERBATIM.** Tasks 2–6 are DONE. **TASK 7's CODE COMMIT OWES THE CLUSTERING DOCSTRING AMENDMENT** — Task 6's shipped derivation is *correct*, but it never states the per-seed 2.238%, the normal-null assumption, or the measured κ = 2.8932; it is a `tests/` byte change and so needs the sweep, which is why it did not ride in the docs-only pre-flight commit. **AND `engine` IS FILED AS OQ26**: the matern32 candidate ran on `kalman`, which it declares, so the hypothesised run-path defect is ABSENT — but the config accepts any string, including `not_an_engine`, and it reaches `fit_hash`. **~~TASK 4 OWES THE RECORDED DENOMINATOR NAME~~ — DONE**: `_verdict_attrs` writes `denominator`, so the report infers nothing for any store written after Task 4; absence still means `eligible`. **THREE FURTHER OBLIGATIONS ARE OWED AT TASK 10** and are listed in the open items below; they are the price of 2f having no criteria suite yet. The plan is [`2026-09-19-metamer-phase2f.md`](docs/superpowers/plans/2026-09-19-metamer-phase2f.md), **APPROVED with ten review amendments**; the pre-flight is [`phase2f-preflight.md`](docs/superpowers/notes/phase2f-preflight.md) and every task's entry is written **before** its code. **Task 0 (the clustering spike) and Task 1 (the reader) are DONE.** The queued follow-up is [here](#the-queued-follow-up--2fs-next-commit) and is **SPENT — all five items closed, items 2 and 4 by the follow-up commit.** Both rulings are verbatim at the pre-flight, with an addendum recording the three things the code found that they did not cover.
 
    > ### THE COLD-START READ LIST FOR THIS NEXT ACTION — READ THESE, CONSULT EVERYTHING ELSE BY NAME
    >
@@ -13,12 +13,12 @@
    > | # | read | for |
    > |---|---|---|
    > | 1 | this head, items 1–10 | state, and the rules that bind any commit |
-   > | 2 | [the plan](docs/superpowers/plans/2026-09-19-metamer-phase2f.md)'s **Task 6**, **D4** and **D5** | the brief the code is written against |
-   > | 3 | `Outcome`'s docstring table in `src/metamer/core/outcomes.py` | the four predicates side by side — **read this before writing any denominator** |
-   > | 4 | [the pre-flight](docs/superpowers/notes/phase2f-preflight.md)'s **Task 2 entries** (the last two) | what Task 2 settled and why the coverage denominator is its own predicate |
-   > | 5 | [the handoff](docs/superpowers/notes/phase1-to-phase2-handoff.md) **§2** | the standing rules — sweep ordering, pin-versus-bound, one push per run |
+   > | 2 | [the plan](docs/superpowers/plans/2026-09-19-metamer-phase2f.md)'s **Task 7**, **D9** and **D10** | the brief the code is written against |
+   > | 3 | `Outcome`'s docstring table in `src/metamer/core/outcomes.py` | the four predicates side by side — **read this before writing any denominator, including a map's** |
+   > | 4 | [the pre-flight](docs/superpowers/notes/phase2f-preflight.md)'s **Task 7 entry and its closing section** | the four findings, **T7-1/T7-2/T7-3 verbatim**, the derivation check, and the matern32 answer |
+   > | 5 | [the handoff](docs/superpowers/notes/phase1-to-phase2-handoff.md) **§2** | the standing rules — sweep ordering, pin-versus-bound, one push per run, **and the two added 2026-10-02** |
    >
-   > **THEN Task 3's own pre-flight entry, appended before its code.** Task 2's accumulated amendments are [below](#task-2s-accumulated-amendments) and are **SPENT** — kept as the record of what Task 2 owed, not as live work.
+   > **Task 7's pre-flight is ALREADY WRITTEN AND COMMITTED ON ITS OWN**, which is the first of the two new rules; add to it only if the code turns up something the rulings did not cover. Task 2's accumulated amendments are [below](#task-2s-accumulated-amendments) and are **SPENT** — kept as the record of what Task 2 owed, not as live work.
    >
    > **NOT read up front, consulted by name if a question needs it:** handoff §1's (a)–(k) — indexed at head item 7; 2a–2e's execution sections; the closed sub-phases' criteria tables; the open questions, except **OQ24** (taken in part, this sub-phase's) and **OQ25** (filed).
 4. **2f is not blocked**: stores, `/selection/delta_ic` and `audit_report.py` exist, and the subjects it waits on to count are now produced. Open question 24 is filed to it.
@@ -51,7 +51,8 @@ never after**. Nothing in the plan is restated here.
 | 4 — the primitives sections, and the resolved-candidate record | **DONE.** The block resolves per candidate and never sees `config.engine`; `domain_mask` and the gate's `denominator` name are recorded; the fill values are counted, not binned |
 | 5 — selectability | **DONE.** Three quantities, three facts; `n_valid` is **converged** and never "fits"; `converged == fitted - failed` is asserted per point |
 | 6 — the clustering statistic and its null | **DONE.** Join count against a mask-fixed permutation null; five non-fit members excluded **by predicate**; `CLUSTERING_SEED` is on the do-not-move list |
-| 7–10 | planned |
+| 7 — the maps, the `[report]` extra, the no-matplotlib path | **PRE-FLIGHT COMMITTED (docs-only); CODE IS THE NEXT ACTION.** Three rulings verbatim at the pre-flight: a block's fraction is over **fit-verdict cells**, not all cells, and an empty block is **masked, never 0**; **both environments in CI**, one job with `[report]` and the others without; **widen the reader once** and add a writer-versus-reader coverage table so Task 8 does not meet this a third time |
+| 8–10 | planned |
 
 **Open question 24 is TAKEN IN PART, not closed** — closer is §13.6's declared domain mask. It cost
 four commits: the judgeability gate, the flip, the verdict's rate denominator, and the record
@@ -172,6 +173,7 @@ absent branch reachable.
 | **OQ23** — `DEGENERATE_HESSIAN` is start-dependent | open. 2f gives it an instrument and **no story**; why `cond(H)` moves is not established |
 | **OQ24** — `INSUFFICIENT_DATA`'s eligibility | **taken in part**, closed by §13.6 |
 | **OQ25** — `audit_report.attempted` names a different quantity from its predicate | filed, not taken. Three candidate denominators (30/40/20); for a two-arm statistic the population is plausibly the **intersection**. **Structural half:** `is_eligible` is now a one-member denylist over a member with no producer. **AND ONE THING IS A DEFECT RATHER THAN A FILING, 2026-09-21:** the enumeration's docstring names **two** quantities (rescue, loss) where `_rate` is **one** division with **seven** callers — `selection_disagreement`, `selection_move`, `selection_dropout`, `ranked_fraction`, `rescue`, `loss`, `both_ok_fraction`. **A miscount of a known set is a defect, not an open question**, so the count is corrected while the denominator stays filed: the scope boundary protects the open question and not the wrong number. **Corrected in the record now; the `tests/` text is PARKED VERBATIM at the pre-flight and lands with item 2's commit**, because this session is docs-only and *"it reaches the tree with the next commit"* is a promise with no owner |
+| **OQ26** — `engine` is an unvalidated `str` that reaches `fit_hash` and root attrs, and no fit uses it | filed, not taken. **The matern32 candidate ran on `kalman`, which it declares — the hypothesised defect is absent.** This is what the probe found instead: a store can say `celerite2` in root attrs while its fits say `kalman`, and the stale fit-hash will match a genuine celerite2 run when Phase 3 lands one. Trigger: **the second engine** |
 | **P4″** — a small cluster existing only at the seam | owed **at a trigger**: the first global store |
 | **the engine-narrowing test** — a candidate whose terms exclude the configured engine records the engine it actually ran | owed **at a trigger**: the second engine (Phase 3's Whittle). **Today `run.py` passes `config.engine` straight through and nothing narrows**, so the block's engine column says *"requested; not resolved per candidate in this version"* rather than holding the request under the name `resolved`. When the trigger fires, that column must be filled from the resolution and this test written |
 | **TASK 10 OWES THREE THINGS, FOUND AT TASK 3's PRE-FLIGHT** | (1) 2f's criteria suite must ship WITH `test_every_criterion_names_evidence_that_exists` — 2b–2e each have one and 2f's records are guarded by nothing until it does; (2) criterion 21's reading names a test **in prose**, invisible to that guard, so it must land in `established_by`; (3) 2e's criterion 14's forward pointer needs 2f's delivering commit, and Task 10 is where 2f's verdicts are taken |
@@ -11773,6 +11775,39 @@ question; compute/bandwidth roofline pair for cross-machine prediction) are in d
 ## Open questions
 
 Still open. **A new session must not assume these were settled.**
+
+26. **`engine` IS AN UNVALIDATED `str` IN THE CONFIG, IT REACHES `fit_hash` AND ROOT ATTRS, AND NO
+    FIT EVER USES IT.** Opened 2026-10-02 by a ruling that asked which engine the `matern32`
+    candidate actually ran on. **The answer is `kalman`, which `matern32` declares, so the
+    hypothesised defect — a candidate fitted on an engine its term withholds — is NOT present**;
+    `fit.py:385` binds `KalmanEngine` and `capability.py:10` says only KALMAN is implemented. **The
+    probe found this instead.**
+
+    `config/model.py:302` is `engine: str = "kalman"` — **two lines below `objective: Literal["ml",
+    "reml"]`.** Measured on an otherwise valid config, every one of `kalman`, `celerite2`, `whittle`,
+    `toeplitz`, `KALMAN` and **`not_an_engine`** is accepted and stored verbatim. The accepted string
+    is then written to root attrs (`store.py:490`), is a **`REQUIRED_ATTR`** (`store.py:223`), and
+    **reaches `fit_hash`** — measured: the hash differs between `engine="kalman"` and
+    `engine="celerite2"` on an otherwise identical config. Every fit meanwhile runs on
+    `KalmanEngine`, and `fit.py:579`/`606` record `engine.engine_id`, the engine **actually used**.
+    **So a store can contradict itself** — root attrs saying `celerite2` while the per-fit record
+    says `kalman` — and nothing notices.
+
+    **The harm is forward and it is a reuse hazard, which is why it is filed rather than taken
+    mid-task.** Because `engine` reaches `fit_hash`, a store written under `engine: "celerite2"`
+    carries kalman fits under a celerite2 fit-hash; **when Phase 3 lands a real second engine that
+    stale store's `fit_hash` will match a genuine celerite2 run's and be reused**, serving kalman
+    numbers as celerite2 numbers past the gate whose whole job is to refuse that. `reuse.py:150`
+    then manufactures `engines=(EngineId(engine),) * models` from the run-level string, asserting the
+    engine rather than reading it. **Today nothing is wrong**: the default is `kalman`,
+    `EngineId("not_an_engine")` raises on the reuse path, and no second engine exists.
+
+    **Trigger: the second engine** — the same trigger the engine-narrowing test is filed at, and
+    that row covers the *per-candidate resolution* while this one covers the *per-run request*.
+    The repair is one line (`Literal`, or an `EngineId` coercion at the config boundary); it is not
+    taken here because a config-validation change belongs to a task that sweeps config, not to the
+    maps task. Evidence is at [the pre-flight](docs/superpowers/notes/phase2f-preflight.md)'s
+    matern32 entry.
 
 24. **IS `INSUFFICIENT_DATA` IN THE FAILURE-RATE DENOMINATOR? THREE SOURCES GIVE THREE ANSWERS,
     AND THE CODE FOLLOWS THE STALE ONE.** Opened 2026-09-14 by 2e's Task 3 pre-flight, **filed to
