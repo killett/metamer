@@ -3923,6 +3923,23 @@ tests could not see.** `pixi run test-fast` would have shipped both.
   medium with no recovery path — it is not that the note is nice to have, it is that intent held
   nowhere else is intent destroyed at the session boundary.
 
+- **BEFORE EDITING ANYTHING UNDER `.github/`, CHECK THAT THE PUSH CREDENTIAL CAN PUSH IT.** Added
+  2026-10-03. `gh auth status` prints the token's scopes; GitHub refuses any push that creates or
+  updates a workflow file unless the token carries **`workflow`**, and the refusal arrives **after
+  the commit is made**, from the post-commit hook. If the scope is absent, build the commit **without**
+  the workflow change and park the diff in the pre-flight for a human to apply — never produce a
+  commit the hook cannot publish.
+
+  **The instance:** 2f Task 7's T7-2 edited `.github/workflows/test.yml`. The launcher's `GH_TOKEN`
+  carries `admin:public_key, gist, read:org, repo` and no `workflow`, and `gh auth git-credential`
+  prefers that env var over its own keyring. Every earlier push had succeeded only because no commit
+  had touched `.github/`. The failure cost the human an interactive device-flow login that the `!`
+  runner then backgrounded at 120 s with its one-time code in a file. **A five-second scope check
+  before the edit would have avoided all of it.** The durable fix is on the launcher: provision
+  `GH_TOKEN` with `workflow`. **And the check is now a pre-commit hook rather than a rule to
+  remember** — `check-push-scope`, which compares the index against `origin/main` and refuses the
+  commit with the scopes it saw and the fix, so the next session cannot repeat this by forgetting.
+
 ---
 
 ## 3. The number every Phase 2 tile calculation inherits

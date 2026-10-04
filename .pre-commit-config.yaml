@@ -40,6 +40,25 @@ repos:
         entry: 'bash -c ''max=2000000; rc=0; for f in "$@"; do sz=$(wc -c < "$f"); if (( sz > max )); then echo "$f: $sz bytes exceeds limit of $max" >&2; rc=1; fi; done; exit $rc'' --'
         language: system
 
+      # Refuse to CREATE a commit the push credential cannot PUBLISH. GitHub
+      # rejects any push touching .github/workflows/ unless the token carries
+      # the `workflow` scope, and that refusal arrives from the post-commit
+      # hook -- after the commit exists and after the sweep that validated it.
+      # 2026-10-03: an OAuth token minted without `workflow` had pushed every
+      # commit for months because none touched .github/; the first that did
+      # sat unpublished for a day. The script compares the index against
+      # origin/main (not HEAD), so it also fires when an EARLIER unpushed
+      # commit carries the change -- stacking behind an unpushable commit only
+      # makes the stack unpushable. `pass_filenames: false` and
+      # `always_run: true`: it reads the index itself, so `--all-files` does
+      # not make it fire on a workflow file that is merely present and pushed.
+      - id: check-push-scope
+        name: check-push-scope (workflow files need a token with `workflow`)
+        entry: bash scripts/check_push_scope.sh
+        language: system
+        pass_filenames: false
+        always_run: true
+
       # Local reimplementation of pre-commit-hooks' check-toml. tomllib is
       # stdlib in 3.11+; this template requires 3.12+. Routed through
       # `pixi run python` so the env (and its Python) is the same one the
