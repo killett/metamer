@@ -2120,3 +2120,174 @@ unnamed gap is indistinguishable from an absent one.
 diagnostic (which skips nothing — open question 19); the report module graph at **941 of a 980
 ceiling**, headroom 39, with `maps.py` present and no `matplotlib` in it, which is D10's lazy import
 measured rather than asserted; and the new channel printing `maps environment: matplotlib PRESENT`.
+
+---
+
+## Plan Task 8 — the entry point, the exit codes, and render-from-record, audited before any code (2026-10-21)
+
+**THE BRIEF** is the plan's Task 8 with D6 and D13: `python -m metamer.report <store>` writes markdown,
+JSON and PNGs beside the store or to `--out <dir>`; writability is checked before the permutation null
+runs; the markdown is rendered from the JSON record; no write to the store; exit codes per D13. **The
+ruling of 2026-10-21 adds five things to reckon with, and two of them collide with work already
+shipped** — T7-2's second CI environment, and the golden table's own scope.
+
+### 1. THE PROBE'S SUBJECT BECOMES THE ENTRY POINT — AND T7-2 MADE THE CI ENVIRONMENTS DIFFER IN EXACTLY THE MODULE THE PROBE FORBIDS
+
+Today the run-time probe walks `metamer.report` with `pkgutil`, imports every module, runs the numbers
+path on a parent-built store, and reads `sys.modules`. Task 8 points it at the entry point instead —
+a subprocess that runs `metamer.report` as `__main__` through `runpy` and reports `sys.modules` at exit
+— which exercises the whole path by construction and needs no list (the probe's own docstring already
+says so).
+
+**THE COLLISION.** The entry point draws the maps wherever matplotlib is importable. Since T7-2 the
+CI job carrying `[report]` has it, so on that job alone the entry point imports matplotlib: the
+`FORBIDDEN` check fires, and the module count jumps by matplotlib's whole graph in one environment
+and not the others. **That breaks the ceiling's stated basis** — *"each change of subject has moved
+every environment by the same small amount, so the local-versus-CI gap is a constant offset"* —
+because the offset would stop being constant on the very commit that re-derives it.
+
+**SETTLED BY HANDOFF §2, NOT A NEW RULING:** *"a constraint justified by 'otherwise the test is
+vacuous' belongs on the test, never on the product."* So **no `--no-maps` flag**. The probe's
+subprocess installs a meta-path finder that refuses `matplotlib` before running the entry point, and
+the subject is stated as what it is: **the entry point in an environment without the plotting stack**
+— which is the foreign-store property itself. The maps-drawn path stays covered where it already is,
+by the `[report]` job running `tests/test_report_maps.py`, whose environment line every run prints.
+**And the blocker makes the reading the same graph in every environment**, so the constant-offset
+basis survives the subject change it would otherwise have broken.
+
+**THE MECHANISM IS THE PRODUCT'S OWN PATH, READ OFF THE CODE:** `maps.matplotlib_available()` asks
+`find_spec("matplotlib")` and already answers *unavailable* on `ImportError` (`maps.py:327-332`). A
+finder at `sys.meta_path[0]` whose `find_spec` raises `ModuleNotFoundError` for `matplotlib` and its
+submodules therefore takes the exact branch a store's owner without `[report]` takes — no special
+case anywhere in `src`. **AND THE PROBE ASSERTS THE BLOCKER BIT**, not only that matplotlib is absent
+from `sys.modules`: the report's own record of the skipped maps must be present in the output, and
+the blocker must have been consulted at least once. Otherwise a blocker that silently failed to
+install reads, on the jobs without matplotlib, exactly like one that worked.
+
+**THE RE-DERIVATION, ONCE, AS AGREED IN `test_the_report_module_graph_stays_under_its_ceiling`'s
+docstring — the procedure, not the numbers:**
+
+0. **The baseline, read before any code, on the current subject:** the engine commit's run
+   `39898265596`, through `gh api`: 3.12 **924**, 3.13 (`[report]`, matplotlib present) **925**, 3.14
+   **932**; local **941**. Spread **17** across four environments, **local the highest**; `CEILING`
+   980 sits 39 above it, which clears twice the spread (34) with 5 to spare. **Local is the binding
+   reading** — the margin is measured from it, not from CI. And the `[report]` job reads within one
+   module of the job without matplotlib, because the walk imports `maps.py`, which imports matplotlib
+   only inside a call — the entry point *calls* it, which is the collision above.
+1. Take the local reading on the new subject.
+2. Set `CEILING` by the existing basis — more than twice the measured cross-environment spread above
+   the highest reading — using the local reading and the baseline's local-versus-CI offsets, which the
+   docstring states are constant across a change of subject.
+3. Push; read **all three** CI jobs' readings from their logs through
+   `gh api repos/<o>/<r>/actions/jobs/<id>/logs`. **Not `gh run view --job <id> --log`**, which
+   returned zero lines for a succeeded job on 2026-10-03 (the gotcha at head item 3).
+4. If any reading lands outside the expected band, or headroom falls below the spread, re-derive in
+   its own commit. **The docstring carries the basis and never a value**; the values live in
+   `DIAGNOSTIC_LINES` and the CI logs, as the docstring already rules.
+
+### 2. RENDER-FROM-RECORD IS MADE STRUCTURAL, AND THE TOKEN CHECK IS DEMOTED TO A BACKSTOP WITH ITS WEAKNESS WRITTEN DOWN
+
+Exit criterion 23 — *"every numeric token in the markdown, found in the JSON"* — is a **set-membership**
+check, weak in both directions: a markdown number that happens to equal a **different** field in the
+JSON passes, and one value formatted two ways (`0.6` and `0.60`) fails for the wrong reason. So the
+guarantee moves into the structure:
+
+- **The renderer's only input is the record as written.** `render(record) -> str`, called on
+  `json.loads(json_text)` of the artifact actually saved — not on in-memory section objects, which carry
+  precision and fields the artifact does not. The markdown is then provably a function of the JSON.
+- **The plan's precedent, read off the code:** `bench/report.py` renders no markdown at all. What it
+  sets is *record-first*: `decomposition_from_record` *"re-derive[s] … from the artifact alone"*, and
+  its test feeds the artifact back and compares. So there is **no existing formatter to reuse**; the
+  one-formatter rule below is new, and the renderer's test feeds the saved JSON back the same way.
+- **`render.py` imports from a standard-library allowlist and nothing else** — no numpy, no
+  `metamer.report.*`, and none of the stdlib modules that do arithmetic as a call — asserted by an
+  `ast` walk. With `divmod` and `pow` forbidden too, that closes the golden table's third gap inside
+  the renderer (§6), which the walker alone cannot.
+- **Its division count is pinned at 0 in the golden rate-site table — and that is where the
+  instruction meets the table's scope.** The table's scope is *modules whose AST names `Outcome`*; a
+  renderer fed plain JSON names no `Outcome`, so it would never enter the table at all. **The scope
+  widens to every module under `metamer/report/`** in addition to the `Outcome`-referencing ones —
+  mechanical. It pulls in `primitives.py` and `__init__.py`, absent today, at whatever count each
+  observes, and Task 8's `__main__.py` and `render.py` on arrival.
+- **A format spec is arithmetic the division count cannot see.** `f"{x:.1%}"` multiplies by 100 and no
+  `ast.BinOp` appears. So `render.py` formats every number through **one** function, and an `ast` check
+  forbids any other numeric format spec, `%`-formatting and `str.format` in the module.
+
+**THE TOKEN CHECK STAYS, AS THE BACKSTOP**, now comparing markdown tokens against the record's numeric
+leaves **passed through that same formatter** — which removes the `0.6`/`0.60` false failure. **Its
+remaining weakness is written beside it:** a number equal to a different field still passes, and only
+the structure above rules that out.
+
+### 3. EXIT CODES PER D13, AND THE ORDER WRITABILITY IS CHECKED IN
+
+`ExitCode` from the live enum: 0 `OK`, 1 `COMPLETED_WITH_FAILURES`, 2 `ABORTED_EARLY`, 3
+`CONFIG_INVALID`, 4 `DATA_INVALID`, 5 `INTERNAL_ERROR`. Per D13: **producible 0, 3, 4, 5**; **1 and 2
+not**, each reason recorded — 1 is a property of a run, 2 of a resumable run, and a report is neither.
+
+- **4 already has its causes in the reader, read off the code rather than the plan**: `read_store`
+  raises `InputContractError` when the path cannot be opened as a zarr group, carries no usable
+  `schema_version`, or declares one this reader does not know (`reader.py:297/309/317`), and `_array`
+  raises it for a missing array (`reader.py:209/214`). The entry point maps that exception to 4 and
+  nothing else to it.
+- **An unwritable `--out` is 3, by elimination from D13's own table** — not the store (4), not an
+  internal fault (5); it is an argument the caller supplied that cannot be honoured, which is the
+  usage class. Settled, not ruled.
+- **THE ORDER IS ASSERTED, NOT DESCRIBED:** arguments → output writability → `read_store` → sections
+  (the permutation null lives in `clustering.compute`) → write. The test spies on
+  `clustering.compute` and asserts an unwritable `--out` exits 3 **with zero calls**. Bug: a report that
+  computes for minutes and then cannot save.
+
+**AND "BESIDE THE STORE" NEEDS A DEFINITION, OR TWO OF THE PLAN'S OWN TESTS COLLIDE.** The permission
+test removes write permission from the store and expects exit 0; output written *inside* the store
+directory would then be impossible. **"Beside" means the store's parent directory — never inside the
+store** — e.g. `<parent>/<store name>.report/`. Stated before the code, because the first draft of a
+default path is exactly where "next to it" becomes "in it".
+
+### 4. THE WRITER-READER COVERAGE TABLE — TASK 8 NEEDS NOTHING OUTSIDE IT
+
+Checked against the tree: `schema_version` is a root attr, so `StoreView.attrs` carries it; *"not a
+metamer store"* is the reader's own refusal; the pass-1 sibling store for the drop row is read through
+`read_store` by `drop.py:340`. **The only zarr opener in `metamer.report` is `reader.py:295`** — one
+consumer today. **So no widening is planned**, and the confirmation at code time is mechanical: T7-3's
+coverage tests stay green with no edits. If the entry point turns out to need a fact the reader lacks,
+the reader is widened — never a second consumer.
+
+### 5. THE CONSOLIDATED-METADATA QUESTION, TAKEN FOR `_disagreements`
+
+Task 7's mismatched-pair test found that the reader sees array attrs **through consolidated
+metadata**: an edit to the array's own attrs did not reach it until re-consolidation. **So a store whose
+consolidated copy disagrees with its arrays is described by the consolidated copy**, silently. Task 8
+gives `_disagreements` a second contradiction to report: the consolidated metadata against the
+unconsolidated per-node metadata, **for the facts the reader actually uses** — root attrs and
+`/status/outcome`'s flag pair. Reported, never repaired (D6), and still one consumer: the reader reads
+one store's metadata two ways. **The test is the accident made deliberate** — mutate an array's attrs
+without re-consolidating and assert the note.
+
+### 6. THE GOLDEN TABLE'S THIRD GAP — TASK 7's DECISION STANDS, AND INSIDE THE RENDERER STRUCTURE CLOSES IT
+
+The gap: *a division expressed as a function call is outside the table's reach* — `maps.py`'s
+`np.divide(counts, totals, ...)` is invisible while its `Path` join counts. **Task 7's as-built
+section already settled it: *"Named rather than repaired: widening the walker to count calls would
+require deciding which calls are divisions, which is the classification the table exists to
+avoid."*** This entry's first draft reversed that, counting calls named `divide`, `true_divide`,
+`floor_divide`, `truediv` and `floordiv` and calling it observation. **Withdrawn before commit: the
+set of calls that divide is open-ended.** `np.mean(x)` is `sum / n`, and so are `np.average`,
+`np.nanmean` and `statistics.mean`; `divmod` is a builtin. `audit_report.py:277` already computes a
+mean that way, invisible to the walker — a mean of a continuous quantity, not a rate over `Outcome`,
+so **no rate is hidden today**. But a name list that counts `np.divide` and not `np.mean` is a
+classification, and one that counts both has decided what a division is. **So the walker keeps
+observing `BinOp` nodes only, `maps.py` stays at 4, and the gap stays named**, now with `np.mean` as
+its sharper example.
+
+**INSIDE `render.py` THE GAP IS CLOSED BY STRUCTURE, NOT BY THE WALKER.** The module imports only
+from a standard-library allowlist that does no arithmetic — no `math`, `operator`, `statistics`,
+`fractions`, `decimal`, and no numpy. And its AST names neither `divmod` nor `pow`. With those gone,
+the only way left to divide inside it is a `BinOp`, which the table counts and pins at 0. **What
+stays outside reach is written beside the check:** a deliberate `x.__truediv__(y)`. The check
+guards against accident, not against an adversary.
+
+### UNSETTLED
+
+**Nothing.** Every decision above is settled by the plan, D13, the handoff's rule on test-only
+constraints, Task 7's as-built record (§6), or the ruling of 2026-10-21. If the code turns up
+something that is not, it is added here before the code that depends on it.
