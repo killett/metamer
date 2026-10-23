@@ -2291,3 +2291,45 @@ guards against accident, not against an adversary.
 **Nothing.** Every decision above is settled by the plan, D13, the handoff's rule on test-only
 constraints, Task 7's as-built record (§6), or the ruling of 2026-10-21. If the code turns up
 something that is not, it is added here before the code that depends on it.
+
+### ADDENDUM, BEFORE ANY CODE (2026-10-23) — `ExitCode` LIVES BEHIND THE BOUNDARY D13 TELLS THE REPORT TO KEEP
+
+**Found reading the imports, before a line of Task 8 was written.** D13 says *reuse `ExitCode`* —
+*"one published table, not a second"*. `ExitCode` is defined in `metamer.batch.validation`, which
+imports `pydantic` and `metamer.config.model` at module scope (`validation.py:46,50`). **Importing
+that module alone loads pydantic** — measured, `'pydantic' in sys.modules` is `True` with 993
+modules. And `FORBIDDEN` lists `pydantic` as the boundary: *"a user with a store and NO CONFIG …
+must not be made to load the validator for a config they do not have."* The entry point is exactly
+where the two rules meet. **Neither escape honours both.** A lazy import fails because the probe
+reads `sys.modules` after the call. A second enum fails D13, and it fails silently: two `IntEnum`s
+with equal values compare equal as ints, so nothing but an identity check would ever notice them
+drift.
+
+**SETTLED BY THE TWO RULES TOGETHER, NOT A NEW RULING.** The enum moves, with its values and
+docstring intact, to `metamer/exitcodes.py`, which imports only the standard library.
+`metamer.batch.validation` re-exports it (`import … as ExitCode`, mypy's explicit form), so all
+eleven existing imports resolve to **the same object**. The tests:
+
+- `validation.ExitCode is exitcodes.ExitCode`. Bug: a copied second table that drifts on the next
+  appended member.
+- The probe on the entry point (§1) finds no `pydantic`. Bug: the move re-imports what it was made
+  to leave behind.
+
+**`exit_code_for` DOES NOT MOVE.** It maps staged validation errors, and it lives with them. The
+report needs one mapping — the reader's `InputContractError` to 4 — and carries it itself. A test
+asserts it agrees with `exit_code_for` on that exception. Bug: the report and the batch run giving
+one refusal two codes.
+
+**AND §5 IS CORRECTED BEFORE ITS CODE: ITS ROOT-ATTRS HALF COMPARES A RECORD WITH ITSELF.** Measured
+on a real store: in zarr v3 the consolidated block lives inside the root `zarr.json` and describes
+the **child nodes only** — 61 of them, with no root entry. Root attrs are stored **once**, in that
+same file's `attributes`. So no consolidated copy of them exists to disagree. **The child-node
+metadata is the real subject.** Through it the reader takes `/status/outcome`'s flag pair
+(`reader.py:166`) and every array's shape and dtype. **So the comparison covers every node the
+consolidated copy describes — discovered, not listed**, the probe's lesson. Each node's
+consolidated entry is checked against its own `zarr.json`. One field is ignored: a subgroup's
+consolidated entry carries a nested `consolidated_metadata` that its own file never does. On an
+untouched store that field is the *only* difference, measured at seven subgroups, so a comparison
+that kept it would report a contradiction on every store ever written. The mutated store reports
+exactly `status/outcome: attributes` while the reader still describes the stale flag pair — the
+accident, reproduced.
