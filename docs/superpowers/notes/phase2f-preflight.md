@@ -2333,3 +2333,117 @@ untouched store that field is the *only* difference, measured at seven subgroups
 that kept it would report a contradiction on every store ever written. The mutated store reports
 exactly `status/outcome: attributes` while the reader still describes the stale flag pair — the
 accident, reproduced.
+
+---
+
+## TASK 8, AS BUILT (2026-10-23) — WHAT THE CODE TURNED UP BEYOND THE PRE-FLIGHT AND ITS ADDENDUM
+
+**§1–§6 and the addendum are implemented as written** (``2a2ade7``). Below is only what the code
+turned up beyond them, plus the readings the pre-flight said would be recorded.
+
+### 1. THE SWEEP AND THE THREE CI READINGS
+
+**`pixi run test`: 1644 passed, 0 FAILED and 0 INDETERMINATE of 6 bracketed (excludes the 11 unbracketed live RSS tests, OQ27)**. That is the RSS block's headline in the OQ27 form: the 11
+live RSS tests outside `rss_validity` are not in the bracketed count, and the sweep's own block
+names them (all 11 ran, 0 failed). Wall time: 7266.28 s (2:01:06), on tree `3f4ffa3f` asserted equal at commit. **+34 on sweep B's 1610**.
+
+**The probe's ceiling, re-derived once as §1 said.** Local, on the new subject, the reading is
+**945**: the entry point run through `runpy` with matplotlib refused, plus the package walk. That is
+the highest of the four readings, so **`CEILING = 990`**. The headroom is 45, more than twice the
+~21-module spread the docstring states (17 measured on the old baseline). The docstring records the
+basis, not the values. The three CI jobs were predicted from the baseline's offsets at about 928,
+929 and 936. **Read from the jobs' own logs** (`gh api …/actions/jobs/<id>/logs`, run 39937220708):
+
+| job | predicted | read | headroom |
+|---|---|---|---|
+| 3.12 (no `[report]`) | ~928 | **928** | 62 |
+| 3.13 (`[report]`, matplotlib installed) | ~929 | **929** | 61 |
+| 3.14 (no `[report]`) | ~936 | **936** | 54 |
+
+**ALL THREE EXACTLY AS PREDICTED, AND THE CEILING STANDS.** Every headroom is more than twice the
+spread, so nothing is re-derived. **The 3.13 row is the one that matters.** It is T7-2's job, where
+matplotlib is *installed*, and it still reads 929, one module above the job without it. The finder in
+the test refused the import, the entry point recorded the maps as not drawn, and the count did not
+move. That is §1's collision resolved, measured in the environment that created it. That job's own
+channel line reads `maps environment: matplotlib PRESENT -- the drawing tests ran`. The other two
+read `ABSENT`, so the run had both arms. All three jobs: 1616 or 1620 passed, 0 failed. The RSS block
+reads `1 measured, 0 FAILED, 0 INDETERMINATE`, and the OQ27 line says 3 of the 11 ran, 0 failed (CI
+deselects the rest).
+
+### 2. THE PACKAGE WALK STAYS IN THE PROBE, BESIDE THE ENTRY POINT
+
+§1 moves the probe's subject to the entry point. **The walk over `metamer.report` stays as well**
+(it skips only `__main__`, which `runpy` runs). Without the walk, a module that `__main__` does not
+yet import would never be probed, and a forbidden import added there would not be seen until the
+day something wired it in. The `at_import` reading still comes from the walk, and the `after_call`
+reading comes from the entry point. The probe asserts three things: the finder was consulted at
+least once, the record says the maps were not drawn, and it names the extra. Without the finder,
+four probe tests fail locally: matplotlib arrives and the count breaks the ceiling. That is the
+blocker shown to be load-bearing rather than assumed.
+
+### 3. THE MUTANTS — ONE SURVIVED, ONE IS EQUIVALENT
+
+These ran against `tests/test_report_main.py` and the probe/§5 tests.
+
+- **Killed:**
+  - compute before the writability check;
+  - no cleanup of the directory `_prepare` made;
+  - no inside-the-store check;
+  - `InputContractError` caught as 5;
+  - a render-time `* 100`;
+  - a format spec outside `_number`;
+  - the `consolidated_metadata` exclusion removed (the untouched-store test fails);
+  - the matplotlib blocker removed.
+- **SURVIVED AT FIRST: THE TWO RATE DENOMINATORS SWAPPED.** `_rate` printing `covered` beside
+  `rate` passed every test, because in the fixture store every candidate has `covered == fitted`.
+  The D6 test (*"a rate travels with its population"*) was checking a case where the right and the
+  wrong population are the same number. **Killed by a test whose populations differ**, built from
+  the real `FailureTally`. It asserts `0.4 (2 of 5 fitted); coverage 0.25 (2 of 8 covered)` exactly.
+  The docstrings that claimed the original test caught it were corrected.
+- **EQUIVALENT: RENDERING FROM THE IN-MEMORY RECORD INSTEAD OF THE FILE.** `_plain` already returns
+  JSON's own types (dicts, lists, str, int, float, None), so `render(record)` and
+  `render(json.loads(file))` produce the same text. No test can tell them apart, and none should
+  claim to. **The guarantee comes from the structure, not from that test.** `render.py` imports
+  nothing that can compute, so it cannot recompute even if it is handed the in-memory record. The
+  `report.md == render(json.loads(report.json))` test holds the artifact and the view equal. It does
+  not prove which object was passed.
+
+### 4. COVERAGE FOUND TWO BRANCHES THAT HAD NEVER RENDERED
+
+`pytest --cov` on the new modules showed that two populated forms never ran: the clustering row with
+an available statistic, and the early-abort table's rows. **The fixture store is under the
+statistic's 500-point floor**, so every clustering row it produces is the *unavailable* form, and it
+records no early-abort rows. Those are the forms a real store's report would print. **Both are now rendered
+from the real dataclasses** (`Arrangement`, `DropRow`, passed through `_plain`), not from hand-built
+dicts, and the test asserts the exact cells:
+
+- `| 3 | 1.5 | 1.25 | 0.125 |`
+- `5 failures among 16 eligible; 999 permutations, seed 7`
+- `| planted-candidate | 0.3 over fitted | 3 | 10 | yes |`
+
+### 5. THE GOLDEN TABLE: FIVE ROWS IN, AND THE FIRST COUNT IN SCOPE IS ALL FALSE POSITIVES
+
+The scope is widened by a directory, not a list. The new rows are:
+
+| module | count |
+|---|---|
+| `__init__.py` | 0 |
+| `__main__.py` | 5 |
+| `primitives.py` | 0 |
+| `record.py` | 0 |
+| `render.py` | 0 (pinned) |
+
+**All five of `__main__.py`'s divisions are `pathlib` joins** (`out / RECORD_NAME` and its siblings).
+That is Task 7 §6's false positive again, and the row says so. The test keeps its name,
+`…_over_every_outcome_referencing_module`, although its scope is now wider than the name. The
+helper it calls is renamed `_rate_site_scope`, and its docstring states the widening.
+
+### 6. README
+
+- The status line now says the report exists, as its own provisional entry point.
+- New **Describing a store** section: the two invocations, where the output goes and that it never
+  goes inside the store, the `[report]` extra for the maps, and exit codes 0, 3, 4 and 5.
+- New `metamer.report` bullet in the layer list.
+- **Two stale sentences corrected.** The status line said *"`validate` and `report` are real"*. The
+  layers paragraph said *"the extras themselves do not exist yet"*. `[report]` has existed since
+  Task 7.
