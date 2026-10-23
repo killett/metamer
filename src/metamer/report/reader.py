@@ -272,6 +272,69 @@ def _disagreements(
     return tuple(notes)
 
 
+def _consolidation_disagreements(store: Path, root: zarr.Group) -> tuple[str, ...]:
+    """Nodes whose consolidated metadata disagrees with their own `zarr.json`.
+
+    **THE READER SEES ARRAY METADATA THROUGH THE CONSOLIDATED COPY**, so a store
+    edited without re-consolidating is described by the copy, silently -- Task
+    7's mismatched-pair test hit exactly that, when an edit to an array's own
+    attrs did not reach the reader. This is the second contradiction between
+    two records in one store, and like the first it is **reported, never
+    repaired**: re-consolidating is a write, and the report never writes.
+
+    **THE SCOPE IS EVERY NODE THE CONSOLIDATED COPY DESCRIBES, DISCOVERED AND
+    NOT LISTED**, which covers every array the reader opens and the one
+    attribute set it reads off a child (`/status/outcome`'s flag pair). Root
+    attrs are not compared because they are not duplicated: in zarr v3 the
+    consolidated block lives inside the root's own `zarr.json` and describes
+    the children only.
+
+    **ONE FIELD IS IGNORED, AND IT WAS MEASURED BEFORE THIS WAS WRITTEN**: a
+    subgroup's consolidated entry carries a nested `consolidated_metadata` that
+    its own file never does. On an untouched store that is the only difference,
+    so keeping it would report a contradiction on every store ever written.
+
+    Args:
+        store: The store's path, opened a second time per-node.
+        root: The group as the reader opened it, consolidated where it can be.
+
+    Returns:
+        One note per disagreeing node, empty when the copies agree or when the
+        store carries no consolidated copy to disagree with.
+    """
+    consolidated = root.metadata.consolidated_metadata
+    if consolidated is None:
+        return ()
+    per_node = zarr.open_group(str(store), mode="r", use_consolidated=False)
+    notes: list[str] = []
+    for path, entry in sorted(consolidated.flattened_metadata.items()):
+        try:
+            own = per_node[path].metadata.to_dict()
+        except KeyError:
+            notes.append(
+                f"/{path} is described by the consolidated metadata but has no "
+                "metadata of its own; the reader read the consolidated copy, so "
+                "what this report says about it may describe a node the store "
+                "no longer holds. Reported rather than resolved"
+            )
+            continue
+        described = entry.to_dict()
+        fields = sorted(
+            key
+            for key in set(described) | set(own)
+            if key != "consolidated_metadata" and described.get(key) != own.get(key)
+        )
+        if fields:
+            notes.append(
+                f"/{path}'s consolidated metadata disagrees with its own zarr.json "
+                f"in {', '.join(fields)}; the reader read the consolidated copy, so "
+                "what this report says about it may describe an earlier state of "
+                "the store. Reported rather than resolved: re-consolidating is a "
+                "write, and the report never writes to the store"
+            )
+    return tuple(notes)
+
+
 def read_store(path: Path | str) -> StoreView:
     """Open a finished store for READING and return its labelled arrays.
 
@@ -344,5 +407,6 @@ def read_store(path: Path | str) -> StoreView:
         completion=Completion(
             complete=int(np.count_nonzero(tiles)), total=int(tiles.size)
         ),
-        disagreements=_disagreements(outcome, tiles, side),
+        disagreements=_disagreements(outcome, tiles, side)
+        + _consolidation_disagreements(store, root),
     )

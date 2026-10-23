@@ -46,7 +46,7 @@ criteria = ["aic", "hqic"]
 #: The report's module-graph ceiling. **A BOUND, NOT A PIN** -- the ceiling
 #: test carries the spread it is derived from and the triggers that
 #: re-derive it.
-CEILING = 980
+CEILING = 990
 
 FORBIDDEN: dict[str, str] = {
     # PORTABILITY. Lives behind the [report] extra, so it may genuinely be
@@ -114,11 +114,11 @@ _PROBE = textwrap.dedent(
 )
 
 
-#: **THE RUN-TIME PROBE: ONE SOURCE, TWO PREAMBLES.** It imports `read_store`
-#: and CALLS it on a store built by the PARENT -- build the fixture inside the
-#: probe and the reading describes the fixture builder, which is a `run()` and
-#: drags in everything the boundary excludes. The subject and its positive
-#: control differ by the injected `preamble` alone.
+#: **THE RUN-TIME PROBE: ONE SOURCE, TWO PREAMBLES.** It runs the report on a
+#: store built by the PARENT -- build the fixture inside the probe and the
+#: reading describes the fixture builder, which is a `run()` and drags in
+#: everything the boundary excludes. The subject and its positive control differ
+#: by the injected `preamble` alone.
 #:
 #: **THE SCOPE IS DISCOVERED BY WALKING THE PACKAGE, NOT HAND-PICKED.** The
 #: probe was aimed at the reader alone and would have been silent about 2f
@@ -127,16 +127,40 @@ _PROBE = textwrap.dedent(
 #: list misses the NEXT module as surely as it missed that one**, which is the
 #: golden table's lesson one instrument over: define the scope mechanically and
 #: a new member is covered on the day it lands rather than the day somebody
-#: remembers. `pkgutil.walk_packages` decides the set; the numbers-path
-#: functions are then called on the parent-built fixture.
+#: remembers.
 #:
-#: **WHEN TASK 8 ADDS THE ENTRY POINT THIS BECOMES `python -m metamer.report
-#: <store>`**, which exercises the whole path by construction and needs no
-#: list at all.
+#: **SINCE 2f TASK 8 THE SUBJECT IS THE ENTRY POINT** -- `python -m
+#: metamer.report <store>`, run through `runpy` -- which exercises every
+#: section the report wires in, by construction. **The walk stays**, importing
+#: every module except `__main__` (which the run executes), because a report
+#: module not yet wired into the entry point would otherwise be probed by
+#: nothing.
+#:
+#: **THE PLOTTING STACK IS REFUSED BY THE TEST, NEVER BY A PRODUCT FLAG**
+#: (handoff section 2: a constraint justified by "otherwise the test is
+#: vacuous" belongs on the test). The entry point draws maps wherever
+#: matplotlib is importable, and since T7-2 one CI job has it, so unblocked
+#: this probe would trip `FORBIDDEN` there alone and break the ceiling's
+#: constant-offset basis. A finder at `sys.meta_path[0]` raises
+#: `ModuleNotFoundError` for `matplotlib`, which `maps.matplotlib_available`
+#: already answers as *unavailable* -- the product's own branch for a user
+#: without `[report]`. **And the probe reports that the finder was consulted**,
+#: because a finder that silently failed to install reads, on the jobs without
+#: matplotlib, exactly like one that worked.
 _RUNTIME_PROBE = textwrap.dedent(
     """
-    import importlib, json, pkgutil, sys
+    import importlib, importlib.abc, json, pkgutil, runpy, sys
     {preamble}
+    refused = []
+
+    class _NoPlotting(importlib.abc.MetaPathFinder):
+        def find_spec(self, name, path=None, target=None):
+            if name == "matplotlib" or name.startswith("matplotlib."):
+                refused.append(name)
+                raise ModuleNotFoundError(f"refused by the probe: {{name}}", name=name)
+            return None
+
+    sys.meta_path.insert(0, _NoPlotting())
     import metamer.report
     # **THE SCOPE IS DISCOVERED, NOT LISTED.** Every module under the package,
     # walked and imported, so the next one is covered on the day it lands.
@@ -147,35 +171,46 @@ _RUNTIME_PROBE = textwrap.dedent(
         )
     )
     for name in discovered:
-        importlib.import_module(name)
+        if name != "metamer.report.__main__":
+            importlib.import_module(name)
     at_import = sorted(m for m in sys.modules if m in {forbidden!r})
-    from metamer.report.drop import describe
-    from metamer.report.numbers import compute
-    from metamer.report.reader import read_store
-    view = read_store({store!r})
-    compute(view)
-    describe(view)
+    sys.argv = ["metamer.report", {store!r}, "--out", {out!r}]
+    try:
+        runpy.run_module("metamer.report", run_name="__main__", alter_sys=True)
+        code = None
+    except SystemExit as stop:
+        code = stop.code
+    with open({record!r}) as handle:
+        maps = json.load(handle)["maps"]
     print(json.dumps({{
         "at_import": at_import,
         "after_call": sorted(m for m in sys.modules if m in {forbidden!r}),
         "modules": len(sys.modules),
         "discovered": discovered,
+        "refused": sorted(set(refused)),
+        "code": code,
+        "drawn": maps["drawn"],
+        "extra": maps["extra"],
     }}))
     """
 )
 
 
-def _reads(store: Path, preamble: str = "") -> dict[str, object]:
-    """Forbidden modules and graph size after `read_store` has actually RUN.
+def _reads(store: Path, out: Path, preamble: str = "") -> dict[str, object]:
+    """Forbidden modules and graph size after the ENTRY POINT has actually run.
 
-    Two readings from one subprocess: at the moment `read_store` is imported,
-    and after it has been called. **The second is the one the boundary is
-    about** -- a convenience import inside the function body is invisible to
-    the first, and `metamer/report/__init__.py` being docstring-only means the
-    package-level probe is invisible to both.
+    Two readings from one subprocess: once every report module is imported,
+    and after `python -m metamer.report` has run on the store. **The second is
+    the one the boundary is about** -- a convenience import inside a function
+    body is invisible to the first. The entry point prints a line of its own,
+    so the reading is the LAST line of stdout.
     """
     source = _RUNTIME_PROBE.format(
-        preamble=preamble, forbidden=set(FORBIDDEN), store=str(store)
+        preamble=preamble,
+        forbidden=set(FORBIDDEN),
+        store=str(store),
+        out=str(out),
+        record=str(out / "report.json"),
     )
     result = subprocess.run(
         [sys.executable, "-c", source],
@@ -185,14 +220,41 @@ def _reads(store: Path, preamble: str = "") -> dict[str, object]:
         check=False,
     )
     assert result.returncode == 0, result.stderr
-    reading: dict[str, object] = json.loads(result.stdout)
+    reading: dict[str, object] = json.loads(result.stdout.splitlines()[-1])
     return reading
 
 
 @pytest.fixture(scope="module")
-def runtime_reading(finished_store: Path) -> dict[str, object]:
-    """The clean run-time reading, taken once and asserted by two tests."""
-    return _reads(finished_store)
+def runtime_reading(
+    finished_store: Path, tmp_path_factory: pytest.TempPathFactory
+) -> dict[str, object]:
+    """The clean run-time reading, taken once and asserted by several tests."""
+    return _reads(finished_store, tmp_path_factory.mktemp("probe-out"))
+
+
+def test_the_probe_ran_the_entry_point_with_the_plotting_stack_refused(
+    runtime_reading,
+):
+    """The subject actually ran, exited 0, and took the no-matplotlib branch.
+
+    Expected value determined independently: `sys.exit(main())` on a readable
+    store raises `SystemExit(0)`; the finder raises for `matplotlib`, so
+    `maps.matplotlib_available` -- which asks `find_spec("matplotlib")` --
+    must have consulted it and answered unavailable, and the record names
+    `maps.REPORT_EXTRA`.
+
+    Bug this catches: a blocker that silently failed to install -- on the jobs
+    without matplotlib it reads exactly like one that worked, and on the
+    `[report]` job the reading would quietly include matplotlib's whole graph;
+    and a probe whose subject never ran, under which every boundary reading
+    below describes imports alone.
+    """
+    from metamer.report.maps import REPORT_EXTRA
+
+    assert runtime_reading["code"] == 0
+    assert "matplotlib" in cast(list[str], runtime_reading["refused"])
+    assert runtime_reading["drawn"] is False
+    assert runtime_reading["extra"] == REPORT_EXTRA
 
 
 def _imports(target: str) -> list[str]:
@@ -344,7 +406,7 @@ def test_reading_a_store_imports_no_forbidden_module(runtime_reading):
     assert len(on_disk) >= 3, on_disk
 
 
-def test_the_runtime_probe_can_see_a_violation(finished_store):
+def test_the_runtime_probe_can_see_a_violation(finished_store, tmp_path):
     """THE POSITIVE CONTROL for the run-time probe, on both of its readings.
 
     Expected value determined independently: `pydantic` is in `FORBIDDEN` and
@@ -363,8 +425,8 @@ def test_the_runtime_probe_can_see_a_violation(finished_store):
     reimplementing it; a control written twice tests two things and proves
     neither.
     """
-    clean = _reads(finished_store)
-    tripped = _reads(finished_store, preamble="import pydantic")
+    clean = _reads(finished_store, tmp_path / "clean")
+    tripped = _reads(finished_store, tmp_path / "tripped", preamble="import pydantic")
 
     assert tripped["at_import"] == ["pydantic"]
     assert tripped["after_call"] == ["pydantic"]
@@ -406,6 +468,10 @@ def test_the_report_module_graph_stays_under_its_ceiling(runtime_reading):
     ruled triggers only: a reading outside the expected shift, or headroom
     shrinking below the spread -- plus one deliberate re-derivation at Task 8,
     when the subject becomes the entry point rather than a package walk.
+    **That re-derivation is DONE (2f Task 8, 2026-10-23)**, by this basis and
+    from the highest reading in every environment, with matplotlib refused
+    inside the probe so the graph is the same graph everywhere; the readings
+    are in the pre-flight's Task 8 section and the commit message, not here.
 
     **IF A READING LANDS OUTSIDE THE EXPECTED SHIFT, OR HEADROOM DROPS BELOW
     THE SPREAD, RE-DERIVE THE MARGIN FROM THE NEW BAND -- DO NOT BUMP THE
@@ -426,7 +492,8 @@ def test_the_report_module_graph_stays_under_its_ceiling(runtime_reading):
     # only when the bound fires has no source for it on a green run. This is
     # the channel `conftest.DIAGNOSTIC_LINES` exists for.
     conftest.DIAGNOSTIC_LINES.append(
-        f"report module graph: {count} modules after the whole package ran "
+        f"report module graph: {count} modules after the entry point ran "
+        f"with matplotlib refused "
         f"(ceiling {CEILING}, headroom {CEILING - count})"
     )
     assert count < CEILING, (
@@ -903,3 +970,86 @@ def test_a_store_with_no_flag_attributes_yields_no_legend(finished_store, tmp_pa
     # store.
     assert view.outcome.size > 0
     assert view.model_labels
+
+
+# ---------------------------------------------------------------------------
+# The consolidated copy against each node's own metadata (2f Task 8, §5)
+# ---------------------------------------------------------------------------
+
+
+def _stale_copy(finished_store: Path, tmp_path: Path) -> tuple[Path, zarr.Group]:
+    """A copy of the fixture, opened PER-NODE so edits skip the consolidated copy.
+
+    This is the accident Task 7's mismatched-pair test hit, made deliberate: an
+    edit through a group opened without consolidation rewrites the node's own
+    `zarr.json` and leaves the root's consolidated block describing the old one.
+    """
+    import shutil
+
+    store = tmp_path / "stale.zarr"
+    shutil.copytree(finished_store, store)
+    return store, zarr.open_group(str(store), mode="r+", use_consolidated=False)
+
+
+def _consolidation_notes(view: StoreView) -> list[str]:
+    return [note for note in view.disagreements if "consolidated" in note]
+
+
+def test_an_untouched_store_reports_no_consolidation_disagreement(finished_store):
+    """A store as the writer left it has consolidated and per-node metadata agree.
+
+    Expected value determined independently: the writer consolidates last, so
+    the two copies were written from one state and nothing has touched either.
+
+    Bug this catches: a comparison that fires on every store -- measured before
+    the code, an untouched store's subgroups differ in exactly one field, the
+    nested `consolidated_metadata` that only a consolidated entry carries; a
+    check that kept it would report seven contradictions on every store ever
+    written, and a note that is always present is a note nobody reads.
+    """
+    assert _consolidation_notes(read_store(finished_store)) == []
+
+
+def test_an_array_edited_without_reconsolidating_is_reported(finished_store, tmp_path):
+    """The stale consolidated copy is named, with the node and the field.
+
+    Expected value determined independently: the edit below rewrites only
+    `/status/outcome`'s own `zarr.json`, and only its `attributes`, so exactly
+    one node and one field disagree -- by construction of the edit.
+
+    Bug this catches: the consolidated copy silently describing the store. The
+    reader reads array metadata through it, so without this note the report
+    would render the OLD flag pair as the store's alphabet and say nothing.
+    """
+    store, raw = _stale_copy(finished_store, tmp_path)
+    array = raw["status/outcome"]
+    assert isinstance(array, zarr.Array)
+    array.attrs["flag_meanings"] = "renamed " + str(array.attrs["flag_meanings"])
+
+    view = read_store(store)
+
+    (note,) = _consolidation_notes(view)
+    assert "status/outcome" in note
+    assert "attributes" in note
+    # Reported, never repaired (D6): the view still describes the consolidated
+    # copy, which is the fact the note warns about.
+    assert not any(name.startswith("renamed") for name in view.legend.values())
+
+
+def test_a_node_missing_its_own_metadata_is_reported(finished_store, tmp_path):
+    """A node the consolidated copy describes but the store no longer holds.
+
+    Expected value determined independently: deleting `/selection/n_valid`'s own
+    `zarr.json` leaves the consolidated block naming a node with no metadata of
+    its own -- one node, by construction.
+
+    Bug this catches: a comparison that only checks nodes it can open per-node,
+    which would skip exactly the most damaged node in the store.
+    """
+    store, _ = _stale_copy(finished_store, tmp_path)
+    (store / "selection" / "n_valid" / "zarr.json").unlink()
+
+    view = read_store(store)
+
+    (note,) = _consolidation_notes(view)
+    assert "selection/n_valid" in note

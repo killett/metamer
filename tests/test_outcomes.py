@@ -5,8 +5,9 @@ import pytest
 
 from metamer.core.outcomes import Outcome, failure_tally
 
-#: Every `src/` module whose AST mentions `Outcome`, with its count of division
-#: nodes. **Measured by `ast` on 2026-09-21, not hand-counted**, and pinned
+#: Every `src/` module whose AST mentions `Outcome` -- and, since 2f Task 8, every
+#: module under `metamer/report/` whether it does or not -- with its count of
+#: division nodes. **Measured by `ast` on 2026-09-21, not hand-counted**, and pinned
 #: rather than bounded because this set changes rarely and every change is a
 #: decision somebody should read.
 #:
@@ -91,6 +92,15 @@ FAILURE_RATE_SITE_TABLE: dict[str, int] = {
     # named gap, beside "a new harness need not call `failure_tally`" and "a
     # rate over raw integer codes never referencing `Outcome`".
     #
+    # **RECKONED WITH AT 2f TASK 8 AND KEPT NAMED, NOT REPAIRED.** Counting
+    # calls by name was drafted and withdrawn before commit: the calls that
+    # divide are open-ended -- `np.mean(x)` is `sum / n`, and so are
+    # `np.average`, `np.nanmean` and `statistics.mean` -- so a name list that
+    # counts `np.divide` and not `np.mean` is a classification, which this
+    # table exists to avoid. Inside the renderer the gap is closed by
+    # STRUCTURE instead: `render.py` imports nothing that can compute (see
+    # `tests/test_report_main.py`), so its only possible division is a `BinOp`.
+    #
     # On the fraction itself: it is failures over the SAME predicate the
     # statistic uses (D9's invariant), applied per block rather than per
     # store, and it does not go through `failure_tally` because that returns a
@@ -98,15 +108,35 @@ FAILURE_RATE_SITE_TABLE: dict[str, int] = {
     # definition of the store-level rate -- the same population, reduced
     # differently.
     "metamer/report/maps.py": 4,
+    # **THE REPORT PACKAGE IS IN SCOPE WHOLE SINCE 2f TASK 8.** A renderer fed
+    # plain JSON names no `Outcome`, so the original scope could never see the
+    # module that turns the record's numbers into text -- the one place a
+    # render-time division would make the markdown disagree with the JSON.
+    # Every row below is observed, not classified, like every row above.
+    "metamer/report/__init__.py": 0,
+    # All five are `pathlib` joins (`out / RECORD_NAME` and its siblings).
+    "metamer/report/__main__.py": 5,
+    "metamer/report/primitives.py": 0,
+    "metamer/report/record.py": 0,
+    # **PINNED AT 0, AND THE PINNING IS THE POINT**: the markdown is rendered
+    # from the saved record, so any division here is a number the record does
+    # not hold.
+    "metamer/report/render.py": 0,
 }
 
 
-def _outcome_referencing_modules() -> dict[str, int]:
-    """The scope, decided mechanically: `src/` modules whose AST names `Outcome`.
+def _rate_site_scope() -> dict[str, int]:
+    """The scope, decided mechanically: `src/` modules whose AST names `Outcome`,
+    and every module under `metamer/report/`.
 
     An identifier anywhere in the tree counts -- a `Name`, an `Attribute`, an
     import alias or a definition -- because the question is whether the module
     is in the taxonomy's world at all, not how it spells its reference.
+
+    **THE REPORT PACKAGE JOINED WHOLE AT 2f TASK 8**, because its renderer reads
+    plain JSON and names no `Outcome` -- the original rule could never see the
+    one module whose division count must be 0. Still mechanical: a directory,
+    not a list.
     """
     root = Path(__file__).resolve().parents[1] / "src"
     table: dict[str, int] = {}
@@ -129,8 +159,9 @@ def _outcome_referencing_modules() -> dict[str, int]:
                 names.add(node.name)
             if isinstance(node, ast.Div | ast.FloorDiv):
                 divisions += 1
-        if "Outcome" in names:
-            table[path.relative_to(root).as_posix()] = divisions
+        relative = path.relative_to(root).as_posix()
+        if "Outcome" in names or relative.startswith("metamer/report/"):
+            table[relative] = divisions
     return table
 
 
@@ -1040,7 +1071,7 @@ def test_the_rate_site_table_is_pinned_over_every_outcome_referencing_module():
        would not be in the table. Sub-phase 2f's D1 forbids it (a predicate
        must read its subject, not an available proxy) and nothing catches it.
     """
-    assert _outcome_referencing_modules() == FAILURE_RATE_SITE_TABLE, (
+    assert _rate_site_scope() == FAILURE_RATE_SITE_TABLE, (
         "the rate-site table moved. A module ADDED to the scope must be added "
         "here deliberately, with its count; a COUNT that moved is a new "
         "division node in a module that knows about Outcome -- check it is not "

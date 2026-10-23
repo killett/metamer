@@ -33,7 +33,8 @@ current count is in [`PROGRESS.md`](PROGRESS.md), which is updated with each ful
 
 **Not yet built:** `metamer.cli` as a command tree. `python -m metamer` is a deliberately
 provisional entry point — naming a subcommand would design the argument structure before
-`validate` and `report` are real. There are no `[batch]` or `[cli]` extras to install
+`validate` is real. `report` exists as its own provisional entry point,
+`python -m metamer.report` (see [Describing a store](#describing-a-store)). There are no `[batch]` or `[cli]` extras to install
 yet; the batch layer's dependencies (xarray, zarr) are not gated.
 
 The API is alpha and may change without a deprecation cycle before 1.0.
@@ -103,6 +104,24 @@ Setting `warm_start.enabled = false` makes `--two-pass` a single cold pass: no c
 store is written, and the output is what a plain run produces. The setting is part of the
 fit identity, so a store fitted with warm starts and one fitted without do not share a
 `fit_hash` and neither resumes the other.
+
+### Describing a store
+
+```
+python -m metamer.report out.zarr            # writes beside it: out.zarr.report/
+python -m metamer.report out.zarr --out DIR
+```
+
+Writes `report.json`, `report.md` and one PNG per map, **beside the store and never inside
+it** — the report never writes to the store it describes, and runs on a store whose
+directory refuses writes. It needs no config, so it works on someone else's store. The
+markdown is rendered from the saved `report.json`, so every number in it is a number in the
+JSON. An unfinished store is described, not refused, with its tile count beside every rate.
+The maps need the `[report]` extra (`pip install 'metamer[report]'`); without it the report
+still runs and says which maps it would have drawn.
+
+Exit codes: 0 written; 3 a usage error or an unwritable `--out` (checked before anything is
+computed); 4 an unreadable or foreign store; 5 an internal error.
 
 ### The warm-start smear, and what it is allowed to say
 
@@ -181,14 +200,17 @@ the approach in detail.
 
 ## Planned structure
 
-Three layers, gated by optional dependency extras. **The first two exist today**; the
-extras themselves do not exist yet, so nothing is actually gated.
+Layers gated by optional dependency extras. **`core`, `batch` and `report` exist today.**
+Of the extras only `[report]` exists, and it gates matplotlib alone; `[batch]` and `[cli]`
+do not exist yet, so the batch layer's dependencies are not gated.
 
 - **`metamer.core`** — *implemented.* numpy/scipy/numba. Arrays in, results out. No file
   I/O, no xarray, no dask. This is what other projects import, and it must be importable
   without the rest.
 - **`metamer.batch`** — *implemented* (extra `[batch]` planned). xarray orchestration,
   zarr output, checkpointing, resumability, and the two-pass warm start.
+- **`metamer.report`** — *implemented*, extra `[report]` for the maps. Describes a store
+  without writing to it, and imports none of the run machinery or the config validator.
 - **`metamer.cli`** (planned, extra `[cli]`) — a config-file-driven runner with a command
   tree. `python -m metamer` is today's provisional stand-in.
 
