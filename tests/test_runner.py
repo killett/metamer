@@ -1678,3 +1678,118 @@ def test_a_recompute_run_counts_its_tiles_and_does_not_report_an_empty_run(tmp_p
     for field in ("points", "fitted"):
         assert _counted(again.stderr, field) == _counted(first.stderr, field), field
         assert _counted(again.stderr, field) > 0, field
+
+
+def test_an_engine_the_run_cannot_honour_exits_three_and_writes_no_store(tmp_path):
+    """Through the shipped CLI: refused at layer 2, before anything is written.
+
+    **MEASURED BEFORE THIS TEST EXISTED, 2026-10-21:** this exact invocation
+    exited **0** and wrote a store whose root `engine` read `kalmann` -- over fits
+    done on `KalmanEngine` -- under a `fit_hash` no kalman run would ever match.
+    A bad `objective` in the same config exits 3 at `layer 2 (schema)`; this
+    asserts the engine now does the same, by the same mechanism.
+
+    Bug this catches: an unhonourable engine reaching the run, and the store
+    recording a request the run never honoured. The no-store assertion is the
+    half that matters to anyone downstream: exit 3 with a half-written store
+    beside it would still leave a record claiming an engine nobody used.
+    """
+    config = _config(tmp_path, _store(tmp_path), 'engine = "kalmann"\n')
+    store = tmp_path / "out.zarr"
+
+    result = _invoke(str(config), str(store))
+
+    assert result.returncode == ExitCode.CONFIG_INVALID, result.stderr[-2000:]
+    assert "layer 2 (schema)" in result.stderr
+    assert "engine" in result.stderr
+    assert "Traceback" not in result.stderr
+    assert not store.exists(), "a refused config must leave no store behind"
+
+
+def _engines_the_fits_ran_on(
+    monkeypatch: pytest.MonkeyPatch, config: Path, store: Path, **run_kwargs: Any
+) -> set[str]:
+    """Run the shipped path and return the engine every `fit` call ACTUALLY used.
+
+    **OBSERVED AT THE RUN PATH's OWN SEAM, NEVER REPLACED.** `run.py`'s `fit` is
+    wrapped so the real function runs and its `FitResult.engine` is recorded --
+    the engine the scores came from, not the one any config named.
+    """
+    import metamer.batch.run as run_module
+    from metamer.core.fit import fit as real
+
+    used: set[str] = set()
+
+    def observing(*args: Any, **kwargs: Any) -> Any:
+        """Call the real `fit` and keep the engine it reports."""
+        result = real(*args, **kwargs)
+        used.add(str(result.engine))
+        return result
+
+    monkeypatch.setattr(run_module, "fit", observing)
+    run(config, store, **run_kwargs)
+    return used
+
+
+def test_every_engine_the_config_accepts_is_the_engine_the_fits_ran_on(
+    monkeypatch, tmp_path
+):
+    """For each accepted engine string, the fits ran on that engine.
+
+    **THIS IS THE PROPERTY THE SHIPPED DEFECT VIOLATED**, and the registry test in
+    `test_config.py` cannot see it: a config may accept exactly the implemented
+    engines and the run may still ignore the request, because `run.py` passes
+    `fit` the injectable `engine=None` and `fit` builds `KalmanEngine` itself.
+    Today that coincides with the one accepted value. **When a second engine is
+    added to the config without `run.py` constructing it from `config.engine`,
+    this test fails** -- which is exactly the trigger the engine-narrowing row in
+    PROGRESS.md is filed at, now enforced rather than remembered.
+
+    Bug this catches: a store whose root `engine` names something the fits did
+    not run on. Asserted against the store's own root attr too, because that is
+    what a later reader -- and `fit_hash` -- trusts.
+
+    **THE INSTRUMENT IS SHOWN TO DISCRIMINATE (a10)** by the control below: the
+    same observation, with an engine injected whose `engine_id` differs from the
+    config's, reports the injected one. So a pass here cannot be the helper
+    echoing the config.
+    """
+    import typing
+
+    from metamer.config import Config
+
+    accepted = typing.get_args(Config.model_fields["engine"].annotation)
+    assert accepted, "an empty accepted set would make this loop vacuous"
+
+    uri = _store(tmp_path)
+    for engine in accepted:
+        config = _config(tmp_path, uri, f'engine = "{engine}"\n', f"{engine}.toml")
+        store = tmp_path / f"{engine}.zarr"
+        assert _engines_the_fits_ran_on(monkeypatch, config, store) == {engine}
+        assert zarr.open_group(str(store), mode="r").attrs["engine"] == engine
+
+
+def test_the_engine_observation_reports_the_fit_not_the_config(monkeypatch, tmp_path):
+    """(a10)'s control: the helper can produce the OTHER answer.
+
+    An engine whose `engine_id` is relabelled is injected; the config still says
+    `kalman`. The observation must report the injected label.
+
+    Bug this catches: a helper that reads the config, or `CandidateScores`'
+    labels from somewhere other than the fit, and so agrees with the config by
+    construction -- which would make the run-binding test above green forever.
+    """
+    from metamer.core.capability import EngineId
+    from metamer.core.engines.kalman import KalmanEngine
+
+    class Relabelled(KalmanEngine):
+        """The same recursion, wearing another engine's name."""
+
+        engine_id = EngineId.WHITTLE
+
+    config = _config(tmp_path, _store(tmp_path))
+    used = _engines_the_fits_ran_on(
+        monkeypatch, config, tmp_path / "out.zarr", engine=Relabelled()
+    )
+
+    assert used == {EngineId.WHITTLE.value}

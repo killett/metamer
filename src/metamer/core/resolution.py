@@ -27,10 +27,15 @@ from metamer.core.terms import ProcessSpec
 #: What the engine column says while only one engine exists.
 #:
 #: **SECTION 4.2's INTERSECTION NARROWS ENGINES PER CANDIDATE AND THE BATCH
-#: PATH DOES NOT CONSULT IT**: `run.py` passes `config.engine` into `fit` and
-#: `ProcessSpec.engine_costs()` has no caller outside `terms` and `capability`.
-#: With one engine there is nothing to narrow, so nothing is wrong today --
-#: **and the honest record of "we did not resolve this" is not the request.**
+#: PATH DOES NOT CONSULT IT**: `ProcessSpec.engine_costs()` has no caller outside
+#: `terms` and `capability`. **And `run.py` never passes `config.engine` to
+#: `fit` at all** -- corrected 2026-10-21, by running it: `fit` receives the
+#: injectable `engine` argument, `None` unless a test injects one, and builds
+#: `KalmanEngine()` itself, so a config naming `celerite2` ran every candidate on
+#: kalman. The config now accepts only the implemented engines, which makes the
+#: request and the engine used coincide by validation rather than by luck. With
+#: one engine there is nothing to narrow, so nothing is wrong today -- **and the
+#: honest record of "we did not resolve this" is not the request.**
 ENGINE_NOT_RESOLVED = "requested; not resolved per candidate in this version"
 
 

@@ -1394,8 +1394,13 @@ the ambiguity window closes for every store written after this task.
 
 The plan wants a test where *"the recorded resolved engine differs from the run-level `engine` attr
 for a candidate whose capability intersection narrows it"*. **Measured against the tree: the run
-never narrows the engine.** `run.py` passes `engine=config.engine` into the fit path and `fit()`
-uses it; **`engine_costs()` has no consumer anywhere outside `terms.py` and `capability.py`** — no
+never narrows the engine.** ~~`run.py` passes `engine=config.engine` into the fit path and `fit()`
+uses it~~ **— CORRECTED 2026-10-21 BY RUNNING IT: `run.py` never passes `config.engine` to `fit`.**
+`fit` receives the injectable `engine` argument, `None` by default, and builds `KalmanEngine()`
+itself; with `engine = "celerite2"` every candidate ran on kalman while root attrs and `fit_hash`
+recorded `celerite2`. The conclusion below survives — nothing narrows — and the stated mechanism
+did not, which is why the defect it hid went unseen. See the matern32 entry's correction at Task 7.
+**`engine_costs()` has no consumer anywhere outside `terms.py` and `capability.py`** — no
 batch module calls it. So `resolved engine == requested engine` for every candidate, always, and a
 test asserting they differ would have to fabricate the condition it checks.
 
@@ -1919,7 +1924,27 @@ mentions an engine. The `matern32`-withholds-`celerite2` fixture belongs to **Ta
 it exists to make the engine-cost column discriminate. So the question was answered against the live
 objects instead.
 
-**THE ANSWER: `kalman`, WHICH `matern32` DECLARES — SO THE HYPOTHESISED DEFECT IS NOT PRESENT.**
+~~**THE ANSWER: `kalman`, WHICH `matern32` DECLARES — SO THE HYPOTHESISED DEFECT IS NOT PRESENT.**~~
+
+> **CORRECTED 2026-10-21: THAT ANSWER WAS READ OFF THE CODE, NOT RUN, AND IT ANSWERED THE WRONG
+> QUESTION.** It never said what `config.engine` was, so it could not distinguish *the run narrowed*
+> from *the run ignored the request*. **Run against the shipped path, with `fit` wrapped at `run.py`'s
+> own import to record what each call returned:**
+>
+> | `config.engine` | `fit` received | `matern32` ran on | `white` ran on | root `engine` | block column |
+> |---|---|---|---|---|---|
+> | `kalman` | `None` | kalman | kalman | `kalman` | not resolved |
+> | `celerite2` | `None` | **kalman** | **kalman** | **`celerite2`** | not resolved |
+> | `kalmann` | `None` | **kalman** | **kalman** | **`kalmann`** | not resolved |
+>
+> All three exit 0 with identical outcomes, under three different `fit_hash`es. **Not narrowing**:
+> `white` declares `celerite2` and still got kalman. **The run never honours `config.engine`** — it
+> reaches root attrs, `fit_hash` and the reuse path, never `fit`. Task 4's *column* stays honest
+> (it records the constant, not the request); the store's root attrs and hash did not. **Fixed in its
+> own commit** — `engine` is a `Literal` of the implemented engines, refused at layer 2 with exit 3,
+> bound to the engine classes and to the run path by test — and Task 4's stated mechanism is
+> corrected at its entry, in `resolution.py`, in a test docstring that cited it as its expected-value
+> source, and in PROGRESS. **The paragraph below, *"today nothing is wrong"*, was wrong too.**
 
 | checked | found |
 |---|---|

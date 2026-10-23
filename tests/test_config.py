@@ -1074,3 +1074,89 @@ def test_a_config_cannot_supply_the_geometry_hash(tmp_path):
         error["type"] == "extra_forbidden" and error["loc"] == ("geometry_hash",)
         for error in raised.value.errors()
     ), raised.value.errors()
+
+
+@pytest.mark.parametrize(
+    ("engine", "why"),
+    [
+        ("kalmann", "a typo of the one implemented engine"),
+        ("celerite2", "a member of EngineId that has no implementation"),
+    ],
+)
+def test_an_engine_the_run_cannot_honour_is_refused_at_load(tmp_path, engine, why):
+    """`engine` is refused at layer 2 unless the run can actually use it.
+
+    **MEASURED BEFORE THIS TEST EXISTED, 2026-10-21, through the shipped CLI:**
+    `engine = "kalmann"` and `engine = "celerite2"` each exited **0**, wrote a
+    store, recorded the request string in root attrs and in `fit_hash` -- three
+    different hashes for byte-identical kalman fits -- while every fit ran on
+    `KalmanEngine`, because `run.py` hands `fit` the injectable `engine=None` and
+    `fit` builds its own. A bad `objective`, two lines up in the same model,
+    exited **3**: it is a `Literal`, and `engine` was a bare `str`.
+
+    Expected value determined independently: `EngineId`'s own docstring says only
+    KALMAN is implemented, and the engine classes under `metamer.core.engines`
+    carry no other `engine_id` -- the next test binds those two facts.
+
+    Bug this catches: the shipped one -- an engine string the run silently does
+    not honour, written into the store as though it had been. Parametrized over
+    both shapes because they fail differently in the world: a typo is noticed by
+    nobody, and a declared-but-unimplemented engine is the one a careful user
+    picks on purpose.
+    """
+    path = _write(
+        tmp_path, _GOLDEN_TOML + f'engine = "{engine}"\n', f"engine-{engine}.toml"
+    )
+    with pytest.raises(ValidationError) as raised:
+        config_module.load(path)
+    assert any(
+        error["type"] == "literal_error" and error["loc"] == ("engine",)
+        for error in raised.value.errors()
+    ), (why, raised.value.errors())
+
+
+def test_the_accepted_engines_are_exactly_the_implemented_ones():
+    """The config's accepted set is bound to the engine classes that exist.
+
+    **THE SCOPE IS DISCOVERED, NOT LISTED.** Every module under
+    `metamer.core.engines` is walked and every class it defines with an
+    `EngineId` `engine_id` is collected, so a new engine class is in scope on the
+    day it lands -- the import probe's lesson, applied to the engine registry.
+
+    Bug this catches, in both directions: the config accepting an engine id with
+    no implementation, which is the defect this test was written beside; and an
+    engine class landing without the config accepting it, which would make the
+    new engine unreachable from a config while every unit test of it passed.
+    **It does not catch an engine the config accepts and `run.py` never
+    constructs** -- that is a property of the run path, not of the registry, and
+    `test_runner.py`'s run-binding test is what holds it.
+    """
+    import importlib
+    import inspect
+    import pkgutil
+    import typing
+
+    import metamer.core.engines as engines_package
+    from metamer.core.capability import EngineId
+
+    implemented: set[str] = set()
+    for _, name, _ in pkgutil.walk_packages(
+        engines_package.__path__, "metamer.core.engines."
+    ):
+        module = importlib.import_module(name)
+        for _, cls in inspect.getmembers(module, inspect.isclass):
+            if cls.__module__ != name:
+                continue
+            engine_id = getattr(cls, "engine_id", None)
+            if isinstance(engine_id, EngineId):
+                implemented.add(engine_id.value)
+
+    accepted = set(
+        typing.get_args(config_module.Config.model_fields["engine"].annotation)
+    )
+
+    assert implemented, "the walk must find at least one engine class"
+    assert accepted == implemented, (
+        f"the config accepts {sorted(accepted)} but the implemented engines are "
+        f"{sorted(implemented)}"
+    )

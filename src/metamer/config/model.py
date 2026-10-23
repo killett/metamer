@@ -299,7 +299,26 @@ class Config(BaseModel):
     # `test_the_hashing_defaults_agree_with_the_model_defaults` is what holds
     # them together. Change one, change the other.
     objective: Literal["ml", "reml"] = "ml"
-    engine: str = "kalman"
+    # **THE ENGINES THE RUN CAN HONOUR, AND NO OTHER STRING.** This was a bare
+    # `str` until 2026-10-21, when running it showed what that meant: `kalmann`
+    # and `celerite2` each exited 0, every fit ran on `KalmanEngine` -- `run.py`
+    # hands `fit` the injectable `engine=None` and `fit` builds its own -- and the
+    # store recorded the request in root attrs and in `fit_hash`, giving three
+    # different hashes for byte-identical fits. A store naming an engine no fit
+    # used is the defect design doc D12 exists to prevent, at run level.
+    #
+    # A `Literal`, like `objective` above, so a bad value is refused at layer 2
+    # and exits 3 by the same mechanism. **It is bound, not merely listed**:
+    # `test_the_accepted_engines_are_exactly_the_implemented_ones` walks
+    # `metamer.core.engines` for the classes that exist, and
+    # `test_every_engine_the_config_accepts_is_the_engine_the_fits_ran_on` runs
+    # the shipped path per accepted value. Adding a second engine here without
+    # `run.py` constructing it from this field fails the second test.
+    #
+    # The value reaching the hash is unchanged for `"kalman"`, so no existing
+    # store's `fit_hash` moves -- the golden hashes, which omit this field and so
+    # take the default, are what show it.
+    engine: Literal["kalman"] = "kalman"
     seed: int = 0
 
     warm_start: WarmStart = Field(default_factory=WarmStart)

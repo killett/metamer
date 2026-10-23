@@ -126,9 +126,11 @@ def test_the_engine_column_says_it_is_not_resolved_rather_than_holding_the_reque
 ):
     """A column named `resolved` must not hold the request.
 
-    Expected value determined independently: `run.py` passes `config.engine`
-    into `fit` and `ProcessSpec.engine_costs()` has no caller outside `terms`
-    and `capability`, so **the batch path never narrows the engine**. With one
+    Expected value determined independently: `ProcessSpec.engine_costs()` has
+    no caller outside `terms` and `capability`, so **the batch path never
+    narrows the engine** -- and `run.py` never passes `config.engine` to `fit`
+    at all, which was stated the other way here until a run showed it
+    (2026-10-21): `fit` builds `KalmanEngine()` whatever the config says. With one
     engine there is nothing to narrow and nothing is wrong -- and the honest
     record of "not resolved" is not the request.
 
