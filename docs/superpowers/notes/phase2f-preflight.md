@@ -2447,3 +2447,305 @@ helper it calls is renamed `_rate_site_scope`, and its docstring states the wide
 - **Two stale sentences corrected.** The status line said *"`validate` and `report` are real"*. The
   layers paragraph said *"the extras themselves do not exist yet"*. `[report]` has existed since
   Task 7.
+
+---
+
+## Plan Task 9 — open question 23's capability, audited before any code (2026-10-23)
+
+Read against the plan's **Task 9**, **D3**, **D4**, **D7**, **D8** and **D9**, and Tasks 7 and 8 as
+built. **Task 9 does not take OQ23** (the plan's scope line: *"open question 23, which 2f gives an
+instrument to without taking"*). Its closer is unchanged: measure `cond(H)`'s own scatter at a fixed
+θ̂ reached by two paths. Nothing here reasons about why a member fires.
+
+### 1. THE PLAN CONTRADICTS ITS OWN DECISION A SECOND TIME — THE MAPS STAY DEFAULT, THE FLAG ADDS STATISTICS
+
+Task 9's **Behaviour** line says *"one flag computes the per-branch statistic **and the
+per-branch-per-candidate maps**"*. Three things outrank it, and all three agree with each other:
+
+- **D9's inventory** is the default report's: *"one map per (branch present × candidate), plus one
+  per branch for the point-level aggregate"*.
+- **D8**, the decision Task 9 implements: *"the maps **already** carry the geography per branch. So
+  the per-branch **statistic** is available on request."*
+- **Task 9's own Tests line** names *"a statistic per branch present and the caveat text"* and no
+  map.
+
+Task 7 shipped those maps in the default report (`plan_maps`), as D9 says. **Task 7's as-built §2 is
+the precedent: the decision and the tests are the live brief, and the Behaviour line is stale.**
+That is the second instance in one plan, two tasks apart. **So the flag adds the per-branch
+statistics and their caveat, and moves no map.** Moving the maps behind the flag would remove from
+every default report the geography D9 put there. No ruling is needed.
+
+### 2. WHAT A PER-BRANCH STATISTIC IS COMPUTED OVER — D9's INVARIANT DECIDES, AND IT IS NOT THE DEFAULT AGGREGATE's INDICATOR
+
+D9's invariant, which is exit criterion 16: *"map and statistic are never computed over different
+things."* The per-branch maps already exist, so **the per-branch statistic takes each map's own
+indicator and population**:
+
+| subject | indicator | population (the graph) |
+|---|---|---|
+| branch `b`, candidate `m` | `outcome[..., m] == b` | `is_fit_verdict` at `m` |
+| branch `b`, point level | **any** candidate carries `b` | **any** candidate has a fit verdict |
+
+**THE POINT-LEVEL ROW IS NOT THE DEFAULT AGGREGATE's QUESTION, AND THE DIFFERENCE IS EASY TO MISS.**
+The default aggregate's indicator is *every fit verdict at the point failed*: a coverage fact, D7's
+*"a hole in the output"*. The per-branch point-level indicator is *some candidate carries `b`*,
+which is what the map of `b` "any candidate" shows. If the default aggregate's rule were reused for
+the per-branch row, the statistic would describe a different set from the map printed beside it.
+That is criterion 16's failure, inside one report. **Each per-branch row's label names its
+indicator at the number, and the record carries it.** That is the move §5.4 makes for the default
+aggregate.
+
+**ONLY BRANCHES WITH A CELL IN THE FIT-VERDICT POPULATION ARE RUN.** D3 fixes the clustering
+population at `is_fit_verdict`, and gives the reason by name: a non-fit code forms *"a perfect
+cluster of a decision the run took"*. A coverage-only branch (`CANDIDATE_DROPPED`,
+`INSUFFICIENT_DATA`, `SCREENED_OUT`) has **no cell** in that population. A mechanical run returns
+`arrangement`'s *"no failures to arrange"* for `CANDIDATE_DROPPED` at 100% of points, which is
+false, and confidently so. **So every branch present but not run is named with its reason**, which
+is Task 7's `unmapped` precedent: a branch that is present and absent from the set says so. The
+same applies to `NOT_ATTEMPTED` and `NOT_APPLICABLE`, which are in neither population. Where the
+two-arm zone fires, **both arms are computed and printed (D4)**, exactly as for the default
+statistic.
+
+**STRUCTURE FIRST, THE COMPARISON AS BACKSTOP — Task 8's pattern.** The indicator and population
+pairs come from **one function that `plan_maps` and the per-branch statistic both call**. The two
+cannot then be computed over different things unless that function itself is wrong. The test
+compares the sets anyway: for every (branch, candidate) and every point-level row, the statistic's
+`eligible` equals the map's population total, and `failures` equals the map's indicator count.
+Bug: the point-level row computed on the default aggregate's indicator. **Its fixture puts `b` in
+one candidate at a point where another candidate is `OK`**, so the two indicators differ there by
+construction. Without that point the test cannot tell them apart, which is the wrong-denominator
+lesson from Task 8 applied before the code.
+
+### 3. THE FAMILY, ITS SIZE, AND THE CAVEAT — AND A FAMILY CAN OUTGROW ITS NULL's RESOLUTION
+
+**D8 says caveat, not correction**, and Task 9's invariants say *"the caveat is printed by the
+capability, not left to the reader"*. So the record carries the caveat as text, built where the
+family is computed. The renderer prints it verbatim and computes nothing, as Task 8 made
+structural. The caveat states, from the record's own numbers:
+
+- **`m`, the family's size, counting every p printed.** Each arm is counted separately. That is the
+  conservative count, and it is D7's own argument: a reader who looks at both arms and takes the
+  smaller p has run two tests.
+- **The null's resolution:** the smallest p any member can reach is `1 / (1 + PERMUTATIONS)`, which
+  is 1/1000.
+- **What follows from the two together:** a Bonferroni correction at level α asks for `p ≤ α / m`,
+  and **when `α / m` falls below the floor, no member of the family can pass it**. The bound is
+  `m ≤ 8 · (M + 1) · 2`: eight failure members, M candidates plus the point row, and two arms.
+  The point row has two arms once §5.2 gives the aggregate its zone. At α =
+  0.05 the threshold drops below 1/1000 once `m > 50`. **Reachable on a real store**: three
+  candidates with every failure member present and both arms gives `m = 64`. The caveat names the
+  floor beside `m` rather than leaving the reader to discover it. This plan picks no α, so the
+  caveat states the relation, not a verdict. **`PERMUTATIONS` is not raised for the flag.**
+  Per-branch p's must have the default statistic's resolution, or the two sections would not be
+  comparable.
+- **The label at the number, in D7's form:** the family's largest z is *"max over m, uncorrected"*.
+
+**THE SEED.** `CLUSTERING_SEED` is passed explicitly, as `arrangement` requires, and recorded in
+every arrangement. Within one population every branch is therefore permuted by **the same
+sequence**, so the family's nulls are correlated. **Bonferroni holds under any dependence**, so the
+correlation does not weaken the caveat. The caveat says only what is true either way.
+
+**THE COST IS WHY IT IS OFF BY DEFAULT, AND THE HELP SAYS SO.** Each member is one permutation null.
+Task 0 measured one at 1024² at 23.5 s, and the ladder is superlinear, so m members cost about m
+times that, at least. That is minutes per member on a real grid. D8's *"without 2f owing a
+correction on every ordinary run"* is the inferential half of the default. The cost is the other
+half.
+
+### 4. UNSETTLED — WHETHER `OK` IS A MEMBER OF THE FAMILY
+
+**The plan's text and its reason point different ways, and §2's settlement does not reach this.**
+`OK` is a fit verdict and not a failure. It is the witness row that separates `is_failure` from
+`is_fit_verdict` in `Outcome`'s table. Task 9's Tests line says *"a statistic per branch
+present"*, and `OK` is present on every real store. D8's reason is OQ23's question, *"is
+`DEGENERATE_HESSIAN` clustered?"*, which is a question about a failure member.
+
+**What `OK`'s statistic would be, measured from the definitions rather than guessed.** Over one
+candidate's fit-verdict cells, `OK` is exactly the complement of the failure union, because fit
+verdict = `OK` ∪ failures. So `OK`'s BB join count is the default statistic's **WW** count, on the
+same graph under the same null. **It is a re-reading of the default per-candidate statistic, not a
+decomposition of it.** Including it adds M + 1 near-duplicates to the family and grows `m`, which
+§3 shows can already exhaust the null's resolution.
+
+- **(a) Recommended:** failure branches only. `OK` is named with that reason, as every branch not
+  run is named (§2).
+- **(b)** Every fit-verdict branch present, `OK` included, per the Tests line read literally.
+
+**Ruling requested.** The code depends on the answer, so the code waits for it. §5's fixes do not
+depend on it.
+
+### 5. FIVE DEFECTS IN SHIPPED CODE, FOUND READING FOR TASK 9 — THREE OF THEM TASK 8's, AND EACH IS FIXED IN ITS OWN COMMIT BEFORE TASK 9's CODE
+
+**All five were found reading for §2 and §3, before any Task 9 code. Each was established by
+running, not by reading.** The scripts and their outputs are cited inline. Three are in Task 8's
+renderer, which was committed this week and is green in CI. **They share a root, and Task 8's own
+structure explains why nothing caught them** (5.6).
+
+#### 5.1 TASK 7 — `OK`'s MAP IS A FAILURE FRACTION BY NAME
+
+**The kind is decided by `branch in fit_codes`, and the word it then assigns is `"failure"`.**
+Membership is asked by `is_fit_verdict`, and the answer is read with `is_failure`'s word.
+**`Outcome`'s own docstring opens by naming this as the project's recurring defect** (*"asking one of
+them and reading the answer as another"*). `OK` is a fit verdict, so:
+
+- its record entry says `kind: failure`;
+- its title reads *"ok - failure fraction over fit-verdict cells"* (seen in a real Task 8 record);
+- its PNG is `code00_failure_<candidate>.png`.
+
+**And a test pins it.** `test_a_non_fit_branch_is_a_coverage_map_over_covered_cells` asserts
+`kinds[OK] == "failure"`. Its own docstring names the bug as *"the word 'failure', which puts a
+decision the run took on the same axis as a fit that broke — D1's tell"*. Under D9's fixed
+`vmin=0, vmax=1`, a healthy store's `OK` map is near 1 everywhere, under the word *failure*.
+
+**The word is settled by Task 5, not chosen here.** Selectability names exactly this set:
+`rankable ⊆ converged (OK) ⊆ fitted (fit verdict)`, with `converged == fitted - failed` asserted per
+point. **So `OK`'s kind is `converged`.** The kinds become `failure` exactly where `is_failure`,
+`converged` for the fit verdict that is not a failure, and `coverage` for a covered non-fit branch.
+The population is unchanged, as T7-1 fixed it. **No committed artifact carries the wrong label**:
+`metamer.report` first wrote a record at Task 8, and no report output is committed. The tests:
+
+- `OK`'s kind, title and PNG stem say `converged`. Bug: the shipped defect.
+- A failure branch is still `failure`. Bug: the fix inverted for the members it was right about.
+- The pinning assertion is **changed, not deleted**.
+
+#### 5.2 TASK 6 — D4's DETECTOR WAS NEVER BUILT: A GLOBAL GRID REPORTS THE UNWRAPPED ARM, UNMARKED, AND SAYS SO
+
+D4: *"**detect global coverage** from the `x` coordinate **and wrap when it is global**"*, by the
+rule *"`n_x · dx` within half a cell of 360°"*. When the question is live, both arms are printed
+*"with the detected arm marked as the reported one"*. Task 6's own invariants repeat it: *"detected
+arm marked as reported"*.
+
+**Shipped:** the two-arm zone, which is D4's deliberately wider band, and nothing else.
+`by_candidate` is always the unwrapped arm, and `wrapped` is added in the zone. **No field says
+which arm is reported**, and the span note is built to end `", not wrapped"` on every branch. Run on
+Task 6's own global fixture (360 columns at 1°; `scratchpad` `wrapped_render.py`), the record reads
+`span_note: "359° of 360°, global, not wrapped"`. **D4 re-decided against exactly this on Task 0's
+numbers**: not wrapping a global grid removes the seam-straddling cluster's own joins, measured at
+Δz = 11.02. Nothing in the pre-flight or PROGRESS records a deferral, so this is an omission, not a
+decision.
+
+**The fix is D4's text:**
+
+- **The gate**, `n_x · dx` within half a cell of 360° with regular spacing. Every ambiguous case
+  fails toward not wrapping, with "longitude-like" read exactly as Task 6 reads it (`_X_AXIS_NAMES`).
+- **A recorded `reported` arm.** It is `wrapped` where the gate says global and `unwrapped` where it
+  does not.
+- **A span note that says which arm was taken.** The zone stays as it is: both arms are computed
+  wherever it fires.
+- **The aggregate too.** Today it has **one arm in every case**: `rook_edges(any_verdict)` with no
+  wrap. D4's argument concerns the seam's effect on a join count on the grid, and the aggregate is
+  a join count on the same grid. So it gets the zone, the gate and the mark like every candidate.
+
+**Tests:**
+
+- **On a gate-global grid the reported arm is the wrapped one.** Bug: the shipped behaviour.
+- **On a grid inside the zone but outside the gate**, for example 358 of 360 columns, the reported
+  arm is the unwrapped one and both are present. Bug: the gate widened to the zone, which wraps a
+  grid with missing columns.
+- **On a subset box** there is one arm and the note says not global.
+
+`CLUSTERING_SEED` does not move, and no committed artifact carries a p from a global store.
+
+#### 5.3 TASK 8 — THE MARKDOWN DROPS THE WRAPPED ARM
+
+Task 8's `_clustering` renders `by_candidate` and the aggregate, and **never reads `wrapped`**. On the
+same global fixture the record carries both arms (unwrapped z 142.6, wrapped z 142.2), and
+`report.md` has no wrapped row. **Task 6's test of this exact bug,
+`test_a_global_span_fires_the_two_arm_zone_and_both_arms_are_reported`**, says *"Bug this catches: a
+report that prints one arm on a global store"*. It asserts on the section dataclass, and the
+renderer then printed one arm. That is the test holding one layer above the defect. **Fix**: both
+arms rendered in full, each labelled `wrapped` or `unwrapped`, with the arm from 5.2 marked
+reported. The test runs on the **markdown**: a global store's `report.md` carries both arms' z, the
+two labels, and exactly one mark.
+
+#### 5.4 TASK 8 — THE CLUSTERING AGGREGATE ROW WEARS THE CANDIDATE FAMILY's LABEL
+
+`_clustering` appends the aggregate under `section["headline_label"]`, which is *"max over M
+candidates, uncorrected"*. That is D7's label for **the largest of the M per-candidate z's**. **D7
+says of the aggregate: *"not a member of the family and is not summarised by it"***. So the row
+claims to be the family's maximum while it is the point-level arrangement. On a one-candidate store
+the two happen to coincide numerically, which is the fixture this went out on. **Fix**: the
+aggregate gets its own label, naming its indicator: every fit verdict at the point failed, over
+points where any candidate has one. The record carries it, built in `clustering.compute` where the
+indicator is defined. The test uses a two-candidate store whose aggregate z differs from both rows'
+z, and asserts the family label is not printed on the aggregate row.
+
+#### 5.5 TASK 8 — THE NUMBERS AGGREGATE IS LABELLED *PER POINT* AND IS A CELL CENSUS
+
+`_numbers` prints the aggregate tally as *"**any candidate, per point**"*. `numbers.py`'s own
+docstring defines it as *"the census over every candidate at once … a point failing under one
+candidate and fitting under another is one cell in each row and **two cells here**"*. Run on a
+**one-point** store with `m0 = OK` and `m1 = DEGENERATE_HESSIAN` (`scratchpad` `numbers_label.py`),
+the markdown reads:
+
+> *"any candidate, per point: 0.5 (1 of 2 fitted)"*
+
+That is two fits at one point under a per-point label. Under the any-candidate rule that point is
+`OK`, so a per-point rate would be 0. **The label states a rate the record does not hold.** The
+phrase came from nowhere in the plan: it was written in Task 8. **Fix**: the label says what the
+tally is, every (point, candidate) cell pooled, and comes from the record, beside the quantity's
+definition. The test uses the one-point store above, asserting the rendered label and the counts
+`1 of 2`.
+
+#### 5.6 WHY TASK 8's STRUCTURE CAUGHT NONE OF ITS THREE — RENDER-FROM-RECORD GUARANTEES THE NUMBERS AND NOT THE WORDS
+
+Task 8 made it structural that **every number** in the markdown is a number in the record: the
+allowlist, the one formatter, the token backstop. **5.3, 5.4 and 5.5 are not wrong numbers.** They
+are a missing row and two false labels, and every number beside them came from the record exactly
+as designed. **The labels are static text in `render.py`**, so the structure never examined them,
+and they made claims about what each number is. That is D1's tell in prose: a name saying one thing
+while the value is another. **The repair is the same move Task 8 made for numbers, extended to the
+words that define a quantity**:
+
+- a label that makes a claim about what a number measures is built **where that number is
+  computed**, and carried in the record;
+- the renderer prints it without composing it;
+- `render.py` keeps only structural words: headings, column names, and connectives such as
+  *"of"*.
+
+That narrows the class rather than closing it, because a heading can still lie. The pre-flight says
+so, rather than claiming the class is closed.
+
+**FIX ORDER, one commit and one sweep each:** 5.1 (`maps.py`); 5.2 (`clustering.py`); 5.3 (the
+renderer, after 5.2, because it prints the mark); 5.4 and 5.5 together, because they are one root
+in one function family and one fix (labels move into the record). **Then Task 9's code**, which
+carries its family's labels and caveat in the record from the start.
+
+### 6. THE FLAG — ITS NAME SAYS WHAT, ITS HELP SAYS WHEN, AND OFF MEANS ABSENT
+
+- **`--per-branch`**, on `python -m metamer.report`. The name says what it computes, and the help
+  carries D8's trigger verbatim: *"compute this when asking open question 23's question"*. A flag
+  named after an open question's number tells a user nothing about what it does.
+- **Off means absent, not empty.** Without the flag, the record has **no** `per_branch` key. That
+  is not `null` and not an empty list, and the markdown has no caveat. This is Task 9's own test:
+  *"without it neither appears — catches a capability that leaks into the default report"*.
+- **And off means not computed**, which an absent key cannot show by itself. A spy on `arrangement`
+  counts its calls with the flag off, and the count must equal the default report's own.
+  Bug: the family computed on every run and then dropped from the record, which costs minutes per
+  member and is invisible in the output.
+- **Writability before compute holds on the flag path too.** Task 8's B6 test, run with
+  `--per-branch` and an unwritable `--out`, sees zero calls. Bug: the capability placed ahead of
+  §3's order.
+- **Exit codes are unchanged** (D13): the flag adds a section, not an outcome.
+
+### 7. THE GOLDEN TABLE, THE PROBE AND THE RENDERER — NOTHING NEW, ALL OF IT HELD
+
+- The table's scope is all of `metamer/report/` since Task 8, so a new module enters it by the
+  directory and its count is **pinned by observation**.
+- The probe's walk imports every report module, so the new code is probed whether or not
+  `__main__` imports it. The ceiling has headroom 45 locally and at least 54 in CI.
+- `render.py` stays inside its allowlist with digit-free static text. `m` and the floor reach the
+  markdown only through `_number` and the caveat's string leaf, both of which are in the record.
+
+### 8. NOT IN THE EXIT TABLE — FILED FOR TASK 10's PRE-FLIGHT, NOT DECIDED HERE
+
+**No 2f exit criterion holds the flag off by default.** None of the 23 reads the capability, and
+criterion 16 reads maps against the default statistic. Task 9's own tests hold both, but a closed
+criteria suite with no row for one of the plan's tasks deserves the check. **Task 10's pre-flight
+decides** whether that is a twenty-fourth criterion or a recorded reason for none. A name search of
+`tests/` also found no test reading criterion 16's comparison, and Task 10 owes that row its
+evidence either way.
+
+### UNSETTLED
+
+**§4 only — whether `OK` is a member of the family.** Ruling requested. §5's five fixes and §6's
+plumbing do not depend on it, and they proceed while it is open. The per-branch code waits for it.
