@@ -196,6 +196,10 @@ def test_a_non_fit_branch_is_a_coverage_map_over_covered_cells():
     Bug this catches: giving every branch the fit-verdict denominator and the
     word "failure", which puts a decision the run took on the same axis as a fit
     that broke -- D1's tell, a name saying one thing while the value is another.
+
+    **AND `OK` IS `converged`, NOT `failure`** (2f Task 9's pre-flight, 5.1).
+    This assertion pinned `"failure"` for `OK` until then -- the same tell one
+    row up, in the test written to catch it.
     """
     codes = np.array(
         [[Outcome.OK.code, Outcome.INSUFFICIENT_DATA.code]], dtype=np.uint8
@@ -204,10 +208,89 @@ def test_a_non_fit_branch_is_a_coverage_map_over_covered_cells():
 
     kinds = {entry.branch: entry.kind for entry in plan.maps}
     populations = {entry.branch: entry.population for entry in plan.maps}
-    assert kinds[Outcome.OK.code] == "failure"
+    assert kinds[Outcome.OK.code] == "converged"
     assert kinds[Outcome.INSUFFICIENT_DATA.code] == "coverage"
     assert "fit-verdict cells" in populations[Outcome.OK.code]
     assert "covered cells" in populations[Outcome.INSUFFICIENT_DATA.code]
+
+
+def test_ok_is_a_converged_fraction_and_never_a_failure_one():
+    """`OK`'s map says what it is a fraction of: converged fits, not failures.
+
+    Expected value determined independently: Task 5 already names exactly this
+    set -- `converged (OK) ⊆ fitted (fit verdict)`, with `converged == fitted -
+    failed` asserted per point -- and T7-1 fixed its population at fit-verdict
+    cells. The title is spelled out by hand from the fixture's legend.
+
+    Bug this catches: the shipped `branch in fit_codes` mapped to the word
+    `"failure"`, which titled a healthy store's `OK` map -- near 1 everywhere
+    under fixed limits -- *"failure fraction"*: `is_fit_verdict` asked and read
+    with `is_failure`'s word, the defect `Outcome`'s docstring opens by naming.
+    """
+    codes = np.array(
+        [
+            [
+                Outcome.OK.code,
+                Outcome.DEGENERATE_HESSIAN.code,
+                Outcome.INSUFFICIENT_DATA.code,
+            ]
+        ],
+        dtype=np.uint8,
+    )[:, :, None]
+    plan = plan_maps(_view(codes))
+
+    ok = [entry for entry in plan.maps if entry.branch == Outcome.OK.code]
+    assert [entry.candidate for entry in ok] == ["m0", None]
+    assert {entry.kind for entry in ok} == {"converged"}
+    assert ok[0].title == "ok - converged fraction over fit-verdict cells"
+    assert ok[1].title == (
+        "ok - converged fraction over fit-verdict cells, any candidate"
+    )
+    assert ok[0].population == "fit-verdict cells"
+    kinds = {entry.branch: entry.kind for entry in plan.maps}
+    assert kinds[Outcome.DEGENERATE_HESSIAN.code] == "failure"
+    assert kinds[Outcome.INSUFFICIENT_DATA.code] == "coverage"
+
+
+#: The failure members, transcribed from `Outcome`'s docstring table rather than
+#: read from `is_failure`, so the test below states the classification instead
+#: of re-deriving it.
+_FAILURE_CODES = {1, 2, 3, 4, 5, 6, 7, 11}
+
+
+def test_every_members_kind_is_the_predicate_its_word_names():
+    """Over the whole alphabet: `failure` exactly where `is_failure`, and so on.
+
+    Expected value determined independently: `_FAILURE_CODES` is the docstring
+    table's `is_failure` column, checked against the enum first so a
+    reclassified member fails here loudly rather than silently moving both
+    sides. `converged` is a fit verdict that is not a failure; `coverage` is a
+    covered branch that is not a fit verdict.
+
+    Bug this catches: any member labelled through a predicate other than the
+    one its word names. **A special case on `OK` passes today**, because `OK`
+    is the only fit verdict that is not a failure -- so that mutant is
+    equivalent until a second such member exists, and this test then fails on
+    it because it iterates the enum rather than naming `OK`.
+    """
+    assert {m.code for m in Outcome if m.is_failure} == _FAILURE_CODES
+    codes = np.array([[m.code for m in Outcome]], dtype=np.uint8)[:, :, None]
+    plan = plan_maps(_view(codes))
+
+    kinds = {entry.branch: entry.kind for entry in plan.maps}
+    assert kinds, "the fixture maps something"
+    for code, kind in kinds.items():
+        member = Outcome.from_code(code)
+        expected = (
+            "failure"
+            if code in _FAILURE_CODES
+            else "converged"
+            if member.is_fit_verdict
+            else "coverage"
+        )
+        assert kind == expected, (member.name, kind)
+    assert kinds[Outcome.OK.code] == "converged"
+    assert {kind for kind in kinds.values()} == {"failure", "converged", "coverage"}
 
 
 def test_the_title_names_the_branch_from_the_stores_own_legend():
@@ -582,6 +665,10 @@ def test_draw_all_writes_one_png_per_map_named_for_its_subject(tmp_path):
         [
             [[Outcome.DEGENERATE_HESSIAN.code, Outcome.OK.code]],
             [[Outcome.OK.code, Outcome.DEGENERATE_HESSIAN.code]],
+            # A coverage branch too, so every kind's stem is drawn and read
+            # (Task 9's pre-flight, 5.1: a stem that ignored the kind survived
+            # on a fixture holding only failure and converged maps).
+            [[Outcome.INSUFFICIENT_DATA.code, Outcome.OK.code]],
         ],
         dtype=np.uint8,
     )
@@ -614,6 +701,23 @@ def test_draw_all_writes_one_png_per_map_named_for_its_subject(tmp_path):
     for name in failure_pngs.values():
         assert f"code{Outcome.DEGENERATE_HESSIAN.code:02d}" in name
         assert "failure" in name
+    # **AND `OK`'s FILES SAY CONVERGED** (Task 9's pre-flight, 5.1): the kind is
+    # spelled into the stem, so a kind fixed in the plan and not in the name
+    # would leave `code00_failure_*.png` on disk.
+    ok_pngs = [
+        entry["png"] for entry in record["maps"] if entry["branch"] == Outcome.OK.code
+    ]
+    assert len(ok_pngs) == 3
+    for name in ok_pngs:
+        assert name.startswith("code00_converged_")
+        assert "failure" not in name
+    coverage_pngs = [
+        entry["png"]
+        for entry in record["maps"]
+        if entry["branch"] == Outcome.INSUFFICIENT_DATA.code
+    ]
+    assert len(coverage_pngs) == 3
+    assert all(name.startswith("code10_coverage_") for name in coverage_pngs)
 
 
 def test_matplotlib_availability_is_answered_and_never_raises(monkeypatch):

@@ -69,10 +69,14 @@ class BranchMap:
         title: The branch's name **as the store spells it**, with the
             population it is over. Empty legend means the code alone.
         candidate: The `m`-axis label, or `None` for the point-level aggregate.
-        kind: `"failure"` over fit-verdict cells, or `"coverage"` over covered
-            cells. **A non-fit branch is never a failure map** (T7-1): it has
-            no fit verdict to fail, so its denominator and its label both say
-            coverage.
+        kind: `"failure"` or `"converged"` over fit-verdict cells, or
+            `"coverage"` over covered cells. **A non-fit branch is never a
+            failure map** (T7-1): it has no fit verdict to fail, so its
+            denominator and its label both say coverage. **And `OK` is
+            `"converged"`** -- Task 5's word for exactly that set, `converged
+            == fitted - failed` -- because the word is `is_failure`'s and is
+            decided by it, never by fit-verdict membership (2f Task 9's
+            pre-flight, 5.1).
         population: The denominator's name, recorded so the map and the
             statistic can be compared without reading this module.
         fraction: `(rows, columns)` float64 in `[0, 1]`; `nan` where the block
@@ -181,7 +185,7 @@ def _title(view: StoreView, branch: int, kind: str, population: str) -> str:
     Args:
         view: The store, for its own flag attributes.
         branch: The outcome code.
-        kind: `"failure"` or `"coverage"`.
+        kind: `"failure"`, `"converged"` or `"coverage"`.
         population: The denominator's name.
 
     Returns:
@@ -245,11 +249,14 @@ def plan_maps(view: StoreView) -> MapPlan:
     fit_verdict = np.zeros(codes.shape, dtype=np.bool_)
     covered = np.zeros(codes.shape, dtype=np.bool_)
     fit_codes: set[int] = set()
+    failure_codes: set[int] = set()
     covered_codes: set[int] = set()
     for member in Outcome:
         if member.is_fit_verdict:
             fit_verdict |= codes == member.code
             fit_codes.add(member.code)
+        if member.is_failure:
+            failure_codes.add(member.code)
         if member.is_covered:
             covered |= codes == member.code
             covered_codes.add(member.code)
@@ -258,7 +265,12 @@ def plan_maps(view: StoreView) -> MapPlan:
     unmapped: list[tuple[int, str, str]] = []
     for branch in sorted({int(code) for code in np.unique(codes)}):
         if branch in fit_codes:
-            kind, population, source = "failure", "fit-verdict cells", fit_verdict
+            # **THE WORD IS `is_failure`'s, SO `is_failure` DECIDES IT.** Until
+            # 2f Task 9's pre-flight this read `"failure"` for every fit verdict,
+            # titling a healthy store's `OK` map -- near 1 everywhere under fixed
+            # limits -- a failure fraction.
+            kind = "failure" if branch in failure_codes else "converged"
+            population, source = "fit-verdict cells", fit_verdict
         elif branch in covered_codes:
             kind, population, source = "coverage", "covered cells", covered
         else:
