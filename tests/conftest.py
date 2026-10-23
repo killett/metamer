@@ -311,6 +311,10 @@ class RssMeasurement:
             statistic cannot tell an allocator from a victim.
         indeterminate: Whether the witness refused to judge.
         reason: The witness's reason, when it refused.
+        failed: Whether the block raised and the witness did not excuse it.
+            **Recorded since 2026-10-21**: before then a failing block left no
+            record at all, so the per-measurement list silently lost the one
+            line that mattered.
     """
 
     what: str
@@ -319,6 +323,7 @@ class RssMeasurement:
     stall_flagged: bool
     indeterminate: bool
     reason: str | None = None
+    failed: bool = False
 
 
 #: Every bracketed measurement this session, in order.
@@ -345,9 +350,20 @@ def rss_validity(
 
     **INDETERMINATE IS NOT PASS AND NOT FAIL**, which is the same shape as
     `calibration.unusable_reason`: a measurement outside its validity range is
-    recorded, not used. The assertions inside the block never run when the
-    condition fails, so a reading taken under reclaim can neither confirm nor
+    recorded, not used: a reading taken under reclaim can neither confirm nor
     refute what it was measuring.
+
+    **THE WITNESS IS READ AFTER THE BLOCK, ON BOTH OUTCOMES.** The assertions run
+    first -- the condition cannot be known until the window has closed -- and the
+    witness then classifies whatever they did. Until 2026-10-21 the `yield` was
+    bare, so an assertion failing inside the block left at the `yield`: the
+    witness was never read and no record was appended. The docstring said the
+    assertions "never run when the condition fails"; in fact a passing reading
+    taken under reclaim became INDETERMINATE and a FAILING one became a failure,
+    blamed on the code under test, and vanished from the summary. **Now:** an
+    `AssertionError` under a witnessed shortfall is INDETERMINATE; any other
+    outcome is recorded and re-raised. **Only an assertion can be excused** -- an
+    error in the code is not a reading, and reclaim does not explain it.
 
     **TWO CONDITIONS, BECAUSE ONE OF THEM IS BLIND TO THE FAILURE THAT MATTERS.**
     The stall rate below is a gate on **thrashing** and Phase 2b Task 8a measured
@@ -385,8 +401,12 @@ def rss_validity(
     from metamer.core import machine
     from tests.stall import StallWatch
 
+    failure: Exception | None = None
     with StallWatch(reader=machine.memory_stall_us) as watch:
-        yield
+        try:
+            yield
+        except Exception as caught:  # classified below, then re-raised or excused
+            failure = caught
 
     flagged = watch.rate is not None and watch.rate > RSS_STALL_LIMIT_US_PER_S
     gate = (
@@ -405,7 +425,7 @@ def rss_validity(
             if witness is not None
             else machine.reclaim_shortfall_bytes(float(reference_bytes or 0.0))
         )
-        if shortfall > 0:
+        if shortfall > 0 and (failure is None or isinstance(failure, AssertionError)):
             reason = (
                 f"{what}: this process's working set ended "
                 f"{shortfall / 1e6:.1f} MB BELOW a reference it cannot honestly "
@@ -419,7 +439,117 @@ def rss_validity(
             )
             pytest.skip(reason)
 
-    RSS_MEASUREMENTS.append(RssMeasurement(what, gate, watch.rate, flagged, False))
+    RSS_MEASUREMENTS.append(
+        RssMeasurement(
+            what, gate, watch.rate, flagged, False, failed=failure is not None
+        )
+    )
+    if failure is not None:
+        # The same object the `with` statement threw in, so `contextlib`
+        # re-raises it with its original traceback.
+        raise failure
+
+
+#: **LIVE RSS TESTS THAT RUN OUTSIDE `rss_validity`, AND WHY.** The count the
+#: summary prints describes bracketed readings only, and a headline quoted from
+#: it was read as complete: on 2026-10-03 a sweep printed `0 INDETERMINATE` while
+#: one of these failed. So every one is named under the count with its outcome,
+#: on every run. Whether they SHOULD be bracketed is open question 27 -- most
+#: need their witness moved into the child first. The scope is held by
+#: `tests/test_rss_validity.py`'s golden table, so a new one cannot be added
+#: silently.
+UNBRACKETED_RSS_TESTS: dict[str, str] = {
+    "test_peak_rss_tracks_a_known_allocation": (
+        "Task 8i: kept out on margin, a >= 200 MB window against ~1 MB of drift"
+    ),
+    "test_current_rss_falls_after_a_release_and_the_watermark_does_not": (
+        "Task 8i: kept out on margin, the same 200 MB window"
+    ),
+    "test_a_child_inherits_the_parents_own_high_water_mark_and_not_its_current_rss": (
+        "Task 8i kept it out on its 400 MiB watermarks, but its fixture "
+        "precondition compares CURRENT RSS at ~11 MB, which that margin never "
+        "covered; failed 2026-10-03"
+    ),
+    "test_the_inheritance_does_not_compound_across_a_generation": (
+        "Task 8i: kept out on its 400 MiB watermarks"
+    ),
+    "test_measured_peak_rss_is_at_least_the_arrays_that_provably_exist": (
+        "Task 8i: kept out on margin, a 2x band over a three-point fit"
+    ),
+    "test_the_floor_probe_reports_a_reclaim_witness_from_inside_the_child": (
+        "never surveyed; asserts the in-child witness read exactly zero, which "
+        "reclaim itself would falsify"
+    ),
+    "test_a_reference_at_or_below_the_working_set_reports_no_shortfall": (
+        "never surveyed; a live current-RSS reference with no window"
+    ),
+    "test_a_reference_above_the_working_set_reports_the_difference": (
+        "never surveyed; a 24-40 MB band on a live allocation"
+    ),
+    "test_the_shortfall_instrument_sees_a_constructed_loss": (
+        "never surveyed; > 32 MB on a live allocation"
+    ),
+    "test_the_floor_is_measured_fresh_every_call_and_never_cached": (
+        "never surveyed; a live floor's post > pre relation, behind a call counter"
+    ),
+    "test_a_run_measures_its_own_floor_when_none_is_supplied": (
+        "never surveyed, and outside the mechanical scan: a 120-500 MB band on the "
+        "floor a run stores, read through store attrs rather than a reader call"
+    ),
+}
+
+#: The worst outcome of each `UNBRACKETED_RSS_TESTS` entry this session.
+UNBRACKETED_RSS_OUTCOMES: dict[str, str] = {}
+
+_OUTCOME_RANK = {"passed": 0, "skipped": 1, "failed": 2}
+
+
+def pytest_runtest_logreport(report: Any) -> None:
+    """Keep the worst outcome of each named unbracketed RSS test.
+
+    **KEYED BY FUNCTION NAME**, so a parametrized id `name[case]` lands on its
+    test, and **WORST WINS**, so a later passing case cannot overwrite an earlier
+    failure. A setup-phase skip counts -- that is how a `skipif` reports -- and
+    a deselected test never reports, which the summary prints as not run.
+
+    Args:
+        report: pytest's per-phase test report.
+    """
+    name = str(report.nodeid).split("::")[-1].split("[")[0]
+    if name not in UNBRACKETED_RSS_TESTS:
+        return
+    if report.when != "call" and report.outcome == "passed":
+        return
+    outcome = str(report.outcome)
+    prior = UNBRACKETED_RSS_OUTCOMES.get(name)
+    if prior is None or _OUTCOME_RANK.get(outcome, 2) > _OUTCOME_RANK.get(prior, 2):
+        UNBRACKETED_RSS_OUTCOMES[name] = outcome
+
+
+def _write_unbracketed(terminalreporter: Any) -> None:
+    """Name every live RSS test the count above does not cover, with its outcome.
+
+    **PRINTED ON BOTH BRANCHES**, including the one where no bracketed
+    measurement ran: that branch returns early, and a line added after it is the
+    line that goes missing on exactly the run where the count is zero.
+
+    Args:
+        terminalreporter: pytest's reporter, or anything with `write_line`.
+    """
+    failed = [
+        name
+        for name in UNBRACKETED_RSS_TESTS
+        if UNBRACKETED_RSS_OUTCOMES.get(name) == "failed"
+    ]
+    ran = [name for name in UNBRACKETED_RSS_TESTS if name in UNBRACKETED_RSS_OUTCOMES]
+    terminalreporter.write_line(
+        f"NOT IN THE COUNT ABOVE (OQ27): {len(UNBRACKETED_RSS_TESTS)} live RSS "
+        f"tests run outside rss_validity -- {len(ran)} ran, {len(failed)} FAILED; "
+        f"an INDETERMINATE count says nothing about them"
+    )
+    for name, reason in UNBRACKETED_RSS_TESTS.items():
+        outcome = UNBRACKETED_RSS_OUTCOMES.get(name, "not run this session")
+        terminalreporter.write_line(f"  {name}: {outcome} -- {reason}")
 
 
 def pytest_terminal_summary(terminalreporter: Any) -> None:
@@ -442,6 +572,7 @@ def pytest_terminal_summary(terminalreporter: Any) -> None:
     terminalreporter.write_sep("=", "RSS measurement validity")
     if not RSS_MEASUREMENTS:
         terminalreporter.write_line("no RSS-difference measurement ran this session")
+        _write_unbracketed(terminalreporter)
         # **NO EARLY RETURN.** Diagnostics are printed by the loop at the end and
         # are not conditional on an RSS measurement having run -- an early return
         # here dropped them silently, which the channel's own test caught.
@@ -455,16 +586,24 @@ def pytest_terminal_summary(terminalreporter: Any) -> None:
             stall = f"stall {record.stall_us_per_s / 1000:.1f} ms/s"
             if record.stall_flagged:
                 stall += " HIGH"
-        verdict = "INDETERMINATE" if record.indeterminate else "asserted"
+        verdict = (
+            "INDETERMINATE"
+            if record.indeterminate
+            else "FAILED"
+            if record.failed
+            else "asserted"
+        )
         terminalreporter.write_line(
             f"  {record.what}: gate={record.gate}, {verdict}, {stall}"
         )
 
     indeterminate = [r for r in RSS_MEASUREMENTS if r.indeterminate]
+    failed = [r for r in RSS_MEASUREMENTS if r.failed]
     on_margin = [r for r in RSS_MEASUREMENTS if r.gate == "margin"]
     flagged = [r for r in RSS_MEASUREMENTS if r.stall_flagged]
     terminalreporter.write_line(
-        f"{len(RSS_MEASUREMENTS)} measured, {len(indeterminate)} INDETERMINATE "
+        f"{len(RSS_MEASUREMENTS)} measured, {len(failed)} FAILED, "
+        f"{len(indeterminate)} INDETERMINATE "
         f"(the reclaim witness refused), {len(on_margin)} carried by their margin "
         f"with no witness, {len(flagged)} above the "
         f"{RSS_STALL_LIMIT_US_PER_S / 1000:.0f} ms/s stall diagnostic"
@@ -481,6 +620,7 @@ def pytest_terminal_summary(terminalreporter: Any) -> None:
     for record in indeterminate:
         terminalreporter.write_line(f"  - {record.reason}")
 
+    _write_unbracketed(terminalreporter)
     _write_diagnostics(terminalreporter)
 
 
