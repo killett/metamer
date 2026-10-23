@@ -715,7 +715,8 @@ def test_the_populated_forms_of_every_section_render_from_their_real_types(repor
 
     _out, record, _markdown = reported
     changed = json.loads(json.dumps(record))
-    changed["clustering"]["aggregate"] = _plain(
+    arm = changed["clustering"][changed["clustering"]["reported"]]
+    arm["aggregate"] = _plain(
         Arrangement(
             available=True,
             reason=None,
@@ -758,6 +759,47 @@ def test_the_populated_forms_of_every_section_render_from_their_real_types(repor
     assert "| planted-candidate | 0.3 over fitted | 3 | 10 | yes |" in markdown
     assert "planted_branch: no map — no population" in markdown
     assert _unsourced(markdown, changed) == set()
+
+
+def test_the_markdown_prints_the_arm_d4s_gate_reports(reported):
+    """On a gate-global store the table is the wrapped arm, as the note says.
+
+    Expected values determined by hand, on Task 6's seam-straddling grid
+    (`test_report_clustering`): the arms differ by the patch's own 15 seam
+    joins, 550 unwrapped and 565 wrapped, for the one candidate and for the
+    aggregate alike. The record's span note says "global, wrapped".
+
+    Bug this catches: a renderer that reads the unwrapped arm whatever the
+    gate decided, which prints 550 beside a note saying the seam was wrapped
+    -- a number contradicting the words beside it. **Printing both arms,
+    labelled and with the reported one marked, is the next fix's**; this one
+    only binds the table to the arm the record says it reports.
+    """
+    from metamer.report.clustering import compute
+    from metamer.report.record import _plain
+    from metamer.report.render import render
+    from tests.test_report_clustering import _cube, _longitude
+
+    rows, columns = 30, 360
+    failed = np.zeros((rows, columns), dtype=bool)
+    failed[5:20, 350:] = True
+    failed[5:20, :10] = True
+    _out, record, _markdown = reported
+    changed = json.loads(json.dumps(record))
+    changed["clustering"] = _plain(
+        compute(_longitude(_cube(failed), np.arange(columns, dtype=np.float64)))
+    )
+
+    lines = render(changed).splitlines()
+    label = changed["clustering"]["headline_label"]
+
+    assert [line.split(" | ")[1] for line in lines if line.startswith("| m0 |")] == [
+        "565"
+    ]
+    assert [
+        line.split(" | ")[1] for line in lines if line.startswith(f"| {label} |")
+    ] == ["565"]
+    assert "Domain span: 360° of 360°, global, wrapped." in lines
 
 
 def test_the_record_refuses_what_json_cannot_carry_faithfully():

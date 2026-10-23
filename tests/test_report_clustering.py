@@ -144,13 +144,13 @@ def test_a_candidate_clustered_alone_is_not_hidden_by_a_clean_aggregate():
     cube = np.concatenate([_cube(bad), _cube(np.zeros_like(bad))], axis=2)
 
     section = compute(_view(cube))
-    (first_label, first), (_, second) = section.by_candidate
+    (first_label, first), (_, second) = section.unwrapped.by_candidate
 
     assert first.available and first.z is not None and first.z > 20.0
     assert second.available is False
     assert second.reason == "no failures to arrange"
-    assert section.aggregate.available is False
-    assert section.aggregate.reason == "no failures to arrange"
+    assert section.unwrapped.aggregate.available is False
+    assert section.unwrapped.aggregate.reason == "no failures to arrange"
     assert section.headline_label == "max over 2 candidates, uncorrected"
     assert first_label == "m0"
 
@@ -182,7 +182,7 @@ def test_a_checkerboard_mask_has_no_adjacent_pair_and_says_so():
     left, right = rook_edges(eligible)
     assert left.size == 0
 
-    ((_, only),) = compute(_view(cube)).by_candidate
+    ((_, only),) = compute(_view(cube)).unwrapped.by_candidate
 
     assert only.available is False
     assert only.edges == 0
@@ -203,7 +203,7 @@ def test_every_point_failing_leaves_one_arrangement_and_is_unavailable():
     rows = columns = 40
     cube = _cube(np.ones((rows, columns), dtype=bool))
 
-    ((_, only),) = compute(_view(cube)).by_candidate
+    ((_, only),) = compute(_view(cube)).unwrapped.by_candidate
 
     assert only.available is False
     assert only.reason == "every eligible point failed; there is one arrangement"
@@ -228,7 +228,7 @@ def test_a_small_mask_names_the_floor_as_a_ladder_rung_not_a_threshold():
     cube = _cube(np.zeros((20, 20), dtype=bool))
     cube[0:5, 0:5, 0] = Outcome.DEGENERATE_HESSIAN.code
 
-    ((_, only),) = compute(_view(cube)).by_candidate
+    ((_, only),) = compute(_view(cube)).unwrapped.by_candidate
 
     assert only.eligible == 400 < ELIGIBLE_FLOOR
     assert only.available is False
@@ -338,7 +338,7 @@ def test_every_non_fit_member_is_absent_from_the_graph():
     cube = codes[:, :, None]
     expected = int((rows - len(non_fit)) * columns)
 
-    ((_, only),) = compute(_view(cube)).by_candidate
+    ((_, only),) = compute(_view(cube)).unwrapped.by_candidate
 
     assert only.eligible == expected, "a non-fit member entered the graph"
 
@@ -416,33 +416,196 @@ def test_an_unmeasurable_span_is_not_global_and_says_which():
 
     assert section.span is None
     assert section.wrapped is None
+    assert section.reported == "unwrapped"
     assert "could not be measured" in section.span_note
 
 
-def test_a_global_span_fires_the_two_arm_zone_and_both_arms_are_reported():
-    """Where the zone fires, both arms are printed in full (D4).
+def _longitude(cube: np.ndarray, x: np.ndarray) -> StoreView:
+    """A view of `cube` whose `x` coordinate is `x`, under a recognised name."""
+    return _view(cube, spatial={"longitude": x})
 
-    Expected value determined by construction: 360 columns spanning 0 to 359
-    degrees is 359 degrees over 359 cells, one cell short of 360 -- **inside
-    the two-arm zone, which is deliberately wider than the wrap gate** so a
-    global grid with a masked column still gets the comparison.
 
-    Bug this catches: a report that prints one arm on a global store, leaving
-    the reader unable to tell whether the arm choice changed the answer. A
-    delta never stands in for the pair, so both arms are asserted present and
-    the wrapped arm must have strictly more edges.
+def test_a_gate_global_grid_reports_the_wrapped_arm_for_candidates_and_aggregate():
+    """D4's gate: `n_x · dx` within half a cell of 360° wraps, and says so.
+
+    **CHANGED FROM TASK 6's "GLOBAL SPAN" TEST, NOT ADDED BESIDE IT.** That
+    test read 360 columns at 1° as *"359 degrees over 359 cells, one cell
+    short of 360"* -- max minus min, which is `(n_x - 1) · dx`. D4's span is
+    `n_x · dx`: its gate is stated in it, and its fail-toward list says *"a
+    span short of 360° because columns are missing"*, so a grid with no
+    column missing is not short. This grid is global, and the shipped report
+    printed the unwrapped arm under *"359° of 360°, global, not wrapped"*.
+
+    Expected values determined by hand, on a 30 x 360 grid at 1° with one
+    failure patch straddling the seam: rows 5..19 in columns 350..359 and
+    0..9, two 15 x 10 blocks once the seam is cut.
+
+    - Unwrapped edges: 29 x 360 vertical + 30 x 359 horizontal = 21210.
+      Wrapped: + 30 seam edges, one per row = 21240.
+    - Unwrapped BB joins: each block has 14 x 10 + 15 x 9 = 275, so 550.
+      Wrapped: + 15, one seam join per patch row = 565.
+    - One candidate, so the aggregate's population and failures are the
+      candidate's, and it gains exactly the same.
+
+    Bug this catches: the shipped behaviour (the unwrapped arm reported on a
+    global grid, and a note that says "not wrapped"). Also an aggregate that
+    keeps one arm everywhere, which loses the patch's own 15 seam joins: P4's
+    Δz = 11.02 is the measured price of that, and D4 was re-decided on it.
     """
     rows, columns = 30, 360
-    cube = _cube(np.zeros((rows, columns), dtype=bool))
-    cube[5:20, 5:40, 0] = Outcome.DEGENERATE_HESSIAN.code
-    section = compute(
-        _view(cube, spatial={"longitude": np.arange(columns, dtype=np.float64)})
-    )
+    failed = np.zeros((rows, columns), dtype=bool)
+    failed[5:20, 350:] = True
+    failed[5:20, :10] = True
+    section = compute(_longitude(_cube(failed), np.arange(columns, dtype=np.float64)))
 
-    assert section.span == pytest.approx(359.0)
+    assert section.span == pytest.approx(360.0)
+    assert section.reported == "wrapped"
+    assert section.span_note == "360° of 360°, global, wrapped"
     assert section.wrapped is not None
-    assert len(section.wrapped) == len(section.by_candidate)
-    ((_, unwrapped),) = section.by_candidate
-    ((_, wrapped),) = section.wrapped
-    assert wrapped.edges == unwrapped.edges + rows
-    assert "360°" in section.span_note
+    ((_, unwrapped),) = section.unwrapped.by_candidate
+    ((_, wrapped),) = section.wrapped.by_candidate
+    for plain, seam in (
+        (unwrapped, wrapped),
+        (section.unwrapped.aggregate, section.wrapped.aggregate),
+    ):
+        assert (plain.edges, seam.edges) == (21210, 21240)
+        assert (plain.observed, seam.observed) == (550, 565)
+
+
+def test_a_grid_two_columns_short_is_in_the_zone_and_is_not_wrapped():
+    """The zone is the gate's band widened, so it reaches what the gate refuses.
+
+    Expected values determined by hand: 358 columns at 1° is a span of 358°,
+    two cells short. **Outside the gate** (half a cell) and **inside the zone**
+    (a couple of cells), which is the case D4 widened the zone to reach: *"a
+    global grid with masked columns"* gets both arms, and the unwrapped one
+    is reported.
+
+    Bug this catches: the gate widened to the zone, which wraps a grid with
+    two columns missing and joins two longitudes 3° apart. **And the zone
+    measured on max minus min**, as shipped: that span is 357°, three cells
+    short, so no second arm is computed for exactly the grid the widening
+    exists for.
+    """
+    columns = 358
+    cube = _cube(np.zeros((30, columns), dtype=bool))
+    section = compute(_longitude(cube, np.arange(columns, dtype=np.float64)))
+
+    assert section.span == pytest.approx(358.0)
+    assert section.reported == "unwrapped"
+    assert section.wrapped is not None
+    assert section.span_note == "358° of 360°, not global, not wrapped"
+
+
+def _jittered() -> np.ndarray:
+    """360 columns at 1° with one value moved by 0.4°."""
+    x = np.arange(360, dtype=np.float64)
+    x[100] = 100.4
+    return x
+
+
+def _stepping_back() -> np.ndarray:
+    """0..180, then back to 179, then 180..359: every step is 1° in size."""
+    return np.concatenate([np.arange(181.0), [179.0], np.arange(180.0, 360.0)])
+
+
+@pytest.mark.parametrize(
+    ("x", "note"),
+    [
+        pytest.param(
+            _jittered(),
+            "360° of 360° at irregular spacing, not global, not wrapped",
+            id="one-value-moved",
+        ),
+        pytest.param(
+            _stepping_back(),
+            "359.994° of 360° at irregular spacing, not global, not wrapped",
+            id="one-step-backwards",
+        ),
+    ],
+)
+def test_irregular_spacing_fails_toward_not_wrapping_and_says_why(
+    x: np.ndarray, note: str
+) -> None:
+    """D4 names irregular spacing as a case that fails toward not wrapping.
+
+    Expected values determined by measuring the two coordinates. One value
+    moved by 0.4° leaves the span at 360° and changes two spacings by 0.4 of
+    a cell. An axis that steps back one column has 362 values over 359°, so
+    a cell is 359/361° and the span is 362 x 359/361 = 359.994°, inside the
+    gate's half cell. **Every one of its steps is within 0.6% of that cell in
+    size**, so only the direction betrays it, and the axis repeats two
+    longitudes. **The note says why a grid this close to 360° is not
+    global**, or the reader sees a number that contradicts the verdict
+    printed beside it.
+
+    Bug this catches: a gate on the span alone, without the regularity D4
+    requires (the first case). A regularity check on the size of each step
+    and not its direction (the second).
+    """
+    cube = _cube(np.zeros((30, x.size), dtype=bool))
+    section = compute(_longitude(cube, x))
+
+    assert section.reported == "unwrapped"
+    assert section.wrapped is not None
+    assert section.span_note == note
+
+
+@pytest.mark.parametrize(
+    ("x", "reported", "note"),
+    [
+        pytest.param(
+            (np.arange(3600, dtype=np.float32) * np.float32(0.1)).astype(np.float64),
+            "wrapped",
+            "360° of 360°, global, wrapped",
+            id="float32-tenth-degree-is-global",
+        ),
+        pytest.param(
+            np.arange(361, dtype=np.float64),
+            "unwrapped",
+            "361° of 360°, not global, not wrapped",
+            id="last-column-repeating-the-first-is-not",
+        ),
+    ],
+)
+def test_the_gates_tolerances_admit_rounding_and_refuse_a_repeated_column(
+    x: np.ndarray, reported: str, note: str
+) -> None:
+    """The gate's two tolerances, each from the side a real grid would test it.
+
+    Expected values determined by measurement of the coordinates, not of the
+    code: a 0.1° grid stored as float32 has spacings within 2.4e-4 of a cell
+    of each other and a span 6e-6° short of 360°. A 0..360 grid repeats its
+    first longitude, so its span is 361°, a whole cell over.
+
+    Bug this catches, first case: an exact-equality gate or regularity check,
+    which refuses to wrap a real global grid because of float32 rounding.
+    Second case: a whole-cell tolerance, which wraps a grid whose last column
+    IS its first and joins a longitude to itself. That grid is in the zone,
+    so both arms are still computed.
+    """
+    cube = _cube(np.zeros((2, x.size), dtype=bool))
+    section = compute(_longitude(cube, x))
+
+    assert section.reported == reported
+    assert section.wrapped is not None
+    assert section.span_note == note
+
+
+def test_d4s_own_printed_example_is_what_a_subset_box_prints():
+    """D4's example sentence, verbatim: *"22.5° of 360°, not global, not wrapped"*.
+
+    Expected value determined independently: the sentence is D4's, and 30
+    columns at 0.75° is 22.5° by `n_x · dx`. A subset box is far outside the
+    zone, so there is one arm.
+
+    Bug this catches: printing max minus min, which is 21.75° for this grid,
+    so the report contradicts the plan's own worked example. Also a zone that
+    fires on a subset box.
+    """
+    x = np.arange(30, dtype=np.float64) * 0.75
+    section = compute(_longitude(_cube(np.zeros((30, 30), dtype=bool)), x))
+
+    assert section.span_note == "22.5° of 360°, not global, not wrapped"
+    assert section.reported == "unwrapped"
+    assert section.wrapped is None

@@ -199,8 +199,9 @@ def _arrangement(name: str, arrangement: Mapping[str, Any]) -> list[str]:
 
 def _clustering(record: Mapping[str, Any]) -> list[str]:
     section = record["clustering"]
-    rows = [_arrangement(name, item) for name, item in section["by_candidate"]]
-    rows.append(_arrangement(section["headline_label"], section["aggregate"]))
+    arm = section[section["reported"]]
+    rows = [_arrangement(name, item) for name, item in arm["by_candidate"]]
+    rows.append(_arrangement(section["headline_label"], arm["aggregate"]))
     lines = ["## Clustering of failures", ""]
     lines += _table(["population", "join count", "null median", "z", "p", ""], rows)
     lines += ["", f"Domain span: {section['span_note']}."]

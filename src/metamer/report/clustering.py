@@ -29,6 +29,7 @@ a new implementation against an old one.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Literal
 
 import numpy as np
 from numpy.typing import NDArray
@@ -63,6 +64,12 @@ ELIGIBLE_FLOOR = 500
 #: is ambiguous and D4 says every ambiguous case fails toward not-wrapping**, so
 #: an unrecognised name yields no span and the not-global branch.
 _X_AXIS_NAMES = ("x", "longitude", "lon")
+
+#: How far one spacing may sit from the mean cell and still count as regular,
+#: as a fraction of the cell. **Chosen between two measured scales**: float32
+#: rounding of a 0.1° grid near 360° moves a spacing by 2.4e-4 of a cell, and
+#: a missing column moves one by a whole cell.
+_REGULARITY = 0.01
 
 
 @dataclass(frozen=True)
@@ -101,8 +108,8 @@ class Arrangement:
 
 
 @dataclass(frozen=True)
-class Clustering:
-    """Task 6's record: per candidate, plus an aggregate of a different kind.
+class Arm:
+    """One seam choice: every candidate's arrangement, and the aggregate's.
 
     Attributes:
         by_candidate: One arrangement per model label, in the store's axis
@@ -111,22 +118,44 @@ class Clustering:
             aggregate-only statistic.
         aggregate: The arrangement over points failing under *any* candidate.
             **A second headline of a different kind, not a summary of the
-            rows.**
-        headline_label: What the largest z means, said at the number.
-        span: The `x` span found, in degrees, or None when it could not be
-            measured.
-        span_note: The span as a sentence, so the not-global branch is a
-            measurement rather than a policy.
-        wrapped: The seam-wrapped arm, when the two-arm zone fires. **Both arms
-            printed in full** (D4); a delta never stands in for the pair.
+            rows.** It is a join count on the same grid, so the seam reaches it
+            exactly as it reaches each candidate.
     """
 
     by_candidate: tuple[tuple[str, Arrangement], ...]
     aggregate: Arrangement
+
+
+@dataclass(frozen=True)
+class Clustering:
+    """Task 6's record: both seam choices where the question is live, and which one is reported.
+
+    **EVERY ARM SAYS WHICH ARM IT IS.** A field named for the rows alone would
+    hold the unreported arm on a global grid, and a reader of the record would
+    take it for the answer.
+
+    Attributes:
+        unwrapped: The arm with the seam cut. Always computed.
+        wrapped: The arm with the seam closed, wherever the two-arm zone fires
+            or the gate says global. **Both arms printed in full** (D4); a
+            delta never stands in for the pair.
+        reported: The arm D4's gate chose: `wrapped` on a global grid,
+            `unwrapped` everywhere else. **The reported arm is always
+            computed**, because the gate lies inside the zone.
+        headline_label: What the largest z means, said at the number.
+        span: D4's span, `n_x · dx` in degrees, or None when it could not be
+            measured.
+        span_note: The span, the gate's verdict and the arm taken, as a
+            sentence, so the not-global branch is a measurement rather than a
+            policy.
+    """
+
+    unwrapped: Arm
+    wrapped: Arm | None
+    reported: Literal["wrapped", "unwrapped"]
     headline_label: str
     span: float | None
     span_note: str
-    wrapped: tuple[tuple[str, Arrangement], ...] | None
 
 
 def rook_edges(
@@ -143,8 +172,9 @@ def rook_edges(
 
     Args:
         eligible: `(rows, columns)` mask of cells in the graph.
-        wrap: Close the longitude seam. **False is the shipped choice** (D4);
-            True is the second arm where the two-arm zone fires.
+        wrap: Close the longitude seam. True is the reported arm where D4's
+            gate says the grid is global, and the second arm wherever else the
+            two-arm zone fires.
 
     Returns:
         `(left, right)` index arrays, one entry per undirected edge.
@@ -270,7 +300,26 @@ def arrangement(
     )
 
 
-def _x_span(view: StoreView) -> float | None:
+@dataclass(frozen=True)
+class _Span:
+    """The `x` axis measured the way D4 states its rule.
+
+    Attributes:
+        degrees: D4's span, `n_x · dx`. **Not max minus min**, which is
+            `(n_x - 1) · dx` and reads a global 1° grid as 359°: D4's
+            fail-toward list says *"a span short of 360° because columns are
+            missing"*, so a grid with no column missing is not short.
+        cell: `dx`, the mean spacing.
+        regular: Whether the axis is monotone and every spacing is within
+            `_REGULARITY` of a cell of `dx`.
+    """
+
+    degrees: float
+    cell: float
+    regular: bool
+
+
+def _x_span(view: StoreView) -> _Span | None:
     """The `x` axis's span in degrees, or None when it cannot be measured.
 
     **EVERY AMBIGUOUS CASE RETURNS None, WHICH IS D4's "FAIL TOWARD NOT
@@ -281,23 +330,57 @@ def _x_span(view: StoreView) -> float | None:
     for name in _X_AXIS_NAMES:
         values = view.spatial.get(name)
         if values is not None and values.size >= 2:
-            return float(values.max() - values.min())
+            cell = float(values.max() - values.min()) / (values.size - 1)
+            steps = np.diff(values)
+            monotone = bool(np.all(steps > 0) or np.all(steps < 0))
+            even = bool(np.all(np.abs(np.abs(steps) - cell) <= _REGULARITY * cell))
+            return _Span(
+                degrees=values.size * cell, cell=cell, regular=monotone and even
+            )
     return None
 
 
-def _two_arm_zone(span: float | None, columns: int) -> bool:
+def _wraps(span: _Span | None) -> bool:
+    """D4's gate: `n_x · dx` within half a cell of 360°, with regular spacing.
+
+    **Every ambiguous case fails toward not wrapping**: no span, irregular
+    spacing, or a span short of or over 360° by more than half a cell -- the
+    last including a grid whose final column repeats its first.
+    """
+    if span is None or not span.regular:
+        return False
+    return abs(span.degrees - 360.0) <= 0.5 * span.cell
+
+
+def _two_arm_zone(span: _Span | None) -> bool:
     """Whether both arms are computed.
 
-    **WIDER THAN THE WRAP GATE, DELIBERATELY** (D4): both arms whenever the
-    span is within a couple of cells of 360 degrees, not only when a gate says
-    global. The realistic false negatives -- a global grid with masked columns,
-    or one whose spacing fails a regularity check -- all land near the boundary
-    in span, which is precisely where the widening reaches.
+    **THE GATE's BAND, WIDENED, ON THE SAME SPAN** (D4): both arms whenever
+    the span is within a couple of cells of 360 degrees, not only when the
+    gate says global. The realistic false negatives -- a global grid with
+    masked columns, or one whose spacing fails the regularity check -- all
+    land near the boundary in span, which is precisely where the widening
+    reaches.
     """
-    if span is None or columns < 2:
+    if span is None:
         return False
-    cell = span / (columns - 1)
-    return abs(span - 360.0) <= 2.0 * cell
+    return abs(span.degrees - 360.0) <= 2.0 * span.cell
+
+
+def _span_note(span: _Span | None, wraps: bool) -> str:
+    """The span, the gate's verdict and the arm taken, as one sentence.
+
+    **AN IRREGULAR GRID SAYS SO**, or a 360° span would be printed beside
+    "not global" with nothing to reconcile the two.
+    """
+    if span is None:
+        return (
+            "the x span could not be measured, so this grid is not treated as "
+            "global and the seam is not wrapped"
+        )
+    spacing = "" if span.regular else " at irregular spacing"
+    verdict = "global, wrapped" if wraps else "not global, not wrapped"
+    return f"{span.degrees:g}° of 360°{spacing}, {verdict}"
 
 
 def compute(view: StoreView, *, seed: int = CLUSTERING_SEED) -> Clustering:
@@ -309,7 +392,8 @@ def compute(view: StoreView, *, seed: int = CLUSTERING_SEED) -> Clustering:
             explicitly by anything reproducing a recorded p.
 
     Returns:
-        The arrangements, with both arms where the two-arm zone fires.
+        Both arms where the two-arm zone fires, and which one D4's gate
+        reports.
     """
     codes = np.asarray(view.outcome, dtype=np.uint8)
     fit_verdict = np.zeros(codes.shape, dtype=np.bool_)
@@ -319,22 +403,6 @@ def compute(view: StoreView, *, seed: int = CLUSTERING_SEED) -> Clustering:
             fit_verdict |= codes == member.code
             if member.is_failure:
                 failure |= codes == member.code
-
-    span = _x_span(view)
-    zone = _two_arm_zone(span, codes.shape[1])
-
-    def arm(wrap: bool) -> tuple[tuple[str, Arrangement], ...]:
-        rows: list[tuple[str, Arrangement]] = []
-        for index, label in enumerate(view.model_labels):
-            eligible = fit_verdict[..., index]
-            left, right = rook_edges(eligible, wrap=wrap)
-            rows.append(
-                (
-                    label,
-                    arrangement(failure[..., index][eligible], left, right, seed=seed),
-                )
-            )
-        return tuple(rows)
 
     # **THE AGGREGATE IS A DIFFERENT KIND OF HEADLINE, NOT A SUMMARY** (D7). A
     # point is in its population where ANY candidate carried a fit verdict, and
@@ -346,21 +414,33 @@ def compute(view: StoreView, *, seed: int = CLUSTERING_SEED) -> Clustering:
     all_failed: NDArray[np.bool_] = (
         np.asarray((failure | ~fit_verdict).all(axis=-1), dtype=np.bool_) & any_verdict
     )
-    left, right = rook_edges(any_verdict)
-    aggregate = arrangement(all_failed[any_verdict], left, right, seed=seed)
 
+    def arm(wrap: bool) -> Arm:
+        rows: list[tuple[str, Arrangement]] = []
+        for index, label in enumerate(view.model_labels):
+            eligible = fit_verdict[..., index]
+            left, right = rook_edges(eligible, wrap=wrap)
+            rows.append(
+                (
+                    label,
+                    arrangement(failure[..., index][eligible], left, right, seed=seed),
+                )
+            )
+        left, right = rook_edges(any_verdict, wrap=wrap)
+        return Arm(
+            by_candidate=tuple(rows),
+            aggregate=arrangement(all_failed[any_verdict], left, right, seed=seed),
+        )
+
+    span = _x_span(view)
+    wraps = _wraps(span)
     return Clustering(
-        by_candidate=arm(wrap=False),
-        aggregate=aggregate,
+        unwrapped=arm(wrap=False),
+        # `or wraps` makes "the reported arm is always computed" structural
+        # rather than a consequence of the gate's band lying inside the zone's.
+        wrapped=arm(wrap=True) if _two_arm_zone(span) or wraps else None,
+        reported="wrapped" if wraps else "unwrapped",
         headline_label=(f"max over {len(view.model_labels)} candidates, uncorrected"),
-        span=span,
-        span_note=(
-            "the x span could not be measured, so this grid is not treated as "
-            "global and the seam is not wrapped"
-            if span is None
-            else f"{span:g}° of 360°, "
-            + ("global" if _two_arm_zone(span, codes.shape[1]) else "not global")
-            + ", not wrapped"
-        ),
-        wrapped=arm(wrap=True) if zone else None,
+        span=None if span is None else span.degrees,
+        span_note=_span_note(span, wraps),
     )

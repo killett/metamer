@@ -58,8 +58,9 @@ FAILURE_RATE_SITE_TABLE: dict[str, int] = {
     # reconstruct. The three divisions are the STATISTIC itself, not a
     # rate over the taxonomy: `(observed - mean) / sd` is the z,
     # `(1 + at_least) / (1 + permutations)` is the p, and
-    # `span / (columns - 1)` is the cell width the two-arm zone is
-    # measured in. **None of them is a failure rate**, which is the
+    # `(max - min) / (n_x - 1)` is the cell width D4's gate and the
+    # two-arm zone are measured in (re-expressed at fix 5.2, still one
+    # division). **None of them is a failure rate**, which is the
     # quantity this table protects; a fourth division appearing here
     # should be read as one until shown otherwise.
     "metamer/report/clustering.py": 3,
