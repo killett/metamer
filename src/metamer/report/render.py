@@ -199,12 +199,22 @@ def _arrangement(name: str, arrangement: Mapping[str, Any]) -> list[str]:
 
 def _clustering(record: Mapping[str, Any]) -> list[str]:
     section = record["clustering"]
-    arm = section[section["reported"]]
-    rows = [_arrangement(name, item) for name, item in arm["by_candidate"]]
-    rows.append(_arrangement(section["headline_label"], arm["aggregate"]))
     lines = ["## Clustering of failures", ""]
-    lines += _table(["population", "join count", "null median", "z", "p", ""], rows)
-    lines += ["", f"Domain span: {section['span_note']}."]
+    # **BOTH ARMS IN FULL, THE REPORTED ONE FIRST AND MARKED ONCE** (D4). The
+    # labels are the record's own keys, so the renderer names no arm itself.
+    reported = section["reported"]
+    others = [name for name in ("unwrapped", "wrapped") if name != reported]
+    for name in [reported, *others]:
+        arm = section[name]
+        if arm is None:
+            continue
+        rows = [_arrangement(label, item) for label, item in arm["by_candidate"]]
+        rows.append(_arrangement(section["headline_label"], arm["aggregate"]))
+        mark = ", reported" if name == reported else ""
+        lines += [f"**{name} arm{mark}**", ""]
+        lines += _table(["population", "join count", "null median", "z", "p", ""], rows)
+        lines += [""]
+    lines += [f"Domain span: {section['span_note']}."]
     return lines
 
 

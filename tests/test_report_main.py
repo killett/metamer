@@ -761,45 +761,120 @@ def test_the_populated_forms_of_every_section_render_from_their_real_types(repor
     assert _unsourced(markdown, changed) == set()
 
 
-def test_the_markdown_prints_the_arm_d4s_gate_reports(reported):
-    """On a gate-global store the table is the wrapped arm, as the note says.
+def _seam_patch(columns: int) -> np.ndarray:
+    """30 rows by `columns`, failing in rows 5..19 of the 10 columns on each side of the seam."""
+    failed = np.zeros((30, columns), dtype=bool)
+    failed[5:20, columns - 10 :] = True
+    failed[5:20, :10] = True
+    return failed
 
-    Expected values determined by hand, on Task 6's seam-straddling grid
-    (`test_report_clustering`): the arms differ by the patch's own 15 seam
-    joins, 550 unwrapped and 565 wrapped, for the one candidate and for the
-    aggregate alike. The record's span note says "global, wrapped".
 
-    Bug this catches: a renderer that reads the unwrapped arm whatever the
-    gate decided, which prints 550 beside a note saying the seam was wrapped
-    -- a number contradicting the words beside it. **Printing both arms,
-    labelled and with the reported one marked, is the next fix's**; this one
-    only binds the table to the arm the record says it reports.
-    """
+def _with_seam_clustering(
+    reported: tuple[Path, dict[str, Any], str], columns: int
+) -> dict[str, Any]:
+    """The real record, its clustering replaced by a 1° grid of `columns`."""
     from metamer.report.clustering import compute
     from metamer.report.record import _plain
-    from metamer.report.render import render
     from tests.test_report_clustering import _cube, _longitude
 
-    rows, columns = 30, 360
-    failed = np.zeros((rows, columns), dtype=bool)
-    failed[5:20, 350:] = True
-    failed[5:20, :10] = True
     _out, record, _markdown = reported
-    changed = json.loads(json.dumps(record))
+    changed: dict[str, Any] = json.loads(json.dumps(record))
     changed["clustering"] = _plain(
-        compute(_longitude(_cube(failed), np.arange(columns, dtype=np.float64)))
+        compute(
+            _longitude(
+                _cube(_seam_patch(columns)), np.arange(columns, dtype=np.float64)
+            )
+        )
     )
+    return changed
 
-    lines = render(changed).splitlines()
+
+def _arm_blocks(markdown: str) -> list[tuple[str, dict[str, str]]]:
+    """The clustering section's arms, in order: heading, then join count by population."""
+    section = markdown.split("## Clustering of failures", 1)[1].split("\n## ", 1)[0]
+    blocks: list[tuple[str, dict[str, str]]] = []
+    for line in section.splitlines():
+        if line.startswith("**") and line.endswith("**"):
+            blocks.append((line.strip("*"), {}))
+        elif line.startswith("| ") and blocks and not line.startswith("| ---"):
+            cells = line.strip("| ").split(" | ")
+            if cells[0] != "population":
+                blocks[-1][1][cells[0]] = cells[1]
+    return blocks
+
+
+def test_a_global_store_prints_both_arms_and_marks_the_wrapped_one(reported):
+    """D4: both arms printed in full, labelled, the detected one marked reported.
+
+    Expected values determined by hand, on Task 6's seam-straddling grid at
+    360 columns (gate-global): the patch's two 15 x 10 halves have 275 joins
+    each, 550 with the seam cut, and the 15 seam joins make 565 with it
+    closed -- for the one candidate and for the aggregate alike.
+
+    Bug this catches: the shipped renderer, which never read `wrapped`, so a
+    global store's markdown carried one arm. **Task 6's test of exactly this
+    bug asserted on the section dataclass**, one layer above the defect, and
+    held while the markdown dropped the arm. The reported arm comes first: a
+    reader skimming takes the first table for the answer.
+    """
+    from metamer.report.render import render
+
+    changed = _with_seam_clustering(reported, 360)
+    markdown = render(changed)
     label = changed["clustering"]["headline_label"]
 
-    assert [line.split(" | ")[1] for line in lines if line.startswith("| m0 |")] == [
-        "565"
+    assert _arm_blocks(markdown) == [
+        ("wrapped arm, reported", {"m0": "565", label: "565"}),
+        ("unwrapped arm", {"m0": "550", label: "550"}),
     ]
-    assert [
-        line.split(" | ")[1] for line in lines if line.startswith(f"| {label} |")
-    ] == ["565"]
-    assert "Domain span: 360° of 360°, global, wrapped." in lines
+    assert "Domain span: 360° of 360°, global, wrapped." in markdown.splitlines()
+    assert _unsourced(markdown, changed) == set()
+
+
+def test_a_grid_two_columns_short_prints_both_arms_and_marks_the_unwrapped_one(
+    reported,
+):
+    """Inside the zone and outside the gate, the mark follows the gate.
+
+    Expected values determined by hand: 358 columns at 1° is 358°, two cells
+    short -- both arms computed, the unwrapped one reported. The patch is the
+    same shape as the global case's, so the counts are the same 550 and 565.
+
+    Bug this catches: a mark pinned to the wrapped arm whenever it exists,
+    which on a near-global grid with missing columns reports the arm the gate
+    refused.
+    """
+    from metamer.report.render import render
+
+    changed = _with_seam_clustering(reported, 358)
+    markdown = render(changed)
+    label = changed["clustering"]["headline_label"]
+
+    assert _arm_blocks(markdown) == [
+        ("unwrapped arm, reported", {"m0": "550", label: "550"}),
+        ("wrapped arm", {"m0": "565", label: "565"}),
+    ]
+    assert "Domain span: 358° of 360°, not global, not wrapped." in (
+        markdown.splitlines()
+    )
+
+
+def test_a_store_with_one_arm_prints_one_block_marked_reported(reported):
+    """Outside the zone there is one arm, and it is still labelled and marked.
+
+    Expected value determined from the record: the real fixture is a regional
+    box, so its `wrapped` is null and the markdown has one block.
+
+    Bug this catches: a wrapped block rendered from a null arm, whose
+    `TypeError` exits 5 on every regional store -- every real store this
+    project has produced.
+    """
+    _out, record, markdown = reported
+
+    assert record["clustering"]["wrapped"] is None
+    assert [heading for heading, _ in _arm_blocks(markdown)] == [
+        "unwrapped arm, reported"
+    ]
 
 
 def test_the_record_refuses_what_json_cannot_carry_faithfully():
